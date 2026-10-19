@@ -10,7 +10,7 @@ const KEY_LIST := [
 		["Esc", "Cancel the current order"]]],
 	["Residents", [["Click", "Select a resident, tree, boulder or building"], ["Shift-drag", "Select several residents"],
 		["F", "Select the next resident"], ["N", "Go to the next stuck item"],
-		["Right-click", "Order the selected residents"]]],
+		["Right-click", "Order the selected residents"], ["Shift + right-click", "Queue an order after their current one"]]],
 	["Time and camera", [["~", "Pause"], ["Space", "Pause or resume"], ["1  2  3", "Speed 1×, 2× or 3×"],
 		["Drag", "Pan the map (W A S D, arrow keys and middle-drag too)"], ["+  −", "Zoom (mouse wheel and pinch too)"]]],
 	["Game", [["Esc  M", "Open the menu"], ["?", "Show these controls"]]],

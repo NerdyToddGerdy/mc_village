@@ -444,7 +444,7 @@ func _refresh_selection(sim: Sim) -> void:
 		for id in sel.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				sig += "%s%s%s%s%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10)]
+				sig += "%s%s%s%s%s%d%s" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders]
 	elif target != null:
 		sig += "%s" % [target]
 	for s in sim.stuck:
@@ -479,6 +479,11 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		for s in sim.stuck:
 			if s.focus_kind == "res" and s.focus_id == r.id:
 				c.add_child(_reason(s.why))
+		if not r.orders.is_empty():
+			c.add_child(_label("Queued orders", true))
+			for i in r.orders.size():
+				c.add_child(_label("%d  %s" % [i + 1, Sim.order_text(r.orders[i])], false, Palette.CHALK, 14))
+			c.add_child(_button("Clear orders", func(): game.clear_orders(r)))
 		if r.axe == null and not r.broken.axe:
 			c.add_child(_label("Chopping by hand is slow. Stone needs a pickaxe.", false, Palette.CHALK_DIM, 15, true))
 		return

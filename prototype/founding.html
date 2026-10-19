@@ -229,7 +229,7 @@ function newGame() {
 }
 function addResident(name, shirt, x, y) {
   var r = { id: S.nextId++, kind: 'res', name: name, shirt: shirt, x: x, y: y, path: [], job: null, direct: null,
-    carry: null, axe: null, pick: null, broken: { axe: false, pick: false }, progress: null, note: null };
+    carry: null, axe: null, pick: null, broken: { axe: false, pick: false }, progress: null, note: null, orders: [] };
   S.residents.push(r); return r;
 }
 function resById(id) { for (var i = 0; i < S.residents.length; i++) if (S.residents[i].id === id) return S.residents[i]; return null; }
@@ -517,6 +517,7 @@ function onSiteDone(s) {
 // ---------- Claiming ----------
 function claim(r) {
   if (r.direct) { var d = r.direct; r.direct = null; r.job = d; return; }
+  while (r.orders && r.orders.length) { var oj = orderJob(r, r.orders.shift()); if (oj) { r.job = oj; return; } }
   var c = rcell(r);
   if (S.autoCraft) expandQueues();
   // Bench work comes before construction: craft, then feed the bench.
@@ -732,6 +733,7 @@ function cancelSite(s) {
 function directOrder(r, hit, cell) {
   if (r.job) failJob(r);
   r.note = null;
+  r.orders = [];
   if (hit && (hit.kind === 'tree' || hit.kind === 'boulder')) {
     hit.des = true;
     if (hit.claim && hit.claim !== r.id) { var o = resById(hit.claim); if (o && o.job && o.job.target === hit) failJob(o); }
@@ -740,6 +742,23 @@ function directOrder(r, hit, cell) {
   } else if (cell) {
     r.direct = moveJob(r, cell[0], cell[1]);
   }
+}
+
+// Shift + right-click: adds an order to the end of the resident's list. Orders run in turn once
+// their current work is done, then the resident goes back to claiming jobs.
+function queueOrder(r, hit, cell) {
+  if (hit && (hit.kind === 'tree' || hit.kind === 'boulder')) { hit.des = true; hit.unreachUntil = 0; r.orders.push({ kind: 'mine', targetKind: hit.kind, id: hit.id }); }
+  else if (cell) r.orders.push({ kind: 'move', cell: cell });
+}
+function orderText(o) { return o.kind === 'move' ? 'Walk to a spot' : o.targetKind === 'tree' ? 'Mine a tree' : 'Mine a boulder'; }
+// A queued order as a job, or null to skip it (target gone or taken, or no pickaxe for a boulder).
+function orderJob(r, o) {
+  if (o.kind === 'move') return walkable(o.cell[0], o.cell[1]) ? moveJob(r, o.cell[0], o.cell[1]) : null;
+  var list = o.targetKind === 'tree' ? S.trees : S.boulders;
+  var t = list.filter(function (x) { return x.id === o.id; })[0];
+  if (!t || !t.alive || (t.claim && t.claim !== r.id)) return null;
+  if (t.kind === 'boulder' && !r.pick && !toolItems('pick', 0).length) { r.note = { text: 'Needs a pickaxe', until: S.tick + 5 * TPS }; return null; }
+  return gatherJob(r, t);
 }
 
 // ---------- Toasts ----------
@@ -956,7 +975,7 @@ function render() {
   if (!ui.tool && ui.mouse && selIds.length && !ui.drag) {
     var hit = pick(ui.mouse[0], ui.mouse[1]);
     var label = null;
-    if (hit && (hit.kind === 'tree' || hit.kind === 'boulder')) label = 'Right-click: Mine';
+    if (hit && (hit.kind === 'tree' || hit.kind === 'boulder')) label = 'Right-click: Mine. Shift queues it.';
     if (label) chip(label, ui.mouse[0] + 18, ui.mouse[1] + 14);
   }
 }
@@ -1001,7 +1020,7 @@ cv.addEventListener('pointerdown', function (e) {
     var ids = ui.sel && ui.sel.kind === 'res' ? ui.sel.ids : [];
     if (!ids.length) return;
     var hit = pick(e.clientX, e.clientY);
-    ids.forEach(function (id) { var r = resById(id); if (r && !r.arriving) directOrder(r, hit && hit.kind !== 'res' && hit.kind !== 'site' ? hit : null, inBounds(c) && walkable(c[0], c[1]) ? c : null); });
+    ids.forEach(function (id) { var r = resById(id); if (r && !r.arriving) (e.shiftKey ? queueOrder : directOrder)(r, hit && hit.kind !== 'res' && hit.kind !== 'site' ? hit : null, inBounds(c) && walkable(c[0], c[1]) ? c : null); });
     refreshHud(true); return;
   }
   if (e.button !== 0) return;
@@ -1095,7 +1114,7 @@ var HOTKEYS = {
 };
 var KEY_LIST = [
   ['Orders', [['X', 'Mine trees and boulders'], ['Z', 'Paint a stockpile'], ['B', 'Open the build menu'], ['T', 'Place a crafting bench'], ['H', 'Place a house'], ['R', 'Turn the house door while placing'], ['Esc', 'Cancel the current order']]],
-  ['Residents', [['F', 'Select the next resident'], ['N', 'Go to the next stuck item'], ['Right-click', 'Order the selected residents']]],
+  ['Residents', [['F', 'Select the next resident'], ['N', 'Go to the next stuck item'], ['Right-click', 'Order the selected residents'], ['Shift + right-click', 'Queue an order after their current one']]],
   ['Time and camera', [['~', 'Pause'], ['Space', 'Pause or resume'], ['1', 'Speed 1×'], ['2', 'Speed 2×'], ['3', 'Speed 3×'], ['W A S D', 'Pan (arrow keys too)'], ['+ / −', 'Zoom (mouse wheel too)']]],
   ['Game', [['Esc or M', 'Open the menu'], ['?', 'Show these controls']]]
 ];
@@ -1131,6 +1150,7 @@ document.addEventListener('click', function (e) {
       refreshHud(true);
     }
   }
+  else if (a[0] === 'clearorders') { var ro = resById(+a[1]); if (ro) { ro.orders = []; refreshHud(true); } }
   else if (a[0] === 'des') { var o = selObj(); if (o) { o.des = !o.des; o.unreachUntil = 0; if (!o.des && o.claim) { var rr = resById(o.claim); if (rr && rr.job && rr.job.target === o) failJob(rr); } refreshHud(true); } }
   else if (a[0] === 'cancelsite') { var s3 = siteById(+a[1]); if (s3) cancelSite(s3); refreshHud(true); }
   else if (a[0] === 'focus') { focusOn(a[1], +a[2]); }
@@ -1257,6 +1277,7 @@ function selHtml() {
       '<div class="row"><span class="dim">Pickaxe</span><span>' + (r.pick ? toolText(r.pick) : r.broken.pick ? 'Broke' : 'None') + '</span></div>' +
       '<div class="row"><span class="dim">Carrying</span><span>' + (r.carry ? words(r.carry.type, r.carry.n) : 'Nothing') + '</span></div>' +
       reasons.map(function (s) { return '<div class="reason">' + FLAG + esc(s.why) + '</div>'; }).join('') +
+      (r.orders && r.orders.length ? '<div style="font-weight:700">Queued orders</div>' + r.orders.map(function (o, i) { return '<div style="font-size:14px">' + (i + 1) + '  ' + orderText(o) + '</div>'; }).join('') + '<button class="ghost-btn" data-a="clearorders:' + r.id + '" style="align-self:flex-start;min-height:40px">Clear orders</button>' : '') +
       (!r.axe && !r.broken.axe ? '<div class="dim">Chopping by hand is slow. Stone needs a pickaxe.</div>' : '');
   }
   var o = selObj();
@@ -1345,7 +1366,7 @@ function restore(json) {
   s.trees.concat(s.boulders).forEach(function (x) { x.claim = null; x.unreachUntil = 0; });
   S = s; occDirty = true;
   S.residents.forEach(function (r) {
-    r.job = null; r.direct = null; r.path = []; r.progress = null; r.note = null;
+    r.job = null; r.direct = null; r.path = []; r.progress = null; r.note = null; r.orders = r.orders || [];
     r.x = Math.round(r.x); r.y = Math.round(r.y);
     if (r.carry) { dropItems(r.x, r.y, r.carry.type, r.carry.n, r.carry.dur); r.carry = null; }
     if (r.arriving) walkIn(r);

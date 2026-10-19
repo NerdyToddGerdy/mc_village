@@ -40,7 +40,7 @@ project/
 - All randomness uses a seeded RNG owned by the sim.
 
 **Saving.** A save is the serialized sim state plus the camera position, in one of 5 slots. Each slot also records a one-line summary (the next goal), time played and when it was saved.
-- **Saved:** world, items, stockpile zones, sites and their delivered materials, bench queues, residents' positions, tools and broken flags, stats and the arrival timer.
+- **Saved:** world, items, stockpile zones, sites and their delivered materials, bench queues, residents' positions, tools and broken flags, queued orders, stats and the arrival timer.
 - **Not saved, rebuilt on load:**
   - In-progress jobs, paths and reservations (claims, incoming deliveries, stockpile cell holds). Residents simply re-claim work on the next tick.
   - Carried items, which are dropped where the resident stands.
@@ -82,7 +82,13 @@ Each job has: target, required tool (if any), required items (if any), priority,
 
 **Claiming.** An idle resident scans unclaimed, unblocked jobs and picks the highest priority, then nearest. Default priority order: craft > deliver to a bench > build > deliver to a construction site > chop/break > haul. Bench work comes before construction so that queued tools and materials aren't starved by blueprints competing for the same logs and planks.
 
-**Direct orders.** Right-click with a resident selected creates a job claimed by that resident immediately, overriding its current job (the old job is released). After finishing, the resident returns to normal claiming. Shift queues the order instead.
+**Direct orders.** Right-click with a resident selected creates a job claimed by that resident immediately, overriding its current job (the old job is released). After finishing, the resident returns to normal claiming. A plain right-click also clears the resident's queued orders.
+
+**Queued orders.** Shift + right-click adds a mine or move order to the end of each selected resident's list instead of replacing what they're doing.
+- Orders run one after another once the current work is done, then the resident goes back to normal claiming.
+- An order is skipped if its tree or boulder is gone or another resident has claimed it. A boulder order is also skipped when no pickaxe exists, with a "Needs a pickaxe" note.
+- The resident panel lists queued orders, with a Clear orders button.
+- Queued orders are saved; save format v3 added them.
 
 **Blocking.** A job that can't proceed sets a `blocked_reason` and is released. The reason drives the stuck flag, the stuck list, and the resident's status line. Reasons are re-checked on relevant events (items arrive, tool crafted, zone painted) rather than every tick.
 
@@ -178,7 +184,7 @@ The Slice 1 subset of brief §12.
 | Left-drag on the map | Pan the camera (with no order active) |
 | Shift + drag | Select multiple residents |
 | Right-click with selection | Contextual order (mine, move); cursor previews it |
-| Shift + order | Queue the order |
+| Shift + right-click | Queue a mine or move order after the current one |
 | Toolbar → drag | Paint mine or stockpile; place a blueprint |
 | R (while placing) | Rotate blueprint |
 | Click empty ground | Clear selection |

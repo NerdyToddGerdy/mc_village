@@ -274,9 +274,24 @@ func _initialize() -> void:
 	var t2: Dictionary = Sim.nearest(sim.trees.filter(func(t): return t.alive and t.claim == 0), Sim.rcell(ada))
 	if not t2.is_empty():
 		await move(screen(t2.cell, 1.5))
-		check(game._hud._hint.text == "Right-click: Mine", "hovering a tree with Ada selected hints Right-click: Mine")
+		check(game._hud._hint.text.begins_with("Right-click: Mine"), "hovering a tree with Ada selected hints Right-click: Mine")
 		await click(screen(t2.cell, 1.5), MOUSE_BUTTON_RIGHT)
 		check(ada.job != null and is_same(ada.job.target, t2) or ada.direct != null, "right-click orders Ada to mine that tree")
+
+	# Shift + right-click queues orders; the panel lists them and can clear them
+	var queue_trees: Array = sim.trees.filter(func(t): return t.alive and t.claim == 0).slice(0, 2)
+	check(queue_trees.size() == 2, "two free trees to queue orders on")
+	if queue_trees.size() == 2:
+		game.selection = {"kind": "res", "ids": [ada.id]}
+		for t in queue_trees:
+			await move(screen(t.cell, 1.5))
+			await click(screen(t.cell, 1.5), MOUSE_BUTTON_RIGHT, true)
+		check(ada.orders.size() >= 1, "Shift + right-click queues orders (%d)" % ada.orders.size())
+		game._hud.refresh(sim)
+		await frames(2)
+		check(visible_label("Queued orders"), "the resident panel lists queued orders")
+		check(await click_button("Clear orders"), "click Clear orders")
+		check(ada.orders.is_empty(), "Clear orders empties the list")
 
 	# Two residents doing different work at once: one mines while the other crafts
 	await key(KEY_X)
