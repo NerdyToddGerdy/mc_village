@@ -191,6 +191,7 @@ The Slice 1 subset of brief §12.
 | Esc | Cancel the active order; with none, open the menu |
 | M | Open or close the menu |
 | X / Z | Mine / Stockpile order |
+| Shift-drag / Alt-drag (with Mine) | Mark trees only / boulders only (Alt is Option on a Mac); a plain drag marks both |
 | B | Build menu |
 | T / H | Place crafting bench (table) / house |
 | F | Select the next resident and centre on them |

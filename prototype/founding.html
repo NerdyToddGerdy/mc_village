@@ -681,8 +681,11 @@ function computeStuck() {
 function siteHeight(s) { if (s.tpl === 'bench') return s.done ? 0.75 : 0.2; return [0.2, 0.5, 2.5, 4][s.stage] || 4; }
 
 // ---------- Orders from the player ----------
-function designate(kind, x0, y0, x1, y1, single) {
-  var list = S.trees.concat(S.boulders), hit = [];
+// `kinds` can limit a drag to trees or boulders: Shift = trees only, Alt/Option = boulders only (#7).
+function mineKinds(shift, alt) { return shift && !alt ? ['tree'] : alt && !shift ? ['boulder'] : ['tree', 'boulder']; }
+function designate(kind, x0, y0, x1, y1, single, kinds) {
+  kinds = kinds || ['tree', 'boulder'];
+  var list = (kinds.indexOf('tree') >= 0 ? S.trees : []).concat(kinds.indexOf('boulder') >= 0 ? S.boulders : []), hit = [];
   list.forEach(function (o) { if (o.alive && o.x >= x0 && o.x <= x1 && o.y >= y0 && o.y <= y1) hit.push(o); });
   if (single && (single.kind === 'tree' || single.kind === 'boulder')) hit = [single];
   var allOn = hit.length && hit.every(function (o) { return o.des; });
@@ -972,6 +975,11 @@ function render() {
     ctx.strokeRect(Math.min(bx.sx, bx.cx), Math.min(bx.sy, bx.cy), Math.abs(bx.cx - bx.sx), Math.abs(bx.cy - bx.sy)); ctx.setLineDash([]);
   }
   // right-click preview
+  if (ui.tool === 'mine' && ui.mouse) {
+    var mk = mineKinds(ui.shift, ui.alt);
+    var mineHint = mk.length === 1 ? (mk[0] === 'tree' ? 'Marking trees only' : 'Marking boulders only') : ui.drag ? null : 'Drag to mark trees and boulders. Shift: trees only. Alt/Option: boulders only.';
+    if (mineHint) chip(mineHint, ui.mouse[0] + 18, ui.mouse[1] + 14);
+  }
   if (!ui.tool && ui.mouse && selIds.length && !ui.drag) {
     var hit = pick(ui.mouse[0], ui.mouse[1]);
     var label = null;
@@ -1037,6 +1045,7 @@ cv.addEventListener('pointerdown', function (e) {
   ui.drag = { kind: 'box', sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY };
 });
 cv.addEventListener('pointermove', function (e) {
+  ui.shift = e.shiftKey; ui.alt = e.altKey;
   ui.mouse = [e.clientX, e.clientY]; ui.hover = toCell(e.clientX, e.clientY);
   var d = ui.drag; if (!d) return;
   if (d.kind === 'pan') { cam.ox = d.ox + e.clientX - d.sx; cam.oy = d.oy + e.clientY - d.sy; d.moved = Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy); }
@@ -1050,7 +1059,7 @@ cv.addEventListener('pointerup', function (e) {
   if (d.kind === 'rect') {
     var r = d.rect, small = Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) < 6;
     if (ui.tool === 'stock') paintZone(r[0], r[1], r[2], r[3]);
-    else designate(ui.tool, r[0], r[1], r[2], r[3], small ? pick(e.clientX, e.clientY) : null);
+    else designate(ui.tool, r[0], r[1], r[2], r[3], small ? pick(e.clientX, e.clientY) : null, mineKinds(e.shiftKey, e.altKey));
     refreshHud(true); return;
   }
   if (d.kind === 'box') {
@@ -1113,7 +1122,7 @@ var HOTKEYS = {
   '?': function () { openMenu('keys'); }
 };
 var KEY_LIST = [
-  ['Orders', [['X', 'Mine trees and boulders'], ['Z', 'Paint a stockpile'], ['B', 'Open the build menu'], ['T', 'Place a crafting bench'], ['H', 'Place a house'], ['R', 'Turn the house door while placing'], ['Esc', 'Cancel the current order']]],
+  ['Orders', [['X', 'Mine trees and boulders'], ['Shift-drag', 'With Mine: trees only'], ['Alt-drag', 'With Mine: boulders only (Option on a Mac)'], ['Z', 'Paint a stockpile'], ['B', 'Open the build menu'], ['T', 'Place a crafting bench'], ['H', 'Place a house'], ['R', 'Turn the house door while placing'], ['Esc', 'Cancel the current order']]],
   ['Residents', [['F', 'Select the next resident'], ['N', 'Go to the next stuck item'], ['Right-click', 'Order the selected residents'], ['Shift + right-click', 'Queue an order after their current one']]],
   ['Time and camera', [['~', 'Pause'], ['Space', 'Pause or resume'], ['1', 'Speed 1×'], ['2', 'Speed 2×'], ['3', 'Speed 3×'], ['W A S D', 'Pan (arrow keys too)'], ['+ / −', 'Zoom (mouse wheel too)']]],
   ['Game', [['Esc or M', 'Open the menu'], ['?', 'Show these controls']]]

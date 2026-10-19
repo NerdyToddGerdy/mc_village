@@ -35,13 +35,14 @@ func move(pos: Vector2) -> void:
 	await frames(1)
 
 
-func press(pos: Vector2, down: bool, button := MOUSE_BUTTON_LEFT, shift := false) -> void:
+func press(pos: Vector2, down: bool, button := MOUSE_BUTTON_LEFT, shift := false, alt := false) -> void:
 	var e := InputEventMouseButton.new()
 	e.position = pos
 	e.global_position = pos
 	e.button_index = button
 	e.pressed = down
 	e.shift_pressed = shift
+	e.alt_pressed = alt
 	e.button_mask = MOUSE_BUTTON_MASK_LEFT if down and button == MOUSE_BUTTON_LEFT else 0
 	root.push_input(e, true)
 	await frames(1)
@@ -54,12 +55,12 @@ func click(pos: Vector2, button := MOUSE_BUTTON_LEFT, shift := false) -> void:
 	await frames(2)
 
 
-func drag(a: Vector2, b: Vector2, shift := false) -> void:
+func drag(a: Vector2, b: Vector2, shift := false, alt := false) -> void:
 	await move(a)
-	await press(a, true, MOUSE_BUTTON_LEFT, shift)
+	await press(a, true, MOUSE_BUTTON_LEFT, shift, alt)
 	for i in range(1, 6):
 		await move(a.lerp(b, i / 5.0))
-	await press(b, false, MOUSE_BUTTON_LEFT, shift)
+	await press(b, false, MOUSE_BUTTON_LEFT, shift, alt)
 	await frames(2)
 
 
@@ -182,6 +183,24 @@ func _initialize() -> void:
 	await drag(screen(Vector2i(0, 8)), screen(Vector2i(8, 17)))
 	var marked := sim.trees.filter(func(t): return t.des).size()
 	check(marked >= 3, "dragging with Mine marks several trees (%d)" % marked)
+	# Shift-drag marks only trees; Alt-drag marks only boulders (issue #7)
+	for o in sim.trees + sim.boulders:
+		o.des = false
+	await move(screen(Vector2i(9, 9)))
+	check("Shift: trees only" in game._hud._hint.text, "the Mine hint explains the modifiers: \"%s\"" % game._hud._hint.text)
+	await drag(screen(Vector2i(6, 2)), screen(Vector2i(17, 17)), true)
+	var t_on := sim.trees.filter(func(t): return t.des).size()
+	var b_on := sim.boulders.filter(func(b): return b.des).size()
+	check(t_on > 0 and b_on == 0, "Shift-drag with Mine marks trees only (%d trees, %d boulders)" % [t_on, b_on])
+	for o in sim.trees + sim.boulders:
+		o.des = false
+	await drag(screen(Vector2i(6, 2)), screen(Vector2i(17, 17)), false, true)
+	t_on = sim.trees.filter(func(t): return t.des).size()
+	b_on = sim.boulders.filter(func(b): return b.des).size()
+	check(b_on > 0 and t_on == 0, "Alt-drag with Mine marks boulders only (%d trees, %d boulders)" % [t_on, b_on])
+	for o in sim.trees + sim.boulders:
+		o.des = false
+	await drag(screen(Vector2i(0, 8)), screen(Vector2i(8, 17)))
 	check(game._world.live_outlines.size() > 0 or true, "drag shows an outline")
 
 	# Place the bench from the build menu
