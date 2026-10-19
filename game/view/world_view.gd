@@ -430,38 +430,47 @@ func ground_cell(origin: Vector3, dir: Vector3):
 	return c if sim.in_bounds(c) else null
 
 
-## What a camera ray points at. Residents come first, even behind a tree, because their
-## silhouette shows through. Then the nearest tree or boulder, then the site under the ray.
-func pick(origin: Vector3, dir: Vector3):
-	var best = null
-	var best_d := INF
-	for r in sim.residents:
-		var p := Vector3(r.pos.x + 0.5, 0, r.pos.y + 0.5)
-		var hit = AABB(p - Vector3(0.25, 0, 0.25), Vector3(0.5, 1.15, 0.5)).intersects_ray(origin, dir)
-		if hit != null and origin.distance_to(hit) < best_d:
-			best_d = origin.distance_to(hit)
-			best = r
-	if best != null:
-		return best
-	var candidates: Array = []
+## What a camera ray points at, in priority order:
+## 1. a resident, even behind a tree, since their silhouette shows through (skipped when
+##    `residents` is false, as when Mine is active);
+## 2. the nearest tree trunk, boulder or building;
+## 3. a tree canopy, only when nothing else is under the cursor, so leaves in front don't
+##    swallow clicks meant for what's behind them.
+func pick(origin: Vector3, dir: Vector3, residents := true):
+	if residents:
+		var r = _nearest_hit(origin, dir, sim.residents.map(func(r):
+			var p := Vector3(r.pos.x + 0.5, 0, r.pos.y + 0.5)
+			return [r, AABB(p - Vector3(0.25, 0, 0.25), Vector3(0.5, 1.15, 0.5))]))
+		if r != null:
+			return r
+	var solid: Array = []
 	for t in sim.trees:
 		if t.alive:
-			candidates.append([t, AABB(Vector3(t.cell.x, 0, t.cell.y), Vector3(1, 3, 1))])
-			candidates.append([t, AABB(Vector3(t.cell.x - 1, 3, t.cell.y - 1), Vector3(3, 2, 3))])
+			solid.append([t, AABB(Vector3(t.cell.x + 0.1, 0, t.cell.y + 0.1), Vector3(0.8, 3, 0.8))])
 	for b in sim.boulders:
 		if b.alive:
-			candidates.append([b, AABB(Vector3(b.cell.x, 0, b.cell.y), Vector3(1, 0.95, 1))])
+			solid.append([b, AABB(Vector3(b.cell.x, 0, b.cell.y), Vector3(1, 0.95, 1))])
+	for s in sim.sites:
+		solid.append([s, AABB(Vector3(s.origin.x, 0, s.origin.y), Vector3(s.size.x, maxf(sim.site_height(s), 0.3), s.size.y))])
+	var hit = _nearest_hit(origin, dir, solid)
+	if hit != null:
+		return hit
+	var canopies: Array = []
+	for t in sim.trees:
+		if t.alive:
+			canopies.append([t, AABB(Vector3(t.cell.x - 1, 3, t.cell.y - 1), Vector3(3, 2, 3))])
+	return _nearest_hit(origin, dir, canopies)
+
+
+func _nearest_hit(origin: Vector3, dir: Vector3, candidates: Array):
+	var best = null
+	var best_d := INF
 	for c in candidates:
-		var hit = (c[1] as AABB).intersects_ray(origin, dir)
-		if hit != null:
-			var d := origin.distance_to(hit)
-			if d < best_d:
-				best_d = d
-				best = c[0]
-	if best != null:
-		return best
-	var cell = ground_cell(origin, dir)
-	return sim.site_at(cell) if cell != null else null
+		var p = (c[1] as AABB).intersects_ray(origin, dir)
+		if p != null and origin.distance_to(p) < best_d:
+			best_d = origin.distance_to(p)
+			best = c[0]
+	return best
 
 
 static func _hash(x: int, y: int) -> float:

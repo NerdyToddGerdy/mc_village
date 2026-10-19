@@ -174,9 +174,9 @@ func _ray(screen: Vector2) -> Array:
 	return [_cam.project_ray_origin(screen), _cam.project_ray_normal(screen)]
 
 
-func _pick(screen: Vector2):
+func _pick(screen: Vector2, residents := true):
 	var r := _ray(screen)
-	return _world.pick(r[0], r[1])
+	return _world.pick(r[0], r[1], residents)
 
 
 func _cell_at(screen: Vector2):
@@ -300,7 +300,7 @@ func _left_up(e: InputEventMouseButton) -> void:
 			if tool == "stock":
 				sim.paint_zone(d.rect)
 			else:
-				var hit = _pick(e.position) if small else null
+				var hit = _pick(e.position, false) if small else null
 				sim.designate_mine(d.rect, hit if hit != null and hit.kind in ["tree", "boulder"] else null)
 		"box":
 			if small:
