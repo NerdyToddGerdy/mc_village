@@ -310,7 +310,7 @@ func _refresh_tools(sim: Sim) -> void:
 		sig += "%s%s%s%s;" % [r.name, r.axe, r.pick, r.broken]
 	var spare: Array = sim.stacks_where(func(st): return Defs.is_tool_item(st.type))
 	for st in spare:
-		sig += "%s%s" % [st.type, sim.in_zone(st.cell)]
+		sig += "%s%s%s" % [st.type, st.get("dur", -1), sim.in_zone(st.cell)]
 	_rebuild(_tools_list, sig, func(c: Container) -> void:
 		for r in sim.residents:
 			var g := VBoxContainer.new()
@@ -340,7 +340,7 @@ func _refresh_tools(sim: Sim) -> void:
 				where.append("%d lying loose" % loose)
 			g.add_child(_label(", ".join(where), false, Palette.CHALK_DIM, 13))
 			for st in spare:
-				g.add_child(_tool_row(st.type, Tuning.DURABILITY[Defs.ITEMS[st.type].tier]))
+				g.add_child(_tool_row(st.type, st.get("dur", Sim.full_uses(st.type))))
 			c.add_child(g)
 		c.add_child(_label("Craft tools at the bench. Residents pick up a better tool when a job needs one.", false, Palette.CHALK_DIM, 13, true)))
 

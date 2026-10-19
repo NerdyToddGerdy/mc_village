@@ -45,7 +45,7 @@ There's no single-test runner. To focus on one test, temporarily trim the `tests
 - `game/scenes/game.gd`: ticks the sim at 20 Hz times the current speed, owns the camera and selection, and turns input into sim commands. It also saves and loads slots, storing `Sim.save_state()` with `var_to_str`. The HUD and the menu (`view/game_menu.gd`) call its public methods.
 - **Changing what's saved:** follow `game/sim/save_format.gd`.
   - Bump `SaveFormat.VERSION`.
-  - Add an upgrade step from the previous version to `UPGRADES`.
+  - Add an upgrade step from the previous version to `SaveFormat.upgrades()`.
   - Generate the new fixture with `tests/fixtures/make_save_fixture.gd`.
   - Never regenerate or delete an old fixture: `run_tests.gd` loads every fixture, which proves players' old saves still load.
 - Avoid naming methods after built-in `Object`/`Script` methods. `_get` and `is_tool` both broke compilation here.

@@ -194,8 +194,14 @@ static func nearest(list: Array, c: Vector2i):
 
 # ---------------------------------------------------------------- items
 
+## Uses a new tool of this type has.
+static func full_uses(type: String) -> int:
+	return Tuning.DURABILITY[Defs.ITEMS[type].tier]
+
+
 ## Places items on or near `c`, filling the cell and spreading outward over walkable cells.
-func drop_items(c: Vector2i, type: String, n: int) -> void:
+## A tool keeps `uses` (its remaining uses); -1 means a new tool.
+func drop_items(c: Vector2i, type: String, n: int, uses := -1) -> void:
 	if _occ_dirty:
 		_recompute_occ()
 	var cap := 1 if Defs.is_tool_item(type) else Tuning.STACK
@@ -210,6 +216,8 @@ func drop_items(c: Vector2i, type: String, n: int) -> void:
 			if s == null:
 				var m := mini(n, cap)
 				items[cur] = {"cell": cur, "type": type, "n": m, "res": 0}
+				if cap == 1:
+					items[cur].dur = full_uses(type) if uses < 0 else uses
 				n -= m
 			elif s.type == type and s.n < cap:
 				var a := mini(n, cap - s.n)
@@ -398,7 +406,7 @@ func _clear_footprint(s: Dictionary) -> void:
 		if items.has(c):
 			var it: Dictionary = items[c]
 			items.erase(c)
-			drop_items(exit, it.type, it.n)
+			drop_items(exit, it.type, it.n, it.get("dur", -1))
 	for r in residents:
 		var c := rcell(r)
 		if Rect2i(s.origin, s.size).has_point(c):
@@ -602,7 +610,7 @@ func fail_job(r: Dictionary, why := "") -> void:
 	r.path = []
 	_release(r, j)
 	if r.carry != null:
-		drop_items(rcell(r), r.carry.type, r.carry.n)
+		drop_items(rcell(r), r.carry.type, r.carry.n, r.carry.get("dur", -1))
 		r.carry = null
 	var until := tick + int(Tuning.UNREACHABLE_COOLDOWN * Tuning.TPS)
 	if why == "unreachable":
@@ -666,6 +674,8 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			if s.n <= 0:
 				items.erase(s.cell)
 			r.carry = {"type": s.type, "n": st.n}
+			if s.has("dur"):
+				r.carry.dur = s.dur
 			rev += 1
 			return true
 		"pickup_tool":
@@ -680,8 +690,8 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			var it: Dictionary = Defs.ITEMS[s.type]
 			var old = r[it.tool]
 			if old != null:
-				drop_items(s.cell, old.type, 1)
-			r[it.tool] = {"type": s.type, "tier": it.tier, "dur": Tuning.DURABILITY[it.tier]}
+				drop_items(s.cell, old.type, 1, old.dur)
+			r[it.tool] = {"type": s.type, "tier": it.tier, "dur": s.dur}
 			r.broken[it.tool] = false
 			rev += 1
 			return true
@@ -695,7 +705,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 		"haul_drop":
 			zone_res.erase(st.cell)
 			j.holds.erase(st.hold)
-			drop_items(st.cell, st.type, st.n)
+			drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
 			r.carry = null
 			return true
 		"move_in":
@@ -1171,7 +1181,7 @@ static func from_state(d: Dictionary) -> Sim:
 		s.residents.append(r)
 	for r in s.residents:
 		if r.carry != null:
-			s.drop_items(rcell(r), r.carry.type, r.carry.n)
+			s.drop_items(rcell(r), r.carry.type, r.carry.n, r.carry.get("dur", -1))
 			r.carry = null
 		if r.arriving:
 			s.walk_in(r)

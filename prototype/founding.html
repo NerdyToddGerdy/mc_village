@@ -275,14 +275,15 @@ function adjSet(cells) {
 function rcell(r) { return [Math.round(r.x), Math.round(r.y)]; }
 
 // ---------- Items ----------
-function dropItems(x, y, type, n) {
+// A tool keeps `uses` (its remaining uses); leave it out for a new tool.
+function dropItems(x, y, type, n, uses) {
   if (occDirty) recomputeOcc();
   var seen = new Set([idx(x, y)]), q = [[x, y]], qi = 0, guard = 0;
   while (n > 0 && qi < q.length && guard++ < 400) {
     var c = q[qi++], k = key(c[0], c[1]), s = S.items[k];
     if (walkable(c[0], c[1]) || (c[0] === x && c[1] === y && !occ[idx(x, y)])) {
       var cap = ITEMS[type].tool ? 1 : T.stack;
-      if (!s) { var m = Math.min(n, cap); S.items[k] = { x: c[0], y: c[1], type: type, n: m, res: 0 }; n -= m; }
+      if (!s) { var m = Math.min(n, cap); S.items[k] = { x: c[0], y: c[1], type: type, n: m, res: 0 }; if (ITEMS[type].tool) S.items[k].dur = uses == null ? T.dur[ITEMS[type].tier] : uses; n -= m; }
       else if (s.type === type && s.n < cap) { var a = Math.min(n, cap - s.n); s.n += a; n -= a; }
     }
     DIRS.forEach(function (d) { var nx = c[0] + d[0], ny = c[1] + d[1], ni = idx(nx, ny);
@@ -340,8 +341,8 @@ function fetchTool(j, r, stack) {
   j.steps.push(stepGoto(function () { return cellSet([[stack.x, stack.y]]); }));
   j.steps.push(stepPickup(stack, 1, function (r) {
     picked = true; var it = ITEMS[stack.type], old = r[it.tool];
-    if (old) dropItems(stack.x, stack.y, old.type, 1);
-    r[it.tool] = { type: stack.type, tier: it.tier, dur: T.dur[it.tier] }; r.broken[it.tool] = false;
+    if (old) dropItems(stack.x, stack.y, old.type, 1, old.dur);
+    r[it.tool] = { type: stack.type, tier: it.tier, dur: stack.dur == null ? T.dur[it.tier] : stack.dur }; r.broken[it.tool] = false;
   }));
   j.release = function (r) { if (!picked) stack.res -= 1; prevRelease(r); };
 }
@@ -413,9 +414,9 @@ function haulJob(r, stack, dest, n) {
   var dk = key(dest[0], dest[1]), type = stack.type;
   stack.res += n; S.zoneRes[dk] = r.id; var picked = false;
   j.steps.push(stepGoto(function () { return cellSet([[stack.x, stack.y]]); }));
-  j.steps.push(stepPickup(stack, n, function (r) { picked = true; r.carry = { type: type, n: n }; }));
+  j.steps.push(stepPickup(stack, n, function (r) { picked = true; r.carry = { type: type, n: n, dur: stack.dur }; }));
   j.steps.push(stepGoto(function () { return cellSet([dest]); }));
-  j.steps.push(function (r) { delete S.zoneRes[dk]; dropItems(dest[0], dest[1], type, n); r.carry = null; return true; });
+  j.steps.push(function (r) { delete S.zoneRes[dk]; dropItems(dest[0], dest[1], type, n, r.carry.dur); r.carry = null; return true; });
   j.release = function () { if (S.zoneRes[dk] === r.id) delete S.zoneRes[dk]; if (!picked) stack.res -= n; };
   return j;
 }
@@ -485,7 +486,7 @@ function clearFootprint(s) {
   recomputeOcc();
   siteCells(s).forEach(function (c) {
     var k = key(c[0], c[1]), it = S.items[k];
-    if (it) { delete S.items[k]; dropItems(s.x0 + Math.floor(s.w / 2), s.y0 + s.h, it.type, it.n); }
+    if (it) { delete S.items[k]; dropItems(s.x0 + Math.floor(s.w / 2), s.y0 + s.h, it.type, it.n, it.dur); }
     delete S.zone[k];
   });
   S.residents.forEach(function (r) {
@@ -582,7 +583,7 @@ function failJob(r, why) {
   var j = r.job; if (!j) return;
   r.job = null; r.progress = null; r.path = [];
   j.release(r);
-  if (r.carry) { var c = rcell(r); dropItems(c[0], c[1], r.carry.type, r.carry.n); r.carry = null; }
+  if (r.carry) { var c = rcell(r); dropItems(c[0], c[1], r.carry.type, r.carry.n, r.carry.dur); r.carry = null; }
   if (why === 'unreachable') { r.note = { text: 'Can’t reach ' + j.what, until: S.tick + 8 * TPS }; if (j.target) j.target.unreachUntil = S.tick + 8 * TPS; }
   if (why === 'needs_pick') { r.note = { text: 'Needs a pickaxe', until: S.tick + 4 * TPS }; }
 }
@@ -1233,7 +1234,7 @@ function toolsHtml() {
   var spare = '', stored = 0, loose = 0;
   for (var k in S.items) {
     var s = S.items[k]; if (!ITEMS[s.type].tool) continue;
-    spare += toolRow(s.type, T.dur[ITEMS[s.type].tier]);
+    spare += toolRow(s.type, s.dur == null ? T.dur[ITEMS[s.type].tier] : s.dur);
     if (inZone(s.x, s.y)) stored++; else loose++;
   }
   if (spare) out += '<div class="tgroup"><span class="gname">Spare</span><span class="dim" style="font-size:13px;margin-top:-4px">' +
@@ -1346,7 +1347,7 @@ function restore(json) {
   S.residents.forEach(function (r) {
     r.job = null; r.direct = null; r.path = []; r.progress = null; r.note = null;
     r.x = Math.round(r.x); r.y = Math.round(r.y);
-    if (r.carry) { dropItems(r.x, r.y, r.carry.type, r.carry.n); r.carry = null; }
+    if (r.carry) { dropItems(r.x, r.y, r.carry.type, r.carry.n, r.carry.dur); r.carry = null; }
     if (r.arriving) walkIn(r);
   });
   ui.sel = null; ui.tool = null; ui.place = null; ui.buildOpen = false;
