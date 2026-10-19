@@ -1,0 +1,1486 @@
+<title>Block Village Founding</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..800&display=swap">
+<style>
+/* Layout: full-bleed isometric canvas; slate HUD boards pinned to the four corners, centre left clear. */
+:root{
+  --slate:#2F3B37; --slate-a:rgba(47,59,55,0.93); --slate-deep:#232C29;
+  --chalk:#ECEAE2; --dim:#B3B8AF;
+  --red:#F25C54; --blue:#6FA8DC; --green:#8CC084; --yellow:#E8C547;
+  --sky:#A9B8B0;
+  --font:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--sky);color:var(--chalk);font-family:var(--font);font-size:15px;line-height:1.35;overflow:hidden;margin:0}
+#world{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:default}
+.hud{position:fixed;inset:0;pointer-events:none;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-bottom,0px));box-sizing:border-box}
+.hud-inner{position:relative;height:100%}
+.panel{pointer-events:auto;background:var(--slate-a);border:1px solid var(--slate-deep);border-radius:8px;box-shadow:0 2px 0 var(--slate-deep)}
+.corner{position:absolute;display:flex;flex-direction:column;gap:8px;max-width:100%}
+.tl{left:0;top:0;align-items:flex-start}
+.tr{right:0;top:0;align-items:flex-end}
+.bl{left:0;bottom:0;align-items:flex-start}
+.br{right:0;bottom:0;align-items:flex-end}
+button{font:inherit;color:var(--chalk);background:transparent;border:1px solid transparent;border-radius:4px;cursor:pointer;padding:0}
+button:hover{background:var(--slate-deep)}
+button:focus-visible{outline:2px solid var(--chalk);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--slate-deep);border-color:var(--chalk)}
+.ghost-btn{border-color:var(--chalk);padding:0 12px;min-height:36px}
+.num{font-variant-numeric:tabular-nums}
+.dim{color:var(--dim)}
+.name{font-size:24px;font-weight:750;font-stretch:78%;line-height:1.1}
+.title{font-size:17px;font-weight:750;font-stretch:80%}
+#tallies{display:flex;flex-wrap:wrap;gap:6px 18px;padding:10px 14px}
+.tally{display:flex;gap:8px;align-items:center}
+.tally .n{font-size:18px;font-weight:650}
+.tally .loose{font-size:12px;line-height:1.2}
+.tools-wrap{position:relative}
+.tools-btn{padding:4px 6px;margin:-4px -6px;min-height:36px}
+.tools-drop{display:none;position:absolute;left:-6px;top:100%;padding-top:10px;z-index:5}
+.tools-wrap:hover .tools-drop,.tools-wrap:focus-within .tools-drop{display:block}
+#toolsList{width:280px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.tgroup{display:flex;flex-direction:column;gap:6px}
+.tgroup .gname{font-weight:700}
+.tool-row{display:flex;flex-direction:column;gap:3px;font-size:14px}
+.tool-row .bar>i{background:var(--chalk)}
+.tool-row.low .bar>i{background:var(--yellow)}
+.tool-row.low .uses{color:var(--yellow)}
+#goals{width:290px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+#goals ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+#goals li{display:flex;gap:8px;align-items:flex-start;font-size:14px}
+#goals li.done{color:var(--dim)}
+#goals li.now{font-weight:700}
+#goals .hint{font-size:13px;color:var(--dim);padding-left:22px;margin-top:-2px}
+.gtop{display:flex;justify-content:space-between;align-items:center;gap:8px}
+#speed{display:flex;gap:2px;padding:4px}
+#speed button{width:44px;height:44px;font-weight:650;display:flex;align-items:center;justify-content:center}
+#stuck{width:250px;padding:12px 8px 8px}
+#stuck .title{color:var(--yellow);padding:0 8px 6px}
+#stuck button{width:100%;text-align:left;padding:8px;display:flex;gap:10px;align-items:flex-start;min-height:44px}
+#stuck .who{font-weight:700;display:block}
+#toasts{position:absolute;left:50%;top:0;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;align-items:center;max-width:calc(100% - 640px);min-width:260px}
+.toast{padding:10px 10px 10px 16px;display:flex;gap:14px;align-items:center}
+#sel{width:330px;max-width:100%;padding:14px 16px 16px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box}
+.row{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.bar{height:6px;background:var(--slate-deep);border-radius:3px;overflow:hidden}
+.bar>i{display:block;height:6px;background:var(--blue);border-radius:3px}
+.reason{display:flex;gap:8px;align-items:center;color:var(--yellow);font-weight:650}
+.recipes{display:flex;flex-direction:column;gap:2px}
+.recipe{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0}
+.recipe button{min-height:36px;padding:0 12px;border-color:var(--dim)}
+.queue{display:flex;flex-wrap:wrap;gap:6px}
+.queue button{min-height:32px;padding:0 10px;border-color:var(--dim);font-size:13px}
+#toolbar{display:flex;flex-wrap:wrap;gap:2px;padding:4px;justify-content:flex-end}
+#toolbar>button{width:78px;height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:14px;font-weight:600}
+#buildmenu{padding:6px;display:flex;flex-direction:column;gap:2px;width:240px}
+#buildmenu button{text-align:left;padding:8px 10px;min-height:44px;display:flex;flex-direction:column}
+#buildmenu .c{font-size:13px;color:var(--dim)}
+.paused{padding:8px 16px;font-weight:650}
+#speed .menu-btn{width:auto;padding:0 12px;gap:8px}
+#speed .sep{width:1px;background:var(--slate-deep);margin:6px 4px}
+.menu-back{position:fixed;inset:0;z-index:20;background:rgba(35,44,41,0.55);display:flex;align-items:center;justify-content:center;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px}
+.menu{width:440px;max-width:100%;max-height:100%;overflow:auto;box-sizing:border-box;padding:22px 22px 20px;display:flex;flex-direction:column;gap:16px}
+.menu h2{margin:0;font-size:34px;font-weight:780;font-stretch:76%;line-height:1}
+.menu .sub{margin-top:4px}
+.menu-actions{display:flex;flex-direction:column;gap:6px}
+.menu-actions>button{min-height:48px;text-align:left;padding:0 16px;border-color:var(--dim);font-size:17px;font-weight:650}
+.menu-actions>button.primary{border-color:var(--chalk);background:var(--slate-deep)}
+.slots{display:flex;flex-direction:column;gap:6px}
+.slot{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--slate-deep);border-radius:6px;padding:10px 12px;background:rgba(35,44,41,0.5)}
+.slot .meta{display:flex;flex-direction:column;gap:1px;min-width:0}
+.slot .sn{font-weight:700}
+.slot button{min-height:40px;padding:0 14px;border-color:var(--chalk);flex:none}
+.slot button:disabled{border-color:var(--slate-deep);color:var(--dim);cursor:default;background:transparent}
+.confirm{border:1px solid var(--yellow);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.confirm .btns{display:flex;gap:8px;flex-wrap:wrap}
+.confirm button{min-height:40px;padding:0 14px;border-color:var(--dim)}
+.confirm button.go{border-color:var(--yellow);color:var(--yellow)}
+.menu .err{color:var(--yellow);font-weight:650}
+kbd{font-family:inherit;font-size:13px;font-weight:700;color:var(--chalk);background:var(--slate-deep);border:1px solid #4A5752;border-bottom-width:2px;border-radius:4px;padding:1px 6px;white-space:nowrap}
+.keys{display:flex;flex-direction:column;gap:6px}
+.keys .gname{font-weight:700}
+.krow{display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;align-items:center;font-size:14px}
+.kbadge{position:absolute;top:3px;right:4px;font-size:11px;font-weight:700;color:var(--dim);line-height:1}
+#toolbar>button{position:relative}
+#buildmenu kbd{font-size:11px;padding:0 5px}
+.menu .back{align-self:flex-start;min-height:40px;padding:0 12px;border-color:var(--dim)}
+[hidden]{display:none!important}
+@media (max-width:760px){
+  #goals{width:240px}
+  #goals li:not(.now):not(.done){display:none}
+  #stuck{width:200px}
+  #toasts{max-width:100%;top:auto;bottom:230px}
+  #sel{width:260px}
+  #toolbar>button{width:64px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<canvas id="world" aria-label="Village map. Use the orders toolbar, then click trees, boulders or open ground."></canvas>
+
+<div class="hud"><div class="hud-inner">
+  <div class="corner tl">
+    <div class="panel" id="tallies" aria-label="Materials">
+      <div id="mats" style="display:contents"></div>
+      <div class="tools-wrap">
+        <button class="tally tools-btn" aria-haspopup="true" aria-describedby="toolsList">
+          <svg width="18" height="20" viewBox="0 0 18 20" aria-hidden="true"><path d="M4 18L13 6" stroke="#9C7A4E" stroke-width="2.5" stroke-linecap="round"/><path d="M8 3.5Q13 1.5 16.5 5L13 6Z" fill="#8A8D86" stroke="#232C29" stroke-width="1"/></svg>
+          <span class="row" style="gap:6px"><span class="dim" style="font-size:14px">Tools</span><span class="n num" id="toolsN">0</span></span>
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5L5 6.5L8 3.5" fill="none" stroke="#B3B8AF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="tools-drop"><div class="panel" id="toolsList" role="tooltip"></div></div>
+      </div>
+    </div>
+    <div class="panel" id="goals"></div>
+  </div>
+  <div class="corner tr">
+    <div class="panel" id="speed" role="group" aria-label="Game speed">
+      <button data-a="menu" class="menu-btn" aria-haspopup="dialog" title="Menu (Esc or M)" aria-keyshortcuts="Escape M"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4H13.5M2.5 8H13.5M2.5 12H13.5" stroke="#ECEAE2" stroke-width="2" stroke-linecap="round"/></svg>Menu</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button data-a="speed:0" aria-label="Pause" title="Pause (~ or Space)" aria-keyshortcuts="Shift+` Space"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3V13M11 3V13" stroke="#ECEAE2" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+      <button data-a="speed:1" title="Speed 1× (1)" aria-keyshortcuts="1">1×</button>
+      <button data-a="speed:2" title="Speed 2× (2)" aria-keyshortcuts="2">2×</button>
+      <button data-a="speed:3" title="Speed 3× (3)" aria-keyshortcuts="3">3×</button>
+    </div>
+    <div class="panel" id="stuck" hidden></div>
+  </div>
+  <div id="toasts"></div>
+  <div class="corner bl"><div class="panel" id="sel"></div></div>
+  <div class="corner br">
+    <div class="panel" id="buildmenu" hidden>
+      <button data-a="place:bench" aria-keyshortcuts="T"><span style="font-weight:700;display:flex;justify-content:space-between;width:100%">Crafting bench <kbd>T</kbd></span><span class="c">4 logs</span></button>
+      <button data-a="place:house" aria-keyshortcuts="H"><span style="font-weight:700;display:flex;justify-content:space-between;width:100%">House <kbd>H</kbd></span><span class="c">8 cobblestone, then 16 planks and 4 logs, then 12 planks</span></button>
+    </div>
+    <div class="panel" id="toolbar" role="toolbar" aria-label="Orders">
+      <button data-a="tool:mine" title="Mine trees and boulders (X). Drag to mark many. Boulders need a pickaxe." aria-keyshortcuts="X"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#F25C54" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18L13.5 8.5"/><path d="M8 4.5Q14 2 18.5 7.5L15.5 9.5Q13 6 8 4.5Z"/></svg>Mine<span class="kbadge" aria-hidden="true">X</span></button>
+      <button data-a="tool:stock" title="Paint a stockpile (Z). Drag over open ground." aria-keyshortcuts="Z"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#8CC084" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3H19V19H3Z M3 11L11 3 M3 19L19 3 M11 19L19 11"/></svg>Stockpile<span class="kbadge" aria-hidden="true">Z</span></button>
+      <button data-a="tool:build" title="Build (B)" aria-keyshortcuts="B"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#6FA8DC" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M3 3H7M10 3H12M15 3H19V7M19 10V12M19 15V19H15M12 19H10M7 19H3V15M3 12V10M3 7V3"/></svg>Build<span class="kbadge" aria-hidden="true">B</span></button>
+    </div>
+  </div>
+</div></div>
+
+<div id="menu" class="menu-back" hidden>
+  <div class="panel menu" role="dialog" aria-modal="true" aria-labelledby="menuTitle" id="menuBox"></div>
+</div>
+
+<script>
+(function(){
+'use strict';
+// ---------- Tuning (provisional, mirrors slice-1-spec §11) ----------
+var W = 18, H = 18, TPS = 20, DT = 1 / TPS;
+var T = { walk: 3, carry: 4, stack: 16, boulder: 6, craft: 3, stage: 10, arrival: 45,
+  chop: [20, 8, 5], brk: [0, 10, 6], dur: [0, 10, 25] };
+var ITEMS = {
+  log: { one: 'log', many: 'logs', label: 'Logs', col: '#7A5634' },
+  plank: { one: 'plank', many: 'planks', label: 'Planks', col: '#C49A62' },
+  stick: { one: 'stick', many: 'sticks', label: 'Sticks', col: '#9C7A4E' },
+  cobble: { one: 'cobblestone', many: 'cobblestone', label: 'Cobblestone', col: '#7F827C' },
+  wood_axe: { one: 'wooden axe', many: 'wooden axes', tool: 'axe', tier: 1, col: '#C49A62' },
+  wood_pick: { one: 'wooden pickaxe', many: 'wooden pickaxes', tool: 'pick', tier: 1, col: '#C49A62' },
+  stone_axe: { one: 'stone axe', many: 'stone axes', tool: 'axe', tier: 2, col: '#8A8D86' },
+  stone_pick: { one: 'stone pickaxe', many: 'stone pickaxes', tool: 'pick', tier: 2, col: '#8A8D86' }
+};
+var RECIPES = [
+  { id: 'planks', name: 'Planks', inp: { log: 1 }, out: { plank: 4 } },
+  { id: 'sticks', name: 'Sticks', inp: { plank: 2 }, out: { stick: 4 } },
+  { id: 'wood_axe', name: 'Wooden axe', inp: { plank: 3, stick: 2 }, out: { wood_axe: 1 } },
+  { id: 'wood_pick', name: 'Wooden pickaxe', inp: { plank: 3, stick: 2 }, out: { wood_pick: 1 } },
+  { id: 'stone_axe', name: 'Stone axe', inp: { cobble: 3, stick: 2 }, out: { stone_axe: 1 } },
+  { id: 'stone_pick', name: 'Stone pickaxe', inp: { cobble: 3, stick: 2 }, out: { stone_pick: 1 } }
+];
+var RBY = {}; RECIPES.forEach(function (r) { RBY[r.id] = r; });
+var TPL = {
+  bench: { name: 'Crafting bench', w: 1, h: 1, stages: [{ name: 'Bench', verb: 'needs', cost: { log: 4 } }] },
+  house: { name: 'House', w: 5, h: 5, stages: [
+    { name: 'Foundation', verb: 'needs', cost: { cobble: 8 } },
+    { name: 'Walls', verb: 'need', cost: { plank: 16, log: 4 } },
+    { name: 'Roof', verb: 'needs', cost: { plank: 12 } }] }
+};
+var C = { grass: '#6F8F4E', dirt: '#7B5E42', stone: '#8A8D86', cobble: '#7F827C', log: '#7A5634', leaves: '#4E7A3A',
+  plank: '#C49A62', roof: '#8E5E3C', legs: '#3A3B45', skin: '#D9A77C', chalk: '#ECEAE2', deep: '#232C29',
+  red: '#F25C54', blue: '#6FA8DC', green: '#8CC084', yellow: '#E8C547', sky: '#A9B8B0' };
+var DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+function words(type, n) { var it = ITEMS[type]; return n + ' ' + (n === 1 ? it.one : it.many); }
+function costText(cost) { return Object.keys(cost).map(function (k) { return words(k, cost[k]); }).join(', '); }
+function key(x, y) { return x + ',' + y; }
+function idx(x, y) { return y * W + x; }
+
+// ---------- World ----------
+var S, occ = new Uint8Array(W * H), occDirty = true;
+
+function newGame() {
+  S = { tick: 0, speed: 1, nextId: 1, trees: [], boulders: [], items: {}, zone: {}, zoneRes: {}, sites: [], residents: [],
+    stats: { felled: 0, broken: 0, pick: false, house: 0, division: false }, arrivalAt: null, arrived: false,
+    toasts: [], stuck: [], autoCraft: false };
+  [[2, 9], [3, 13], [12, 2], [2, 3], [6, 12], [15, 6], [9, 15], [15, 13], [6, 2], [16, 9], [13, 16], [1, 16], [9, 2], [4, 6]]
+    .forEach(function (p, i) { S.trees.push({ id: S.nextId++, kind: 'tree', x: p[0], y: p[1], logs: 4 + (i * 7) % 3, alive: true, des: false, claim: null }); });
+  [[11, 12], [14, 10], [7, 5], [10, 4], [16, 3], [7, 16]]
+    .forEach(function (p) { S.boulders.push({ id: S.nextId++, kind: 'boulder', x: p[0], y: p[1], alive: true, des: false, claim: null }); });
+  addResident('Ada', '#3E6E7E', 9, 9);
+  occDirty = true;
+  ui.sel = { kind: 'res', ids: [S.residents[0].id] };
+  ui.tool = null; ui.place = null;
+}
+function addResident(name, shirt, x, y) {
+  var r = { id: S.nextId++, kind: 'res', name: name, shirt: shirt, x: x, y: y, path: [], job: null, direct: null,
+    carry: null, axe: null, pick: null, broken: { axe: false, pick: false }, progress: null, note: null };
+  S.residents.push(r); return r;
+}
+function resById(id) { for (var i = 0; i < S.residents.length; i++) if (S.residents[i].id === id) return S.residents[i]; return null; }
+function siteById(id) { for (var i = 0; i < S.sites.length; i++) if (S.sites[i].id === id) return S.sites[i]; return null; }
+function siteCells(s) { var out = []; for (var x = s.x0; x < s.x0 + s.w; x++) for (var y = s.y0; y < s.y0 + s.h; y++) out.push([x, y]); return out; }
+function siteBlocks(s) { return s.done || (s.tpl === 'house' && s.stage >= 1); }
+
+function recomputeOcc() {
+  occ.fill(0);
+  S.trees.forEach(function (t) { if (t.alive) occ[idx(t.x, t.y)] = 1; });
+  S.boulders.forEach(function (b) { if (b.alive) occ[idx(b.x, b.y)] = 1; });
+  S.sites.forEach(function (s) { if (siteBlocks(s)) siteCells(s).forEach(function (c) { occ[idx(c[0], c[1])] = 1; }); });
+  occDirty = false;
+}
+function walkable(x, y) {
+  if (x < 0 || y < 0 || x >= W || y >= H) return false;
+  if (occDirty) recomputeOcc();
+  return !occ[idx(x, y)];
+}
+function bfs(sx, sy, goals) {
+  var start = idx(sx, sy); if (goals.has(start)) return [];
+  var prev = new Int32Array(W * H).fill(-2); prev[start] = -1;
+  var q = [start], qi = 0;
+  while (qi < q.length) {
+    var c = q[qi++], cx = c % W, cy = (c / W) | 0;
+    for (var d = 0; d < 4; d++) {
+      var nx = cx + DIRS[d][0], ny = cy + DIRS[d][1];
+      if (!walkable(nx, ny)) continue;
+      var n = idx(nx, ny); if (prev[n] !== -2) continue;
+      prev[n] = c;
+      if (goals.has(n)) { var path = [], p = n; while (p !== start) { path.unshift(p); p = prev[p]; } return path; }
+      q.push(n);
+    }
+  }
+  return null;
+}
+function cellSet(cells) { var s = new Set(); cells.forEach(function (c) { if (walkable(c[0], c[1])) s.add(idx(c[0], c[1])); }); return s; }
+function adjSet(cells) {
+  var inside = new Set(cells.map(function (c) { return idx(c[0], c[1]); })), s = new Set();
+  cells.forEach(function (c) { DIRS.forEach(function (d) { var x = c[0] + d[0], y = c[1] + d[1]; if (walkable(x, y) && !inside.has(idx(x, y))) s.add(idx(x, y)); }); });
+  return s;
+}
+function rcell(r) { return [Math.round(r.x), Math.round(r.y)]; }
+
+// ---------- Items ----------
+function dropItems(x, y, type, n) {
+  if (occDirty) recomputeOcc();
+  var seen = new Set([idx(x, y)]), q = [[x, y]], qi = 0, guard = 0;
+  while (n > 0 && qi < q.length && guard++ < 400) {
+    var c = q[qi++], k = key(c[0], c[1]), s = S.items[k];
+    if (walkable(c[0], c[1]) || (c[0] === x && c[1] === y && !occ[idx(x, y)])) {
+      var cap = ITEMS[type].tool ? 1 : T.stack;
+      if (!s) { var m = Math.min(n, cap); S.items[k] = { x: c[0], y: c[1], type: type, n: m, res: 0 }; n -= m; }
+      else if (s.type === type && s.n < cap) { var a = Math.min(n, cap - s.n); s.n += a; n -= a; }
+    }
+    DIRS.forEach(function (d) { var nx = c[0] + d[0], ny = c[1] + d[1], ni = idx(nx, ny);
+      if (nx >= 0 && ny >= 0 && nx < W && ny < H && !seen.has(ni) && walkable(nx, ny)) { seen.add(ni); q.push([nx, ny]); } });
+  }
+}
+function stacks(filter) { var out = []; for (var k in S.items) { var s = S.items[k]; if (filter(s)) out.push(s); } return out; }
+function avail(s) { return s.n - s.res; }
+function nearest(list, x, y) {
+  var best = null, bd = 1e9;
+  list.forEach(function (o) { var d = Math.abs(o.x - x) + Math.abs(o.y - y); if (d < bd) { bd = d; best = o; } });
+  return best;
+}
+function freeCount(type) { var n = 0; for (var k in S.items) { var s = S.items[k]; if (s.type === type) n += avail(s); } return n; }
+function toolItems(kind, minTier) { return stacks(function (s) { var it = ITEMS[s.type]; return it.tool === kind && it.tier > minTier && avail(s) > 0; }); }
+function inZone(x, y) { return !!S.zone[key(x, y)]; }
+
+// ---------- Jobs ----------
+function mkJob(kind, label, what) { return { kind: kind, label: label, what: what, steps: [], i: 0, release: function () {} }; }
+function stepGoto(goalFn) {
+  var planned = false;
+  return function (r) {
+    if (!planned) {
+      var g = goalFn(r); if (!g || !g.size) return 'unreachable';
+      var c = rcell(r), p = bfs(c[0], c[1], g); if (!p) return 'unreachable';
+      r.path = p; planned = true;
+    }
+    if (!r.path.length) { var c2 = rcell(r); r.x = c2[0]; r.y = c2[1]; return true; }
+    var n = r.path[0], tx = n % W, ty = (n / W) | 0;
+    if (!walkable(tx, ty)) { planned = false; r.path = []; return false; }
+    var dx = tx - r.x, dy = ty - r.y, dist = Math.hypot(dx, dy), step = T.walk * DT;
+    if (dist <= step) { r.x = tx; r.y = ty; r.path.shift(); return !r.path.length; }
+    r.x += dx / dist * step; r.y += dy / dist * step; return false;
+  };
+}
+function stepWork(secs, label, done) {
+  var t = 0, total = null;
+  return function (r, j) {
+    if (total === null) { total = typeof secs === 'function' ? secs(r) : secs; if (typeof total === 'string') return total; j.label = label; }
+    t += DT; r.progress = Math.min(1, t / total);
+    if (t >= total) { r.progress = null; var res = done(r); return res === undefined ? true : res; }
+    return false;
+  };
+}
+function stepPickup(stack, n, onTake) {
+  return function (r) {
+    var s = S.items[key(stack.x, stack.y)];
+    if (s !== stack || s.n < n) return 'gone';
+    s.n -= n; s.res -= n; if (s.n <= 0) delete S.items[key(stack.x, stack.y)];
+    onTake(r); return true;
+  };
+}
+function fetchTool(j, r, stack) {
+  stack.res += 1; var picked = false, prevRelease = j.release;
+  j.steps.push(stepGoto(function () { return cellSet([[stack.x, stack.y]]); }));
+  j.steps.push(stepPickup(stack, 1, function (r) {
+    picked = true; var it = ITEMS[stack.type], old = r[it.tool];
+    if (old) dropItems(stack.x, stack.y, old.type, 1);
+    r[it.tool] = { type: stack.type, tier: it.tier, dur: T.dur[it.tier] }; r.broken[it.tool] = false;
+  }));
+  j.release = function (r) { if (!picked) stack.res -= 1; prevRelease(r); };
+}
+function wear(r, kind) {
+  var t = r[kind]; if (!t) return;
+  t.dur -= 1;
+  if (t.dur <= 0) { r[kind] = null; r.broken[kind] = true; S.stats.broken++; toast(r.name + '’s ' + ITEMS[t.type].one + ' broke.', r.id); }
+}
+function gatherJob(r, target) {
+  var isTree = target.kind === 'tree', kind = isTree ? 'axe' : 'pick';
+  var j = mkJob('gather', isTree ? 'Going to chop a tree' : 'Going to break a boulder', isTree ? 'this tree' : 'this boulder');
+  j.target = target; target.claim = r.id;
+  j.release = function () { if (target.claim === r.id) target.claim = null; };
+  var cur = r[kind] ? r[kind].tier : 0, better = toolItems(kind, cur);
+  if (better.length) fetchTool(j, r, nearest(better, r.x, r.y));
+  j.steps.push(stepGoto(function () { return adjSet([[target.x, target.y]]); }));
+  j.steps.push(stepWork(function (r) {
+    var tier = r[kind] ? r[kind].tier : 0;
+    if (isTree) return T.chop[tier];
+    return tier ? T.brk[tier] : 'needs_pick';
+  }, isTree ? 'Chopping a tree' : 'Breaking a boulder', function (r) {
+    if (!target.alive) return 'gone';
+    target.alive = false; target.des = false; occDirty = true;
+    if (isTree) { dropItems(target.x, target.y, 'log', target.logs); S.stats.felled++; }
+    else { dropItems(target.x, target.y, 'cobble', T.boulder); S.stats.broke = (S.stats.broke || 0) + 1; }
+    wear(r, kind);
+  }));
+  return j;
+}
+function deliverJob(r, dest, type, n, stack) {
+  var j = mkJob('deliver', 'Hauling ' + ITEMS[type].many + ' to the ' + (dest.tpl === 'bench' && dest.done ? 'bench' : TPL[dest.tpl].name.toLowerCase()), 'the ' + TPL[dest.tpl].name.toLowerCase());
+  j.target = dest; stack.res += n; dest.incoming[type] = (dest.incoming[type] || 0) + n;
+  var picked = false, done = false;
+  j.steps.push(stepGoto(function () { return cellSet([[stack.x, stack.y]]); }));
+  j.steps.push(stepPickup(stack, n, function (r) { picked = true; r.carry = { type: type, n: n }; }));
+  j.steps.push(stepGoto(function () { return adjSet(siteCells(dest)); }));
+  j.steps.push(function (r) {
+    dest.incoming[type] -= n; dest.store[type] = (dest.store[type] || 0) + n; r.carry = null; done = true; return true;
+  });
+  j.release = function () { if (done) return; if (!picked) stack.res -= n; dest.incoming[type] -= n; };
+  return j;
+}
+function buildJob(r, s) {
+  var st = TPL[s.tpl].stages[s.stage];
+  var j = mkJob('build', 'Going to build', 'the ' + TPL[s.tpl].name.toLowerCase());
+  j.target = s; s.builder = r.id;
+  j.release = function () { if (s.builder === r.id) s.builder = null; };
+  j.steps.push(stepGoto(function () { return adjSet(siteCells(s)); }));
+  j.steps.push(stepWork(T.stage, 'Building ' + (s.tpl === 'bench' ? 'the bench' : st.name.toLowerCase()), function () { completeStage(s); }));
+  return j;
+}
+function craftJob(r, b, rec) {
+  var j = mkJob('craft', 'Going to the bench', 'the bench');
+  j.target = b; b.crafter = r.id; b.crafting = rec.name;
+  j.release = function () { if (b.crafter === r.id) { b.crafter = null; b.crafting = null; } };
+  j.steps.push(stepGoto(function () { return adjSet(siteCells(b)); }));
+  j.steps.push(stepWork(T.craft, 'Crafting ' + rec.name.toLowerCase(), function (r) {
+    var qi = b.queue.indexOf(rec.id);
+    if (qi < 0 || !hasAll(b.store, rec.inp)) return 'gone';
+    for (var k in rec.inp) b.store[k] -= rec.inp[k];
+    qRemove(b, qi);
+    var c = rcell(r);
+    for (var o in rec.out) { dropItems(c[0], c[1], o, rec.out[o]); if (ITEMS[o].tool === 'pick') S.stats.pick = true; }
+  }));
+  return j;
+}
+function haulJob(r, stack, dest, n) {
+  var j = mkJob('haul', 'Hauling ' + ITEMS[stack.type].many + ' to the stockpile', 'the stockpile');
+  var dk = key(dest[0], dest[1]), type = stack.type;
+  stack.res += n; S.zoneRes[dk] = r.id; var picked = false;
+  j.steps.push(stepGoto(function () { return cellSet([[stack.x, stack.y]]); }));
+  j.steps.push(stepPickup(stack, n, function (r) { picked = true; r.carry = { type: type, n: n }; }));
+  j.steps.push(stepGoto(function () { return cellSet([dest]); }));
+  j.steps.push(function (r) { delete S.zoneRes[dk]; dropItems(dest[0], dest[1], type, n); r.carry = null; return true; });
+  j.release = function () { if (S.zoneRes[dk] === r.id) delete S.zoneRes[dk]; if (!picked) stack.res -= n; };
+  return j;
+}
+function moveJob(r, x, y) {
+  var j = mkJob('move', 'Walking', 'that spot');
+  j.steps.push(stepGoto(function () { return cellSet([[x, y]]); }));
+  return j;
+}
+function hasAll(store, need) { for (var k in need) if ((store[k] || 0) < need[k]) return false; return true; }
+// The first queued recipe whose inputs exist somewhere (bench, on the way, or loose/stockpiled). Blocked recipes are skipped.
+function benchActive(b) {
+  for (var i = 0; i < b.queue.length; i++) {
+    var inp = RBY[b.queue[i]].inp, ok = true;
+    for (var k in inp) if ((b.store[k] || 0) + (b.incoming[k] || 0) + freeCount(k) < inp[k]) { ok = false; break; }
+    if (ok) return i;
+  }
+  return -1;
+}
+function qAdd(b, id, auto, at) {
+  if (!b.autoq) b.autoq = [];
+  var i = at === undefined ? b.queue.length : at;
+  b.queue.splice(i, 0, id); b.autoq.splice(i, 0, !!auto);
+}
+function qRemove(b, i) { b.queue.splice(i, 1); if (b.autoq) b.autoq.splice(i, 1); }
+var PRODUCER = {}; RECIPES.forEach(function (r) { for (var o in r.out) if (!PRODUCER[o]) PRODUCER[o] = r; });
+// With two or more residents, a recipe short of an ingredient the bench can make gets that recipe queued ahead of it.
+// Runs repeatedly, so a pickaxe expands into sticks, and the sticks then expand into planks.
+function expandQueues() {
+  S.sites.forEach(function (b) {
+    if (!(b.done && b.tpl === 'bench') || !b.queue.length) return;
+    for (var guard = 0; guard < 12 && b.queue.length < 30; guard++) {
+      var inserted = false;
+      for (var i = 0; i < b.queue.length && !inserted; i++) {
+        var inp = RBY[b.queue[i]].inp;
+        for (var k in inp) {
+          var p = PRODUCER[k]; if (!p) continue;
+          var short = inp[k] - (b.store[k] || 0) - (b.incoming[k] || 0) - freeCount(k);
+          for (var j = 0; j < i; j++) short -= RBY[b.queue[j]].out[k] || 0;
+          if (short <= 0) continue;
+          for (var n = Math.ceil(short / p.out[k]); n > 0; n--) qAdd(b, p.id, true, i);
+          inserted = true; break;
+        }
+      }
+      if (!inserted) break;
+    }
+  });
+}
+function benchCraftable(b) {
+  for (var i = 0; i < b.queue.length; i++) if (hasAll(b.store, RBY[b.queue[i]].inp)) return RBY[b.queue[i]];
+  return null;
+}
+function stageNeeds(s) {
+  var cost, out = {};
+  if (s.done) { var ai = benchActive(s); cost = ai >= 0 ? RBY[s.queue[ai]].inp : {}; }
+  else cost = TPL[s.tpl].stages[s.stage].cost;
+  for (var k in cost) { var r = cost[k] - (s.store[k] || 0) - (s.incoming[k] || 0); if (r > 0) out[k] = r; }
+  return out;
+}
+function completeStage(s) {
+  var tpl = TPL[s.tpl], st = tpl.stages[s.stage];
+  for (var k in st.cost) s.store[k] -= st.cost[k];
+  s.stage++; occDirty = true;
+  if (s.stage >= tpl.stages.length) { s.done = true; s.store = {}; s.incoming = {}; onSiteDone(s); }
+  if (siteBlocks(s)) clearFootprint(s);
+}
+function clearFootprint(s) {
+  recomputeOcc();
+  siteCells(s).forEach(function (c) {
+    var k = key(c[0], c[1]), it = S.items[k];
+    if (it) { delete S.items[k]; dropItems(s.x0 + Math.floor(s.w / 2), s.y0 + s.h, it.type, it.n); }
+    delete S.zone[k];
+  });
+  S.residents.forEach(function (r) {
+    var c = rcell(r);
+    if (c[0] >= s.x0 && c[0] < s.x0 + s.w && c[1] >= s.y0 && c[1] < s.y0 + s.h) {
+      var p = bfsAny(c[0], c[1]); if (p) { r.x = p[0]; r.y = p[1]; r.path = []; }
+    }
+  });
+}
+function bfsAny(x, y) {
+  var seen = new Set([idx(x, y)]), q = [[x, y]], qi = 0;
+  while (qi < q.length) { var c = q[qi++]; if (walkable(c[0], c[1])) return c;
+    DIRS.forEach(function (d) { var nx = c[0] + d[0], ny = c[1] + d[1]; if (nx >= 0 && ny >= 0 && nx < W && ny < H && !seen.has(idx(nx, ny))) { seen.add(idx(nx, ny)); q.push([nx, ny]); } }); }
+  return null;
+}
+function onSiteDone(s) {
+  if (s.tpl === 'bench') { s.queue = []; toast('The crafting bench is ready. Select it to queue crafts.', null, s.id); return; }
+  S.stats.house++;
+  var ada = S.residents[0];
+  var adaHasHome = S.sites.some(function (o) { return o.owner === ada.id; });
+  if (!adaHasHome) {
+    s.owner = ada.id; toast('Ada’s house is finished.', null, s.id);
+    if (!S.autoCraft) { S.autoCraft = true; toast('The bench now makes the planks and sticks a recipe needs.'); }
+  }
+  else if (!S.arrived && S.arrivalAt === null) { S.arrivalAt = S.tick + T.arrival * TPS; toast('The second house is finished. Someone may come to live in it.', null, s.id); }
+}
+
+// ---------- Claiming ----------
+function claim(r) {
+  if (r.direct) { var d = r.direct; r.direct = null; r.job = d; return; }
+  var c = rcell(r);
+  if (S.autoCraft) expandQueues();
+  // Bench work comes before construction: craft, then feed the bench.
+  var benches = S.sites.filter(function (s) { return s.done && s.tpl === 'bench' && s.queue.length && !s.crafter && benchCraftable(s) && !blockedFor(s); });
+  if (benches.length) { var b = nearestSite(benches, c); r.job = craftJob(r, b, benchCraftable(b)); return; }
+  if (tryDeliver(r, c, S.sites.filter(function (s) { return s.done && s.tpl === 'bench' && s.queue.length; }))) return;
+  // Construction: build a ready stage, then deliver to sites.
+  // A blueprint waits until its footprint is cleared of trees and boulders.
+  var ready = S.sites.filter(function (s) { return !s.done && !s.builder && hasAll(s.store, TPL[s.tpl].stages[s.stage].cost) && !blockedFor(s) && footprintClear(s); });
+  if (ready.length) { r.job = buildJob(r, nearestSite(ready, c)); return; }
+  if (tryDeliver(r, c, S.sites.filter(function (s) { return !s.done && footprintClear(s); }))) return;
+  // gather
+  var targets = [];
+  var axeOk = !r.broken.axe || toolItems('axe', 0).length;
+  if (axeOk) S.trees.forEach(function (t) { if (t.alive && t.des && !t.claim && !blockedFor(t)) targets.push(t); });
+  var pickOk = r.pick || toolItems('pick', 0).length;
+  if (pickOk) S.boulders.forEach(function (b) { if (b.alive && b.des && !b.claim && !blockedFor(b)) targets.push(b); });
+  if (targets.length) { r.job = gatherJob(r, nearest(targets, c[0], c[1])); return; }
+  // haul
+  var zoneCells = Object.keys(S.zone);
+  if (zoneCells.length) {
+    var loose = stacks(function (st) { return avail(st) > 0 && !inZone(st.x, st.y); });
+    loose.sort(function (a, b) { return (Math.abs(a.x - c[0]) + Math.abs(a.y - c[1])) - (Math.abs(b.x - c[0]) + Math.abs(b.y - c[1])); });
+    for (var li = 0; li < loose.length; li++) {
+      var ls = loose[li], dest = zoneDest(ls.type);
+      if (!dest) continue;
+      var cap = ITEMS[ls.type].tool ? 1 : T.stack, here = S.items[key(dest[0], dest[1])];
+      var room = cap - (here ? here.n : 0);
+      r.job = haulJob(r, ls, dest, Math.min(avail(ls), T.carry, room)); return;
+    }
+  }
+}
+function tryDeliver(r, c, dests) {
+  for (var i = 0; i < dests.length; i++) {
+    var s = dests[i]; if (blockedFor(s)) continue;
+    var need = stageNeeds(s);
+    for (var t in need) {
+      var src = stacks(function (st) { return st.type === t && avail(st) > 0 && !onSite(st, s); });
+      if (!src.length) continue;
+      var st = nearest(src, c[0], c[1]);
+      r.job = deliverJob(r, s, t, Math.min(need[t], T.carry, avail(st)), st); return true;
+    }
+  }
+  return false;
+}
+// A finished bench drops its crafts on its own cell; those aren't fed back in. Materials lying on an unbuilt footprint can be used.
+function onSite(st, s) { return s.done && st.x >= s.x0 && st.x < s.x0 + s.w && st.y >= s.y0 && st.y < s.y0 + s.h && s.tpl === 'bench'; }
+function nearestSite(list, c) { return nearest(list.map(function (s) { return { x: s.x0, y: s.y0, s: s }; }), c[0], c[1]).s; }
+function blockedFor(t) { return t.unreachUntil && t.unreachUntil > S.tick; }
+function zoneDest(type) {
+  var cap = ITEMS[type].tool ? 1 : T.stack, empty = null;
+  for (var k in S.zone) {
+    if (S.zoneRes[k]) continue;
+    var p = k.split(',').map(Number); if (!walkable(p[0], p[1])) continue;
+    var it = S.items[k];
+    if (it && it.type === type && it.n < cap) return p;
+    if (!it && !empty) empty = p;
+  }
+  return empty;
+}
+
+// ---------- Tick ----------
+function failJob(r, why) {
+  var j = r.job; if (!j) return;
+  r.job = null; r.progress = null; r.path = [];
+  j.release(r);
+  if (r.carry) { var c = rcell(r); dropItems(c[0], c[1], r.carry.type, r.carry.n); r.carry = null; }
+  if (why === 'unreachable') { r.note = { text: 'Can’t reach ' + j.what, until: S.tick + 8 * TPS }; if (j.target) j.target.unreachUntil = S.tick + 8 * TPS; }
+  if (why === 'needs_pick') { r.note = { text: 'Needs a pickaxe', until: S.tick + 4 * TPS }; }
+}
+function stepResident(r) {
+  if (!r.job) {
+    if (r.arriving) return;
+    claim(r); if (!r.job) return;
+    r.job.i = 0;
+  }
+  var j = r.job, st = j.steps[j.i];
+  if (!st) { r.job = null; return; }
+  var res = st(r, j);
+  if (res === true) { j.i++; if (j.i >= j.steps.length) { r.job = null; r.progress = null; j.release(r); } }
+  else if (typeof res === 'string') failJob(r, res);
+}
+function step() {
+  S.tick++;
+  S.residents.forEach(stepResident);
+  if (S.arrivalAt !== null && !S.arrived && S.tick >= S.arrivalAt) arrive();
+  var kinds = S.residents.filter(function (r) { return r.job && r.job.kind !== 'move' && r.job.kind !== 'arrive'; }).map(function (r) { return r.job.kind; });
+  if (kinds.length >= 2 && new Set(kinds).size >= 2) S.stats.division = true;
+  if (S.autoCraft && S.tick % 10 === 0) expandQueues();
+  if (S.tick % 10 === 0) S.sites.forEach(function (s) { if (!s.done) markObstacles(s); });
+  if (S.tick % 5 === 0) computeStuck();
+}
+function arrive() {
+  S.arrived = true;
+  var spawn = [0, H - 1]; if (!walkable(0, H - 1)) spawn = bfsAny(0, H - 1);
+  var t = addResident('Tomas', '#8C4F6B', spawn[0], spawn[1]);
+  walkIn(t);
+  toast('A traveler named Tomas has arrived.', t.id);
+}
+function walkIn(t) {
+  var spare = S.sites.filter(function (s) { return s.tpl === 'house' && s.done && !s.owner; })[0];
+  t.arriving = false;
+  if (spare) {
+    t.arriving = true;
+    var j = mkJob('arrive', 'Walking to the new house', 'the new house');
+    j.steps.push(stepGoto(function () { return adjSet(siteCells(spare)); }));
+    j.steps.push(function (r) {
+      spare.owner = r.id; r.arriving = false; S.stats.tomasHome = true;
+      toast('Tomas moved into the new house.', r.id);
+      return true;
+    });
+    j.release = function (r) { r.arriving = false; };
+    t.job = j;
+  }
+}
+
+// ---------- Stuck reasons ----------
+function computeStuck() {
+  var out = [];
+  var anyPick = S.residents.some(function (r) { return r.pick; }) || toolItems('pick', 0).length > 0;
+  var bould = S.boulders.filter(function (b) { return b.alive && b.des; });
+  if (bould.length && !anyPick) bould.forEach(function (b, i) { out.push({ who: 'Boulder', why: 'Needs a pickaxe', x: b.x + .5, y: b.y + .5, h: 1.1, focus: { kind: 'boulder', id: b.id }, hide: i > 0 }); });
+  S.sites.forEach(function (s) {
+    var tpl = TPL[s.tpl], cost, label, verb;
+    if (!s.done && !footprintClear(s)) {
+      var ob = siteObstacles(s);
+      if (ob.boulders.length && !anyPick) out.push({ who: tpl.name, why: 'Needs a pickaxe to clear ' + (ob.boulders.length === 1 ? 'a boulder' : ob.boulders.length + ' boulders'),
+        x: s.x0 + s.w / 2, y: s.y0 + s.h / 2, h: 0.6, focus: { kind: 'site', id: s.id } });
+      return;
+    }
+    if (!s.done) { var st = tpl.stages[s.stage]; cost = st.cost; label = s.tpl === 'bench' ? 'Bench' : st.name; verb = st.verb; }
+    else if (s.tpl === 'bench' && s.queue.length && !s.crafter && !benchCraftable(s) && benchActive(s) < 0) { var rec = RBY[s.queue[0]]; cost = rec.inp; label = rec.name; verb = 'needs'; }
+    else return;
+    var worst = null;
+    for (var k in cost) {
+      var short = cost[k] - (s.store[k] || 0) - (s.incoming[k] || 0) - freeCount(k);
+      if (short > 0 && (!worst || short > worst.n)) worst = { k: k, n: short };
+    }
+    if (worst) {
+      var cx = s.x0 + s.w / 2, cy = s.y0 + s.h / 2;
+      out.push({ who: s.done ? 'Crafting bench' : tpl.name, why: label + ' ' + verb + ' ' + worst.n + ' more ' + (worst.n === 1 ? ITEMS[worst.k].one : ITEMS[worst.k].many),
+        x: cx, y: cy, h: siteHeight(s) + 0.4, focus: { kind: 'site', id: s.id } });
+    }
+  });
+  S.residents.forEach(function (r) {
+    ['axe', 'pick'].forEach(function (k) {
+      if (r.broken[k] && !r[k]) out.push({ who: r.name, why: (k === 'axe' ? 'Axe' : 'Pickaxe') + ' broke. Needs a new ' + (k === 'axe' ? 'axe' : 'pickaxe'), x: r.x + .5, y: r.y + .5, h: 1.6, focus: { kind: 'res', id: r.id } });
+    });
+    if (r.note && r.note.until > S.tick) out.push({ who: r.name, why: r.note.text, x: r.x + .5, y: r.y + .5, h: 1.6, focus: { kind: 'res', id: r.id } });
+  });
+  var zoneN = Object.keys(S.zone).length;
+  if (zoneN) {
+    var loose = stacks(function (st) { return avail(st) > 0 && !inZone(st.x, st.y); });
+    if (loose.length && loose.every(function (st) { return !zoneDest(st.type); })) {
+      var zk = Object.keys(S.zone)[0].split(',').map(Number);
+      out.push({ who: 'Stockpile', why: 'Stockpile is full', x: zk[0] + .5, y: zk[1] + .5, h: 0.6, focus: null });
+    }
+  }
+  S.stuck = out;
+}
+function siteHeight(s) { if (s.tpl === 'bench') return s.done ? 0.75 : 0.2; return [0.2, 0.5, 2.5, 4][s.stage] || 4; }
+
+// ---------- Orders from the player ----------
+function designate(kind, x0, y0, x1, y1, single) {
+  var list = S.trees.concat(S.boulders), hit = [];
+  list.forEach(function (o) { if (o.alive && o.x >= x0 && o.x <= x1 && o.y >= y0 && o.y <= y1) hit.push(o); });
+  if (single && (single.kind === 'tree' || single.kind === 'boulder')) hit = [single];
+  var allOn = hit.length && hit.every(function (o) { return o.des; });
+  hit.forEach(function (o) {
+    o.des = single && allOn ? false : true; o.unreachUntil = 0;
+    if (!o.des && o.claim) { var r = resById(o.claim); if (r && r.job && r.job.target === o) failJob(r); }
+  });
+}
+function paintZone(x0, y0, x1, y1) {
+  for (var x = x0; x <= x1; x++) for (var y = y0; y <= y1; y++) if (walkable(x, y) && !siteAt(x, y)) S.zone[key(x, y)] = true;
+}
+function siteAt(x, y) { for (var i = 0; i < S.sites.length; i++) { var s = S.sites[i]; if (x >= s.x0 && x < s.x0 + s.w && y >= s.y0 && y < s.y0 + s.h) return s; } return null; }
+// Trees, boulders and stockpile cells don't block placement: the blueprint clears them.
+function placementCheck(tpl, x0, y0) {
+  var t = TPL[tpl];
+  if (x0 < 0 || y0 < 0 || x0 + t.w > W || y0 + t.h > H) return 'Too close to the edge';
+  for (var x = x0; x < x0 + t.w; x++) for (var y = y0; y < y0 + t.h; y++) if (siteAt(x, y)) return 'Overlaps another building';
+  return null;
+}
+function obstaclesIn(x0, y0, w, h) {
+  function inside(o) { return o.alive && o.x >= x0 && o.x < x0 + w && o.y >= y0 && o.y < y0 + h; }
+  return { trees: S.trees.filter(inside), boulders: S.boulders.filter(inside) };
+}
+function siteObstacles(s) { return obstaclesIn(s.x0, s.y0, s.w, s.h); }
+function footprintClear(s) { var o = siteObstacles(s); return !o.trees.length && !o.boulders.length; }
+function clearingText(o) {
+  var parts = [];
+  if (o.trees.length) parts.push(o.trees.length + (o.trees.length === 1 ? ' tree' : ' trees'));
+  if (o.boulders.length) parts.push(o.boulders.length + (o.boulders.length === 1 ? ' boulder' : ' boulders'));
+  return parts.join(' and ');
+}
+function markObstacles(s) {
+  var o = siteObstacles(s);
+  o.trees.concat(o.boulders).forEach(function (t) { if (!t.des) { t.des = true; t.unreachUntil = 0; } });
+}
+function placeSite(tpl, x0, y0, rot) {
+  var s = { id: S.nextId++, kind: 'site', tpl: tpl, x0: x0, y0: y0, w: TPL[tpl].w, h: TPL[tpl].h, rot: rot || 0, stage: 0, store: {}, incoming: {}, builder: null, done: false, owner: null, queue: [], crafter: null };
+  S.sites.push(s); occDirty = true;
+  siteCells(s).forEach(function (c) { delete S.zone[key(c[0], c[1])]; });
+  markObstacles(s);
+  return s;
+}
+function cancelSite(s) {
+  S.residents.forEach(function (r) { if (r.job && r.job.target === s) failJob(r); });
+  for (var k in s.store) if (s.store[k] > 0) dropItems(s.x0, s.y0 + s.h, k, s.store[k]);
+  S.sites.splice(S.sites.indexOf(s), 1); occDirty = true; ui.sel = null;
+}
+function directOrder(r, hit, cell) {
+  if (r.job) failJob(r);
+  r.note = null;
+  if (hit && (hit.kind === 'tree' || hit.kind === 'boulder')) {
+    hit.des = true;
+    if (hit.claim && hit.claim !== r.id) { var o = resById(hit.claim); if (o && o.job && o.job.target === hit) failJob(o); }
+    if (hit.kind === 'boulder' && !r.pick && !toolItems('pick', 0).length) { r.note = { text: 'Needs a pickaxe', until: S.tick + 5 * TPS }; computeStuck(); return; }
+    r.direct = gatherJob(r, hit); hit.unreachUntil = 0;
+  } else if (cell) {
+    r.direct = moveJob(r, cell[0], cell[1]);
+  }
+}
+
+// ---------- Toasts ----------
+function toast(text, resId, siteId) { S.toasts.push({ text: text, res: resId || null, site: siteId || null, until: performance.now() + 7000 }); if (S.toasts.length > 3) S.toasts.shift(); }
+
+// ---------- Rendering ----------
+var cv = document.getElementById('world'), ctx = cv.getContext('2d');
+var cam = { ox: 0, oy: 0, z: 1 }, vw = 0, vh = 0, dpr = 1;
+var ui = { tool: null, place: null, rot: 0, hover: null, mouse: null, drag: null, sel: null, buildOpen: false, keys: {} };
+
+function resize() {
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  vw = window.innerWidth; vh = window.innerHeight;
+  cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
+}
+function fitCamera() {
+  cam.z = Math.max(0.5, Math.min(1.25, Math.min(vw / (W * 64 + 120), vh / (H * 32 + 260))));
+  centerOn(W / 2, H / 2);
+}
+function centerOn(x, y) { cam.ox = vw / 2 - (x - y) * 32 * cam.z; cam.oy = vh / 2 + 40 * cam.z - (x + y) * 16 * cam.z; }
+function iso(gx, gy, h) { return [cam.ox + (gx - gy) * 32 * cam.z, cam.oy + (gx + gy) * 16 * cam.z - h * 32 * cam.z]; }
+function toCell(sx, sy) {
+  var u = (sx - cam.ox) / (32 * cam.z), v = (sy - cam.oy) / (16 * cam.z);
+  return [Math.floor((u + v) / 2), Math.floor((v - u) / 2)];
+}
+function rgb(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+var shadeCache = {};
+function shade(h, f) { var k = h + f; if (shadeCache[k]) return shadeCache[k]; var c = rgb(h); return (shadeCache[k] = 'rgb(' + Math.round(c[0] * f) + ',' + Math.round(c[1] * f) + ',' + Math.round(c[2] * f) + ')'); }
+function poly(pts) { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); }
+
+var boxes = [];
+function box(x0, y0, x1, y1, h0, h1, top, side, opt) {
+  boxes.push({ k: (x0 + x1) / 2 + (y0 + y1) / 2 + h0 * 0.01, x0: x0, y0: y0, x1: x1, y1: y1, h0: h0, h1: h1, top: top, side: side || top, opt: opt });
+}
+function drawBox(b) {
+  var o = b.opt || {};
+  ctx.globalAlpha = o.alpha || 1;
+  var A = iso(b.x0, b.y0, b.h1), B = iso(b.x1, b.y0, b.h1), Cc = iso(b.x1, b.y1, b.h1), D = iso(b.x0, b.y1, b.h1);
+  var Cb = iso(b.x1, b.y1, b.h0), Db = iso(b.x0, b.y1, b.h0), Bb = iso(b.x1, b.y0, b.h0);
+  var ghost = o.ghost;
+  ctx.fillStyle = ghost ? '#6FA8DC' : shade(b.side, 0.8); poly([D, Cc, Cb, Db]); ctx.fill(); if (ghost) { ctx.strokeStyle = '#DCEBF7'; ctx.lineWidth = 1; ctx.stroke(); }
+  ctx.fillStyle = ghost ? '#4F86B8' : shade(b.side, 0.64); poly([Cc, B, Bb, Cb]); ctx.fill(); if (ghost) ctx.stroke();
+  ctx.fillStyle = ghost ? '#9CC4E8' : b.top; poly([A, B, Cc, D]); ctx.fill(); if (ghost) ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+function hash(x, y) { var h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+
+function addTree(t) {
+  for (var i = 0; i < 3; i++) box(t.x, t.y, t.x + 1, t.y + 1, i, i + 1, C.log);
+  for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) box(t.x + dx, t.y + dy, t.x + dx + 1, t.y + dy + 1, 3, 4, C.leaves);
+  box(t.x, t.y, t.x + 1, t.y + 1, 4, 5, C.leaves);
+}
+function addItems(s) {
+  var it = ITEMS[s.type], cx = s.x + 0.5, cy = s.y + 0.5;
+  if (it.tool) { box(cx - 0.3, cy - 0.06, cx + 0.3, cy + 0.06, 0, 0.08, '#7A5634'); box(cx + 0.12, cy - 0.16, cx + 0.3, cy + 0.16, 0, 0.14, it.col); return; }
+  var levels = Math.min(4, Math.ceil(s.n / 4));
+  for (var i = 0; i < levels; i++) box(cx - 0.26, cy - 0.26, cx + 0.26, cy + 0.26, i * 0.2, i * 0.2 + 0.2, it.col);
+}
+function addResidentBoxes(r) {
+  var cx = r.x + 0.5, cy = r.y + 0.5;
+  box(cx - 0.13, cy - 0.13, cx + 0.13, cy + 0.13, 0, 0.32, C.legs);
+  box(cx - 0.17, cy - 0.17, cx + 0.17, cy + 0.17, 0.32, 0.78, r.shirt);
+  box(cx - 0.12, cy - 0.12, cx + 0.12, cy + 0.12, 0.78, 1.1, C.skin);
+  if (r.carry) box(cx - 0.14, cy - 0.14, cx + 0.14, cy + 0.14, 1.14, 1.38, ITEMS[r.carry.type].col);
+  else if (r.axe && r.job && r.job.kind === 'gather') box(cx + 0.18, cy - 0.04, cx + 0.3, cy + 0.04, 0.4, 0.8, ITEMS[r.axe.type].col);
+}
+function addSite(s) {
+  if (s.tpl === 'bench') {
+    if (s.done) { box(s.x0 + .1, s.y0 + .1, s.x0 + .9, s.y0 + .9, 0, 0.75, C.plank, C.log); }
+    else box(s.x0 + .1, s.y0 + .1, s.x0 + .9, s.y0 + .9, 0, 0.75, C.plank, C.log, { ghost: true, alpha: 0.45 });
+    return;
+  }
+  var x0 = s.x0, y0 = s.y0, x1 = x0 + 4, y1 = y0 + 4, door = doorCell(s);
+  for (var x = x0; x <= x1; x++) for (var y = y0; y <= y1; y++) {
+    if (s.stage >= 1) box(x, y, x + 1, y + 1, 0, 0.5, C.cobble);
+    else if (s.stage === 0) box(x, y, x + 1, y + 1, 0, 0.5, C.cobble, null, { ghost: true, alpha: 0.4 });
+  }
+  if (s.stage >= 1) for (var x2 = x0; x2 <= x1; x2++) for (var y2 = y0; y2 <= y1; y2++) {
+    if (!(x2 === x0 || x2 === x1 || y2 === y0 || y2 === y1)) continue;
+    var corner = (x2 === x0 || x2 === x1) && (y2 === y0 || y2 === y1), isDoor = x2 === door[0] && y2 === door[1];
+    var opt = s.stage === 1 ? { ghost: true, alpha: 0.4 } : null, col = corner ? C.log : C.plank;
+    if (isDoor) box(x2, y2, x2 + 1, y2 + 1, 1.7, 2.5, col, null, opt);
+    else box(x2, y2, x2 + 1, y2 + 1, 0.5, 2.5, col, null, opt);
+  }
+  if (s.stage >= 2) for (var a = 0; a <= 2; a++) for (var rx = x0 + a; rx <= x1 - a; rx++) for (var ry = y0 + a; ry <= y1 - a; ry++) {
+    box(rx, ry, rx + 1, ry + 1, 2.5 + a * 0.5, 3 + a * 0.5, C.roof, null, s.stage === 2 ? { ghost: true, alpha: 0.4 } : null);
+  }
+}
+function doorCell(s) {
+  var r = s.rot % 4;
+  if (r === 0) return [s.x0 + 2, s.y0 + 4];
+  if (r === 1) return [s.x0 + 4, s.y0 + 2];
+  if (r === 2) return [s.x0 + 2, s.y0];
+  return [s.x0, s.y0 + 2];
+}
+function footprintPoly(x0, y0, w, h, ht) { return [iso(x0, y0, ht), iso(x0 + w, y0, ht), iso(x0 + w, y0 + h, ht), iso(x0, y0 + h, ht)]; }
+function dashed(pts, col, under) {
+  ctx.lineJoin = 'round';
+  poly(pts); ctx.setLineDash([]); ctx.strokeStyle = C.deep; ctx.lineWidth = under || 6; ctx.stroke();
+  poly(pts); ctx.setLineDash([10, 7]); ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.stroke(); ctx.setLineDash([]);
+}
+function chalkLine(pts, col) {
+  ctx.lineCap = 'round';
+  ctx.beginPath(); pts.forEach(function (seg) { ctx.moveTo(seg[0], seg[1]); ctx.lineTo(seg[2], seg[3]); });
+  ctx.strokeStyle = C.deep; ctx.lineWidth = 10 * Math.max(0.7, cam.z); ctx.stroke();
+  ctx.strokeStyle = col; ctx.lineWidth = 5 * Math.max(0.7, cam.z); ctx.stroke();
+}
+function drawFlag(px, py) {
+  var s = Math.max(0.8, cam.z);
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - 42 * s); ctx.strokeStyle = C.deep; ctx.lineWidth = 5; ctx.stroke();
+  ctx.strokeStyle = C.chalk; ctx.lineWidth = 2; ctx.stroke();
+  var fx = px + 1, fy = py - 42 * s;
+  ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx + 23 * s, fy); ctx.lineTo(fx + 19 * s, fy + 8 * s); ctx.lineTo(fx + 23 * s, fy + 16 * s); ctx.lineTo(fx, fy + 16 * s); ctx.closePath();
+  ctx.fillStyle = C.yellow; ctx.fill(); ctx.strokeStyle = C.deep; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = C.deep; ctx.font = '800 ' + Math.round(13 * s) + 'px ' + 'Bricolage Grotesque, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('!', fx + 10 * s, fy + 8.5 * s);
+}
+function chip(text, x, y, col) {
+  ctx.font = '600 14px Bricolage Grotesque, sans-serif';
+  var w = ctx.measureText(text).width + 16;
+  ctx.fillStyle = 'rgba(47,59,55,0.95)'; ctx.strokeStyle = C.deep; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, 26, 4) : ctx.rect(x, y, w, 26); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = col || C.chalk; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 8, y + 13.5);
+}
+
+function render() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = C.sky; ctx.fillRect(0, 0, vw, vh);
+  // ground slab edges
+  for (var i = 0; i < W; i++) {
+    ctx.fillStyle = shade(C.dirt, 0.8); poly([iso(i, H, 0), iso(i + 1, H, 0), iso(i + 1, H, -0.6), iso(i, H, -0.6)]); ctx.fill();
+    ctx.fillStyle = shade(C.dirt, 0.64); poly([iso(W, i, 0), iso(W, i + 1, 0), iso(W, i + 1, -0.6), iso(W, i, -0.6)]); ctx.fill();
+  }
+  for (var x = 0; x < W; x++) for (var y = 0; y < H; y++) {
+    ctx.fillStyle = shade(C.grass, 0.96 + hash(x, y) * 0.08);
+    poly([iso(x, y, 0), iso(x + 1, y, 0), iso(x + 1, y + 1, 0), iso(x, y + 1, 0)]); ctx.fill();
+  }
+  // stockpile hatch
+  for (var zk in S.zone) {
+    var p = zk.split(',').map(Number);
+    ctx.save(); poly([iso(p[0], p[1], 0), iso(p[0] + 1, p[1], 0), iso(p[0] + 1, p[1] + 1, 0), iso(p[0], p[1] + 1, 0)]); ctx.clip();
+    var a = iso(p[0], p[1], 0);
+    ctx.fillStyle = 'rgba(140,192,132,0.18)'; ctx.fillRect(a[0] - 40 * cam.z, a[1] - 4, 80 * cam.z, 40 * cam.z);
+    for (var s = -80; s < 80; s += 10) {
+      ctx.beginPath(); ctx.moveTo(a[0] + s * cam.z, a[1] - 4); ctx.lineTo(a[0] + (s + 40) * cam.z, a[1] + 36 * cam.z);
+      ctx.strokeStyle = C.deep; ctx.lineWidth = 5 * cam.z; ctx.stroke(); ctx.strokeStyle = C.green; ctx.lineWidth = 2.5 * cam.z; ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // previews on the ground
+  if (ui.drag && ui.drag.kind === 'rect') {
+    var r0 = ui.drag.rect;
+    var col = ui.tool === 'stock' ? C.green : ui.tool === 'select' ? C.chalk : C.red;
+    if (ui.tool !== 'select') dashed(footprintPoly(r0[0], r0[1], r0[2] - r0[0] + 1, r0[3] - r0[1] + 1, 0), col, 5);
+  } else if (ui.hover && ui.tool && ui.tool !== 'build' && inBounds(ui.hover)) {
+    ctx.globalAlpha = 0.6; poly(footprintPoly(ui.hover[0], ui.hover[1], 1, 1, 0)); ctx.strokeStyle = C.chalk; ctx.lineWidth = 1.5; ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  // selection rings
+  var selIds = ui.sel && ui.sel.kind === 'res' ? ui.sel.ids : [];
+  S.residents.forEach(function (r) {
+    if (selIds.indexOf(r.id) < 0) return;
+    var c = iso(r.x + 0.5, r.y + 0.5, 0);
+    ctx.beginPath(); ctx.ellipse(c[0], c[1], 19 * cam.z, 9.5 * cam.z, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = C.deep; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = C.chalk; ctx.lineWidth = 2; ctx.stroke();
+  });
+  // world boxes
+  boxes = [];
+  S.trees.forEach(function (t) { if (t.alive) addTree(t); });
+  S.boulders.forEach(function (b) { if (b.alive) { box(b.x + .08, b.y + .08, b.x + .92, b.y + .92, 0, 0.62, C.stone); box(b.x + .2, b.y + .15, b.x + .7, b.y + .7, 0.62, 0.95, shade(C.stone, 1.06)); } });
+  for (var k in S.items) addItems(S.items[k]);
+  S.sites.forEach(addSite);
+  S.residents.forEach(addResidentBoxes);
+  if (ui.tool === 'build' && ui.place && ui.hover) {
+    var t = TPL[ui.place], hx = ui.hover[0] - Math.floor(t.w / 2), hy = ui.hover[1] - Math.floor(t.h / 2);
+    ui.placeAt = [hx, hy]; ui.placeErr = placementCheck(ui.place, hx, hy);
+  }
+  boxes.sort(function (a, b) { return a.k - b.k; });
+  boxes.forEach(drawBox);
+  // overlays: blueprints, marks, flags, progress
+  S.sites.forEach(function (s) { if (!s.done) dashed(footprintPoly(s.x0, s.y0, s.w, s.h, s.stage >= 1 ? 0.5 : 0), C.blue); });
+  if (ui.tool === 'build' && ui.place && ui.placeAt) {
+    var tp = TPL[ui.place], pa = ui.placeAt;
+    dashed(footprintPoly(pa[0], pa[1], tp.w, tp.h, 0), ui.placeErr ? C.red : C.blue);
+    if (ui.place === 'house' && !ui.placeErr) {
+      var dc = doorCell({ x0: pa[0], y0: pa[1], rot: ui.rot });
+      ctx.fillStyle = 'rgba(111,168,220,0.55)'; poly(footprintPoly(dc[0], dc[1], 1, 1, 0)); ctx.fill();
+    }
+    if (ui.mouse) {
+      var obs = obstaclesIn(pa[0], pa[1], tp.w, tp.h), clr = clearingText(obs);
+      var label = ui.placeErr || ((ui.place === 'house' ? 'Place house. R turns the door.' : 'Place crafting bench.') + (clr ? ' Clears ' + clr + '.' : ''));
+      chip(label, ui.mouse[0] + 18, ui.mouse[1] + 14, ui.placeErr ? C.yellow : C.chalk);
+    }
+  }
+  S.trees.forEach(function (t) { if (t.alive && t.des) { var c = iso(t.x + .5, t.y + .5, 1.5), d = 9 * Math.max(0.8, cam.z); chalkLine([[c[0] - d, c[1] + d, c[0] + d, c[1] - d]], C.red); } });
+  S.boulders.forEach(function (b) { if (b.alive && b.des) { var c = iso(b.x + .5, b.y + .5, 0.7), d = 8 * Math.max(0.8, cam.z); chalkLine([[c[0] - d, c[1] - d, c[0] + d, c[1] + d], [c[0] + d, c[1] - d, c[0] - d, c[1] + d]], C.red); } });
+  S.stuck.forEach(function (st) { var c = iso(st.x, st.y, st.h); drawFlag(c[0], c[1]); });
+  S.residents.forEach(function (r) {
+    if (r.progress === null || r.progress === undefined) return;
+    var c = iso(r.x + .5, r.y + .5, 1.55);
+    ctx.fillStyle = C.deep; ctx.fillRect(c[0] - 18, c[1] - 4, 36, 7);
+    ctx.fillStyle = C.chalk; ctx.fillRect(c[0] - 17, c[1] - 3, 34 * r.progress, 5);
+  });
+  if (ui.sel && (ui.sel.kind === 'tree' || ui.sel.kind === 'boulder' || ui.sel.kind === 'site')) {
+    var o = selObj();
+    if (o) { var fp = o.kind === 'site' ? footprintPoly(o.x0, o.y0, o.w, o.h, 0) : footprintPoly(o.x, o.y, 1, 1, 0); poly(fp); ctx.strokeStyle = C.deep; ctx.lineWidth = 5; ctx.stroke(); poly(fp); ctx.strokeStyle = C.chalk; ctx.lineWidth = 2; ctx.stroke(); }
+  }
+  if (ui.drag && ui.drag.kind === 'box') {
+    var bx = ui.drag;
+    ctx.strokeStyle = C.chalk; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+    ctx.strokeRect(Math.min(bx.sx, bx.cx), Math.min(bx.sy, bx.cy), Math.abs(bx.cx - bx.sx), Math.abs(bx.cy - bx.sy)); ctx.setLineDash([]);
+  }
+  // right-click preview
+  if (!ui.tool && ui.mouse && selIds.length && !ui.drag) {
+    var hit = pick(ui.mouse[0], ui.mouse[1]);
+    var label = null;
+    if (hit && (hit.kind === 'tree' || hit.kind === 'boulder')) label = 'Right-click: Mine';
+    if (label) chip(label, ui.mouse[0] + 18, ui.mouse[1] + 14);
+  }
+}
+function inBounds(c) { return c[0] >= 0 && c[1] >= 0 && c[0] < W && c[1] < H; }
+
+// ---------- Picking ----------
+function pick(sx, sy) {
+  var best = null, bd = -1e9;
+  function test(o, x, y, hw, top, bottom, depth) {
+    var c = iso(x, y, 0);
+    if (sx >= c[0] - hw * cam.z && sx <= c[0] + hw * cam.z && sy >= c[1] - top * cam.z && sy <= c[1] + bottom * cam.z && depth > bd) { bd = depth; best = o; }
+  }
+  S.residents.forEach(function (r) { test(r, r.x + .5, r.y + .5, 14, 44, 6, r.x + r.y + 1.5); });
+  S.trees.forEach(function (t) { if (t.alive) test(t, t.x + .5, t.y + .5, 22, 150, 12, t.x + t.y + 1); });
+  S.boulders.forEach(function (b) { if (b.alive) test(b, b.x + .5, b.y + .5, 28, 36, 14, b.x + b.y + 1); });
+  if (best) return best;
+  var c = toCell(sx, sy);
+  if (!inBounds(c)) return null;
+  return siteAt(c[0], c[1]);
+}
+function selObj() {
+  if (!ui.sel) return null;
+  if (ui.sel.kind === 'tree') return S.trees.filter(function (t) { return t.id === ui.sel.id && t.alive; })[0] || null;
+  if (ui.sel.kind === 'boulder') return S.boulders.filter(function (t) { return t.id === ui.sel.id && t.alive; })[0] || null;
+  if (ui.sel.kind === 'site') return siteById(ui.sel.id);
+  return null;
+}
+function selectHit(hit) {
+  if (!hit) { ui.sel = null; return; }
+  if (hit.kind === 'res') ui.sel = { kind: 'res', ids: [hit.id] };
+  else ui.sel = { kind: hit.kind, id: hit.id };
+}
+
+// ---------- Input ----------
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+cv.addEventListener('pointerdown', function (e) {
+  cv.setPointerCapture(e.pointerId);
+  var c = toCell(e.clientX, e.clientY);
+  if (e.button === 1 || (e.pointerType === 'touch' && !ui.tool)) { ui.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, ox: cam.ox, oy: cam.oy, moved: 0, touch: e.pointerType === 'touch' }; return; }
+  if (e.button === 2) {
+    if (ui.tool) { setTool(null); return; }
+    var ids = ui.sel && ui.sel.kind === 'res' ? ui.sel.ids : [];
+    if (!ids.length) return;
+    var hit = pick(e.clientX, e.clientY);
+    ids.forEach(function (id) { var r = resById(id); if (r && !r.arriving) directOrder(r, hit && hit.kind !== 'res' && hit.kind !== 'site' ? hit : null, inBounds(c) && walkable(c[0], c[1]) ? c : null); });
+    refreshHud(true); return;
+  }
+  if (e.button !== 0) return;
+  if (ui.tool === 'build') {
+    if (ui.place && ui.placeAt && !ui.placeErr) {
+      var s = placeSite(ui.place, ui.placeAt[0], ui.placeAt[1], ui.rot);
+      ui.sel = { kind: 'site', id: s.id }; if (!e.shiftKey) setTool(null);
+    }
+    return;
+  }
+  if (ui.tool === 'mine' || ui.tool === 'stock') {
+    ui.drag = { kind: 'rect', a: c, rect: [c[0], c[1], c[0], c[1]], sx: e.clientX, sy: e.clientY }; return;
+  }
+  ui.drag = { kind: 'box', sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY };
+});
+cv.addEventListener('pointermove', function (e) {
+  ui.mouse = [e.clientX, e.clientY]; ui.hover = toCell(e.clientX, e.clientY);
+  var d = ui.drag; if (!d) return;
+  if (d.kind === 'pan') { cam.ox = d.ox + e.clientX - d.sx; cam.oy = d.oy + e.clientY - d.sy; d.moved = Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy); }
+  else if (d.kind === 'rect') { var c = ui.hover; d.rect = [Math.max(0, Math.min(d.a[0], c[0])), Math.max(0, Math.min(d.a[1], c[1])), Math.min(W - 1, Math.max(d.a[0], c[0])), Math.min(H - 1, Math.max(d.a[1], c[1]))]; }
+  else if (d.kind === 'box') { d.cx = e.clientX; d.cy = e.clientY; }
+});
+cv.addEventListener('pointerleave', function () { ui.mouse = null; ui.hover = null; });
+cv.addEventListener('pointerup', function (e) {
+  var d = ui.drag; ui.drag = null; if (!d) return;
+  if (d.kind === 'pan') { if (d.touch && d.moved < 8) selectHit(pick(e.clientX, e.clientY)); refreshHud(true); return; }
+  if (d.kind === 'rect') {
+    var r = d.rect, small = Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) < 6;
+    if (ui.tool === 'stock') paintZone(r[0], r[1], r[2], r[3]);
+    else designate(ui.tool, r[0], r[1], r[2], r[3], small ? pick(e.clientX, e.clientY) : null);
+    refreshHud(true); return;
+  }
+  if (d.kind === 'box') {
+    if (Math.abs(d.cx - d.sx) + Math.abs(d.cy - d.sy) < 6) { selectHit(pick(e.clientX, e.clientY)); refreshHud(true); return; }
+    var x0 = Math.min(d.sx, d.cx), x1 = Math.max(d.sx, d.cx), y0 = Math.min(d.sy, d.cy), y1 = Math.max(d.sy, d.cy);
+    var ids = S.residents.filter(function (r) { var c = iso(r.x + .5, r.y + .5, 0.5); return c[0] >= x0 && c[0] <= x1 && c[1] >= y0 && c[1] <= y1; }).map(function (r) { return r.id; });
+    ui.sel = ids.length ? { kind: 'res', ids: ids } : null; refreshHud(true);
+  }
+});
+cv.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  var z0 = cam.z, z1 = Math.max(0.45, Math.min(2, z0 * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+  cam.ox = e.clientX - (e.clientX - cam.ox) * z1 / z0; cam.oy = e.clientY - (e.clientY - cam.oy) * z1 / z0; cam.z = z1;
+}, { passive: false });
+window.addEventListener('keydown', function (e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  var k = e.key.toLowerCase();
+  if (ui.menu) {
+    if (k === 'escape') { e.preventDefault(); if (ui.menu.confirm) { ui.menu.confirm = null; renderMenu(); } else if (ui.menu.view !== 'main') openMenu('main'); else closeMenu(); }
+    else if (k === '?') openMenu(ui.menu.view === 'keys' ? 'main' : 'keys');
+    else if (k === 'm' && ui.menu.view === 'main' && !ui.menu.confirm) closeMenu();
+    return;
+  }
+  if (e.code === 'Space') { e.preventDefault(); setSpeed(S.speed === 0 ? (ui.lastSpeed || 1) : 0); return; }
+  if (k === 'escape') { if (ui.tool || ui.buildOpen) setTool(null); else openMenu('main'); return; }
+  if (k === 'r' && ui.tool === 'build') { ui.rot = (ui.rot + 1) % 4; return; }
+  var hot = HOTKEYS[k];
+  if (hot) { e.preventDefault(); hot(); return; }
+  if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].indexOf(k) >= 0) { ui.keys[k] = true; if (k.indexOf('arrow') === 0) e.preventDefault(); }
+});
+window.addEventListener('keyup', function (e) { ui.keys[e.key.toLowerCase()] = false; });
+window.addEventListener('blur', function () { ui.keys = {}; });
+window.addEventListener('resize', function () { resize(); });
+
+function placeTool(tpl) { ui.tool = 'build'; ui.place = tpl; ui.buildOpen = false; cv.style.cursor = 'crosshair'; refreshHud(true); }
+function zoomBy(f) {
+  var z0 = cam.z, z1 = Math.max(0.45, Math.min(2, z0 * f)), cx = vw / 2, cy = vh / 2;
+  cam.ox = cx - (cx - cam.ox) * z1 / z0; cam.oy = cy - (cy - cam.oy) * z1 / z0; cam.z = z1;
+}
+function nextResident() {
+  if (!S.residents.length) return;
+  var cur = ui.sel && ui.sel.kind === 'res' ? ui.sel.ids[0] : null;
+  var i = S.residents.findIndex(function (r) { return r.id === cur; });
+  focusOn('res', S.residents[(i + 1) % S.residents.length].id);
+}
+function nextStuck() {
+  var list = S.stuck.filter(function (s) { return !s.hide && s.focus; });
+  if (!list.length) { toast('Nothing is stuck.'); refreshHud(true); return; }
+  ui.stuckIdx = ((ui.stuckIdx || 0) + 1) % list.length;
+  var f = list[ui.stuckIdx].focus; focusOn(f.kind, f.id);
+}
+// Keyboard shortcuts. Letters avoid W, A, S and D, which pan the camera.
+var HOTKEYS = {
+  x: function () { setTool('mine'); }, z: function () { setTool('stock'); },
+  b: function () { setTool('build'); }, t: function () { placeTool('bench'); }, h: function () { placeTool('house'); },
+  m: function () { openMenu('main'); }, f: nextResident, n: nextStuck,
+  '1': function () { setSpeed(1); }, '2': function () { setSpeed(2); }, '3': function () { setSpeed(3); },
+  '~': function () { setSpeed(0); }, '`': function () { setSpeed(0); },
+  '+': function () { zoomBy(1.15); }, '=': function () { zoomBy(1.15); }, '-': function () { zoomBy(1 / 1.15); }, '_': function () { zoomBy(1 / 1.15); },
+  '?': function () { openMenu('keys'); }
+};
+var KEY_LIST = [
+  ['Orders', [['X', 'Mine trees and boulders'], ['Z', 'Paint a stockpile'], ['B', 'Open the build menu'], ['T', 'Place a crafting bench'], ['H', 'Place a house'], ['R', 'Turn the house door while placing'], ['Esc', 'Cancel the current order']]],
+  ['Residents', [['F', 'Select the next resident'], ['N', 'Go to the next stuck item'], ['Right-click', 'Order the selected residents']]],
+  ['Time and camera', [['~', 'Pause'], ['Space', 'Pause or resume'], ['1', 'Speed 1×'], ['2', 'Speed 2×'], ['3', 'Speed 3×'], ['W A S D', 'Pan (arrow keys too)'], ['+ / −', 'Zoom (mouse wheel too)']]],
+  ['Game', [['Esc or M', 'Open the menu'], ['?', 'Show these controls']]]
+];
+function setTool(t) {
+  if (t === 'build') {
+    ui.buildOpen = !ui.buildOpen;
+    if (ui.buildOpen && ui.tool !== 'build') { ui.tool = null; ui.place = null; }
+    if (!ui.buildOpen && ui.tool === 'build') ui.tool = null;
+  }
+  else { ui.buildOpen = false; ui.tool = ui.tool === t ? null : t; ui.place = null; }
+  if (t === null) { ui.tool = null; ui.place = null; ui.buildOpen = false; }
+  cv.style.cursor = ui.tool ? 'crosshair' : 'default';
+  refreshHud(true);
+}
+function setSpeed(v) { if (S.speed) ui.lastSpeed = S.speed; S.speed = v; refreshHud(true); }
+
+document.addEventListener('click', function (e) {
+  var b = e.target.closest('[data-a]'); if (!b) return;
+  var a = b.getAttribute('data-a').split(':');
+  if (a[0] === 'speed') setSpeed(+a[1]);
+  else if (a[0] === 'tool') setTool(a[1]);
+  else if (a[0] === 'place') { placeTool(a[1]); }
+  else if (a[0] === 'queue') { var s = siteById(+a[1]); if (s) { qAdd(s, a[2], false); if (S.autoCraft) expandQueues(); refreshHud(true); } }
+  else if (a[0] === 'unqueue') {
+    var s2 = siteById(+a[1]), i = +a[2];
+    if (s2) {
+      qRemove(s2, i);
+      if (!s2.queue.length) {
+        S.residents.forEach(function (r) { if (r.job && r.job.target === s2) failJob(r); });
+        for (var k in s2.store) if (s2.store[k] > 0) dropItems(s2.x0, s2.y0 + 1, k, s2.store[k]);
+        s2.store = {};
+      }
+      refreshHud(true);
+    }
+  }
+  else if (a[0] === 'des') { var o = selObj(); if (o) { o.des = !o.des; o.unreachUntil = 0; if (!o.des && o.claim) { var rr = resById(o.claim); if (rr && rr.job && rr.job.target === o) failJob(rr); } refreshHud(true); } }
+  else if (a[0] === 'cancelsite') { var s3 = siteById(+a[1]); if (s3) cancelSite(s3); refreshHud(true); }
+  else if (a[0] === 'focus') { focusOn(a[1], +a[2]); }
+  else if (a[0] === 'menu') { openMenu('main'); }
+  else if (a[0] === 'm') { menuAction(a); }
+});
+function focusOn(kind, id) {
+  var o = kind === 'res' ? resById(id) : kind === 'site' ? siteById(id) : kind === 'boulder' ? S.boulders.filter(function (b) { return b.id === id; })[0] : null;
+  if (!o) return;
+  if (kind === 'res') { ui.sel = { kind: 'res', ids: [id] }; centerOn(o.x + .5, o.y + .5); }
+  else if (kind === 'site') { ui.sel = { kind: 'site', id: id }; centerOn(o.x0 + o.w / 2, o.y0 + o.h / 2); }
+  else { ui.sel = { kind: kind, id: id }; centerOn(o.x + .5, o.y + .5); }
+  refreshHud(true);
+}
+
+// ---------- HUD ----------
+var last = {};
+function setHtml(id, html) { if (last[id] !== html) { last[id] = html; document.getElementById(id).innerHTML = html; } }
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+var FLAG = '<svg width="14" height="20" viewBox="0 0 14 20" aria-hidden="true" style="flex:none"><line x1="2" y1="19" x2="2" y2="1" stroke="#ECEAE2" stroke-width="2"/><path d="M3 1H13L11 5L13 9H3Z" fill="#E8C547"/></svg>';
+function swatch(col) { return '<svg width="18" height="20" viewBox="0 0 18 20" aria-hidden="true"><polygon points="0,5 9,10 9,20 0,15" fill="' + shade(col, 0.8) + '"/><polygon points="9,10 18,5 18,15 9,20" fill="' + shade(col, 0.64) + '"/><polygon points="9,0 18,5 9,10 0,5" fill="' + col + '"/></svg>'; }
+
+var GOALS = [
+  { t: 'Chop a tree', h: 'Choose Mine, then click a tree. Ada fells it by hand, slowly.', ok: function () { return S.stats.felled > 0; } },
+  { t: 'Build a crafting bench', h: 'Choose Build, then Crafting bench, and click open ground.', ok: function () { return S.sites.some(function (s) { return s.tpl === 'bench' && s.done; }); } },
+  { t: 'Craft a pickaxe', h: 'Select the bench. Queue planks, sticks, then a wooden pickaxe.', ok: function () { return S.stats.pick; } },
+  { t: 'Paint a stockpile', h: 'Choose Stockpile and drag over open ground.', ok: function () { return Object.keys(S.zone).length > 0; } },
+  { t: 'Break a boulder', h: 'Choose Mine, then click a boulder. Ada uses her pickaxe.', ok: function () { return (S.stats.broke || 0) > 0; } },
+  { t: 'Build Ada’s house', h: 'Choose Build, then House. R turns the door.', ok: function () { return S.stats.house >= 1; } },
+  { t: 'Build a second house', h: 'Queue planks at the bench for the walls and roof. Tools now get their planks and sticks made automatically.', ok: function () { return S.stats.house >= 2; } },
+  { t: 'Welcome a traveler', h: 'Someone arrives a little while after the second house is done.', ok: function () { return !!S.stats.tomasHome; } },
+  { t: 'Two residents at work', h: 'Keep both busy with different jobs.', ok: function () { return S.stats.division; } }
+];
+var CHECK = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style="flex:none;margin-top:3px"><path d="M2 7.5L5.5 11L12 3.5" fill="none" stroke="#8CC084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function refreshHud(force) {
+  // tallies
+  var totals = {}, loose = {}, tools = 0;
+  for (var k in S.items) { var s = S.items[k]; if (ITEMS[s.type].tool) { tools += s.n; continue; } totals[s.type] = (totals[s.type] || 0) + s.n; if (!inZone(s.x, s.y)) loose[s.type] = (loose[s.type] || 0) + s.n; }
+  var th = ['log', 'plank', 'stick', 'cobble'].map(function (t) {
+    var l = loose[t] || 0;
+    return '<div class="tally">' + swatch(ITEMS[t].col) + '<div><div class="row" style="gap:6px;justify-content:flex-start"><span class="dim" style="font-size:14px">' + ITEMS[t].label + '</span><span class="n num">' + (totals[t] || 0) + '</span></div>' +
+      (l ? '<div class="loose dim num">' + l + ' loose</div>' : '') + '</div></div>';
+  }).join('');
+  setHtml('mats', th);
+  var held = 0; S.residents.forEach(function (r) { if (r.axe) held++; if (r.pick) held++; });
+  document.getElementById('toolsN').textContent = tools + held;
+  setHtml('toolsList', toolsHtml());
+  // goals
+  var cur = -1, gh = '<div class="gtop"><span class="title">The founding</span></div><ol>';
+  GOALS.forEach(function (g, i) {
+    var ok = g.ok(); if (!ok && cur < 0) cur = i;
+    gh += '<li class="' + (ok ? 'done' : cur === i ? 'now' : '') + '">' + (ok ? CHECK : '<span class="num dim" style="width:14px;flex:none;text-align:right">' + (i + 1) + '</span>') + '<span>' + g.t + '</span></li>';
+    if (cur === i && !ok) gh += '<li class="hint">' + g.h + '</li>';
+  });
+  if (cur < 0) gh += '<li class="hint" style="color:var(--green)">Slice 1 complete. The village has its first two residents.</li>';
+  setHtml('goals', gh + '</ol>');
+  // speed
+  [].forEach.call(document.querySelectorAll('#speed button'), function (b) { var v = +b.getAttribute('data-a').split(':')[1]; b.setAttribute('aria-pressed', S.speed === v ? 'true' : 'false'); });
+  // stuck
+  var vis = S.stuck.filter(function (s) { return !s.hide; });
+  var stuckEl = document.getElementById('stuck'); stuckEl.hidden = !vis.length;
+  if (vis.length) setHtml('stuck', '<div class="title">Stuck (' + vis.length + ')</div>' + vis.map(function (s) {
+    var f = s.focus ? 'focus:' + s.focus.kind + ':' + s.focus.id : '';
+    return '<button ' + (f ? 'data-a="' + f + '"' : '') + '>' + FLAG + '<span><span class="who">' + esc(s.who) + '</span><span class="dim">' + esc(s.why) + '</span></span></button>';
+  }).join(''));
+  // toasts
+  var now = performance.now(); S.toasts = S.toasts.filter(function (t) { return t.until > now; });
+  var paused = S.speed === 0 ? '<div class="panel paused">Paused. You can still give orders.</div>' : '';
+  setHtml('toasts', paused + S.toasts.map(function (t) {
+    var btn = t.res ? '<button class="ghost-btn" data-a="focus:res:' + t.res + '">Go to ' + esc(resById(t.res) ? resById(t.res).name : '') + '</button>' : t.site ? '<button class="ghost-btn" data-a="focus:site:' + t.site + '">Show</button>' : '';
+    return '<div class="panel toast"><span>' + esc(t.text) + '</span>' + btn + '</div>';
+  }).join(''));
+  // selection
+  setHtml('sel', selHtml());
+  var pb = document.getElementById('pbar'); if (pb) { var rr = ui.sel && ui.sel.kind === 'res' ? resById(ui.sel.ids[0]) : null; pb.style.width = rr && rr.progress ? Math.round(rr.progress * 100) + '%' : '0%'; }
+  // toolbar
+  [].forEach.call(document.querySelectorAll('#toolbar button'), function (b) {
+    var t = b.getAttribute('data-a').split(':')[1];
+    b.setAttribute('aria-pressed', (t === 'build' ? (ui.buildOpen || ui.tool === 'build') : ui.tool === t) ? 'true' : 'false');
+  });
+  document.getElementById('buildmenu').hidden = !ui.buildOpen;
+}
+function toolRow(type, dur) {
+  var max = T.dur[ITEMS[type].tier], low = dur <= 3;
+  var name = ITEMS[type].one; name = name.charAt(0).toUpperCase() + name.slice(1);
+  return '<div class="tool-row' + (low ? ' low' : '') + '"><div class="row"><span>' + name + '</span><span class="uses num">' + dur + ' / ' + max + ' uses</span></div>' +
+    '<div class="bar"><i style="width:' + Math.round(100 * dur / max) + '%"></i></div></div>';
+}
+function toolsHtml() {
+  var out = '';
+  S.residents.forEach(function (r) {
+    var rows = '';
+    if (r.axe) rows += toolRow(r.axe.type, r.axe.dur);
+    if (r.pick) rows += toolRow(r.pick.type, r.pick.dur);
+    if (r.broken.axe && !r.axe) rows += '<div class="reason" style="font-size:14px">' + FLAG + 'Axe broke</div>';
+    if (r.broken.pick && !r.pick) rows += '<div class="reason" style="font-size:14px">' + FLAG + 'Pickaxe broke</div>';
+    if (!rows) rows = '<div class="dim" style="font-size:14px">Bare hands</div>';
+    out += '<div class="tgroup"><span class="gname">' + esc(r.name) + '</span>' + rows + '</div>';
+  });
+  var spare = '', stored = 0, loose = 0;
+  for (var k in S.items) {
+    var s = S.items[k]; if (!ITEMS[s.type].tool) continue;
+    spare += toolRow(s.type, T.dur[ITEMS[s.type].tier]);
+    if (inZone(s.x, s.y)) stored++; else loose++;
+  }
+  if (spare) out += '<div class="tgroup"><span class="gname">Spare</span><span class="dim" style="font-size:13px;margin-top:-4px">' +
+    (stored ? stored + ' in the stockpile' : '') + (stored && loose ? ', ' : '') + (loose ? loose + ' lying loose' : '') + '</span>' + spare + '</div>';
+  out += '<div class="dim" style="font-size:13px">Craft tools at the bench. Residents pick up a better tool when a job needs one.</div>';
+  return out;
+}
+function toolText(t) { if (!t) return 'None'; return (t.tier === 2 ? 'Stone' : 'Wooden') + ', ' + t.dur + (t.dur === 1 ? ' use' : ' uses') + ' left'; }
+function selHtml() {
+  var sel = ui.sel;
+  if (!sel) return '<div class="title">Nothing selected</div><div class="dim">Click Ada to select her. With Ada selected, right-click a tree to mine it, or use the orders toolbar to mark work for anyone. Press F to select a resident, or ? to see every key.</div>';
+  if (sel.kind === 'res') {
+    var rs = sel.ids.map(resById).filter(Boolean);
+    if (!rs.length) return '';
+    if (rs.length > 1) return '<div class="name">' + rs.length + ' residents</div><div class="dim">' + rs.map(function (r) { return esc(r.name) + ': ' + esc(r.job ? r.job.label : 'Idle'); }).join('<br>') + '</div><div class="dim">Right-click to give them all the same order.</div>';
+    var r = rs[0], reasons = S.stuck.filter(function (s) { return s.focus && s.focus.kind === 'res' && s.focus.id === r.id; });
+    return '<div class="row"><span class="name">' + esc(r.name) + '</span><span class="dim">' + esc(r.job ? r.job.label : 'Idle') + '</span></div>' +
+      '<div class="bar" aria-hidden="true"><i id="pbar" style="width:0%"></i></div>' +
+      '<div class="row"><span class="dim">Axe</span><span>' + (r.axe ? toolText(r.axe) : r.broken.axe ? 'Broke' : 'Bare hands') + '</span></div>' +
+      '<div class="row"><span class="dim">Pickaxe</span><span>' + (r.pick ? toolText(r.pick) : r.broken.pick ? 'Broke' : 'None') + '</span></div>' +
+      '<div class="row"><span class="dim">Carrying</span><span>' + (r.carry ? words(r.carry.type, r.carry.n) : 'Nothing') + '</span></div>' +
+      reasons.map(function (s) { return '<div class="reason">' + FLAG + esc(s.why) + '</div>'; }).join('') +
+      (!r.axe && !r.broken.axe ? '<div class="dim">Chopping by hand is slow. Stone needs a pickaxe.</div>' : '');
+  }
+  var o = selObj();
+  if (!o) return '<div class="dim">That’s gone.</div>';
+  if (o.kind === 'tree') return '<div class="row"><span class="name">Tree</span><span class="dim">Drops ' + o.logs + ' logs</span></div><button class="ghost-btn" data-a="des" style="align-self:flex-start;min-height:44px">' + (o.des ? 'Cancel mining' : 'Mine') + '</button>';
+  if (o.kind === 'boulder') {
+    var bs = S.stuck.filter(function (s) { return s.focus && s.focus.kind === 'boulder'; });
+    return '<div class="row"><span class="name">Boulder</span><span class="dim">Drops 6 cobblestone</span></div>' + (o.des && bs.length ? '<div class="reason">' + FLAG + 'Needs a pickaxe</div>' : '') + '<button class="ghost-btn" data-a="des" style="align-self:flex-start;min-height:44px">' + (o.des ? 'Cancel mining' : 'Mine') + '</button>';
+  }
+  var tpl = TPL[o.tpl], reasons2 = S.stuck.filter(function (s) { return s.focus && s.focus.kind === 'site' && s.focus.id === o.id; });
+  if (!o.done) {
+    var st = tpl.stages[o.stage], rows = '';
+    for (var k in st.cost) {
+      var have = o.store[k] || 0, need = st.cost[k];
+      rows += '<div style="display:flex;flex-direction:column;gap:4px"><div class="row"><span>' + ITEMS[k].label + '</span><span class="num">' + have + ' / ' + need + '</span></div><div class="bar"><i style="width:' + Math.round(100 * have / need) + '%"></i></div></div>';
+    }
+    var stageLine = tpl.stages.length > 1 ? 'Stage ' + (o.stage + 1) + ' of ' + tpl.stages.length + ': ' + st.name.toLowerCase() : 'Blueprint';
+    var nextSt = tpl.stages[o.stage + 1];
+    var ob = siteObstacles(o), clearing = footprintClear(o) ? '' : '<div>Clearing the ground first: ' + clearingText(ob) + '.</div>';
+    return '<div class="row"><span class="name">' + tpl.name + '</span><span class="dim">' + stageLine + '</span></div>' + clearing + rows +
+      reasons2.map(function (s) { return '<div class="reason">' + FLAG + esc(s.why) + '</div>'; }).join('') +
+      (o.builder ? '<div class="dim">' + esc(resById(o.builder).name) + ' is building.</div>' : '') +
+      (nextSt ? '<div class="dim">' + nextSt.name + ' next: ' + costText(nextSt.cost) + '.</div>' : '') +
+      '<button class="ghost-btn" data-a="cancelsite:' + o.id + '" style="align-self:flex-start;min-height:40px">Cancel blueprint</button>';
+  }
+  if (o.tpl === 'house') {
+    var owner = o.owner ? resById(o.owner) : null;
+    return '<div class="name">House</div><div class="dim">' + (owner ? 'Home of ' + esc(owner.name) + '.' : S.arrivalAt !== null && !S.arrived ? 'Empty. A traveler should arrive soon.' : 'Empty.') + '</div>';
+  }
+  // bench
+  var ai = benchActive(o), ready = benchCraftable(o), head = o.queue.length ? RBY[o.queue[ai >= 0 ? ai : 0]] : null, status = 'Nothing queued';
+  if (o.crafting) status = 'Crafting ' + o.crafting.toLowerCase();
+  else if (ready) status = 'Ready to craft ' + ready.name.toLowerCase();
+  else if (head) {
+    var missing = [];
+    for (var ik in head.inp) { var h2 = o.store[ik] || 0; if (h2 < head.inp[ik]) missing.push(words(ik, head.inp[ik] - h2)); }
+    status = (ai >= 0 ? 'Gathering ' : 'Waiting for ') + missing.join(', ') + ' for ' + head.name.toLowerCase();
+  }
+  return '<div class="row"><span class="name">Crafting bench</span><span class="dim">' + esc(status) + '</span></div>' +
+    reasons2.map(function (s) { return '<div class="reason">' + FLAG + esc(s.why) + '</div>'; }).join('') +
+    '<div class="recipes">' + RECIPES.map(function (rc) {
+      return '<div class="recipe"><span><span style="font-weight:650">' + rc.name + '</span><br><span class="dim" style="font-size:13px">' + costText(rc.inp) + ' → ' + costText(rc.out) + '</span></span><button data-a="queue:' + o.id + ':' + rc.id + '">Queue</button></div>';
+    }).join('') + '</div>' +
+    (o.queue.length ? '<div class="dim" style="font-size:13px">Queue. Items that can’t be made yet are skipped. Click one to remove it.</div><div class="queue">' + o.queue.map(function (q, i) {
+      var can = i === ai || (ready && ready.id === q && o.queue.indexOf(q) === i), auto = o.autoq && o.autoq[i];
+      return '<button data-a="unqueue:' + o.id + ':' + i + '" aria-label="Remove ' + RBY[q].name + ' from queue"' + (can ? ' style="border-color:var(--chalk);font-weight:700"' : '') + '>' + RBY[q].name + (auto ? ' <span class="dim">(auto)</span>' : '') + ' ×</button>';
+    }).join('') + '</div>' : '') +
+    '<div class="dim" style="font-size:13px">' + (S.autoCraft ? 'Missing planks and sticks are queued automatically.' : 'Once Ada’s house is finished, the bench queues the planks and sticks a recipe needs.') + '</div>';
+}
+
+// ---------- Saving ----------
+// Saves go to this player's private per-viewer storage when the page has it, else to this browser.
+var SLOTS = 5, SAVE_V = 1;
+var store = { kind: 'local', db: null, uid: null };
+(function connectStore() {
+  var c = window.claude;
+  if (!c || typeof c.use !== 'function') return;
+  Promise.all([c.use('db'), c.use('user')]).then(function (res) {
+    var db = res[0], user = res[1];
+    if (!db || !user) return null;
+    return user.id().then(function (uid) { if (uid) { store.kind = 'db'; store.db = db; store.uid = uid; if (ui.menu && ui.menu.slots) loadSlots(); } });
+  }).catch(function () {});
+})();
+function slotRef(i) { return store.db.collection('data/users/' + store.uid).doc('save' + i); }
+function readSlot(i) {
+  if (store.kind === 'db') return slotRef(i).get().then(function (s) { return s.exists ? s.data() : null; });
+  try { var v = localStorage.getItem('bv-save-' + i); return Promise.resolve(v ? JSON.parse(v) : null); } catch (e) { return Promise.resolve(null); }
+}
+function writeSlot(i, body) {
+  if (store.kind === 'db') return slotRef(i).set(body);
+  try { localStorage.setItem('bv-save-' + i, JSON.stringify(body)); return Promise.resolve(); } catch (e) { return Promise.reject(e); }
+}
+var SKIP = { job: 1, direct: 1, path: 1, toasts: 1, stuck: 1 };
+function serialize() {
+  var speed = S.speed; S.speed = ui.menu && ui.menu.prevSpeed !== undefined ? ui.menu.prevSpeed : S.speed;
+  var json = JSON.stringify({ S: S, cam: { x: camCenter()[0], y: camCenter()[1], z: cam.z } }, function (k, v) { return SKIP[k] ? undefined : v; });
+  S.speed = speed;
+  return json;
+}
+function camCenter() { var u = (vw / 2 - cam.ox) / (32 * cam.z), v = (vh / 2 - 40 * cam.z - cam.oy) / (16 * cam.z); return [(u + v) / 2, (v - u) / 2]; }
+function restore(json) {
+  var o = JSON.parse(json), s = o.S;
+  s.toasts = []; s.stuck = []; s.zoneRes = {};
+  for (var k in s.items) s.items[k].res = 0;
+  s.sites.forEach(function (x) { x.incoming = {}; x.builder = null; x.crafter = null; x.crafting = null; if (!x.autoq) x.autoq = x.queue.map(function () { return false; }); });
+  s.trees.concat(s.boulders).forEach(function (x) { x.claim = null; x.unreachUntil = 0; });
+  S = s; occDirty = true;
+  S.residents.forEach(function (r) {
+    r.job = null; r.direct = null; r.path = []; r.progress = null; r.note = null;
+    r.x = Math.round(r.x); r.y = Math.round(r.y);
+    if (r.carry) { dropItems(r.x, r.y, r.carry.type, r.carry.n); r.carry = null; }
+    if (r.arriving) walkIn(r);
+  });
+  ui.sel = null; ui.tool = null; ui.place = null; ui.buildOpen = false;
+  if (o.cam) { cam.z = o.cam.z; centerOn(o.cam.x, o.cam.y); }
+  computeStuck();
+}
+function progressText(st) {
+  var next = null;
+  for (var i = 0; i < GOALS.length; i++) if (!GOALS[i].ok.call(null, st)) { next = GOALS[i].t; break; }
+  return next ? 'Next: ' + next : 'Founding complete';
+}
+function playedText(tick) { var m = Math.floor(tick / TPS / 60); return m < 1 ? 'Under a minute played' : m === 1 ? '1 minute played' : m + ' minutes played'; }
+function whenText(iso) { try { return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } }
+
+// ---------- Menu ----------
+function openMenu(view) {
+  if (!ui.menu) ui.menu = { prevSpeed: S.speed };
+  ui.menu.view = view || 'main'; ui.menu.confirm = null; ui.menu.msg = null;
+  S.speed = 0;
+  if (ui.menu.view === 'save' || ui.menu.view === 'load') loadSlots();
+  renderMenu();
+}
+function closeMenu() {
+  if (!ui.menu) return;
+  S.speed = ui.menu.first ? 1 : ui.menu.prevSpeed; ui.menu = null;
+  document.getElementById('menu').hidden = true; refreshHud(true);
+}
+function loadSlots() {
+  ui.menu.slots = null; renderMenu();
+  var reads = []; for (var i = 1; i <= SLOTS; i++) reads.push(readSlot(i).catch(function () { return { error: true }; }));
+  Promise.all(reads).then(function (list) { if (ui.menu) { ui.menu.slots = list; renderMenu(); } });
+}
+function renderMenu() {
+  var m = ui.menu, box = document.getElementById('menuBox'), back = document.getElementById('menu');
+  if (!m) { back.hidden = true; return; }
+  back.hidden = false;
+  var h = '';
+  if (m.view === 'main') {
+    h += '<div><h2 id="menuTitle">Block Village</h2><div class="sub dim">The founding. ' + esc(progressText()) + '.</div></div>';
+    h += '<div class="menu-actions">' +
+      '<button class="primary" data-a="m:resume">' + (m.first ? 'Play' : 'Resume') + '</button>' +
+      '<button data-a="m:view:save">Save game</button>' +
+      '<button data-a="m:view:load">Load game</button>' +
+      '<button data-a="m:view:keys">Controls</button>' +
+      '<button data-a="m:ask:restart">Start over</button></div>';
+    if (m.confirm) h += confirmHtml(m.confirm);
+    h += '<div class="dim" style="font-size:13px">' + (store.kind === 'db' ? 'Saves are kept with your account on this page.' : 'Saves are kept in this browser.') + ' Esc or M opens this menu.</div>';
+  } else if (m.view === 'keys') {
+    h += '<div><h2 id="menuTitle">Controls</h2><div class="sub dim">Press ? in the game to open this list.</div></div>';
+    h += KEY_LIST.map(function (g) {
+      return '<div class="keys"><div class="gname">' + g[0] + '</div>' + g[1].map(function (r) {
+        return '<div class="krow"><span class="kk">' + r[0].split(' or ').map(function (p) { return '<kbd>' + esc(p) + '</kbd>'; }).join(' ') + '</span><span>' + esc(r[1]) + '</span></div>';
+      }).join('') + '</div>';
+    }).join('');
+    h += '<button class="back" data-a="m:view:main">Back</button>';
+  } else {
+    var saving = m.view === 'save';
+    h += '<div><h2 id="menuTitle">' + (saving ? 'Save game' : 'Load game') + '</h2><div class="sub dim">' + (saving ? 'Choose a slot. Saving over a slot replaces it.' : 'Choose a save to continue from.') + '</div></div>';
+    if (!m.slots) h += '<div class="dim">Reading saves…</div>';
+    else {
+      h += '<div class="slots">' + m.slots.map(function (sl, i) {
+        var n = i + 1, empty = !sl || sl.error, meta;
+        if (sl && sl.error) meta = '<span class="err" style="font-size:14px">Couldn’t read this slot</span>';
+        else if (!sl) meta = '<span class="dim">Empty</span>';
+        else meta = '<span>' + esc(sl.summary || '') + '</span><span class="dim" style="font-size:13px">' + esc(playedText(sl.tick || 0)) + '. Saved ' + esc(whenText(sl.savedAt)) + '</span>';
+        var btn = saving ? '<button data-a="m:' + (empty ? 'save' : 'ask:save') + ':' + n + '">' + (empty ? 'Save here' : 'Save over') + '</button>'
+          : '<button data-a="m:ask:load:' + n + '"' + (empty ? ' disabled' : '') + '>Load</button>';
+        return '<div class="slot"><div class="meta"><span class="sn">Slot ' + n + '</span>' + meta + '</div>' + btn + '</div>';
+      }).join('') + '</div>';
+    }
+    if (m.confirm) h += confirmHtml(m.confirm);
+    if (m.msg) h += '<div class="' + (m.msg.err ? 'err' : 'dim') + '">' + esc(m.msg.text) + '</div>';
+    h += '<button class="back" data-a="m:view:main">Back</button>';
+  }
+  box.innerHTML = h;
+  var first = box.querySelector('.confirm button.go') || box.querySelector('button.primary') || box.querySelector('button');
+  if (first && document.activeElement && !box.contains(document.activeElement)) first.focus();
+}
+function confirmHtml(c) {
+  return '<div class="confirm" role="alert"><div>' + esc(c.text) + '</div><div class="btns"><button class="go" data-a="m:do:' + c.action + '">' + esc(c.yes) + '</button><button data-a="m:cancel">Cancel</button></div></div>';
+}
+function menuAction(parts) {
+  var m = ui.menu; if (!m) return;
+  var a = parts[1];
+  if (a === 'resume') return closeMenu();
+  if (a === 'view') return openMenu(parts[2]);
+  if (a === 'cancel') { m.confirm = null; return renderMenu(); }
+  if (a === 'ask') {
+    var what = parts[2], n = parts[3];
+    if (what === 'restart') m.confirm = { text: 'Start a new game? Anything you haven’t saved will be lost.', yes: 'Start over', action: 'restart' };
+    if (what === 'save') m.confirm = { text: 'Save over slot ' + n + '? The save that’s there now will be replaced.', yes: 'Save over slot ' + n, action: 'save:' + n };
+    if (what === 'load') m.confirm = { text: 'Load slot ' + n + '? Anything you haven’t saved will be lost.', yes: 'Load slot ' + n, action: 'load:' + n };
+    return renderMenu();
+  }
+  if (a === 'do') return menuAction(['m'].concat(parts.slice(2)));
+  if (a === 'restart') { newGame(); fitCamera(); m.prevSpeed = 1; m.first = false; closeMenu(); return; }
+  if (a === 'save') {
+    var slot = +parts[2];
+    m.confirm = null; m.msg = { text: 'Saving to slot ' + slot + '…' }; renderMenu();
+    var body = { v: SAVE_V, savedAt: new Date().toISOString(), tick: S.tick, summary: progressText(), state: serialize() };
+    writeSlot(slot, body).then(function () {
+      if (!ui.menu) return;
+      ui.menu.slots[slot - 1] = body; ui.menu.msg = { text: 'Saved to slot ' + slot + '.' }; renderMenu();
+    }, function (e) {
+      if (!ui.menu) return;
+      var why = e && e.code === 'quota_exceeded' ? 'The save storage is full.' : 'Try again in a moment.';
+      ui.menu.msg = { text: 'Couldn’t save to slot ' + slot + '. ' + why, err: true }; renderMenu();
+    });
+    return;
+  }
+  if (a === 'load') {
+    var ls = +parts[2], data = m.slots && m.slots[ls - 1];
+    if (!data || !data.state) { m.confirm = null; m.msg = { text: 'Slot ' + ls + ' is empty.', err: true }; return renderMenu(); }
+    try { restore(data.state); } catch (e) { m.confirm = null; m.msg = { text: 'Slot ' + ls + ' couldn’t be loaded. The save may be from an older version.', err: true }; return renderMenu(); }
+    m.prevSpeed = S.speed || 1; m.first = false;
+    closeMenu(); toast('Loaded slot ' + ls + '.'); refreshHud(true);
+  }
+}
+
+// ---------- Loop ----------
+var acc = 0, lastT = performance.now(), hudT = 0;
+function frame(t) {
+  var dt = Math.min(0.1, (t - lastT) / 1000); lastT = t;
+  var pan = 600 * dt;
+  if (ui.keys.w || ui.keys.arrowup) cam.oy += pan; if (ui.keys.s || ui.keys.arrowdown) cam.oy -= pan;
+  if (ui.keys.a || ui.keys.arrowleft) cam.ox += pan; if (ui.keys.d || ui.keys.arrowright) cam.ox -= pan;
+  acc += dt * S.speed; var n = 0;
+  while (acc >= DT && n < 30) { step(); acc -= DT; n++; }
+  render();
+  hudT += dt; if (hudT > 0.2) { hudT = 0; refreshHud(); }
+  requestAnimationFrame(frame);
+}
+resize(); newGame(); fitCamera(); refreshHud(true);
+ui.menu = { prevSpeed: 1, first: true }; openMenu('main');
+requestAnimationFrame(frame);
+})();
+</script>
