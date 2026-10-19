@@ -240,9 +240,11 @@ func _initialize() -> void:
 	check(h1 != null and h1.tpl == "house" and h1.rot == 1, "clicking places the house with the turned door")
 
 	await click(screen(bench_cell, 0.4))
-	for i in 8:
-		await click_button("Queue", "Planks")
-	check(bench.queue.size() >= 8, "8 batches of planks queued by clicking")
+	var queued_before: int = bench.queue.size()
+	check(await click_button("Queue 5", "Planks"), "click Queue 5 for planks")
+	check(bench.queue.size() == queued_before + 5, "Queue 5 queues five batches")
+	await click_button("Queue 5", "Planks")
+	check(bench.queue.size() >= queued_before + 8, "two Queue 5 clicks cover a house's planks")
 	await run(700)
 	check(h1.done, "Ada builds her house")
 	check(sim.auto_craft, "auto ingredients unlock with the first house")
@@ -254,8 +256,8 @@ func _initialize() -> void:
 	var h2 = sim.site_at(origin2 + Vector2i(2, 2))
 	check(h2 != null, "second house placed")
 	await click(screen(bench_cell, 0.4))
-	for i in 8:
-		await click_button("Queue", "Planks")
+	await click_button("Queue 5", "Planks")
+	await click_button("Queue 5", "Planks")
 	await run(1000)
 	check(h2 != null and h2.done, "second house finished")
 	check(sim.residents.size() == 2 and sim.stats.traveler_home, "Tomas arrives and moves in")
@@ -293,7 +295,7 @@ func _initialize() -> void:
 
 	# Tools dropdown on hover
 	var tb: Button = game._hud._tools_btn
-	await move(Vector2(640, 400))
+	await move(Vector2(1000, 430))
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "Tools list is closed")
 	await move(tb.get_global_rect().get_center())
@@ -302,7 +304,7 @@ func _initialize() -> void:
 	await move(game._hud._tools_drop.get_global_rect().get_center())
 	await frames(2)
 	check(game._hud._tools_drop.visible, "the list stays open while the pointer moves onto it")
-	await move(Vector2(640, 400))
+	await move(Vector2(1000, 430))
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "moving away closes the list")
 

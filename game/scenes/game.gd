@@ -530,8 +530,9 @@ func cancel_site(s: Dictionary) -> void:
 	selection = {}
 
 
-func queue_craft(s: Dictionary, recipe_id: String) -> void:
-	sim.queue_add(s, recipe_id)
+func queue_craft(s: Dictionary, recipe_id: String, times := 1) -> void:
+	for i in times:
+		sim.queue_add(s, recipe_id)
 
 
 func unqueue_craft(s: Dictionary, i: int) -> void:

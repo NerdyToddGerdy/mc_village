@@ -97,7 +97,7 @@ Each job has: target, required tool (if any), required items (if any), priority,
 
 ## 6. Crafting
 
-The crafting bench is a 1-block structure built from logs. Selecting it opens its panel, where the player queues recipes. A resident claims a `craft` job, fetches inputs, works for `craft_time`, and drops outputs at the bench (to be hauled).
+The crafting bench is a 1-block structure built from logs. Selecting it opens its panel, where the player queues recipes, one at a time with **Queue** or five at a time with **Queue 5**. A house's 28 planks take two Queue 5 clicks. A resident claims a `craft` job, fetches inputs, works for `craft_time`, and drops outputs at the bench (to be hauled).
 
 **Queue order.** The queue isn't strictly first-in-first-out:
 - Residents feed and craft the first queued recipe whose inputs exist somewhere: already at the bench, on the way, or lying loose or in a stockpile. Blocked recipes are skipped, not waited on. So "Wooden axe, Planks, Sticks" makes the planks and sticks first, then the axe.
