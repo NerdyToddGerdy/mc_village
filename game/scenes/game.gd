@@ -405,6 +405,7 @@ func open_menu(view: String) -> void:
 	if not _menu.visible:
 		_menu_prev_speed = speed if speed != 0 else last_speed
 		speed = 0
+		_acc = 0.0
 		set_tool("")
 	_menu.show_view(view)
 
@@ -493,6 +494,8 @@ func set_speed(v: int) -> void:
 	if speed != 0:
 		last_speed = speed
 	speed = v
+	if v == 0:
+		_acc = 0.0  # no leftover time may tick the sim after pausing
 
 
 func set_tool(t: String) -> void:

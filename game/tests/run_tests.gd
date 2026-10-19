@@ -22,7 +22,8 @@ func _init() -> void:
 		_current = t
 		call(t)
 	print("\n%d checks, %d failed" % [_checks, _failures])
-	quit(1 if _failures > 0 else 0)
+	# No checks means the tests never ran (for example, a script failed to compile).
+	quit(1 if _failures > 0 or _checks == 0 else 0)
 
 
 func check(cond: bool, what: String) -> void:

@@ -1,0 +1,64 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  godot:
+    name: Godot tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GODOT_VERSION: 4.7.2
+    defaults:
+      run:
+        working-directory: game
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Download Godot ${{ env.GODOT_VERSION }}
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        working-directory: .
+        run: |
+          mkdir -p ~/godot
+          curl -fsSL -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot
+          mv ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ~/godot/godot
+          chmod +x ~/godot/godot
+
+      - name: Import project
+        run: timeout 300 ~/godot/godot --headless --path . --import
+
+      # Each suite must print its success line too: Godot can exit 0 when a test script fails
+      # to compile, so the exit code alone isn't enough.
+      - name: Sim tests
+        run: |
+          set -o pipefail
+          timeout 300 ~/godot/godot --headless --path . -s res://tests/run_tests.gd 2>&1 | tee /tmp/sim.log
+          grep -qE '^[1-9][0-9]* checks, 0 failed$' /tmp/sim.log
+
+      - name: Game scene tests
+        run: |
+          set -o pipefail
+          timeout 300 ~/godot/godot --headless --path . -s res://tests/game_test.gd 2>&1 | tee /tmp/game.log
+          grep -q '^ALL PASSED$' /tmp/game.log
+
+      - name: Bot playtest
+        run: |
+          set -o pipefail
+          timeout 600 ~/godot/godot --headless --path . -s res://tests/playtest.gd 2>&1 | tee /tmp/playtest.log
+          grep -q '^PLAYTEST PASSED$' /tmp/playtest.log
