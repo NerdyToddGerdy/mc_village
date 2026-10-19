@@ -15,6 +15,7 @@ var _tools_btn: Button
 var _tools_drop: PanelContainer
 var _tools_list := VBoxContainer.new()
 var _tools_pinned := false
+var _pointer := Vector2(-1, -1)
 var _goals := VBoxContainer.new()
 var _speed_btns := {}
 var _stuck_panel: PanelContainer
@@ -360,10 +361,15 @@ func _tool_row(type: String, dur: int) -> VBoxContainer:
 
 ## Opens the Tools dropdown while the pointer is over the button or the list, while the button
 ## has keyboard focus, or while it's pinned open by a click or tap.
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouse:
+		_pointer = event.position
+
+
 func _process(_delta: float) -> void:
 	if _tools_btn == null:
 		return
-	var mouse := _root.get_global_mouse_position()
+	var mouse := _pointer
 	var btn_rect := _tools_btn.get_global_rect().grow(4)
 	var open := _tools_pinned or _tools_btn.has_focus() or btn_rect.has_point(mouse)
 	if _tools_drop.visible and not open:

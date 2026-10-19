@@ -22,12 +22,13 @@ GODOT=/Applications/Godot.app/Contents/MacOS/Godot
 $GODOT --path .                                              # play
 $GODOT --headless --path . -s res://tests/run_tests.gd       # sim tests; exit code 1 on failure
 $GODOT --headless --path . -s res://tests/game_test.gd       # real game scene: menu, save, load, start over
+$GODOT --headless --path . -s res://tests/playtest.gd        # bot plays the whole opening through pushed input events (~1 min)
 $GODOT --headless --path . --import                          # refresh the class cache after adding a class_name script
 $GODOT --path . --resolution 1280x720 -- --screenshot        # scripted opening, saves user://screenshot.png, quits
 $GODOT --path . --resolution 1280x720 -- --screenshot-menu   # Save game menu, saves user://screenshot_menu.png
 ```
 
-Screenshots and saves (`saves/slot_N.save`) live in `~/Library/Application Support/Godot/app_userdata/Block Village/`. `game_test.gd` writes to `test_saves/` there instead, so it never touches real saves. It's the quickest way to check view changes without clicking through the game.
+Screenshots and saves (`saves/slot_N.save`) live in `~/Library/Application Support/Godot/app_userdata/Block Village/`. `game_test.gd` and `playtest.gd` write to `test_saves/` and `playtest_saves/` there instead, so they never touch real saves. The playtest pushes input with `push_input(event, true)` (local coordinates) because the window is stretched. It's the quickest way to check view changes without clicking through the game.
 
 There's no single-test runner. To focus on one test, temporarily trim the `tests` list in `tests/run_tests.gd`. Tests are named after the behaviour they cover.
 
