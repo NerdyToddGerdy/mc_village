@@ -134,6 +134,8 @@ A resident auto-equips a carried or nearby unclaimed tool when a job needs one a
 
 One use is one tree felled or one boulder broken. When durability reaches 0, the tool is destroyed, the job is released with `tool_broke`, and the resident stops and reports. There's no auto-replacement in Slice 1; a fresh tool in storage is equipped only when the player orders it or when the resident next claims a job needing that tool. (The Slice 2 toolsmith job takes this over.)
 
+**Tools keep their wear.** A tool keeps its remaining uses wherever it goes: dropped, carried to the stockpile, equipped, or saved. A resident who swaps to a better tool drops the old one with whatever it had left. The Tools list shows each spare tool's real uses. A tool fresh from the bench has full uses. Save format v2 added this. Loading a v1 save gives its loose tools full uses, which is what they effectively had before.
+
 ## 8. Construction
 
 **Placement.** The blueprint follows the cursor. It shows its footprint, entrance, and stage costs. Placing creates a construction site, not a building. Rotation in 90° steps.

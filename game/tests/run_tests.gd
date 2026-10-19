@@ -17,7 +17,9 @@ func _init() -> void:
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
-		"test_v1_save_fixture_still_loads",
+		"test_every_save_fixture_still_loads",
+		"test_v1_tools_get_full_uses_when_upgraded",
+		"test_dropped_tools_keep_their_wear",
 		"test_upgrades_run_in_order",
 		"test_newer_or_damaged_saves_are_refused",
 		"test_save_file_round_trip",
@@ -215,18 +217,58 @@ func test_tool_breaks_and_resident_reports() -> void:
 
 
 ## Every fixture in tests/fixtures must keep loading after any change to the save format.
-func test_v1_save_fixture_still_loads() -> void:
+func test_every_save_fixture_still_loads() -> void:
+	for v in range(1, SaveFormat.VERSION + 1):
+		var path := "res://tests/fixtures/save_v%d.save" % v
+		var r := SaveFormat.read(path)
+		check(not r.has("error"), "v%d fixture reads: %s" % [v, r.get("error", "")])
+		if r.has("error"):
+			continue
+		check(r.data.v == SaveFormat.VERSION, "v%d fixture is upgraded to the current version" % v)
+		var sim := Sim.from_state(r.data.state)
+		check(sim.tick == r.data.tick, "v%d: tick restored" % v)
+		check(sim.residents.size() == 2 and sim.residents[1].arriving, "v%d: Tomas is walking in again after loading" % v)
+		check(sim.sites.any(func(s): return s.tpl == "bench" and s.done and s.queue.has("stone_axe")), "v%d: the bench and its queue survive" % v)
+		run(sim, 60)
+		check(sim.stats.traveler_home, "v%d: Tomas finishes moving in after loading" % v)
+
+
+func test_v1_tools_get_full_uses_when_upgraded() -> void:
+	var raw = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v1.save"))
+	var had_tools: bool = raw.state.items.values().any(func(it): return Defs.is_tool_item(it.type))
 	var r := SaveFormat.read("res://tests/fixtures/save_v1.save")
-	check(not r.has("error"), "v1 fixture reads: %s" % r.get("error", ""))
-	if r.has("error"):
-		return
-	check(r.data.v == SaveFormat.VERSION, "fixture is upgraded to the current version")
-	var sim := Sim.from_state(r.data.state)
-	check(sim.tick == r.data.tick, "tick restored from the fixture")
-	check(sim.residents.size() == 2 and sim.residents[1].arriving, "Tomas is walking in again after loading")
-	check(sim.sites.any(func(s): return s.tpl == "bench" and s.done and s.queue.has("stone_axe")), "the bench and its queue survive")
-	run(sim, 60)
-	check(sim.stats.traveler_home, "Tomas finishes moving in after loading")
+	var tools: Array = r.data.state.items.values().filter(func(it): return Defs.is_tool_item(it.type))
+	check(tools.all(func(it): return it.get("dur", -1) == Sim.full_uses(it.type)), "loose tools from a v1 save get full uses (%d tools; v1 had tools: %s)" % [tools.size(), had_tools])
+
+
+## Issue #5: a tool keeps its remaining uses when dropped, stockpiled, saved and picked up again.
+func test_dropped_tools_keep_their_wear() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	ada.axe = {"type": "wood_axe", "tier": 1, "dur": 3}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "stone_axe", 1)
+	var tree: Dictionary = Sim.nearest(sim.trees, Sim.rcell(ada))
+	sim.direct_order(ada, tree)
+	run(sim, 20)
+	check(ada.axe != null and ada.axe.type == "stone_axe", "Ada swaps to the better stone axe")
+	var worn: Array = sim.stacks_where(func(s): return s.type == "wood_axe")
+	check(worn.size() == 1 and worn[0].dur == 3, "the wooden axe she put down still has 3 uses, not a new 10")
+	sim.paint_zone(Rect2i(0, 0, 3, 3))
+	run(sim, 40)
+	worn = sim.stacks_where(func(s): return s.type == "wood_axe")
+	check(worn.size() == 1 and sim.in_zone(worn[0].cell) and worn[0].dur == 3, "hauled to the stockpile with its wear")
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	worn = loaded.stacks_where(func(s): return s.type == "wood_axe")
+	check(worn.size() == 1 and worn[0].dur == 3, "wear survives a save and load")
+	var bo := loaded.add_resident("Bo", "8C4F6B", Vector2i(1, 1))
+	loaded.designate_mine(Rect2i(0, 0, loaded.w, loaded.h))
+	for b in loaded.boulders:
+		b.des = false
+	for i in 60:
+		run(loaded, 0.5)
+		if bo.axe != null:
+			break
+	check(bo.axe != null and bo.axe.type == "wood_axe" and bo.axe.dur == 3, "the next resident picks it up with its 3 uses (%s)" % [bo.axe])
 
 
 func test_upgrades_run_in_order() -> void:

@@ -8,15 +8,29 @@ extends RefCounted
 ##
 ## When the shape of saved data changes:
 ## 1. Bump VERSION.
-## 2. Add an entry to UPGRADES that turns a save of the previous version into the new shape.
+## 2. Add an entry to upgrades() that turns a save of the previous version into the new shape.
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 1
+const VERSION := 2
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
-const UPGRADES := {}
+static func upgrades() -> Dictionary:
+	return {1: _v1_to_v2}
+
+
+## v2: tool items remember their remaining uses (issue #5). In v1 a dropped tool always came back
+## new, so give every loose or carried tool full uses.
+static func _v1_to_v2(d: Dictionary) -> Dictionary:
+	for k in d.state.items:
+		var it: Dictionary = d.state.items[k]
+		if Defs.is_tool_item(it.type) and not it.has("dur"):
+			it.dur = Sim.full_uses(it.type)
+	for r in d.state.residents:
+		if r.get("carry") != null and Defs.is_tool_item(r.carry.type) and not r.carry.has("dur"):
+			r.carry.dur = Sim.full_uses(r.carry.type)
+	return d
 
 
 ## Reads a save file. Returns {"data": Dictionary} upgraded to the current version, or
@@ -36,7 +50,9 @@ static func parse(text: String) -> Dictionary:
 
 ## Runs `data` through each upgrade step from its version up to `target`, in order. `steps` and
 ## `target` default to the real ones; tests pass their own to check the chain.
-static func upgrade(data: Dictionary, steps := UPGRADES, target := VERSION) -> Dictionary:
+static func upgrade(data: Dictionary, steps = null, target := VERSION) -> Dictionary:
+	if steps == null:
+		steps = upgrades()
 	var v: int = int(data.v)
 	if v > target:
 		return {"error": "This save is from a newer version of the game."}
