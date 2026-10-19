@@ -12,12 +12,20 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 2
+const VERSION := 3
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2}
+	return {1: _v1_to_v2, 2: _v2_to_v3}
+
+
+## v3: residents have a list of queued orders (Shift + right-click, issue #2).
+static func _v2_to_v3(d: Dictionary) -> Dictionary:
+	for r in d.state.residents:
+		if not r.has("orders"):
+			r.orders = []
+	return d
 
 
 ## v2: tool items remember their remaining uses (issue #5). In v1 a dropped tool always came back

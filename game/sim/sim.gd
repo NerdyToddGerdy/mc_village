@@ -58,7 +58,8 @@ func _id() -> int:
 func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 	var r := {"id": _id(), "kind": "res", "name": rname, "shirt": shirt, "pos": Vector2(cell),
 		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null,
-		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false}
+		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false,
+		"orders": []}
 	residents.append(r)
 	return r
 
@@ -789,6 +790,11 @@ func _claim(r: Dictionary) -> void:
 		r.job = r.direct
 		r.direct = null
 		return
+	while not r.orders.is_empty():
+		var j = _order_job(r, r.orders.pop_front())
+		if j != null:
+			r.job = j
+			return
 	var c := rcell(r)
 	if auto_craft:
 		expand_queues()
@@ -1100,13 +1106,15 @@ func cancel_site(s: Dictionary) -> void:
 	rev += 1
 
 
-## Right-click order for one resident: mine a tree or boulder, or walk to a cell.
+## Right-click order for one resident: mine a tree or boulder, or walk to a cell. It replaces
+## whatever they're doing and any queued orders.
 func direct_order(r: Dictionary, target = null, cell = null) -> void:
 	if r.arriving:
 		return
 	if r.job != null:
 		fail_job(r)
 	r.note = null
+	r.orders.clear()
 	if target != null and (target.kind == "tree" or target.kind == "boulder"):
 		target.des = true
 		target.unreach_until = 0
@@ -1122,6 +1130,48 @@ func direct_order(r: Dictionary, target = null, cell = null) -> void:
 		r.direct = _gather_job(r, target)
 	elif cell != null and walkable(cell):
 		r.direct = _move_job(cell)
+
+
+## Shift + right-click: adds an order to the end of the resident's list. Orders run one after
+## another once their current work is done, then the resident goes back to claiming jobs.
+func queue_order(r: Dictionary, target = null, cell = null) -> void:
+	if r.arriving:
+		return
+	if target != null and (target.kind == "tree" or target.kind == "boulder"):
+		target.des = true
+		target.unreach_until = 0
+		rev += 1
+		r.orders.append({"kind": "mine", "target_kind": target.kind, "id": target.id})
+	elif cell != null and walkable(cell):
+		r.orders.append({"kind": "move", "cell": cell})
+
+
+func clear_orders(r: Dictionary) -> void:
+	r.orders.clear()
+
+
+static func order_text(o: Dictionary) -> String:
+	if o.kind == "move":
+		return "Walk to a spot"
+	return "Mine a tree" if o.target_kind == "tree" else "Mine a boulder"
+
+
+## Turns a queued order into a job, or returns null to skip it (its target is gone or taken, or a
+## boulder needs a pickaxe nobody has).
+func _order_job(r: Dictionary, o: Dictionary):
+	if o.kind == "move":
+		return _move_job(o.cell) if walkable(o.cell) else null
+	var list := trees if o.target_kind == "tree" else boulders
+	for t in list:
+		if t.id != o.id:
+			continue
+		if not t.alive or (t.claim != 0 and t.claim != r.id):
+			return null
+		if t.kind == "boulder" and r.pick == null and tool_items("pick", 0).is_empty():
+			r.note = {"text": "Needs a pickaxe", "until": tick + 5 * Tuning.TPS}
+			return null
+		return _gather_job(r, t)
+	return null
 
 
 # ---------------------------------------------------------------- saving

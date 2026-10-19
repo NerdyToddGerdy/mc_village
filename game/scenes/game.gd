@@ -157,7 +157,7 @@ func _update_live_overlays() -> void:
 	if hint == "" and tool == "" and _drag.is_empty() and selection.get("kind", "") == "res":
 		var hit = _pick(_mouse)
 		if hit != null and hit.kind in ["tree", "boulder"]:
-			hint = "Right-click: Mine"
+			hint = "Right-click: Mine. Shift queues it."
 	_world.live_outlines = outlines
 	_world.live_fills = fills
 	_hud.show_hint(hint, _mouse, hint_col)
@@ -301,7 +301,10 @@ func _mouse_button(e: InputEventMouseButton) -> void:
 			var r := sim.resident(id)
 			if not r.is_empty():
 				var target = hit if hit != null and hit.kind in ["tree", "boulder"] else null
-				sim.direct_order(r, target, cell)
+				if e.shift_pressed:
+					sim.queue_order(r, target, cell)
+				else:
+					sim.direct_order(r, target, cell)
 	elif e.button_index == MOUSE_BUTTON_LEFT:
 		if e.pressed:
 			_left_down(e)
@@ -519,6 +522,10 @@ func start_placing(tpl: String) -> void:
 
 func zoom(f: float) -> void:
 	_cam.size = clampf(_cam.size * f, 6.0, 32.0)
+
+
+func clear_orders(r: Dictionary) -> void:
+	sim.clear_orders(r)
 
 
 func toggle_mine(target: Dictionary) -> void:

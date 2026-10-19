@@ -20,6 +20,7 @@ func _init() -> void:
 		"test_every_save_fixture_still_loads",
 		"test_v1_tools_get_full_uses_when_upgraded",
 		"test_dropped_tools_keep_their_wear",
+		"test_queued_orders_run_in_turn",
 		"test_upgrades_run_in_order",
 		"test_newer_or_damaged_saves_are_refused",
 		"test_save_file_round_trip",
@@ -229,6 +230,10 @@ func test_every_save_fixture_still_loads() -> void:
 		check(sim.tick == r.data.tick, "v%d: tick restored" % v)
 		check(sim.residents.size() == 2 and sim.residents[1].arriving, "v%d: Tomas is walking in again after loading" % v)
 		check(sim.sites.any(func(s): return s.tpl == "bench" and s.done and s.queue.has("stone_axe")), "v%d: the bench and its queue survive" % v)
+		if v >= 3:
+			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
+		else:
+			check(sim.residents[0].orders == [], "v%d: residents get an empty order list" % v)
 		run(sim, 60)
 		check(sim.stats.traveler_home, "v%d: Tomas finishes moving in after loading" % v)
 
@@ -311,3 +316,45 @@ func test_save_file_round_trip() -> void:
 	check(not r.has("error") and r.data.v == SaveFormat.VERSION, "save read back at the current version")
 	check(Sim.from_state(r.data.state).tick == sim.tick, "state survives the file")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## Issue #2: Shift + right-click queues orders that run one after another, after current work.
+func test_queued_orders_run_in_turn() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var start := Sim.rcell(ada)
+	var spot := start + Vector2i(3, 0)
+	var tree: Dictionary = Sim.nearest(sim.trees, start)
+	var back := start + Vector2i(0, 2)
+	sim.queue_order(ada, null, spot)
+	sim.queue_order(ada, tree)
+	sim.queue_order(ada, null, back)
+	check(ada.orders.size() == 3 and Sim.order_text(ada.orders[1]) == "Mine a tree", "three orders queued")
+	check(tree.des, "a queued tree is marked for mining")
+	var visited_spot := -1
+	var felled := -1
+	var back_at := -1
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if visited_spot < 0 and Sim.rcell(ada) == spot:
+			visited_spot = i
+		if felled < 0 and not tree.alive:
+			felled = i
+		if back_at < 0 and felled >= 0 and Sim.rcell(ada) == back:
+			back_at = i
+	check(visited_spot >= 0 and felled > visited_spot and back_at > felled, "orders run in turn: walk, then mine, then walk (%d, %d, %d)" % [visited_spot, felled, back_at])
+	check(ada.orders.is_empty(), "the list empties as orders run")
+	sim.queue_order(ada, null, spot)
+	sim.queue_order(ada, null, back)
+	sim.direct_order(ada, null, start)
+	check(ada.orders.is_empty(), "a plain right-click replaces the queued orders")
+	var boulder: Dictionary = sim.boulders[0]
+	sim.queue_order(ada, boulder)
+	sim.queue_order(ada, null, spot)
+	run(sim, 1)
+	check(ada.orders.is_empty() and ada.job != null and ada.job.kind == "move", "a boulder order without a pickaxe is skipped and the next order runs")
+	sim.queue_order(ada, null, back)
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.residents[0].orders.size() == 1, "queued orders survive a save and load")
+	sim.clear_orders(ada)
+	check(ada.orders.is_empty(), "Clear orders empties the list")

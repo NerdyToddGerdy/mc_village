@@ -32,6 +32,14 @@ func _initialize() -> void:
 			if walked >= Tuning.TPS:  # a second into the walk
 				break
 	sim.queue_add(bench, "stone_axe")
+	if SaveFormat.VERSION >= 3:
+		var ada: Dictionary = sim.residents[0]
+		var tree = Sim.nearest(sim.trees.filter(func(t): return t.alive), Sim.rcell(ada))
+		if tree != null:
+			sim.queue_order(ada, tree)
+		else:
+			sim.queue_order(ada, null, Sim.rcell(ada) + Vector2i(1, 0))
+		sim.queue_order(ada, null, Sim.rcell(ada))
 	if not (sim.residents.size() == 2 and sim.residents[1].arriving):
 		printerr("Tomas isn't walking in; the fixture would miss that case.")
 		quit(1)
