@@ -4,12 +4,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-The Godot project hasn't started yet. The repo holds design docs and a browser prototype for **Block Village** (working title), an isometric settlement simulation inspired by Minecraft:
-- `block-village-design-brief.md` is the vision and decisions document.
-- `slice-1-spec.md` is the implementation spec for the current slice. It covers architecture, the job system, recipes, construction, controls, saving, the tuning table, and the "carpenter's chalk" UI language.
-- `prototype/founding.html` is a playable, single-file browser prototype of Slice 1. Open it directly in a browser; it has no build step or dependencies beyond Google Fonts. It's used to test rules before they go into the spec. When a playtest changes a rule, update both the prototype and the spec. Its live copy is published as a claude.ai artifact.
+**Block Village** (working title) is an isometric settlement simulation inspired by Minecraft. The repo holds:
+- `block-village-design-brief.md`: the vision and decisions document.
+- `slice-1-spec.md`: the implementation spec for the current slice. It covers architecture, the job system, recipes, construction, controls, saving, the tuning table, and the "carpenter's chalk" UI language.
+- `prototype/founding.html`: a playable, single-file browser prototype of Slice 1.
+  - It's opened directly in a browser, with no build step or dependencies beyond Google Fonts.
+  - Rules are tried here before they go into the spec. When a playtest changes a rule, update the prototype, the spec, and the Godot sim.
+  - Its live copy is published as a claude.ai artifact.
+- `game/`: the Godot 4.7 project for Slice 1.
 
-There's no build system or test suite yet. Update this file with commands once the Godot project exists.
+## Commands
+
+Godot is installed at `/Applications/Godot.app/Contents/MacOS/Godot` (via `brew install --cask godot`). Run these from `game/`:
+
+```sh
+GODOT=/Applications/Godot.app/Contents/MacOS/Godot
+$GODOT --path .                                              # play
+$GODOT --headless --path . -s res://tests/run_tests.gd       # sim tests; exit code 1 on failure
+$GODOT --headless --path . -s res://tests/game_test.gd       # real game scene: menu, save, load, start over
+$GODOT --headless --path . --import                          # refresh the class cache after adding a class_name script
+$GODOT --path . --resolution 1280x720 -- --screenshot        # scripted opening, saves user://screenshot.png, quits
+$GODOT --path . --resolution 1280x720 -- --screenshot-menu   # Save game menu, saves user://screenshot_menu.png
+```
+
+Screenshots and saves (`saves/slot_N.save`) live in `~/Library/Application Support/Godot/app_userdata/Block Village/`. `game_test.gd` writes to `test_saves/` there instead, so it never touches real saves. It's the quickest way to check view changes without clicking through the game.
+
+There's no single-test runner. To focus on one test, temporarily trim the `tests` list in `tests/run_tests.gd`. Tests are named after the behaviour they cover.
+
+## Godot project layout
+
+- `game/sim/`: all game rules, as `RefCounted` classes with no Nodes.
+  - `sim.gd` holds the state and does the work: ticking, claiming jobs, interpreting job steps, computing stuck reasons, commands, and save/load.
+  - Entities are plain Dictionaries (cells are `Vector2i`). Compare them with `is_same()`, never `==`, because GDScript compares Dictionaries by content.
+  - `job.gd` is a job's step list plus its "holds", the reservations it keeps. A step that uses up a hold removes it, and whatever's left is undone when the job ends. Jobs aren't saved.
+  - `tuning.gd` holds every number. `defs.gd` holds items, recipes and building templates. `goals.gd` holds the founding checklist.
+- `game/view/`: drawing only.
+  - `world_view.gd` rebuilds MultiMesh block geometry when `sim.rev` changes and draws residents and per-frame overlays every frame.
+  - `hud.gd` builds the slate-and-chalk HUD from one code-built `Theme`. Panels rebuild only when their content changes, so clicks aren't lost to a rebuild.
+- `game/scenes/game.gd`: ticks the sim at 20 Hz times the current speed, owns the camera and selection, and turns input into sim commands. It also saves and loads slots, storing `Sim.save_state()` with `var_to_str`. The HUD and the menu (`view/game_menu.gd`) call its public methods.
+- Avoid naming methods after built-in `Object`/`Script` methods. `_get` and `is_tool` both broke compilation here.
 
 ## Technical decisions
 

@@ -46,7 +46,7 @@ project/
   - Carried items, which are dropped where the resident stands.
   - A traveler who's still walking in, who restarts the walk.
 - So job and step logic never needs to be serializable.
-- The prototype saves through the artifact's private per-player storage and falls back to the browser's local storage.
+- The prototype saves through the artifact's private per-player storage and falls back to the browser's local storage. The Godot game writes `user://saves/slot_N.save` (text, via `var_to_str`), one file per slot.
 
 **Main menu.** Opens on launch and with the Menu button or Esc. It has Play/Resume, Save game, Load game and Start over, and the game pauses while it's open. Overwriting a slot, loading and starting over each ask for confirmation on the page.
 
@@ -173,7 +173,8 @@ The Slice 1 subset of brief §12.
 | Input | Action |
 |---|---|
 | Left-click | Select resident, site, bench, tree, or boulder |
-| Drag on empty ground | Select multiple residents |
+| Left-drag on the map | Pan the camera (with no order active) |
+| Shift + drag | Select multiple residents |
 | Right-click with selection | Contextual order (mine, move); cursor previews it |
 | Shift + order | Queue the order |
 | Toolbar → drag | Paint mine or stockpile; place a blueprint |
@@ -188,8 +189,8 @@ The Slice 1 subset of brief §12.
 | N | Go to the next stuck item |
 | 1 / 2 / 3 | Speed 1× / 2× / 3× |
 | ~ | Pause (backtick works too) |
-| WASD, arrows / middle-drag | Pan |
-| Mouse wheel, + / − | Zoom (orthographic size) |
+| WASD, arrows / middle-drag | Pan (as well as left-drag) |
+| Mouse wheel, trackpad pinch, + / − | Zoom (orthographic size) |
 | Space | Pause / resume |
 | ? | Controls list |
 
