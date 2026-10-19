@@ -25,6 +25,7 @@ var _drag := {}
 var _hover = null                       ## Ground cell under the mouse, or null.
 var _mouse := Vector2.ZERO
 var _stuck_i := -1
+var _mods := {"shift": false, "alt": false}  ## Modifier keys, from the latest input event.
 var _menu := GameMenu.new()
 var _menu_prev_speed := 1
 
@@ -158,6 +159,12 @@ func _update_live_overlays() -> void:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
+	if hint == "" and tool == "mine" and _hover != null:
+		var kinds := mine_kinds(_mods.shift, _mods.alt)
+		if kinds.size() == 1:
+			hint = "Marking trees only" if kinds[0] == "tree" else "Marking boulders only"
+		elif _drag.is_empty():
+			hint = "Drag to mark trees and boulders. Shift: trees only. Alt/Option: boulders only."
 	if hint == "" and tool == "" and _drag.is_empty() and selection.get("kind", "") == "res":
 		var hit = _pick(_mouse)
 		if hit != null and hit.kind in ["tree", "boulder"]:
@@ -206,6 +213,15 @@ static func _add_rect_points(pts: Array, r: Rect2i, h: float, ignore: int) -> vo
 			Vector2(r.position.x + 0.5, r.end.y - 0.5), Vector2(r.end.x - 0.5, r.position.y + 0.5),
 			(Vector2(r.position) + Vector2(r.end)) / 2.0]:
 		pts.append([Vector3(p.x, h, p.y), ignore])
+
+
+## What a Mine drag marks: Shift limits it to trees, Alt (Option on a Mac) to boulders (issue #7).
+static func mine_kinds(shift: bool, alt: bool) -> Array:
+	if shift and not alt:
+		return ["tree"]
+	if alt and not shift:
+		return ["boulder"]
+	return ["tree", "boulder"]
 
 
 func _placement_origin() -> Vector2i:
@@ -257,6 +273,9 @@ func _select(hit) -> void:
 # ---------------------------------------------------------------- input
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventWithModifiers:
+		_mods.shift = event.shift_pressed
+		_mods.alt = event.alt_pressed
 	if event is InputEventKey and event.pressed and not event.echo:
 		_key(event)
 	elif event is InputEventMouseMotion:
@@ -349,7 +368,7 @@ func _left_up(e: InputEventMouseButton) -> void:
 				sim.paint_zone(d.rect)
 			else:
 				var hit = _pick(e.position, false) if small else null
-				sim.designate_mine(d.rect, hit if hit != null and hit.kind in ["tree", "boulder"] else null)
+				sim.designate_mine(d.rect, hit if hit != null and hit.kind in ["tree", "boulder"] else null, mine_kinds(e.shift_pressed, e.alt_pressed))
 		"box":
 			if small:
 				_select(_pick(e.position))

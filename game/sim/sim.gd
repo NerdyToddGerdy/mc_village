@@ -1038,14 +1038,15 @@ func site_height(s: Dictionary) -> float:
 
 # ---------------------------------------------------------------- commands
 
-## Marks every tree and boulder in `rect` to be mined. A single click on an already-marked one
-## (pass it as `single`) unmarks it instead.
-func designate_mine(rect: Rect2i, single = null) -> void:
+## Marks every tree and boulder in `rect` to be mined; `kinds` can limit it to "tree" or "boulder"
+## (issue #7). A single click on an already-marked one (pass it as `single`) unmarks it instead.
+func designate_mine(rect: Rect2i, single = null, kinds := ["tree", "boulder"]) -> void:
 	var hit: Array = []
 	if single != null:
 		hit = [single]
 	else:
-		for o in trees + boulders:
+		var pool: Array = (trees if kinds.has("tree") else []) + (boulders if kinds.has("boulder") else [])
+		for o in pool:
 			if o.alive and rect.has_point(o.cell):
 				hit.append(o)
 	var all_on := not hit.is_empty() and hit.all(func(o): return o.des)

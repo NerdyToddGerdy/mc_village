@@ -5,7 +5,7 @@ extends Control
 ## here on the page. The game pauses while the menu is open.
 
 const KEY_LIST := [
-	["Orders", [["X", "Mine trees and boulders"], ["Z", "Paint a stockpile"], ["B", "Open the build menu"],
+	["Orders", [["X", "Mine trees and boulders"], ["Shift-drag", "With Mine: trees only"], ["Alt-drag", "With Mine: boulders only (Option on a Mac)"], ["Z", "Paint a stockpile"], ["B", "Open the build menu"],
 		["T", "Place a crafting bench"], ["H", "Place a house"], ["R", "Turn the house door while placing"],
 		["Esc", "Cancel the current order"]]],
 	["Residents", [["Click", "Select a resident, tree, boulder or building"], ["Shift-drag", "Select several residents"],

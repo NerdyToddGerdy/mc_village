@@ -21,6 +21,7 @@ func _init() -> void:
 		"test_v1_tools_get_full_uses_when_upgraded",
 		"test_dropped_tools_keep_their_wear",
 		"test_queued_orders_run_in_turn",
+		"test_mine_drag_limited_to_one_kind",
 		"test_upgrades_run_in_order",
 		"test_newer_or_damaged_saves_are_refused",
 		"test_save_file_round_trip",
@@ -358,3 +359,15 @@ func test_queued_orders_run_in_turn() -> void:
 	check(loaded.residents[0].orders.size() == 1, "queued orders survive a save and load")
 	sim.clear_orders(ada)
 	check(ada.orders.is_empty(), "Clear orders empties the list")
+
+
+## Issue #7: a Mine drag can be limited to trees or to boulders.
+func test_mine_drag_limited_to_one_kind() -> void:
+	var sim := Sim.new_game()
+	sim.designate_mine(whole_map(), null, ["tree"])
+	check(sim.trees.all(func(t): return t.des) and sim.boulders.all(func(b): return not b.des), "trees only marks every tree and no boulder")
+	var sim2 := Sim.new_game()
+	sim2.designate_mine(whole_map(), null, ["boulder"])
+	check(sim2.boulders.all(func(b): return b.des) and sim2.trees.all(func(t): return not t.des), "boulders only marks every boulder and no tree")
+	check(Game.mine_kinds(true, false) == ["tree"] and Game.mine_kinds(false, true) == ["boulder"], "Shift means trees, Alt means boulders")
+	check(Game.mine_kinds(false, false).size() == 2 and Game.mine_kinds(true, true).size() == 2, "no modifier, or both, marks both kinds")
