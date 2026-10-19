@@ -18,6 +18,7 @@ An isometric, Minecraft-inspired settlement simulation. Begin with one player ch
 - Include the Nether, the End, and the Sift in the wider design.
 - Include enchantments and redstone.
 - Use an isometric presentation.
+- Job buildings start simple and evolve in place: a crafting bench grows into a workshop, a fireplace into a kitchen. Each reserves the space its upgrade needs.
 
 ### Proposed design principles
 
@@ -29,15 +30,15 @@ An isometric, Minecraft-inspired settlement simulation. Begin with one player ch
 
 ## 2. Opening Experience
 
-1. The PC arrives empty-handed in a clearing with trees and stone boulders.
+1. The PC arrives empty-handed in a clearing with trees, stone boulders and a few sheep.
 2. The player designates trees for chopping; the PC fells them slowly by hand. Stone cannot be broken without a pickaxe.
 3. The player places a crafting bench blueprint; the PC builds it from logs.
 4. At the bench, the PC crafts planks, sticks, and a wooden axe and pickaxe.
 5. The player designates boulders for breaking and paints a stockpile zone; the PC gathers and hauls.
 6. Stone tools replace the wooden ones.
-7. The player places the PC's house blueprint; the PC builds it.
-8. The player places and completes a second house.
-9. A traveler walks into the settlement empty-handed and becomes its first villager.
+7. The PC hunts sheep for wool (from Slice 2). The player places the PC's house blueprint, and the PC builds it, bed included.
+8. The player places and completes a second house with its bed.
+9. Because a bed is free, a traveler walks into the settlement empty-handed and becomes its first villager.
 10. The PC crafts tools for the villager, and two residents allow the first division of labor.
 
 Opening decisions:
@@ -47,11 +48,12 @@ Opening decisions:
 - Tools come in wooden and stone axes and pickaxes. They have durability, and stone tools are faster.
 - When a tool breaks, the resident stops and reports what it needs. Automatic replacement comes later with a toolsmith job.
 - Houses use one fixed template that can be rotated when placed. Building fills in stage by stage (foundation, walls, roof) as materials are delivered.
+- From Slice 2, every house has a bed as its last stage, which needs wool from sheep. **No free bed, no arrival**: travelers come only when a finished house has a free bed, as in Minecraft.
 
 Proposed opening rules:
 
-- The completed spare house triggers a guaranteed first arrival after a short wait.
-- Later arrivals can have different skills and requirements.
+- The completed spare house, with its bed, triggers a guaranteed first arrival after a short wait.
+- Later arrivals can have different skills and requirements. (Slice 2: each newcomer starts skilled in one job.)
 - The PC remains an individual resident who can work, build, and join expeditions, but is not mandatory for every mission.
 
 ## 3. Core Gameplay Loop
@@ -400,7 +402,10 @@ One PC with bare hands, trees, boulders, a crafting bench, wooden and stone tool
 
 ### Slice 2 — A functioning village
 
-Add job designation, simple food production, a toolsmith job that keeps residents supplied with replacement tools, more residents, and understandable bottlenecks.
+Add job designation, simple food production, a toolsmith job that keeps residents supplied with replacement tools, more residents, and understandable bottlenecks. Implementation detail: `slice-2-spec.md`.
+- **Jobs:** every resident has a level in every job that rises with practice, plus on/off switches and priorities.
+- **Food:** wheat farms and a kitchen for bread, and sheep hunted for mutton. Hunger is the only need.
+- **Beds and wool:** beds make arrivals possible, so wool comes from sheep in the clearing and on a short trip to a meadow off the map.
 
 ### Slice 3 — The first expedition
 
@@ -422,13 +427,13 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 
 - Final title, and target platforms beyond desktop. (Resolved: Godot 4 engine; 3D blocks with an orthographic isometric camera.)
 - Whether PC incapacitation or death has special consequences.
-- Food, rest, happiness, and other needs: depth and pacing.
+- Rest, happiness, and other needs beyond food: depth and pacing. (Resolved for Slice 2, #18: food only.)
 - Combat presentation and degree of player control.
 - Death, rescue, and difficulty settings.
 - Terrain modification, building customization beyond fixed templates, verticality, and camera rotation.
 - Resource regeneration and deposit depletion rules.
 - Exact party sizes, costs, durations, capacities, and balance values.
-- Recruitment rules after the guaranteed first arrival.
+- Recruitment beyond free beds, such as requests or an inn. (Resolved for Slice 2, #24: a traveler arrives for each free bed.)
 - How often expeditions require intervention and how many can run simultaneously.
 - Outpost staffing and ongoing supply costs.
 - Detailed End and Sift systems.

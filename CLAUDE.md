@@ -6,7 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Block Village** (working title) is an isometric settlement simulation inspired by Minecraft. The repo holds:
 - `block-village-design-brief.md`: the vision and decisions document.
-- `slice-1-spec.md`: the implementation spec for the current slice. It covers architecture, the job system, recipes, construction, controls, saving, the tuning table, and the "carpenter's chalk" UI language.
+- `slice-2-spec.md`: the spec for the current slice (Slice 2). It only describes what's new or changed since Slice 1.
+- `slice-1-spec.md`: the Slice 1 spec, still the reference for everything Slice 2 doesn't change. It covers architecture, the job system, recipes, construction, controls, saving, the tuning table, and the "carpenter's chalk" UI language.
 - `prototype/founding.html`: a playable, single-file browser prototype of Slice 1.
   - It's opened directly in a browser, with no build step or dependencies beyond Google Fonts.
   - Rules are tried here before they go into the spec. When a playtest changes a rule, update the prototype, the spec, and the Godot sim.
@@ -70,6 +71,7 @@ Cross-cutting principles that design and implementation work should keep:
 - Work and material movement are visible in the world. Resources are gathered, hauled, stored, processed, and consumed. Nothing teleports into a stockpile.
 - Direct orders to characters gradually give way to delegation. Designations (chop, break, haul, build) create jobs that eligible residents claim. Direct orders override priorities only for a while.
 - Idle or stalled work always reports an actionable reason: missing materials, no tool, unreachable stockpile, unavailable labor, injury, or rest.
+- Job buildings start simple and evolve in place (bench → workshop, fireplace → kitchen). Each reserves the plot its upgrade needs, so placement must keep that plot clear.
 - Setbacks can be recovered from. The home village stays useful throughout progression.
 - Residents sent on expeditions are absent from village labor.
 - Minecart routes speed up travel in both directions but don't increase extraction speed.
