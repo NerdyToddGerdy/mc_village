@@ -324,7 +324,9 @@ func _initialize() -> void:
 	check(await click_button("Load game"), "click Load game")
 	check(await click_button("Load"), "click Load on slot 1")
 	check(await click_button("Load slot 1"), "confirm Load slot 1")
-	check(not game._menu.visible and game.sim.tick == saved_tick, "the saved game is back")
+	var slot_tick: int = game.read_slots()[0].tick
+	check(not game._menu.visible, "loading closes the menu")
+	check(game.sim.tick == slot_tick, "the saved game is back (tick %d, slot holds %d, tick before resuming %d)" % [game.sim.tick, slot_tick, saved_tick])
 	await key(KEY_SLASH, true)
 	check(game._menu.visible and game._menu.view == "keys", "? opens Controls")
 	check(visible_label("Mine trees and boulders"), "Controls lists the keys")
