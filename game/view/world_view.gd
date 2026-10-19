@@ -68,6 +68,7 @@ func set_sim(s: Sim) -> void:
 	for id in _people:
 		_people[id].queue_free()
 	_people.clear()
+	_hops.clear()
 
 
 func _ready() -> void:
@@ -118,7 +119,8 @@ func _material(transparent: bool, overlay: bool, priority: int) -> StandardMater
 	return m
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_frame_delta = delta
 	if sim == null:
 		return
 	if sim.rev != _built_rev:
@@ -429,10 +431,14 @@ func _part(parent: Node3D, size: Vector3, y: float, color: Color) -> MeshInstanc
 
 func _make_person(r: Dictionary) -> Node3D:
 	var n := Node3D.new()
-	_part(n, Vector3(0.26, 0.32, 0.26), 0, Palette.LEGS)
-	_part(n, Vector3(0.34, 0.46, 0.34), 0.32, Color("#" + r.shirt))
-	_part(n, Vector3(0.24, 0.32, 0.24), 0.78, Palette.SKIN)
-	var carry := _part(n, Vector3(0.28, 0.24, 0.28), 1.14, Palette.PLANK)
+	# The body hops while walking; the selection ring stays on the ground.
+	var body := Node3D.new()
+	body.name = "Body"
+	n.add_child(body)
+	_part(body, Vector3(0.26, 0.32, 0.26), 0, Palette.LEGS)
+	_part(body, Vector3(0.34, 0.46, 0.34), 0.32, Color("#" + r.shirt))
+	_part(body, Vector3(0.24, 0.32, 0.24), 0.78, Palette.SKIN)
+	var carry := _part(body, Vector3(0.28, 0.24, 0.28), 1.14, Palette.PLANK)
 	carry.name = "Carry"
 	var ring := MeshInstance3D.new()
 	var torus := TorusMesh.new()
@@ -455,7 +461,7 @@ func _make_person(r: Dictionary) -> Node3D:
 	bar.shaded = false
 	bar.position.y = 1.6
 	bar.pixel_size = 0.014
-	n.add_child(bar)
+	body.add_child(bar)
 	add_child(n)
 	return n
 
@@ -467,15 +473,41 @@ func _update_people() -> void:
 		var n: Node3D = _people[r.id]
 		var at := drawn_pos(r)
 		n.position = Vector3(at.x + 0.5, 0, at.y + 0.5)
-		var carry: MeshInstance3D = n.get_node("Carry")
+		(n.get_node("Body") as Node3D).position.y = _hop(r.id, at)
+		var carry: MeshInstance3D = n.get_node("Body/Carry")
 		carry.visible = r.carry != null
 		if r.carry != null:
 			carry.material_override = _person_mat(Palette.ITEM_COLORS[r.carry.type])
 		(n.get_node("Ring") as Node3D).visible = selected_ids.has(r.id)
-		var bar: Sprite3D = n.get_node("Bar")
+		var bar: Sprite3D = n.get_node("Body/Bar")
 		bar.visible = r.progress >= 0.0
 		if bar.visible:
 			bar.texture = _bar_texture(r.progress)
+
+
+const HOP_STRIDE := 0.5    ## Cells walked per hop.
+const HOP_HEIGHT := 0.12   ## How high a hop lifts the body, in blocks.
+const HOP_SETTLE := 1.5    ## How fast a resident who stops settles back down, blocks per second.
+
+var _frame_delta := 0.0
+var _hops := {}            ## Resident id -> {last: Vector2, phase: float, lift: float}
+
+
+## A little hop while walking: the body rises and falls once per HOP_STRIDE of distance, so it
+## keeps step with the walk at any game speed and stops when they stop.
+func _hop(id: int, at: Vector2) -> float:
+	var h: Dictionary = _hops.get(id, {"last": at, "phase": 0.0, "lift": 0.0})
+	var moved: float = at.distance_to(h.last)
+	h.last = at
+	if moved > 0.0005 and moved < 1.0:
+		h.phase = fmod(h.phase + moved / HOP_STRIDE * PI, TAU)
+		h.lift = absf(sin(h.phase)) * HOP_HEIGHT
+	else:
+		h.lift = move_toward(h.lift, 0.0, HOP_SETTLE * _frame_delta)
+		if h.lift == 0.0:
+			h.phase = 0.0
+	_hops[id] = h
+	return h.lift
 
 
 var _bar_cache := {}
