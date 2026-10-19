@@ -25,6 +25,8 @@ var _sel_panel: PanelContainer
 var _sel := VBoxContainer.new()
 var _build_menu: PanelContainer
 var _tool_btns := {}
+var _build_items := {}
+var _keys_sig := ""
 var _hint := Label.new()
 var _paused_label: PanelContainer
 var _sigs := {}
@@ -60,7 +62,6 @@ func _ready() -> void:
 	for v in [0, 1, 2, 3]:
 		var b := _button("‖" if v == 0 else "%d×" % v, func(): game.set_speed(v))
 		b.custom_minimum_size = Vector2(44, 44)
-		b.tooltip_text = "Pause (~ or Space)" if v == 0 else "Speed %d× (%d)" % [v, v]
 		b.toggle_mode = true
 		_speed_btns[v] = b
 		speed.add_child(b)
@@ -82,21 +83,21 @@ func _ready() -> void:
 
 	var br := _corner(Control.PRESET_BOTTOM_RIGHT)
 	var bm := VBoxContainer.new()
-	bm.add_child(_menu_item("Crafting bench", "4 logs", "T", func(): game.start_placing("bench")))
-	bm.add_child(_menu_item("House", "8 cobblestone, then 16 planks and 4 logs, then 12 planks", "H", func(): game.start_placing("house")))
+	_build_items.bench = _menu_item("Crafting bench", "4 logs", "", func(): game.start_placing("bench"))
+	_build_items.house = _menu_item("House", "8 cobblestone, then 16 planks and 4 logs, then 12 planks", "", func(): game.start_placing("house"))
+	bm.add_child(_build_items.bench)
+	bm.add_child(_build_items.house)
 	_build_menu = _panel(bm, Vector2(260, 0), 6)
 	br.add_child(_build_menu)
 	var tools := HBoxContainer.new()
 	tools.add_theme_constant_override("separation", 2)
 	for t in [["mine", "Mine", "X", Palette.RED], ["stock", "Stockpile", "Z", Palette.GREEN], ["build", "Build", "B", Palette.BLUE]]:
-		var b := _button("%s  %s" % [t[1], t[2]], func(): game.set_tool(t[0]))
+		var b := _button(t[1], func(): game.set_tool(t[0]))
 		b.custom_minimum_size = Vector2(96, 52)
 		b.toggle_mode = true
 		b.add_theme_color_override("font_color", t[3])
 		b.add_theme_color_override("font_hover_color", t[3])
 		b.add_theme_color_override("font_pressed_color", t[3])
-		b.tooltip_text = {"mine": "Mine trees and boulders (X). Drag to mark many. Boulders need a pickaxe.",
-			"stock": "Paint a stockpile (Z). Drag over open ground.", "build": "Build (B)"}[t[0]]
 		_tool_btns[t[0]] = b
 		tools.add_child(b)
 	br.add_child(_panel(tools, Vector2.ZERO, 4))
@@ -211,6 +212,30 @@ func _button(text: String, on_press: Callable) -> Button:
 	return b
 
 
+## Toolbar badges, build-menu keys and tooltips, from the current key bindings (issue #8).
+func _refresh_key_labels() -> void:
+	var k: KeyBindings = game.keys
+	var sig := "%s" % [k.keys]
+	if sig == _keys_sig:
+		return
+	_keys_sig = sig
+	var names := {"mine": "Mine", "stock": "Stockpile", "build": "Build"}
+	var tips := {"mine": "Mine trees and boulders. Drag to mark many. Boulders need a pickaxe.",
+		"stock": "Paint a stockpile. Drag over open ground.", "build": "Build"}
+	for t in _tool_btns:
+		var key := k.first(t)
+		_tool_btns[t].text = "%s  %s" % [names[t], key] if key != "" else names[t]
+		_tool_btns[t].tooltip_text = tips[t] + (" (%s)" % key if key != "" else "")
+	var subs := {"bench": "4 logs", "house": "8 cobblestone, then 16 planks and 4 logs, then 12 planks"}
+	var titles := {"bench": "Crafting bench", "house": "House"}
+	for b in _build_items:
+		_build_items[b].text = "%s   %s\n%s" % [titles[b], k.first(b), subs[b]]
+	var speed_actions := {0: "pause", 1: "speed1", 2: "speed2", 3: "speed3"}
+	for v in _speed_btns:
+		var keytext := k.text(speed_actions[v]).replace("  ", " or ")
+		_speed_btns[v].tooltip_text = ("Pause" if v == 0 else "Speed %d×" % v) + (" (%s)" % keytext if keytext != "No key" else "")
+
+
 func _menu_item(title: String, sub: String, key: String, on_press: Callable) -> Button:
 	var b := _button("%s   %s\n%s" % [title, key, sub], on_press)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -260,6 +285,7 @@ func _rebuild(c: Container, sig: String, fill: Callable) -> void:
 # ---------------------------------------------------------------- per-frame refresh
 
 func refresh(sim: Sim) -> void:
+	_refresh_key_labels()
 	_refresh_tallies(sim)
 	_refresh_goals(sim)
 	for v in _speed_btns:
