@@ -555,6 +555,7 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(l)
 		h.add_child(_button("Queue", func(): game.queue_craft(s, rec.id)))
+		h.add_child(_button("Queue 5", func(): game.queue_craft(s, rec.id, 5)))
 		c.add_child(h)
 	if not s.queue.is_empty():
 		c.add_child(_label("Queue. Items that can’t be made yet are skipped. Click one to remove it.", false, Palette.CHALK_DIM, 13, true))
