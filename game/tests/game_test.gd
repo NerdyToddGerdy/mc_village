@@ -129,9 +129,21 @@ func _test_smooth_movement(game: Game) -> void:
 	check(prev != ada.pos, "Ada is walking")
 	check(drawn.is_equal_approx(prev.lerp(ada.pos, world.tick_fraction)) and world.tick_fraction > 0.3 and world.tick_fraction < 0.7,
 		"halfway between ticks she's drawn halfway between positions (fraction %.2f)" % world.tick_fraction)
+	var lifts: Array = []
+	for i in 20:
+		game._process(0.033)
+		world._process(0.033)
+		lifts.append((world._people[ada.id].get_node("Body") as Node3D).position.y)
+	check(lifts.max() > 0.05 and lifts.max() <= WorldView.HOP_HEIGHT + 0.001, "she hops while walking (highest %.3f)" % lifts.max())
+	check(lifts.min() < 0.03, "and comes back down between hops (lowest %.3f)" % lifts.min())
+	check(world._people[ada.id].get_node("Ring").position.y < 0.05, "her selection ring stays on the ground")
 	game.set_speed(0)
 	game._process(0.016)
 	check(world.drawn_pos(ada) == ada.pos, "paused, she's drawn exactly where she is")
+	for i in 10:
+		game._process(0.1)
+		world._process(0.1)
+	check(is_zero_approx((world._people[ada.id].get_node("Body") as Node3D).position.y), "standing still, she settles back to the ground")
 	world._prev_pos[ada.id] = ada.pos + Vector2(5, 0)
 	game.set_speed(1)
 	check(world.drawn_pos(ada) == ada.pos, "a jump of more than a cell snaps instead of gliding")
