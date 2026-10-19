@@ -137,8 +137,11 @@ func _render_slots() -> void:
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info.add_theme_constant_override("separation", 0)
 		info.add_child(hud.label("Slot %d" % n, true))
+		var unreadable: bool = meta != null and meta.has("error")
 		if meta == null:
 			info.add_child(hud.label("Empty", false, Palette.CHALK_DIM, 14))
+		elif unreadable:
+			info.add_child(hud.label(meta.error, false, Palette.YELLOW, 14, true))
 		else:
 			info.add_child(hud.label(meta.summary, false, Palette.CHALK, 14))
 			info.add_child(hud.label("%s. Saved %s" % [_played(meta.tick), _when(meta.saved_at)], false, Palette.CHALK_DIM, 13))
@@ -151,7 +154,7 @@ func _render_slots() -> void:
 				b = hud.button("Save over", func(): _ask("Save over slot %d? The save that’s there now will be replaced." % n, "Save over slot %d" % n, "save", n))
 		else:
 			b = hud.button("Load", func(): _ask("Load slot %d? Anything you haven’t saved will be lost." % n, "Load slot %d" % n, "load", n))
-			b.disabled = meta == null
+			b.disabled = meta == null or unreadable
 		b.custom_minimum_size = Vector2(110, 40)
 		b.add_theme_stylebox_override("normal", hud.box(Color(0, 0, 0, 0), 4, 10, Palette.CHALK if not b.disabled else Palette.SLATE_DEEP))
 		row.add_child(b)

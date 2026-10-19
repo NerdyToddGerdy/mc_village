@@ -17,6 +17,10 @@ func _init() -> void:
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
+		"test_v1_save_fixture_still_loads",
+		"test_upgrades_run_in_order",
+		"test_newer_or_damaged_saves_are_refused",
+		"test_save_file_round_trip",
 	]
 	for t in tests:
 		_current = t
@@ -208,3 +212,60 @@ func test_tool_breaks_and_resident_reports() -> void:
 	sim.designate_mine(Rect2i(sim.trees[0].cell, Vector2i.ONE))
 	run(sim, 5)
 	check(ada.job == null or ada.job.kind != "gather", "resident stops chopping until a new axe exists")
+
+
+## Every fixture in tests/fixtures must keep loading after any change to the save format.
+func test_v1_save_fixture_still_loads() -> void:
+	var r := SaveFormat.read("res://tests/fixtures/save_v1.save")
+	check(not r.has("error"), "v1 fixture reads: %s" % r.get("error", ""))
+	if r.has("error"):
+		return
+	check(r.data.v == SaveFormat.VERSION, "fixture is upgraded to the current version")
+	var sim := Sim.from_state(r.data.state)
+	check(sim.tick == r.data.tick, "tick restored from the fixture")
+	check(sim.residents.size() == 2 and sim.residents[1].arriving, "Tomas is walking in again after loading")
+	check(sim.sites.any(func(s): return s.tpl == "bench" and s.done and s.queue.has("stone_axe")), "the bench and its queue survive")
+	run(sim, 60)
+	check(sim.stats.traveler_home, "Tomas finishes moving in after loading")
+
+
+func test_upgrades_run_in_order() -> void:
+	var order: Array = []
+	var steps := {
+		1: func(d):
+			order.append(1)
+			d.state.renamed = d.state.get("old", 0)
+			return d,
+		2: func(d):
+			order.append(2)
+			d.state.extra = true
+			return d,
+	}
+	var r := SaveFormat.upgrade({"v": 1, "state": {"old": 7}}, steps, 3)
+	check(not r.has("error"), "a v1 save upgrades to v3 through two steps")
+	check(order == [1, 2], "steps run oldest first: %s" % [order])
+	check(r.data.v == 3 and r.data.state.renamed == 7 and r.data.state.extra, "each step's change is kept")
+	var gap := SaveFormat.upgrade({"v": 1, "state": {}}, {2: steps[2]}, 3)
+	check(gap.has("error"), "a missing step is refused instead of loading half-upgraded")
+	var same := SaveFormat.upgrade({"v": 3, "state": {}}, steps, 3)
+	check(not same.has("error") and same.data.v == 3, "a current save passes through unchanged")
+
+
+func test_newer_or_damaged_saves_are_refused() -> void:
+	var newer := SaveFormat.upgrade({"v": SaveFormat.VERSION + 1, "state": {}})
+	check(newer.get("error", "").contains("newer version"), "a save from a newer game version is refused with a clear reason")
+	check(SaveFormat.parse("not a save").has("error"), "garbage is refused")
+	check(SaveFormat.parse(var_to_str({"tick": 1})).has("error"), "a dictionary without a version is refused")
+
+
+func test_save_file_round_trip() -> void:
+	var sim := Sim.new_game()
+	sim.designate_mine(Rect2i(0, 0, 10, 18))
+	run(sim, 30)
+	var path := "user://test_saves/round_trip.save"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	check(SaveFormat.write(path, {"summary": "x", "tick": sim.tick, "saved_at": 0, "state": sim.save_state(), "camera": {}, "speed": 1}), "save written")
+	var r := SaveFormat.read(path)
+	check(not r.has("error") and r.data.v == SaveFormat.VERSION, "save read back at the current version")
+	check(Sim.from_state(r.data.state).tick == sim.tick, "state survives the file")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

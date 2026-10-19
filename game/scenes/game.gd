@@ -440,44 +440,38 @@ func _slot_path(n: int) -> String:
 	return "%s/slot_%d.save" % [save_dir, n]
 
 
-## Each slot's summary ({summary, tick, saved_at}), or null for an empty or unreadable slot.
+## For each slot: null when empty, {error} when it can't be loaded, else {summary, tick, saved_at}.
 func read_slots() -> Array:
 	var out: Array = []
 	for n in range(1, SLOTS + 1):
-		var data = _read_save(n)
-		out.append(null if data == null else {"summary": data.summary, "tick": data.tick, "saved_at": data.saved_at})
+		if not FileAccess.file_exists(_slot_path(n)):
+			out.append(null)
+			continue
+		var r := SaveFormat.read(_slot_path(n))
+		if r.has("error"):
+			out.append({"error": r.error})
+		else:
+			out.append({"summary": r.data.summary, "tick": r.data.tick, "saved_at": r.data.saved_at})
 	return out
-
-
-func _read_save(n: int):
-	var path := _slot_path(n)
-	if not FileAccess.file_exists(path):
-		return null
-	var text := FileAccess.get_file_as_string(path)
-	var data = str_to_var(text)
-	return data if data is Dictionary and data.get("v", 0) == 1 else null
 
 
 ## Saves to slot `n`. Returns "" on success, else a message for the player.
 func save_slot(n: int) -> String:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(save_dir))
-	var state := sim.save_state()
-	var data := {"v": 1, "summary": Goals.progress_text(sim), "tick": sim.tick,
-		"saved_at": int(Time.get_unix_time_from_system()), "state": state,
+	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick,
+		"saved_at": int(Time.get_unix_time_from_system()), "state": sim.save_state(),
 		"camera": {"target": _target, "size": _cam.size}, "speed": _menu_prev_speed}
-	var f := FileAccess.open(_slot_path(n), FileAccess.WRITE)
-	if f == null:
+	if not SaveFormat.write(_slot_path(n), data):
 		return "Couldn’t save to slot %d. Check that the disk isn’t full, then try again." % n
-	f.store_string(var_to_str(data))
-	f.close()
 	return ""
 
 
 ## Loads slot `n` and returns to the game. Returns "" on success, else a message for the player.
 func load_slot(n: int) -> String:
-	var data = _read_save(n)
-	if data == null:
-		return "Slot %d couldn’t be loaded. The save may be from an older version." % n
+	var r := SaveFormat.read(_slot_path(n))
+	if r.has("error"):
+		return "Slot %d couldn’t be loaded. %s" % [n, r.error]
+	var data: Dictionary = r.data
 	_use_sim(Sim.from_state(data.state))
 	_target = data.camera.target
 	_cam.size = data.camera.size
