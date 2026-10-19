@@ -4,17 +4,15 @@ extends Control
 ## 5 slots, Controls, and Start over. Overwriting, loading and starting over ask for confirmation
 ## here on the page. The game pauses while the menu is open.
 
-const KEY_LIST := [
-	["Orders", [["X", "Mine trees and boulders"], ["Shift-drag", "With Mine: trees only"], ["Alt-drag", "With Mine: boulders only (Option on a Mac)"], ["Z", "Paint a stockpile"], ["B", "Open the build menu"],
-		["T", "Place a crafting bench"], ["H", "Place a house"], ["R", "Turn the house door while placing"],
-		["Esc", "Cancel the current order"]]],
-	["Residents", [["Click", "Select a resident, tree, boulder or building"], ["Shift-drag", "Select several residents"],
-		["F", "Select the next resident"], ["N", "Go to the next stuck item"],
-		["Right-click", "Order the selected residents"], ["Shift + right-click", "Queue an order after their current one"]]],
-	["Time and camera", [["~", "Pause"], ["Space", "Pause or resume"], ["1  2  3", "Speed 1×, 2× or 3×"],
-		["Drag", "Pan the map (W A S D, arrow keys and middle-drag too)"], ["+  −", "Zoom (mouse wheel and pinch too)"]]],
-	["Game", [["Esc  M", "Open the menu"], ["?", "Show these controls"]]],
-]
+## Mouse controls and Esc, which can't be rebound; shown alongside the rebindable keys.
+const FIXED_ROWS := {
+	"Orders": [["Shift-drag", "With Mine: trees only"], ["Alt-drag", "With Mine: boulders only (Option on a Mac)"],
+		["Esc", "Cancel the current order"]],
+	"Residents": [["Click", "Select a resident, tree, boulder or building"], ["Shift-drag", "Select several residents"],
+		["Right-click", "Order the selected residents"], ["Shift + right-click", "Queue an order after their current one"]],
+	"Time and camera": [["Drag", "Pan the map (middle-drag too)"], ["Wheel", "Zoom (pinch too)"]],
+	"Game": [["Esc", "Open the menu"]],
+}
 
 var game   ## The Game node.
 var hud: Hud
@@ -25,6 +23,7 @@ var _msg := ""
 var _msg_err := false
 var _slots: Array = []
 var _box := VBoxContainer.new()
+var listening := ""       ## Action waiting for its new key on the Controls page.
 
 
 func _ready() -> void:
@@ -48,6 +47,7 @@ func _ready() -> void:
 
 func show_view(v: String) -> void:
 	view = v
+	listening = ""
 	_confirm = {}
 	_msg = ""
 	if v == "save" or v == "load":
@@ -57,7 +57,10 @@ func show_view(v: String) -> void:
 
 
 func back() -> void:
-	if not _confirm.is_empty():
+	if listening != "":
+		listening = ""
+		_render()
+	elif not _confirm.is_empty():
 		_confirm = {}
 		_render()
 	elif view != "main":
@@ -110,19 +113,100 @@ func _render_main() -> void:
 
 
 func _render_keys() -> void:
-	_title("Controls", "Press ? in the game to open this list.")
-	for group in KEY_LIST:
-		_box.add_child(hud.label(group[0], true, Palette.CHALK, 16))
+	var k: KeyBindings = game.keys
+	_title("Controls", "Change any key. Esc and the mouse can't be changed.")
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 6)
+	var groups: Array = []
+	for a in KeyBindings.ACTIONS:
+		if not groups.has(a[1]):
+			groups.append(a[1])
+	for g in groups:
+		list.add_child(hud.label(g, true, Palette.CHALK, 16))
 		var grid := GridContainer.new()
-		grid.columns = 2
-		grid.add_theme_constant_override("h_separation", 16)
-		for row in group[1]:
-			var k := hud.label(row[0], true, Palette.CHALK, 14)
-			k.custom_minimum_size = Vector2(110, 0)
-			grid.add_child(k)
-			grid.add_child(hud.label(row[1], false, Palette.CHALK, 14))
-		_box.add_child(grid)
-	_box.add_child(_back_button())
+		grid.columns = 3
+		grid.add_theme_constant_override("h_separation", 12)
+		for a in KeyBindings.ACTIONS:
+			if a[1] != g:
+				continue
+			var waiting: bool = listening == a[0]
+			var key_label := hud.label("Press a key…" if waiting else k.text(a[0]), true, Palette.YELLOW if waiting or k.keys[a[0]].is_empty() else Palette.CHALK, 14)
+			key_label.custom_minimum_size = Vector2(110, 0)
+			grid.add_child(key_label)
+			var name := hud.label(a[2], false, Palette.CHALK, 14)
+			name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			grid.add_child(name)
+			var change := hud.button("Cancel" if waiting else "Change", func(): _listen(a[0]))
+			change.custom_minimum_size = Vector2(80, 30)
+			change.add_theme_stylebox_override("normal", hud.box(Color(0, 0, 0, 0), 4, 6, Palette.CHALK_DIM))
+			grid.add_child(change)
+		for row in FIXED_ROWS.get(g, []):
+			grid.add_child(hud.label(row[0], true, Palette.CHALK_DIM, 14))
+			grid.add_child(hud.label(row[1], false, Palette.CHALK_DIM, 14))
+			grid.add_child(Control.new())
+		list.add_child(grid)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, mini(460, int(get_viewport_rect().size.y) - 260))
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.add_child(list)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_box.add_child(scroll)
+	if listening != "":
+		_box.add_child(hud.label("Press the new key for “%s”. Esc cancels." % KeyBindings.label_of(listening), false, Palette.YELLOW, 14, true))
+	_add_confirm()
+	if _msg != "":
+		_box.add_child(hud.label(_msg, false, Palette.CHALK_DIM, 14, true))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(_back_button())
+	var reset := hud.button("Reset to defaults", _reset_keys)
+	reset.add_theme_stylebox_override("normal", hud.box(Color(0, 0, 0, 0), 4, 10, Palette.CHALK_DIM))
+	row.add_child(reset)
+	_box.add_child(row)
+
+
+func _listen(action: String) -> void:
+	listening = "" if listening == action else action
+	_confirm = {}
+	_msg = ""
+	_render()
+
+
+## The next key pressed while waiting on the Controls page (Esc is handled as cancel by the game).
+func key_pressed(e: InputEventKey) -> void:
+	if e.keycode == KEY_ESCAPE:
+		listening = ""
+		_render()
+		return
+	if e.keycode in [KEY_SHIFT, KEY_CTRL, KEY_ALT, KEY_META]:
+		return
+	var k: KeyBindings = game.keys
+	var action := listening
+	var code := KeyBindings.event_code(e)
+	listening = ""
+	var other := k.used_by(code, action)
+	if other != "":
+		_confirm = {"text": "%s is already used for “%s”. Use it for “%s” instead? “%s” will be left without a key." % [KeyBindings.key_text(code), KeyBindings.label_of(other), KeyBindings.label_of(action), KeyBindings.label_of(other)],
+			"yes": "Use %s" % KeyBindings.key_text(code), "action": "rebind", "slot": 0, "target": action, "code": code}
+		_render()
+		return
+	_rebind(action, code)
+
+
+func _rebind(action: String, code: int) -> void:
+	game.keys.assign(action, code)
+	game.keys.save_file()
+	_msg = "“%s” is now %s." % [KeyBindings.label_of(action), KeyBindings.key_text(code)]
+	_render()
+
+
+func _reset_keys() -> void:
+	game.keys.reset()
+	game.keys.save_file()
+	listening = ""
+	_confirm = {}
+	_msg = "Keys are back to their defaults."
+	_render()
 
 
 func _render_slots() -> void:
@@ -206,6 +290,7 @@ func _do_confirmed() -> void:
 	_confirm = {}
 	match c.action:
 		"restart": game.restart()
+		"rebind": _rebind(c.target, c.code)
 		"save": _save(c.slot)
 		"load":
 			var err: String = game.load_slot(c.slot)

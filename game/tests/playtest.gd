@@ -159,6 +159,8 @@ func open_cell(c: Vector2i, size := Vector2i.ONE) -> Vector2i:
 
 func _initialize() -> void:
 	game = load("res://scenes/main.tscn").instantiate()
+	game.keys_path = "user://test_settings/playtest_keys.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.keys_path))
 	root.add_child(game)
 	await frames(3)
 	game.save_dir = "user://playtest_saves"

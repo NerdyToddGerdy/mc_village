@@ -203,7 +203,14 @@ The Slice 1 subset of brief §12.
 | Space | Pause / resume |
 | ? | Controls list |
 
-Order letters avoid W, A, S and D, which pan the camera. Key combinations using Ctrl, ⌘ or Alt are left to the browser or OS. Each toolbar button shows its key, and the menu has a Controls page listing every binding.
+These are the default keys. Every key can be rebound on the menu's Controls page, except Esc, which always cancels or opens the menu, and the mouse controls.
+- Each action shows its key with a Change button. Press the new key, or Esc to cancel.
+- Taking a key another action uses, including W, A, S and D for panning, asks first, and the other action is left without a key.
+- Reset to defaults restores everything.
+- Bindings are saved to `user://settings/keys.cfg`, separate from game saves.
+- The toolbar badges, build menu, tooltips and cursor hints all show the current keys.
+
+The default order letters avoid W, A, S and D, which pan the camera. Key combinations using Ctrl, ⌘ or Alt are left to the browser or OS. Each toolbar button shows its key, and the menu has a Controls page listing every binding.
 
 ## 11. Tuning table (provisional)
 

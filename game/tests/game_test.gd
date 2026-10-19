@@ -138,8 +138,60 @@ func _test_smooth_movement(game: Game) -> void:
 	game.set_speed(1)
 
 
+func _key(game: Game, code: Key, shift := false) -> void:
+	var e := InputEventKey.new()
+	e.keycode = code
+	e.pressed = true
+	e.shift_pressed = shift
+	game._unhandled_input(e)
+
+
+## Issue #8: keys can be rebound on the Controls page, with conflict warnings and a reset.
+func _test_rebinding(game: Game) -> void:
+	var menu: GameMenu = game._menu
+	game.set_tool("")
+	game.open_menu("keys")
+	menu._listen("mine")
+	_key(game, KEY_Q)
+	check(game.keys.keys.mine == [KEY_Q], "Mine rebound to Q on the Controls page")
+	check(KeyBindings.new(game.keys_path).keys.mine == [KEY_Q], "the new key is saved to the settings file")
+	game.close_menu()
+	await process_frame
+	_key(game, KEY_X)
+	check(game.tool == "", "X no longer picks Mine")
+	_key(game, KEY_Q)
+	check(game.tool == "mine", "Q picks Mine")
+	game._hud.refresh(game.sim)
+	check(game._hud._tool_btns.mine.text == "Mine  Q", "the toolbar badge shows the new key")
+	game.set_tool("")
+	game.open_menu("keys")
+	menu._listen("stock")
+	_key(game, KEY_Q)
+	check(not menu._confirm.is_empty() and "Mine trees and boulders" in menu._confirm.text, "taking Mine's key asks first")
+	check(game.keys.keys.stock == [KEY_Z], "nothing changes until you confirm")
+	menu._do_confirmed()
+	check(game.keys.keys.stock == [KEY_Q] and game.keys.keys.mine.is_empty(), "confirming moves Q to Stockpile and leaves Mine without a key")
+	menu._listen("mine")
+	_key(game, KEY_W)
+	check(not menu._confirm.is_empty() and "Pan up" in menu._confirm.text, "using W warns that it pans the camera")
+	menu.back()
+	menu._listen("speed1")
+	_key(game, KEY_ESCAPE)
+	check(menu.listening == "" and game.keys.keys.speed1 == [KEY_1], "Esc cancels waiting for a key")
+	menu._reset_keys()
+	check(game.keys.keys.mine == [KEY_X] and game.keys.keys.stock == [KEY_Z], "Reset to defaults restores every key")
+	check(KeyBindings.new(game.keys_path).keys.mine == [KEY_X], "the reset is saved too")
+	game.close_menu()
+	_key(game, KEY_SLASH, true)
+	check(menu.visible and menu.view == "keys", "? (Shift + /) still opens Controls")
+	game.close_menu()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.keys_path))
+
+
 func _initialize() -> void:
 	var game: Game = load("res://scenes/main.tscn").instantiate()
+	game.keys_path = "user://test_settings/game_test_keys.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.keys_path))
 	root.add_child(game)
 	await process_frame
 	game.save_dir = "user://test_saves"
@@ -188,6 +240,7 @@ func _initialize() -> void:
 	_test_drag(game)
 	await _test_fading(game)
 	_test_smooth_movement(game)
+	await _test_rebinding(game)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")

@@ -43,6 +43,7 @@ There's no single-test runner. To focus on one test, temporarily trim the `tests
 - `game/view/`: drawing only.
   - `world_view.gd` rebuilds MultiMesh block geometry when `sim.rev` changes and draws residents and per-frame overlays every frame.
   - `hud.gd` builds the slate-and-chalk HUD from one code-built `Theme`. Panels rebuild only when their content changes, so clicks aren't lost to a rebuild.
+- `game/view/key_bindings.gd`: rebindable keys. Input goes through `keys.action_for(event)`; never match raw keycodes in `game.gd`. Tests set `game.keys_path` before adding the game, so they always run with default keys.
 - `game/scenes/game.gd`: ticks the sim at 20 Hz times the current speed, owns the camera and selection, and turns input into sim commands. It also saves and loads slots, storing `Sim.save_state()` with `var_to_str`. The HUD and the menu (`view/game_menu.gd`) call its public methods.
 - **Changing what's saved:** follow `game/sim/save_format.gd`.
   - Bump `SaveFormat.VERSION`.

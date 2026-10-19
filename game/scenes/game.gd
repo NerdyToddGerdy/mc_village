@@ -27,6 +27,8 @@ var _mouse := Vector2.ZERO
 var _stuck_i := -1
 var _mods := {"shift": false, "alt": false}  ## Modifier keys, from the latest input event.
 var _menu := GameMenu.new()
+var keys: KeyBindings
+var keys_path := ""  ## Tests set this before the game starts, so they always use default keys.
 var _menu_prev_speed := 1
 
 var save_dir := "user://saves"  ## Tests point this elsewhere so they never touch real saves.
@@ -34,6 +36,7 @@ const SLOTS := 5
 
 
 func _ready() -> void:
+	keys = KeyBindings.new(keys_path)
 	sim = Sim.new_game()
 	_setup_scene()
 	_world.sim = sim
@@ -120,10 +123,12 @@ func _process(delta: float) -> void:
 
 func _pan_with_keys(delta: float) -> void:
 	var v := Vector2.ZERO
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): v.y -= 1
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): v.y += 1
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): v.x -= 1
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): v.x += 1
+	if _menu.visible:
+		return
+	if keys.is_down("pan_up"): v.y -= 1
+	if keys.is_down("pan_down"): v.y += 1
+	if keys.is_down("pan_left"): v.x -= 1
+	if keys.is_down("pan_right"): v.x += 1
 	if v != Vector2.ZERO:
 		_pan_screen(v * _cam.size * 0.9 * delta * get_viewport().get_visible_rect().size.y / _cam.size)
 
@@ -160,7 +165,8 @@ func _update_live_overlays() -> void:
 			hint_col = Palette.YELLOW
 		else:
 			var clr := Sim.clearing_text(sim.obstacles_in(Rect2i(origin, size)))
-			hint = ("Place house. R turns the door." if placing == "house" else "Place crafting bench.") + (" Clears %s." % clr if clr != "" else "")
+			var turn := keys.first("rotate")
+			hint = (("Place house. %s turns the door." % turn if turn != "" else "Place house.") if placing == "house" else "Place crafting bench.") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
 	if sel != null and sel.kind in ["tree", "boulder"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
@@ -392,42 +398,46 @@ func _key(e: InputEventKey) -> void:
 	if e.ctrl_pressed or e.meta_pressed or e.alt_pressed:
 		return
 	if _menu.visible:
-		match e.keycode:
-			KEY_ESCAPE: _menu.back()
-			KEY_M:
-				if _menu.view == "main":
-					close_menu()
-			KEY_SLASH, KEY_QUESTION: _menu.show_view("main" if _menu.view == "keys" else "keys")
-			_: return
+		if _menu.listening != "":
+			_menu.key_pressed(e)
+		elif e.keycode == KEY_ESCAPE:
+			_menu.back()
+		else:
+			match keys.action_for(e):
+				"menu":
+					if _menu.view == "main":
+						close_menu()
+				"controls": _menu.show_view("main" if _menu.view == "keys" else "keys")
+				_: return
 		get_viewport().set_input_as_handled()
 		return
-	match e.keycode:
-		KEY_ESCAPE:
-			if tool != "" or build_menu_open:
-				set_tool("")
-			else:
-				open_menu("main")
-		KEY_M: open_menu("main")
-		KEY_SLASH, KEY_QUESTION:
-			if e.shift_pressed or e.keycode == KEY_QUESTION:
-				open_menu("keys")
-		KEY_SPACE: set_speed(last_speed if speed == 0 else 0)
-		KEY_QUOTELEFT, KEY_ASCIITILDE: set_speed(0)
-		KEY_1: set_speed(1)
-		KEY_2: set_speed(2)
-		KEY_3: set_speed(3)
-		KEY_X: set_tool("mine")
-		KEY_Z: set_tool("stock")
-		KEY_B: set_tool("build")
-		KEY_T: start_placing("bench")
-		KEY_H: start_placing("house")
-		KEY_R:
+	if e.keycode == KEY_ESCAPE:
+		if tool != "" or build_menu_open:
+			set_tool("")
+		else:
+			open_menu("main")
+		get_viewport().set_input_as_handled()
+		return
+	match keys.action_for(e):
+		"menu": open_menu("main")
+		"controls": open_menu("keys")
+		"toggle_pause": set_speed(last_speed if speed == 0 else 0)
+		"pause": set_speed(0)
+		"speed1": set_speed(1)
+		"speed2": set_speed(2)
+		"speed3": set_speed(3)
+		"mine": set_tool("mine")
+		"stock": set_tool("stock")
+		"build": set_tool("build")
+		"bench": start_placing("bench")
+		"house": start_placing("house")
+		"rotate":
 			if tool == "build":
 				rot = (rot + 1) % 4
-		KEY_F: _next_resident()
-		KEY_N: _next_stuck()
-		KEY_EQUAL, KEY_PLUS, KEY_KP_ADD: zoom(1 / 1.15)
-		KEY_MINUS, KEY_KP_SUBTRACT: zoom(1.15)
+		"next_res": _next_resident()
+		"next_stuck": _next_stuck()
+		"zoom_in": zoom(1 / 1.15)
+		"zoom_out": zoom(1.15)
 		_: return
 	get_viewport().set_input_as_handled()
 
@@ -634,7 +644,7 @@ static func area(x: int, y: int, w: int, h: int) -> Rect2i:
 # ---------------------------------------------------------------- screenshot mode
 
 func _screenshot_menu() -> void:
-	open_menu("save")
+	open_menu("keys" if "--keys" in OS.get_cmdline_user_args() else "save")
 	for i in 20:
 		await get_tree().process_frame
 	var img := get_viewport().get_texture().get_image()
