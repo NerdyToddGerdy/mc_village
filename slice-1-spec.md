@@ -271,6 +271,12 @@ World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`,
 
 Marks render in an overlay pass (`no_depth_test`) with a dark under-stroke so trees can't hide them and they read on any block.
 
+**Keeping work visible.**
+- **Fading trees:** a tree fades to a see-through shape (about 30% opacity) when it stands between the camera and something the player is focused on. That means a selected resident, the cell under the cursor, a blueprint being placed, or a selected building, tree or boulder. The tree under the cursor stays solid, so you can see what you're about to mine.
+- **Roof cutaways:** a finished house's roof is cut away while the house is selected or the cursor is inside its footprint.
+- **Silhouettes:** a resident hidden by anything else shows as a chalk silhouette.
+- **Clicking:** clicks go to residents first, then trunks, boulders and buildings, then canopies only when nothing else is under the cursor.
+
 **Contrast (checked).** Against the terrain, the chalk colours alone reach only 1.1 to 2:1, so the `#232C29` under-stroke is required, not decoration. Measured against the stroke:
 
 | Mark | Colour | Contrast with stroke |

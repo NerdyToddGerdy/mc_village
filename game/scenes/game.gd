@@ -161,6 +161,47 @@ func _update_live_overlays() -> void:
 	_world.live_outlines = outlines
 	_world.live_fills = fills
 	_hud.show_hint(hint, _mouse, hint_col)
+	_update_focus(sel)
+
+
+## Tells the world view what the player is looking at, so trees in front of it fade and the roof
+## of a selected or hovered house is cut away (issue #3).
+func _update_focus(sel) -> void:
+	var pts: Array = []
+	for id in selection.get("ids", []):
+		var r := sim.resident(id)
+		if not r.is_empty():
+			pts.append([Vector3(r.pos.x + 0.5, 0.2, r.pos.y + 0.5), 0])
+			pts.append([Vector3(r.pos.x + 0.5, 1.0, r.pos.y + 0.5), 0])
+	if _hover != null:
+		# The tree under the cursor stays solid, so you can see what you're about to mine.
+		var under = _pick(_mouse, false)
+		var keep: int = under.id if under != null and under.kind == "tree" else 0
+		pts.append([Vector3(_hover.x + 0.5, 0.05, _hover.y + 0.5), keep])
+	if tool == "build" and placing != "" and _hover != null:
+		_add_rect_points(pts, Rect2i(_placement_origin(), Defs.TEMPLATES[placing].size), 0.1, 0)
+	if sel != null:
+		if sel.kind == "site":
+			_add_rect_points(pts, Rect2i(sel.origin, sel.size), sim.site_height(sel), 0)
+		else:
+			pts.append([Vector3(sel.cell.x + 0.5, 0.5, sel.cell.y + 0.5), sel.id])
+	_world.focus_points = pts
+	var roofs: Array = []
+	if sel != null and sel.kind == "site" and sel.tpl == "house":
+		roofs.append(sel.id)
+	if _hover != null:
+		var h = sim.site_at(_hover)
+		if h != null and h.tpl == "house" and not roofs.has(h.id):
+			roofs.append(h.id)
+	_world.open_roofs = roofs
+
+
+## The corners and centre of a footprint, so a tree hiding any part of it fades.
+static func _add_rect_points(pts: Array, r: Rect2i, h: float, ignore: int) -> void:
+	for p in [Vector2(r.position) + Vector2(0.5, 0.5), Vector2(r.end) - Vector2(0.5, 0.5),
+			Vector2(r.position.x + 0.5, r.end.y - 0.5), Vector2(r.end.x - 0.5, r.position.y + 0.5),
+			(Vector2(r.position) + Vector2(r.end)) / 2.0]:
+		pts.append([Vector3(p.x, h, p.y), ignore])
 
 
 func _placement_origin() -> Vector2i:
@@ -579,6 +620,8 @@ func _screenshot_scene() -> void:
 	selection = {"kind": "site", "id": house.id}
 	if "--tools" in OS.get_cmdline_user_args():
 		_hud._tools_pinned = true
+	if "--select-ada" in OS.get_cmdline_user_args():
+		selection = {"kind": "res", "ids": [sim.residents[0].id]}
 	for i in 30:
 		await get_tree().process_frame
 	var img := get_viewport().get_texture().get_image()

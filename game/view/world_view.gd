@@ -25,6 +25,16 @@ var _person_mats := {}
 var live_outlines: Array = []   ## {rect: Rect2i, h: float, color: Color, dashed: bool}
 var live_fills: Array = []      ## {rect: Rect2i, h: float, color: Color}
 var selected_ids: Array = []    ## Resident ids with a selection ring.
+## What the player is looking at, as [world point, entity id to ignore]. Trees standing between the
+## camera and any of these fade to a see-through shape (brief §11: fade obstructing objects).
+var focus_points: Array = []
+var open_roofs: Array = []      ## House ids whose roof is cut away (selected, or the cursor is inside).
+var faded_trees: Array = []     ## Tree ids currently faded.
+
+var _trees: MultiMeshInstance3D
+var _trees_faded: MultiMeshInstance3D
+var _roofs: MultiMeshInstance3D
+var _occluder_sig := ""
 
 
 class Batch:
@@ -57,6 +67,11 @@ func set_sim(s: Sim) -> void:
 
 func _ready() -> void:
 	_solid = _mm(_material(false, false, 0))
+	_trees = _mm(_material(false, false, 0))
+	var faded := _material(true, false, 0)
+	faded.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
+	_trees_faded = _mm(faded)
+	_roofs = _mm(_material(false, false, 0))
 	_ghost = _mm(_material(true, false, 0))
 	_over_dark = _mm(_material(true, true, 9))
 	_over_col = _mm(_material(true, true, 10))
@@ -110,6 +125,7 @@ func _process(_delta: float) -> void:
 	if sig != _stuck_sig:
 		_stuck_sig = sig
 		_build_flags()
+	_build_occluders()
 	_update_people()
 	_build_live()
 
@@ -126,12 +142,6 @@ func _build_static() -> void:
 			var v := 0.96 + _hash(x, y) * 0.08
 			solid.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT)
 			solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), Palette.GRASS * Color(v, v, v))
-	for t in sim.trees:
-		if t.alive:
-			var c: Vector2i = t.cell
-			solid.box(Vector3(c.x + 0.1, 0, c.y + 0.1), Vector3(c.x + 0.9, 3, c.y + 0.9), Palette.LOG)
-			solid.box(Vector3(c.x - 1, 3, c.y - 1), Vector3(c.x + 2, 4, c.y + 2), Palette.LEAVES)
-			solid.box(Vector3(c.x, 4, c.y), Vector3(c.x + 1, 5, c.y + 1), Palette.LEAVES)
 	for b in sim.boulders:
 		if b.alive:
 			var c: Vector2i = b.cell
@@ -145,6 +155,7 @@ func _build_static() -> void:
 			_outline(dark, col, Rect2i(s.origin, s.size), 0.52 if s.stage >= 1 else 0.02, Palette.BLUE, true)
 	solid.apply(_solid)
 	ghost.apply(_ghost)
+	_occluder_sig = ""
 	dark.apply(_over_dark)
 	col.apply(_over_col)
 	_build_marks()
@@ -193,13 +204,72 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 			var cc := gcol if stage == 1 else c
 			var lo := 1.7 if Vector2i(x, y) == door else 0.5
 			b.box(Vector3(x, lo, y), Vector3(x + 1, 2.5, y + 1), cc)
-	if stage < 2:
-		return
+	if stage == 2:
+		_add_roof(ghost, o, gcol)
+	# A finished roof is drawn by _build_occluders, so it can be cut away.
+
+
+func _add_roof(b: Batch, o: Vector2i, color: Color) -> void:
 	for a in 3:
 		for x in range(o.x + a, o.x + 5 - a):
 			for y in range(o.y + a, o.y + 5 - a):
-				var b := ghost if stage == 2 else solid
-				b.box(Vector3(x, 2.5 + a * 0.5, y), Vector3(x + 1, 3.0 + a * 0.5, y + 1), gcol if stage == 2 else Palette.ROOF)
+				b.box(Vector3(x, 2.5 + a * 0.5, y), Vector3(x + 1, 3.0 + a * 0.5, y + 1), color)
+
+
+# ---------------------------------------------------------------- trees and roofs that get out of the way
+
+const _TOWARD_CAMERA := Vector3(0.57735, 0.57735, 0.57735)
+
+
+static func _tree_boxes(c: Vector2i) -> Array:
+	return [AABB(Vector3(c.x + 0.1, 0, c.y + 0.1), Vector3(0.8, 3, 0.8)),
+		AABB(Vector3(c.x - 1, 3, c.y - 1), Vector3(3, 1, 3)),
+		AABB(Vector3(c.x, 4, c.y), Vector3(1, 1, 1))]
+
+
+## True when the tree stands between the camera and one of the focus points.
+func _tree_occludes(t: Dictionary) -> bool:
+	for f in focus_points:
+		if f[1] == t.id:
+			continue
+		var p: Vector3 = f[0]
+		for box in _tree_boxes(t.cell):
+			if box.intersects_segment(p + _TOWARD_CAMERA * 0.05, p + _TOWARD_CAMERA * 80.0) != null:
+				return true
+	return false
+
+
+## Draws trees (solid or faded) and finished roofs (unless cut away). Cheap to check every frame;
+## the meshes are only rebuilt when which trees are faded or which roofs are open changes.
+func _build_occluders() -> void:
+	var faded: Array = []
+	for t in sim.trees:
+		if t.alive and _tree_occludes(t):
+			faded.append(t.id)
+	var sig := "%d|%s|%s" % [sim.rev, faded, open_roofs]
+	if sig == _occluder_sig:
+		return
+	_occluder_sig = sig
+	faded_trees = faded
+	var solid := Batch.new()
+	var see_through := Batch.new()
+	for t in sim.trees:
+		if not t.alive:
+			continue
+		var fade: bool = faded.has(t.id)
+		var b := see_through if fade else solid
+		var alpha := 0.3 if fade else 1.0
+		var boxes := _tree_boxes(t.cell)
+		b.box(boxes[0].position, boxes[0].end, Color(Palette.LOG, alpha))
+		b.box(boxes[1].position, boxes[1].end, Color(Palette.LEAVES, alpha))
+		b.box(boxes[2].position, boxes[2].end, Color(Palette.LEAVES, alpha))
+	solid.apply(_trees)
+	see_through.apply(_trees_faded)
+	var roofs := Batch.new()
+	for s in sim.sites:
+		if s.tpl == "house" and s.done and not open_roofs.has(s.id):
+			_add_roof(roofs, s.origin, Palette.ROOF)
+	roofs.apply(_roofs)
 
 
 ## A chalk outline around `rect` at height `h`, drawn over everything, on a dark under-stroke.

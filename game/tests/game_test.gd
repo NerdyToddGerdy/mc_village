@@ -69,6 +69,49 @@ func _test_drag(game: Game) -> void:
 	game.set_tool("")
 
 
+func _test_fading(game: Game) -> void:
+	var sim := game.sim
+	var world: WorldView = game._world
+	game._hover = null
+	game.selection = {}
+	await process_frame
+	await process_frame
+	var candidates := sim.trees.filter(func(t): return t.alive and sim.walkable(t.cell - Vector2i(2, 2)) and sim.site_at(t.cell - Vector2i(2, 2)) == null)
+	check(not candidates.is_empty(), "a standing tree with open ground behind it")
+	if candidates.is_empty():
+		return
+	var tree: Dictionary = candidates[0]
+	check(not world.faded_trees.has(tree.id), "trees are solid when nothing is focused")
+	# Something directly behind the tree, from the camera's point of view, two cells further back.
+	var bench := sim.place_site("bench", tree.cell - Vector2i(2, 2))
+	game.selection = {"kind": "site", "id": bench.id}
+	await process_frame
+	await process_frame
+	check(world.faded_trees.has(tree.id), "selecting a bench behind a tree fades that tree")
+	check(world.faded_trees.size() <= 2, "only trees in front of it fade (%d faded)" % world.faded_trees.size())
+	game.selection = {}
+	await process_frame
+	await process_frame
+	check(not world.faded_trees.has(tree.id), "the tree turns solid again when nothing behind it is focused")
+	sim.cancel_site(bench)
+	var house := sim.place_site("house", Vector2i(11, 0))
+	house.stage = 3
+	house.done = true
+	sim.rev += 1
+	await process_frame
+	var roof_boxes: int = world._roofs.multimesh.instance_count
+	check(roof_boxes > 0, "a finished house has a roof")
+	game.selection = {"kind": "site", "id": house.id}
+	await process_frame
+	await process_frame
+	check(world.open_roofs.has(house.id) and world._roofs.multimesh.instance_count == 0, "selecting the house cuts its roof away")
+	game.selection = {}
+	await process_frame
+	await process_frame
+	check(world._roofs.multimesh.instance_count == roof_boxes, "deselecting puts the roof back")
+	sim.cancel_site(house)
+
+
 func _initialize() -> void:
 	var game: Game = load("res://scenes/main.tscn").instantiate()
 	root.add_child(game)
@@ -107,6 +150,7 @@ func _initialize() -> void:
 	check(game.sim.tick > saved_tick, "the loaded game keeps running")
 	check(game.load_slot(4) != "", "an empty slot can't be loaded")
 	_test_drag(game)
+	await _test_fading(game)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")
