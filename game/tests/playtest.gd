@@ -180,34 +180,34 @@ func _initialize() -> void:
 	check(tree.des, "clicking a tree marks it")
 	await click(screen(tree.cell, 1.5))
 	check(not tree.des, "clicking a marked tree unmarks it")
-	await drag(screen(Vector2i(0, 8)), screen(Vector2i(8, 17)))
+	await drag(screen(at(0, 8)), screen(at(8, 17)))
 	var marked := sim.trees.filter(func(t): return t.des).size()
 	check(marked >= 3, "dragging with Mine marks several trees (%d)" % marked)
 	# Shift-drag marks only trees; Alt-drag marks only boulders (issue #7)
 	for o in sim.trees + sim.boulders:
 		o.des = false
-	await move(screen(Vector2i(9, 9)))
+	await move(screen(at(9, 9)))
 	check("Shift: trees only" in game._hud._hint.text, "the Mine hint explains the modifiers: \"%s\"" % game._hud._hint.text)
-	await drag(screen(Vector2i(6, 2)), screen(Vector2i(17, 17)), true)
+	await drag(screen(at(6, 2)), screen(at(17, 17)), true)
 	var t_on := sim.trees.filter(func(t): return t.des).size()
 	var b_on := sim.boulders.filter(func(b): return b.des).size()
 	check(t_on > 0 and b_on == 0, "Shift-drag with Mine marks trees only (%d trees, %d boulders)" % [t_on, b_on])
 	for o in sim.trees + sim.boulders:
 		o.des = false
-	await drag(screen(Vector2i(6, 2)), screen(Vector2i(17, 17)), false, true)
+	await drag(screen(at(6, 2)), screen(at(17, 17)), false, true)
 	t_on = sim.trees.filter(func(t): return t.des).size()
 	b_on = sim.boulders.filter(func(b): return b.des).size()
 	check(b_on > 0 and t_on == 0, "Alt-drag with Mine marks boulders only (%d trees, %d boulders)" % [t_on, b_on])
 	for o in sim.trees + sim.boulders:
 		o.des = false
-	await drag(screen(Vector2i(0, 8)), screen(Vector2i(8, 17)))
+	await drag(screen(at(0, 8)), screen(at(8, 17)))
 	check(game._world.live_outlines.size() > 0 or true, "drag shows an outline")
 
 	# Place the bench from the build menu
 	await key(KEY_B)
 	check(game.build_menu_open, "B opens the build menu")
 	check(await click_button("Crafting bench"), "click Crafting bench in the build menu")
-	var bench_cell := open_cell(Vector2i(9, 11))
+	var bench_cell := open_cell(at(9, 11))
 	await move(screen(bench_cell))
 	check(game._hud._hint.visible and "crafting bench" in game._hud._hint.text, "cursor hint while placing: \"%s\"" % game._hud._hint.text)
 	await click(screen(bench_cell))
@@ -234,7 +234,7 @@ func _initialize() -> void:
 	await drag(screen(zc), screen(zc + Vector2i(3, 1)))
 	check(sim.zone.size() >= 6, "dragging paints a stockpile (%d cells)" % sim.zone.size())
 	await key(KEY_X)
-	await drag(screen(Vector2i(6, 3)), screen(Vector2i(17, 17)))
+	await drag(screen(at(6, 3)), screen(at(17, 17)))
 	check(sim.boulders.filter(func(b): return b.des).size() >= 3, "dragging with Mine marks boulders")
 	await key(KEY_ESCAPE)
 	check(game.tool == "", "Esc cancels the order")
@@ -314,7 +314,7 @@ func _initialize() -> void:
 
 	# Two residents doing different work at once: one mines while the other crafts
 	await key(KEY_X)
-	await drag(screen(Vector2i(0, 0)), screen(Vector2i(17, 17)))
+	await drag(screen(at(0, 0)), screen(at(17, 17)))
 	await key(KEY_ESCAPE)
 	await click(screen(bench_cell, 0.4))
 	for i in 4:
@@ -383,3 +383,12 @@ func _initialize() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(game._slot_path(n)))
 	print("\n%s" % ("PLAYTEST PASSED" if _failures == 0 else "%d FAILED" % _failures))
 	quit(1 if _failures else 0)
+
+
+## A cell or area of the original 18×18 opening, in today's map (issue #52 moved it to the middle).
+static func at(x: int, y: int) -> Vector2i:
+	return Vector2i(x, y) + Tuning.OPENING_OFFSET
+
+
+static func area(x: int, y: int, w: int, h: int) -> Rect2i:
+	return Rect2i(Vector2i(x, y) + Tuning.OPENING_OFFSET, Vector2i(w, h))

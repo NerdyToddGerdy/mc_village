@@ -18,7 +18,7 @@ var selection := {}                     ## {} | {kind:"res", ids:[...]} | {kind:
 var _acc := 0.0
 var _hud_t := 0.0
 var _cam := Camera3D.new()
-var _target := Vector3(9, 0, 9)
+var _target := Vector3.ZERO
 var _world := WorldView.new()
 var _hud := Hud.new()
 var _drag := {}
@@ -38,6 +38,7 @@ func _ready() -> void:
 	_setup_scene()
 	_world.sim = sim
 	add_child(_world)
+	_look_at_first_resident()
 	_hud.game = self
 	add_child(_hud)
 	_menu.game = self
@@ -75,6 +76,12 @@ func _setup_scene() -> void:
 	_cam.near = 0.1
 	_cam.far = 200.0
 	add_child(_cam)
+	_place_camera()
+
+
+func _look_at_first_resident() -> void:
+	var r: Dictionary = sim.residents[0]
+	_target = Vector3(r.pos.x + 0.5, 0, r.pos.y + 0.5)
 	_place_camera()
 
 
@@ -444,7 +451,7 @@ func close_menu() -> void:
 
 func restart() -> void:
 	_use_sim(Sim.new_game())
-	_target = Vector3(9, 0, 9)
+	_look_at_first_resident()
 	_cam.size = 17.0
 	_place_camera()
 	selection = {"kind": "res", "ids": [sim.residents[0].id]}
@@ -614,6 +621,16 @@ func _next_stuck() -> void:
 	focus_on(list[_stuck_i].focus_kind, list[_stuck_i].focus_id)
 
 
+
+## A cell or area of the original 18×18 opening, in today's map (issue #52 moved it to the middle).
+static func at(x: int, y: int) -> Vector2i:
+	return Vector2i(x, y) + Tuning.OPENING_OFFSET
+
+
+static func area(x: int, y: int, w: int, h: int) -> Rect2i:
+	return Rect2i(Vector2i(x, y) + Tuning.OPENING_OFFSET, Vector2i(w, h))
+
+
 # ---------------------------------------------------------------- screenshot mode
 
 func _screenshot_menu() -> void:
@@ -629,17 +646,17 @@ func _screenshot_menu() -> void:
 ## `godot --path . -- --screenshot` plays a short scripted opening, saves a frame to
 ## user://screenshot.png and quits. Used to check the view without clicking through it.
 func _screenshot_scene() -> void:
-	sim.designate_mine(Rect2i(0, 8, 9, 10))
-	var bench := sim.place_site("bench", Vector2i(8, 10))
+	sim.designate_mine(area(0, 8, 9, 10))
+	var bench := sim.place_site("bench", at(8, 10))
 	for i in 120 * Tuning.TPS:
 		sim.step()
 	for r in ["planks", "planks", "sticks", "wood_pick"]:
 		sim.queue_add(bench, r)
-	sim.paint_zone(Rect2i(10, 7, 4, 2))
+	sim.paint_zone(area(10, 7, 4, 2))
 	for i in 140 * Tuning.TPS:
 		sim.step()
-	sim.designate_mine(Rect2i(9, 0, 9, 18))
-	var house := sim.place_site("house", Vector2i(11, 0))
+	sim.designate_mine(area(9, 0, 9, 18))
+	var house := sim.place_site("house", at(11, 0))
 	for i in 3:
 		sim.queue_add(bench, "planks")
 	for i in 210 * Tuning.TPS:

@@ -14,6 +14,7 @@ func _init() -> void:
 		"test_bench_skips_blocked_recipes_and_comes_before_building",
 		"test_auto_ingredients_unlock_with_first_house",
 		"test_blueprint_clears_trees_and_boulders",
+		"test_bigger_clearing",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -67,20 +68,20 @@ func stuck_text(sim: Sim) -> String:
 
 ## Plays the founding moment the way a player would, end to end.
 func play_opening(sim: Sim) -> Dictionary:
-	sim.designate_mine(Rect2i(0, 0, 10, 18))
-	var bench := sim.place_site("bench", Vector2i(8, 10))
+	sim.designate_mine(area(0, 0, 10, 18))
+	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
 	for r in ["planks", "planks", "sticks", "wood_pick"]:
 		sim.queue_add(bench, r)
 	run(sim, 120)
-	sim.paint_zone(Rect2i(10, 7, 4, 2))
+	sim.paint_zone(area(10, 7, 4, 2))
 	sim.designate_mine(whole_map())
 	run(sim, 150)
-	var h1 := sim.place_site("house", Vector2i(11, 0))
+	var h1 := sim.place_site("house", at(11, 0))
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	run(sim, 600)
-	var h2 := sim.place_site("house", Vector2i(1, 4), 1)
+	var h2 := sim.place_site("house", at(1, 4), 1)
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	run(sim, 900)
@@ -103,11 +104,11 @@ func test_full_opening() -> void:
 
 func test_bench_skips_blocked_recipes_and_comes_before_building() -> void:
 	var sim := Sim.new_game()
-	sim.designate_mine(Rect2i(0, 0, 10, 18))
-	var bench := sim.place_site("bench", Vector2i(8, 10))
+	sim.designate_mine(area(0, 0, 10, 18))
+	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
 	check(bench.done, "bench built")
-	var house := sim.place_site("house", Vector2i(11, 4))
+	var house := sim.place_site("house", at(11, 4))
 	house.stage = 1  # foundation already down, so the house wants planks and logs
 	sim._occ_dirty = true
 	for r in ["wood_axe", "planks", "planks", "sticks"]:
@@ -129,8 +130,8 @@ func test_bench_skips_blocked_recipes_and_comes_before_building() -> void:
 
 func test_auto_ingredients_unlock_with_first_house() -> void:
 	var sim := Sim.new_game()
-	sim.designate_mine(Rect2i(0, 0, 10, 18))
-	var bench := sim.place_site("bench", Vector2i(8, 10))
+	sim.designate_mine(area(0, 0, 10, 18))
+	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
 	for k in sim.items.keys():
 		if sim.items[k].type != "log":
@@ -150,19 +151,31 @@ func test_auto_ingredients_unlock_with_first_house() -> void:
 
 func test_blueprint_clears_trees_and_boulders() -> void:
 	var sim := Sim.new_game()
-	check(sim.placement_check("bench", Vector2i(4, 6)) == "", "tree doesn't block placement")
-	var bench := sim.place_site("bench", Vector2i(4, 6))
-	var tree: Dictionary = sim.trees.filter(func(t): return t.cell == Vector2i(4, 6))[0]
+	check(sim.placement_check("bench", at(4, 6)) == "", "tree doesn't block placement")
+	var bench := sim.place_site("bench", at(4, 6))
+	var tree: Dictionary = sim.trees.filter(func(t): return t.cell == at(4, 6))[0]
 	check(tree.des, "tree under the blueprint is marked")
 	run(sim, 120)
 	check(not tree.alive and bench.done, "tree cleared and bench built from its logs")
-	var house := sim.place_site("house", Vector2i(5, 3))
-	var boulder: Dictionary = sim.boulders.filter(func(b): return b.cell == Vector2i(7, 5))[0]
+	var house := sim.place_site("house", at(5, 3))
+	var boulder: Dictionary = sim.boulders.filter(func(b): return b.cell == at(7, 5))[0]
 	check(boulder.des, "boulder under the blueprint is marked")
 	run(sim, 1)
 	check(stuck_text(sim).contains("Needs a pickaxe to clear a boulder"), "house says what it's waiting for: " + stuck_text(sim))
 	check(house.store.is_empty(), "no deliveries while the ground isn't clear")
-	check(sim.placement_check("house", Vector2i(3, 3)) == "Overlaps another building", "buildings still can't overlap")
+	check(sim.placement_check("house", at(3, 3)) == "Overlaps another building", "buildings still can't overlap")
+
+
+func test_bigger_clearing() -> void:
+	var sim := Sim.new_game()
+	check(sim.w == 32 and sim.h == 32, "a new game is 32×32")
+	check(sim.trees.size() == 40 and sim.boulders.size() == 16, "40 trees and 16 boulders")
+	check(Sim.rcell(sim.residents[0]) == at(9, 9), "Ada starts where the opening expects, near the middle")
+	var cells := {}
+	for o in sim.trees + sim.boulders:
+		check(sim.in_bounds(o.cell) and not cells.has(o.cell), "%s at %s is on the map and alone" % [o.kind, o.cell])
+		cells[o.cell] = true
+	check(sim.walkable(Vector2i(0, sim.h - 1)), "travelers can walk in at the bottom-left corner")
 
 
 func test_mine_marks_trees_and_boulders() -> void:
@@ -179,8 +192,8 @@ func test_mine_marks_trees_and_boulders() -> void:
 
 func test_save_and_load_mid_game() -> void:
 	var sim := Sim.new_game()
-	sim.designate_mine(Rect2i(0, 0, 10, 18))
-	var bench := sim.place_site("bench", Vector2i(8, 10))
+	sim.designate_mine(area(0, 0, 10, 18))
+	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
 	for r in ["planks", "planks", "sticks", "wood_pick"]:
 		sim.queue_add(bench, r)
@@ -193,10 +206,10 @@ func test_save_and_load_mid_game() -> void:
 	var b2: Dictionary = loaded.sites.filter(func(s): return s.tpl == "bench")[0]
 	run(loaded, 200)
 	check(b2.queue.is_empty() and loaded.stats.pick_crafted, "loaded game carries on crafting")
-	loaded.paint_zone(Rect2i(10, 7, 4, 2))
+	loaded.paint_zone(area(10, 7, 4, 2))
 	loaded.designate_mine(whole_map())
 	run(loaded, 150)
-	var h := loaded.place_site("house", Vector2i(11, 0))
+	var h := loaded.place_site("house", at(11, 0))
 	for i in 8:
 		loaded.queue_add(b2, "planks")
 	run(loaded, 600)
@@ -229,6 +242,8 @@ func test_every_save_fixture_still_loads() -> void:
 		check(r.data.v == SaveFormat.VERSION, "v%d fixture is upgraded to the current version" % v)
 		var sim := Sim.from_state(r.data.state)
 		check(sim.tick == r.data.tick, "v%d: tick restored" % v)
+		var size := Vector2i(sim.w, sim.h)
+		check(size == (Vector2i(18, 18) if v < 4 else Vector2i(Tuning.MAP_W, Tuning.MAP_H)), "v%d: map size is %s" % [v, size])
 		check(sim.residents.size() == 2 and sim.residents[1].arriving, "v%d: Tomas is walking in again after loading" % v)
 		check(sim.sites.any(func(s): return s.tpl == "bench" and s.done and s.queue.has("stone_axe")), "v%d: the bench and its queue survive" % v)
 		if v >= 3:
@@ -259,14 +274,14 @@ func test_dropped_tools_keep_their_wear() -> void:
 	check(ada.axe != null and ada.axe.type == "stone_axe", "Ada swaps to the better stone axe")
 	var worn: Array = sim.stacks_where(func(s): return s.type == "wood_axe")
 	check(worn.size() == 1 and worn[0].dur == 3, "the wooden axe she put down still has 3 uses, not a new 10")
-	sim.paint_zone(Rect2i(0, 0, 3, 3))
+	sim.paint_zone(area(0, 0, 3, 3))
 	run(sim, 40)
 	worn = sim.stacks_where(func(s): return s.type == "wood_axe")
 	check(worn.size() == 1 and sim.in_zone(worn[0].cell) and worn[0].dur == 3, "hauled to the stockpile with its wear")
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	worn = loaded.stacks_where(func(s): return s.type == "wood_axe")
 	check(worn.size() == 1 and worn[0].dur == 3, "wear survives a save and load")
-	var bo := loaded.add_resident("Bo", "8C4F6B", Vector2i(1, 1))
+	var bo := loaded.add_resident("Bo", "8C4F6B", at(1, 1))
 	loaded.designate_mine(Rect2i(0, 0, loaded.w, loaded.h))
 	for b in loaded.boulders:
 		b.des = false
@@ -308,7 +323,7 @@ func test_newer_or_damaged_saves_are_refused() -> void:
 
 func test_save_file_round_trip() -> void:
 	var sim := Sim.new_game()
-	sim.designate_mine(Rect2i(0, 0, 10, 18))
+	sim.designate_mine(area(0, 0, 10, 18))
 	run(sim, 30)
 	var path := "user://test_saves/round_trip.save"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://test_saves"))
@@ -371,3 +386,12 @@ func test_mine_drag_limited_to_one_kind() -> void:
 	check(sim2.boulders.all(func(b): return b.des) and sim2.trees.all(func(t): return not t.des), "boulders only marks every boulder and no tree")
 	check(Game.mine_kinds(true, false) == ["tree"] and Game.mine_kinds(false, true) == ["boulder"], "Shift means trees, Alt means boulders")
 	check(Game.mine_kinds(false, false).size() == 2 and Game.mine_kinds(true, true).size() == 2, "no modifier, or both, marks both kinds")
+
+
+## A cell or area of the original 18×18 opening, in today's map (issue #52 moved it to the middle).
+static func at(x: int, y: int) -> Vector2i:
+	return Vector2i(x, y) + Tuning.OPENING_OFFSET
+
+
+static func area(x: int, y: int, w: int, h: int) -> Rect2i:
+	return Rect2i(Vector2i(x, y) + Tuning.OPENING_OFFSET, Vector2i(w, h))

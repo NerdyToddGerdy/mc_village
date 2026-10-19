@@ -12,12 +12,20 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 3
+const VERSION := 4
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4}
+
+
+## v4: the map size is saved (issue #52). Everything before v4 was played on the 18×18 map.
+static func _v3_to_v4(d: Dictionary) -> Dictionary:
+	if not d.state.has("w"):
+		d.state.w = 18
+		d.state.h = 18
+	return d
 
 
 ## v3: residents have a list of queued orders (Shift + right-click, issue #2).
