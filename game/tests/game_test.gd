@@ -112,6 +112,32 @@ func _test_fading(game: Game) -> void:
 	sim.cancel_site(house)
 
 
+func _test_smooth_movement(game: Game) -> void:
+	var sim := game.sim
+	var world: WorldView = game._world
+	var ada: Dictionary = sim.residents[0]
+	sim.fail_job(ada)
+	var c := Sim.rcell(ada)
+	var goal := c + Vector2i(4, 0) if sim.walkable(c + Vector2i(4, 0)) else c - Vector2i(4, 0)
+	sim.direct_order(ada, null, goal)
+	game.set_speed(1)
+	game._acc = 0.0
+	game._process(Tuning.DT * 3.0)   # a few whole ticks to get her walking
+	game._process(Tuning.DT * 0.5)   # then half a tick
+	var drawn := world.drawn_pos(ada)
+	var prev: Vector2 = world._prev_pos[ada.id]
+	check(prev != ada.pos, "Ada is walking")
+	check(drawn.is_equal_approx(prev.lerp(ada.pos, world.tick_fraction)) and world.tick_fraction > 0.3 and world.tick_fraction < 0.7,
+		"halfway between ticks she's drawn halfway between positions (fraction %.2f)" % world.tick_fraction)
+	game.set_speed(0)
+	game._process(0.016)
+	check(world.drawn_pos(ada) == ada.pos, "paused, she's drawn exactly where she is")
+	world._prev_pos[ada.id] = ada.pos + Vector2(5, 0)
+	game.set_speed(1)
+	check(world.drawn_pos(ada) == ada.pos, "a jump of more than a cell snaps instead of gliding")
+	game.set_speed(1)
+
+
 func _initialize() -> void:
 	var game: Game = load("res://scenes/main.tscn").instantiate()
 	root.add_child(game)
@@ -161,6 +187,7 @@ func _initialize() -> void:
 	check("newer version" in game.load_slot(5), "loading a newer save explains why it failed")
 	_test_drag(game)
 	await _test_fading(game)
+	_test_smooth_movement(game)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")

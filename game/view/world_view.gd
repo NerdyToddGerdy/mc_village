@@ -30,6 +30,10 @@ var selected_ids: Array = []    ## Resident ids with a selection ring.
 var focus_points: Array = []
 var open_roofs: Array = []      ## House ids whose roof is cut away (selected, or the cursor is inside).
 var faded_trees: Array = []     ## Tree ids currently faded.
+## Residents are drawn between their position before the last tick and their current one, this
+## far along (0..1), so walking looks smooth although the sim moves them 20 times a second.
+var tick_fraction := 1.0
+var _prev_pos := {}             ## Resident id -> position before the latest tick.
 
 var _trees: MultiMeshInstance3D
 var _trees_faded: MultiMeshInstance3D
@@ -58,6 +62,7 @@ class Batch:
 ## Switches to another sim (after loading a save) and redraws everything.
 func set_sim(s: Sim) -> void:
 	sim = s
+	_prev_pos.clear()
 	_built_rev = -1
 	_stuck_sig = "-"
 	for id in _people:
@@ -353,6 +358,21 @@ func _build_hatch() -> void:
 
 # ---------------------------------------------------------------- residents
 
+## Called just before each sim tick.
+func remember_positions() -> void:
+	for r in sim.residents:
+		_prev_pos[r.id] = r.pos
+
+
+## Where to draw a resident this frame: partway from the previous tick's position to the current
+## one. A jump of more than a cell (a load, being moved off a new building) snaps instead.
+func drawn_pos(r: Dictionary) -> Vector2:
+	var prev = _prev_pos.get(r.id)
+	if prev == null or prev.distance_to(r.pos) > 1.0:
+		return r.pos
+	return prev.lerp(r.pos, tick_fraction)
+
+
 func _person_mat(color: Color) -> StandardMaterial3D:
 	var key := color.to_html()
 	if not _person_mats.has(key):
@@ -445,7 +465,8 @@ func _update_people() -> void:
 		if not _people.has(r.id):
 			_people[r.id] = _make_person(r)
 		var n: Node3D = _people[r.id]
-		n.position = Vector3(r.pos.x + 0.5, 0, r.pos.y + 0.5)
+		var at := drawn_pos(r)
+		n.position = Vector3(at.x + 0.5, 0, at.y + 0.5)
 		var carry: MeshInstance3D = n.get_node("Carry")
 		carry.visible = r.carry != null
 		if r.carry != null:
