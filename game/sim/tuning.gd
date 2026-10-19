@@ -6,8 +6,9 @@ const TPS := 20                         ## Simulation ticks per second.
 const DT := 1.0 / TPS
 const SPEEDS := [0, 1, 2, 3]
 
-const MAP_W := 18
-const MAP_H := 18
+const MAP_W := 32                       ## New games; a loaded save keeps its own size.
+const MAP_H := 32
+const OPENING_OFFSET := Vector2i(7, 7)  ## Where the original 18×18 opening sits in the bigger map.
 
 const WALK := 3.0                       ## Cells per second.
 const CARRY := 4                        ## Items of one type per trip.

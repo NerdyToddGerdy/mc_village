@@ -8,20 +8,20 @@ extends SceneTree
 
 func _initialize() -> void:
 	var sim := Sim.new_game()
-	sim.designate_mine(Rect2i(0, 0, 10, 18))
-	var bench := sim.place_site("bench", Vector2i(8, 10))
+	sim.designate_mine(area(0, 0, 10, 18))
+	var bench := sim.place_site("bench", at(8, 10))
 	_run(sim, 120)
 	for r in ["planks", "planks", "sticks", "wood_pick"]:
 		sim.queue_add(bench, r)
 	_run(sim, 120)
-	sim.paint_zone(Rect2i(10, 7, 4, 2))
+	sim.paint_zone(area(10, 7, 4, 2))
 	sim.designate_mine(Rect2i(0, 0, sim.w, sim.h))
 	_run(sim, 150)
-	sim.place_site("house", Vector2i(11, 0))
+	sim.place_site("house", at(11, 0))
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	_run(sim, 600)
-	sim.place_site("house", Vector2i(1, 4), 1)
+	sim.place_site("house", at(1, 4), 1)
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	var walked := 0
@@ -57,3 +57,12 @@ func _initialize() -> void:
 func _run(sim: Sim, seconds: float) -> void:
 	for i in int(seconds * Tuning.TPS):
 		sim.step()
+
+
+## A cell or area of the original 18×18 opening, in today's map (issue #52 moved it to the middle).
+static func at(x: int, y: int) -> Vector2i:
+	return Vector2i(x, y) + Tuning.OPENING_OFFSET
+
+
+static func area(x: int, y: int, w: int, h: int) -> Rect2i:
+	return Rect2i(Vector2i(x, y) + Tuning.OPENING_OFFSET, Vector2i(w, h))

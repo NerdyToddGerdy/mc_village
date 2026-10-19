@@ -35,18 +35,32 @@ var _occ_dirty := true
 
 # ---------------------------------------------------------------- setup
 
+## The opening's trees and boulders, as tuned on the original 18×18 map. They sit in the middle
+## of the bigger clearing, shifted by Tuning.OPENING_OFFSET, so the opening plays as it always has.
+const OPENING_TREES := [[2, 9], [3, 13], [12, 2], [2, 3], [6, 12], [15, 6], [9, 15], [15, 13], [6, 2], [16, 9], [13, 16], [1, 16], [9, 2], [4, 6]]
+const OPENING_BOULDERS := [[11, 12], [14, 10], [7, 5], [10, 4], [16, 3], [7, 16]]
+const OPENING_START := Vector2i(9, 9)
+## The outer ring of the 32×32 clearing (issue #52), in map cells. Trees stay 3 cells apart so
+## canopies don't merge, and the left edge from y 12 down is kept clear for travelers.
+const RING_TREES := [[9, 2], [26, 2], [14, 3], [17, 3], [8, 5], [11, 5], [26, 7], [29, 8], [4, 10], [26, 11],
+	[4, 16], [27, 17], [30, 17], [5, 20], [27, 21], [30, 23], [5, 25], [26, 25], [11, 27], [14, 27], [30, 27],
+	[22, 28], [19, 29], [5, 30], [10, 30], [13, 30]]
+const RING_BOULDERS := [[6, 7], [3, 8], [28, 11], [25, 13], [3, 14], [14, 25], [19, 26], [21, 26], [17, 30], [24, 30]]
+
+
 static func new_game() -> Sim:
 	var s := Sim.new()
 	s._occ.resize(s.w * s.h)
-	var tree_spots := [[2, 9], [3, 13], [12, 2], [2, 3], [6, 12], [15, 6], [9, 15], [15, 13], [6, 2], [16, 9], [13, 16], [1, 16], [9, 2], [4, 6]]
-	for i in tree_spots.size():
-		var p: Array = tree_spots[i]
-		s.trees.append({"id": s._id(), "kind": "tree", "cell": Vector2i(p[0], p[1]), "logs": 4 + (i * 7) % 3,
+	var o := Tuning.OPENING_OFFSET
+	var spots: Array = OPENING_TREES.map(func(p): return Vector2i(p[0], p[1]) + o) + RING_TREES.map(func(p): return Vector2i(p[0], p[1]))
+	for i in spots.size():
+		s.trees.append({"id": s._id(), "kind": "tree", "cell": spots[i], "logs": 4 + (i * 7) % 3,
 			"alive": true, "des": false, "claim": 0, "unreach_until": 0})
-	for p in [[11, 12], [14, 10], [7, 5], [10, 4], [16, 3], [7, 16]]:
-		s.boulders.append({"id": s._id(), "kind": "boulder", "cell": Vector2i(p[0], p[1]),
+	var rocks: Array = OPENING_BOULDERS.map(func(p): return Vector2i(p[0], p[1]) + o) + RING_BOULDERS.map(func(p): return Vector2i(p[0], p[1]))
+	for c in rocks:
+		s.boulders.append({"id": s._id(), "kind": "boulder", "cell": c,
 			"alive": true, "des": false, "claim": 0, "unreach_until": 0})
-	s.add_resident("Ada", "3E6E7E", Vector2i(9, 9))
+	s.add_resident("Ada", "3E6E7E", OPENING_START + o)
 	return s
 
 
@@ -1199,13 +1213,15 @@ func save_state() -> Dictionary:
 		c.crafter = 0
 		c.crafting = ""
 		sites_out.append(c)
-	return {"tick": tick, "next_id": next_id, "trees": trees.duplicate(true), "boulders": boulders.duplicate(true),
+	return {"w": w, "h": h, "tick": tick, "next_id": next_id, "trees": trees.duplicate(true), "boulders": boulders.duplicate(true),
 		"items": items_out, "zone": zone.duplicate(), "sites": sites_out, "residents": res_out,
 		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft}
 
 
 static func from_state(d: Dictionary) -> Sim:
 	var s := Sim.new()
+	s.w = d.w
+	s.h = d.h
 	s._occ.resize(s.w * s.h)
 	s.tick = d.tick
 	s.next_id = d.next_id

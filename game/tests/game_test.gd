@@ -94,7 +94,7 @@ func _test_fading(game: Game) -> void:
 	await process_frame
 	check(not world.faded_trees.has(tree.id), "the tree turns solid again when nothing behind it is focused")
 	sim.cancel_site(bench)
-	var house := sim.place_site("house", Vector2i(11, 0))
+	var house := sim.place_site("house", at(11, 0))
 	house.stage = 3
 	house.done = true
 	sim.rev += 1
@@ -149,8 +149,8 @@ func _initialize() -> void:
 	check(menu.visible and menu.first and game.speed == 0, "menu opens at launch, paused, with Play")
 	game.close_menu()
 	check(not menu.visible and game.speed == 1, "Play closes the menu and runs at 1×")
-	game.sim.designate_mine(Rect2i(0, 0, 10, 18))
-	game.sim.place_site("bench", Vector2i(8, 10))
+	game.sim.designate_mine(area(0, 0, 10, 18))
+	game.sim.place_site("bench", at(8, 10))
 	for i in 60 * Tuning.TPS:
 		game.sim.step()
 	game.set_speed(3)
@@ -195,3 +195,12 @@ func _initialize() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(game._slot_path(n)))
 	print("%s" % ("ALL PASSED" if _failures == 0 else "%d FAILED" % _failures))
 	quit(1 if _failures else 0)
+
+
+## A cell or area of the original 18×18 opening, in today's map (issue #52 moved it to the middle).
+static func at(x: int, y: int) -> Vector2i:
+	return Vector2i(x, y) + Tuning.OPENING_OFFSET
+
+
+static func area(x: int, y: int, w: int, h: int) -> Rect2i:
+	return Rect2i(Vector2i(x, y) + Tuning.OPENING_OFFSET, Vector2i(w, h))

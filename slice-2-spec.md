@@ -166,10 +166,10 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 
 ## 10. Saving
 
-Save format v4 adds the map size, sheep, farm plots and wheat growth, the fireplace, its queue, standing order and reserved plot, reserved plots for new benches, residents' hunger, job toggles, priorities and skills, the meadow's remaining sheep, and residents away on trips.
+Slice 2 changes the save format one step per change, each with its own upgrade step and fixture, rather than in one jump. **v4 (#52) adds the map size.** Later steps add sheep, farm plots and wheat growth, the fireplace, its queue, standing order and reserved plot, reserved plots for new benches, residents' hunger, job toggles, priorities and skills, the meadow's remaining sheep, and residents away on trips.
 
-The v3→v4 upgrade step:
-- Records the map size as 18×18, so older saves keep their size.
+Taken together, the upgrade steps:
+- Record the map size as 18×18 for saves from before v4, so older saves keep their size (v3→v4).
 - Gives existing residents full hunger, all jobs on at priority 2, and level 1 everywhere.
 - Adds a finished bed to every finished house (so old saves keep their residents housed).
 - Adds no sheep to the clearing (old saves are past the opening).
