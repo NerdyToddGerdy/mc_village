@@ -91,9 +91,13 @@ func _process(delta: float) -> void:
 	_acc += minf(delta, 0.1) * speed
 	var n := 0
 	while _acc >= Tuning.DT and n < 30:
+		_world.remember_positions()
 		sim.step()
 		_acc -= Tuning.DT
 		n += 1
+	# How far the game is into the next tick, for drawing residents between ticks (issue #4).
+	# Paused, they're drawn exactly where they are.
+	_world.tick_fraction = 1.0 if speed == 0 else clampf(_acc / Tuning.DT, 0.0, 1.0)
 	for ev in sim.events:
 		if ev.type == "toast":
 			_hud.add_toast(ev)
