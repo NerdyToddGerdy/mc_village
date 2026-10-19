@@ -33,6 +33,10 @@ Slice 2 is done when, from a fresh start, a player can:
 
 ## 2. Changes to Slice 1 rules
 
+- **A bigger clearing:** the map grows from 18×18 to **32×32** (provisional), with proportionally more trees (about 40) and boulders (about 16).
+  - There's room for a third house, farm plots, the fireplace and the reserved plots that let buildings grow.
+  - Ada starts near the middle, and the camera opens on her.
+  - Saves record the map size, so older 18×18 saves keep their size.
 - **House stages** become Foundation → Walls → Roof → **Bed**. The bed stage costs 3 wool and 3 planks, and the bed is placed inside, against the wall opposite the door.
 - **The clearing starts with 6 sheep**, enough wool for the two opening beds.
 - **Arrivals need a free bed** (§7). Tomas comes once the second house, bed included, is finished.
@@ -162,9 +166,10 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 
 ## 10. Saving
 
-Save format v4 adds sheep, farm plots and wheat growth, the fireplace, its queue, standing order and reserved plot, reserved plots for new benches, residents' hunger, job toggles, priorities and skills, the meadow's remaining sheep, and residents away on trips.
+Save format v4 adds the map size, sheep, farm plots and wheat growth, the fireplace, its queue, standing order and reserved plot, reserved plots for new benches, residents' hunger, job toggles, priorities and skills, the meadow's remaining sheep, and residents away on trips.
 
 The v3→v4 upgrade step:
+- Records the map size as 18×18, so older saves keep their size.
 - Gives existing residents full hunger, all jobs on at priority 2, and level 1 everywhere.
 - Adds a finished bed to every finished house (so old saves keep their residents housed).
 - Adds no sheep to the clearing (old saves are past the opening).
@@ -184,6 +189,8 @@ All are rebindable (Slice 1, §10).
 
 | Key | Value |
 |---|---|
+| `map_size` | 32 × 32 (was 18 × 18) |
+| `start_trees` / `start_boulders` | about 40 / about 16, laid out by hand |
 | `start_sheep` | 6 |
 | `sheep_walk` | 0.6 cells/s, pausing often |
 | `hunt_time` | 4 s |
