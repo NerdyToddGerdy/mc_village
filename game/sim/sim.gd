@@ -1138,7 +1138,7 @@ func save_state() -> Dictionary:
 		c.crafter = 0
 		c.crafting = ""
 		sites_out.append(c)
-	return {"v": 1, "tick": tick, "next_id": next_id, "trees": trees.duplicate(true), "boulders": boulders.duplicate(true),
+	return {"tick": tick, "next_id": next_id, "trees": trees.duplicate(true), "boulders": boulders.duplicate(true),
 		"items": items_out, "zone": zone.duplicate(), "sites": sites_out, "residents": res_out,
 		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft}
 
