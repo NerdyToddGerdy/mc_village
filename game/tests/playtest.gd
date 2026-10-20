@@ -116,6 +116,8 @@ func click_button(text: String, near := "", last := false) -> bool:
 	if b == null:
 		printerr("     (no visible button containing \"%s\")" % text)
 		return false
+	if OS.get_environment("PLAYTEST_TRACE") != "":
+		print("     click \"%s\" -> button \"%s\" at %s (parent %s)" % [text, b.text.replace("\n", " / "), b.get_global_rect(), b.get_parent().get_parent().name])
 	await click(b.get_global_rect().get_center())
 	return true
 
@@ -247,9 +249,13 @@ func _initialize() -> void:
 	# Queue crafts by clicking the bench and its Queue buttons
 	await click(screen(bench_cell, 0.4))
 	check(game.selection.get("kind", "") == "site" and game.selection.id == bench.id, "clicking the bench selects it (got %s)" % [game.selection])
+	# Pause while queueing, so nothing gets crafted between clicks and the count is exact.
+	await key(KEY_QUOTELEFT)
+	check(game.speed == 0, "~ pauses")
 	for r in ["Planks", "Planks", "Sticks", "Wooden pickaxe"]:
 		check(await click_button("Queue", r), "click Queue for %s" % r)
 	check(bench.queue.size() == 4, "4 crafts queued (%s)" % [bench.queue])
+	await key(KEY_1)
 	await run(150)
 	check(sim.stats.pick_crafted, "a wooden pickaxe is crafted")
 
@@ -284,12 +290,20 @@ func _initialize() -> void:
 	var h1 = sim.site_at(house_origin + Vector2i(2, 2))
 	check(h1 != null and h1.tpl == "house" and h1.rot == 1, "clicking places the house with the turned door")
 
-	await click(screen(bench_cell, 0.4))
+	# Queue the house's planks from the toolbar's Craft panel (issue #57), not by clicking the bench
+	game.selection = {}
+	check(game._hud._tool_btns.craft.visible, "a Craft button is in the toolbar now that the bench is finished")
+	check(await click_button("Craft"), "click Craft in the toolbar")
+	check(game.craft_menu_open, "the craft panel opens")
+	await key(KEY_QUOTELEFT)
 	var queued_before: int = bench.queue.size()
 	check(await click_button("Queue 5", "Planks"), "click Queue 5 for planks")
 	check(bench.queue.size() == queued_before + 5, "Queue 5 queues five batches")
 	await click_button("Queue 5", "Planks")
 	check(bench.queue.size() >= queued_before + 8, "two Queue 5 clicks cover a house's planks")
+	await key(KEY_ESCAPE)
+	check(not game.craft_menu_open, "Esc closes the craft panel")
+	await key(KEY_1)
 	await run(700)
 	check(h1.done, "Ada builds her house")
 	check(sim.auto_craft, "auto ingredients unlock with the first house")

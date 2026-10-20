@@ -13,6 +13,8 @@ var tool := ""                          ## "", "mine", "stock" or "build"
 var placing := ""                       ## Template being placed while tool == "build".
 var rot := 0
 var build_menu_open := false
+var craft_menu_open := false            ## The Craft panel above the toolbar (issue #57).
+var craft_bench_i := 0                  ## Which finished bench the Craft panel shows.
 var selection := {}                     ## {} | {kind:"res", ids:[...]} | {kind:"tree"/"boulder"/"site", id}
 
 var _acc := 0.0
@@ -425,6 +427,8 @@ func _key(e: InputEventKey) -> void:
 	if e.keycode == KEY_ESCAPE:
 		if tool != "" or build_menu_open:
 			set_tool("")
+		elif craft_menu_open:
+			craft_menu_open = false
 		else:
 			open_menu("main")
 		get_viewport().set_input_as_handled()
@@ -438,6 +442,7 @@ func _key(e: InputEventKey) -> void:
 		"speed2": set_speed(2)
 		"speed3": set_speed(3)
 		"mine": set_tool("mine")
+		"craft": toggle_craft_menu()
 		"hunt": set_tool("hunt")
 		"stock": set_tool("stock")
 		"build": set_tool("build")
@@ -483,6 +488,8 @@ func restart() -> void:
 
 func _use_sim(s: Sim) -> void:
 	sim = s
+	craft_menu_open = false
+	craft_bench_i = 0
 	_world.set_sim(s)
 	tool = ""
 	placing = ""
@@ -547,8 +554,39 @@ func set_speed(v: int) -> void:
 		_acc = 0.0  # no leftover time may tick the sim after pausing
 
 
+## Finished benches, for the Craft panel.
+func benches() -> Array:
+	return sim.sites.filter(func(s): return s.done and s.tpl == "bench")
+
+
+## The bench the Craft panel is showing, or null before any bench is finished.
+func craft_bench():
+	var list := benches()
+	return null if list.is_empty() else list[craft_bench_i % list.size()]
+
+
+func toggle_craft_menu() -> void:
+	if craft_bench() == null:
+		craft_menu_open = false
+		return
+	craft_menu_open = not craft_menu_open
+	if craft_menu_open:
+		build_menu_open = false
+		if tool == "build":
+			tool = ""
+			placing = ""
+
+
+func next_craft_bench() -> void:
+	craft_bench_i += 1
+
+
 func set_tool(t: String) -> void:
+	if t == "craft":
+		toggle_craft_menu()
+		return
 	if t == "build":
+		craft_menu_open = false
 		build_menu_open = not build_menu_open
 		if build_menu_open and tool != "build":
 			tool = ""
@@ -697,6 +735,8 @@ func _screenshot_scene() -> void:
 			near.des = true
 			_target = Vector3(near.pos.x + 0.5, 0, near.pos.y + 0.5)
 			_place_camera()
+	if "--craft" in OS.get_cmdline_user_args():
+		craft_menu_open = true
 	if "--select-ada" in OS.get_cmdline_user_args():
 		selection = {"kind": "res", "ids": [sim.residents[0].id]}
 	for i in 30:

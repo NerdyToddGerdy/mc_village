@@ -200,6 +200,46 @@ func _test_rebinding(game: Game) -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.keys_path))
 
 
+## Issue #57: a Craft button in the toolbar opens the bench panel once a bench is finished.
+func _test_craft_menu(game: Game) -> void:
+	game.restart()
+	var hud: Hud = game._hud
+	hud.refresh(game.sim)
+	await process_frame
+	check(not hud._tool_btns.craft.visible, "no Craft button before there's a bench")
+	_key(game, KEY_C)
+	check(not game.craft_menu_open, "C does nothing without a bench")
+	var bench := game.sim.place_site("bench", Sim.rcell(game.sim.residents[0]) + Vector2i(2, 0))
+	bench.stage = 1
+	bench.done = true
+	game.sim.rev += 1
+	hud.refresh(game.sim)
+	await process_frame
+	check(hud._tool_btns.craft.visible, "the Craft button appears once a bench is finished")
+	_key(game, KEY_C)
+	hud.refresh(game.sim)
+	await process_frame
+	check(game.craft_menu_open and hud._craft_panel.visible, "C opens the craft panel above the toolbar")
+	var queue_btn: Button = null
+	for n in _walk(hud._craft_box):
+		if n is Button and n.text == "Queue":
+			queue_btn = n
+			break
+	check(queue_btn != null, "the panel lists recipes with Queue buttons")
+	if queue_btn != null:
+		queue_btn.pressed.emit()
+		check(bench.queue.size() == 1, "Queue in the craft panel queues a craft at the bench")
+	_key(game, KEY_ESCAPE)
+	check(not game.craft_menu_open and not game._menu.visible, "Esc closes the craft panel first")
+
+
+func _walk(n: Node) -> Array:
+	var out: Array = [n]
+	for ch in n.get_children():
+		out.append_array(_walk(ch))
+	return out
+
+
 func _initialize() -> void:
 	var game: Game = load("res://scenes/main.tscn").instantiate()
 	game.keys_path = "user://test_settings/game_test_keys.cfg"
@@ -253,6 +293,7 @@ func _initialize() -> void:
 	await _test_fading(game)
 	_test_smooth_movement(game)
 	await _test_rebinding(game)
+	await _test_craft_menu(game)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")

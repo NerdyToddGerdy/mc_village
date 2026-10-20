@@ -24,6 +24,8 @@ var _toasts := VBoxContainer.new()
 var _sel_panel: PanelContainer
 var _sel := VBoxContainer.new()
 var _build_menu: PanelContainer
+var _craft_panel: PanelContainer
+var _craft_box := VBoxContainer.new()
 var _tool_btns := {}
 var _build_items := {}
 var _keys_sig := ""
@@ -89,9 +91,13 @@ func _ready() -> void:
 	bm.add_child(_build_items.house)
 	_build_menu = _panel(bm, Vector2(260, 0), 6)
 	br.add_child(_build_menu)
+	_craft_box.add_theme_constant_override("separation", 4)
+	_craft_panel = _panel(_craft_box, Vector2(340, 0))
+	_craft_panel.visible = false
+	br.add_child(_craft_panel)
 	var tools := HBoxContainer.new()
 	tools.add_theme_constant_override("separation", 2)
-	for t in [["mine", "Mine", "X", Palette.RED], ["hunt", "Hunt", "G", Palette.RED], ["stock", "Stockpile", "Z", Palette.GREEN], ["build", "Build", "B", Palette.BLUE]]:
+	for t in [["mine", "Mine", "X", Palette.RED], ["hunt", "Hunt", "G", Palette.RED], ["stock", "Stockpile", "Z", Palette.GREEN], ["build", "Build", "B", Palette.BLUE], ["craft", "Craft", "C", Palette.PLANK]]:
 		var b := _button(t[1], func(): game.set_tool(t[0]))
 		b.custom_minimum_size = Vector2(96, 52)
 		b.toggle_mode = true
@@ -219,9 +225,10 @@ func _refresh_key_labels() -> void:
 	if sig == _keys_sig:
 		return
 	_keys_sig = sig
-	var names := {"mine": "Mine", "hunt": "Hunt", "stock": "Stockpile", "build": "Build"}
+	var names := {"mine": "Mine", "hunt": "Hunt", "stock": "Stockpile", "build": "Build", "craft": "Craft"}
 	var tips := {"mine": "Mine trees and boulders. Drag to mark many. Boulders need a pickaxe.",
 		"hunt": "Hunt sheep for wool and mutton. Click or drag over them.",
+		"craft": "Queue crafts at the bench",
 		"stock": "Paint a stockpile. Drag over open ground.", "build": "Build"}
 	for t in _tool_btns:
 		var key := k.first(t)
@@ -295,9 +302,14 @@ func refresh(sim: Sim) -> void:
 	_refresh_stuck(sim)
 	_refresh_selection(sim)
 	for t in _tool_btns:
-		var on: bool = game.build_menu_open or game.tool == "build" if t == "build" else game.tool == t
+		var on: bool
+		match t:
+			"build": on = game.build_menu_open or game.tool == "build"
+			"craft": on = game.craft_menu_open
+			_: on = game.tool == t
 		_tool_btns[t].set_pressed_no_signal(on)
 	_build_menu.visible = game.build_menu_open
+	_refresh_craft(sim)
 	_refresh_toasts()
 
 
@@ -535,6 +547,27 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			_fill_site(c, sim, target)
 
 
+## The Craft button appears once a bench is finished; it opens the bench panel above the toolbar
+## (issue #57), with the same contents as selecting the bench.
+func _refresh_craft(sim: Sim) -> void:
+	var bench = game.craft_bench()
+	_tool_btns.craft.visible = bench != null
+	_craft_panel.visible = game.craft_menu_open and bench != null
+	if not _craft_panel.visible:
+		return
+	var n: int = game.benches().size()
+	var sig := "%d|%d|%s|%s|%s|%s" % [n, game.craft_bench_i, bench, sim.auto_craft, sim.free_count("log"), sim.stuck.map(func(x): return x.why)]
+	_rebuild(_craft_box, sig, func(c: Container) -> void:
+		if n > 1:
+			var h := HBoxContainer.new()
+			var l := _label("Bench %d of %d" % [game.craft_bench_i % n + 1, n], false, Palette.CHALK_DIM, 14)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			h.add_child(l)
+			h.add_child(_button("Next bench", func(): game.next_craft_bench()))
+			c.add_child(h)
+		_fill_site(c, sim, bench))
+
+
 func _tool_text(t: Dictionary) -> String:
 	return "%s, %d %s left" % ["Stone" if t.tier == 2 else "Wooden", t.dur, "use" if t.dur == 1 else "uses"]
 
@@ -582,26 +615,37 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 			if have < head.inp[k]:
 				missing.append(Defs.words(k, head.inp[k] - have))
 		status = "%s %s for %s" % ["Gathering" if ai >= 0 else "Waiting for", ", ".join(missing), head.name.to_lower()]
+	# The title and recipe rows come first and never change size, so the Queue buttons stay put while
+	# the status, reasons and queue below them change (issue #57: buttons used to jump mid-click).
 	c.add_child(_label("Crafting bench", true, Palette.CHALK, 24))
-	c.add_child(_label(status, false, Palette.CHALK_DIM, 15, true))
-	for x in reasons:
-		c.add_child(_reason(x.why))
 	for rec in Defs.RECIPES:
 		var h := HBoxContainer.new()
-		var l := _label("%s\n%s → %s" % [rec.name, Defs.cost_text(rec.inp), Defs.cost_text(rec.out)], false, Palette.CHALK, 14)
+		var l := _label("%s\n%s → %s" % [rec.name, Defs.cost_text(rec.inp), Defs.cost_text(rec.out)], false, Palette.CHALK, 13)
+		l.add_theme_constant_override("line_spacing", -2)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(l)
 		h.add_child(_button("Queue", func(): game.queue_craft(s, rec.id)))
 		h.add_child(_button("Queue 5", func(): game.queue_craft(s, rec.id, 5)))
 		c.add_child(h)
+	var lower := VBoxContainer.new()
+	lower.add_theme_constant_override("separation", 6)
+	lower.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lower.add_child(_label(status, false, Palette.CHALK_DIM, 15, true))
+	for x in reasons:
+		lower.add_child(_reason(x.why))
 	if not s.queue.is_empty():
-		c.add_child(_label("Queue. Items that can’t be made yet are skipped. Click one to remove it.", false, Palette.CHALK_DIM, 13, true))
+		lower.add_child(_label("Queue. Items that can’t be made yet are skipped. Click one to remove it.", false, Palette.CHALK_DIM, 13, true))
 		var flow := HFlowContainer.new()
 		for i in s.queue.size():
 			var auto: bool = s.autoq[i]
 			flow.add_child(_button("%s%s ×" % [Defs.recipe(s.queue[i]).name, " (auto)" if auto else ""], func(): game.unqueue_craft(s, i)))
-		c.add_child(flow)
-	c.add_child(_label("Missing planks and sticks are queued automatically." if sim.auto_craft else "Once Ada’s house is finished, the bench queues the planks and sticks a recipe needs.", false, Palette.CHALK_DIM, 13, true))
+		lower.add_child(flow)
+	lower.add_child(_label("Missing planks and sticks are queued automatically." if sim.auto_craft else "Once Ada’s house is finished, the bench queues the planks and sticks a recipe needs.", false, Palette.CHALK_DIM, 13, true))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 96)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.add_child(lower)
+	c.add_child(scroll)
 
 
 # ---------------------------------------------------------------- cursor hint
