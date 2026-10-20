@@ -69,6 +69,17 @@ func _test_drag(game: Game) -> void:
 	game.set_tool("")
 
 
+## A long status moves below its title instead of running into it (issue #72).
+func _test_headers(game: Game) -> void:
+	var hud: Hud = game._hud
+	var short := hud._head("Sheep meadow", "6 of 8 sheep")
+	var long := hud._head("Farm plot", "Ripe wheat, waiting to be harvested")
+	check(short is HBoxContainer and short.get_theme_constant("separation") >= 12, "a short status sits beside its title, with a gap")
+	check(long is VBoxContainer and long.get_child_count() == 2, "a long status gets its own line below the title")
+	short.free()
+	long.free()
+
+
 ## Toasts sit in the gap below the tally bar, clear of the goals panel and the stuck list (issue #71).
 func _test_toasts(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -569,6 +580,7 @@ func _initialize() -> void:
 	await _test_jobs_grid(game)
 	await _test_equip(game)
 	await _test_toasts(game)
+	_test_headers(game)
 	await _test_meadow(game)
 	game.open_menu("main")
 	game.restart()
