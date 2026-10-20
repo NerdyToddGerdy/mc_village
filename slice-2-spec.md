@@ -254,8 +254,15 @@ Taken together, the upgrade steps:
 | G | Hunt order |
 | P | Farm order |
 | K | Place a fireplace |
+| Z, then drag from a stockpile cell | Erase stockpile cells (#63) |
 
 All are rebindable (Slice 1, §10).
+
+**Erasing stockpile cells (#63).** With the Stockpile order on, a drag that starts on a stockpile cell erases every stockpile cell in its rectangle instead of painting, and a click on one cell erases just that cell, as clicking a marked tree unmarks it under Mine.
+- **Preview:** while erasing, the rectangle is outlined in cut red and each cell that will go is filled red, with the hint "Release to erase these stockpile cells".
+- **Items left behind:** stacks on erased cells stay where they are and count as loose. They're hauled to the cells that are left, if any have room.
+- **Haulers on the way:** a haul heading to an erased cell heads for another cell with room instead. If none has room, the haul ends and anything carried is set down, loose.
+- **No stockpile left:** erasing the last cell brings back the usual no-stockpile behaviour (nothing is hauled). "Stockpile is full" shows as before when the remaining cells have no room.
 
 ## 12. Tuning table (provisional)
 

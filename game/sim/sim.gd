@@ -1822,6 +1822,54 @@ func paint_zone(rect: Rect2i) -> void:
 	rev += 1
 
 
+## Erases the stockpile cells in `rect` (Stockpile order, issue #63). Stacks on them stay put and
+## count as loose, so they're hauled to the cells that are left. A haul on its way to an erased cell
+## heads for another cell, or ends if none has room. Returns how many cells were erased.
+func erase_zone(rect: Rect2i) -> int:
+	var n := 0
+	for x in range(rect.position.x, rect.end.x):
+		for y in range(rect.position.y, rect.end.y):
+			var c := Vector2i(x, y)
+			if not zone.has(c):
+				continue
+			zone.erase(c)
+			n += 1
+			var rid: int = zone_res.get(c, 0)
+			zone_res.erase(c)
+			if rid != 0:
+				_retarget_haul(resident(rid), c)
+	rev += 1
+	return n
+
+
+## Points a haul bound for the erased stockpile cell `old` at another cell with room, or ends it.
+func _retarget_haul(r: Dictionary, old: Vector2i) -> void:
+	if r.is_empty() or r.job == null or r.job.kind != "haul":
+		return
+	var j: Job = r.job
+	var at := -1
+	for k in j.steps.size():
+		if j.steps[k].op == "haul_drop" and j.steps[k].cell == old:
+			at = k
+	if at < 0:
+		return
+	var dest = zone_dest(j.steps[at].type)
+	if dest == null:
+		fail_job(r)  # nowhere left to put it: whatever's carried is set down here, loose
+		return
+	j.steps[at].cell = dest
+	zone_res[dest] = r.id
+	for hd in j.holds:
+		if hd.t == "zone" and hd.cell == old:
+			hd.cell = dest
+	var walk: Dictionary = j.steps[at - 1]
+	if walk.op == "goto":
+		walk.cells = [dest]
+		walk.planned = false
+		if j.i == at - 1:
+			r.path = []
+
+
 ## Why a cell can't be a farm plot, or "" when it can: farms go on open grass only (issue #45).
 func farm_blocked(c: Vector2i) -> String:
 	if not walkable(c):

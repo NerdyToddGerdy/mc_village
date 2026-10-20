@@ -152,7 +152,16 @@ func _update_live_overlays() -> void:
 	var hint := ""
 	var hint_col := Palette.CHALK
 	if not _drag.is_empty() and _drag.kind == "rect":
-		outlines.append({"rect": _drag.rect, "h": 0.03, "color": {"stock": Palette.GREEN, "farm": Palette.WHEAT}.get(tool, Palette.RED), "dashed": true})
+		if _drag.get("erase", false):  # erasing stockpile cells: a red outline, and a red fill on each cell that goes
+			outlines.append({"rect": _drag.rect, "h": 0.03, "color": Palette.RED, "dashed": true})
+			for x in range(_drag.rect.position.x, _drag.rect.end.x):
+				for y in range(_drag.rect.position.y, _drag.rect.end.y):
+					if sim.zone.has(Vector2i(x, y)):
+						fills.append({"rect": Rect2i(x, y, 1, 1), "h": 0.02, "color": Color(Palette.RED, 0.45)})
+			hint = "Release to erase these stockpile cells. Anything on them stays and is hauled to the rest."
+			hint_col = Palette.RED
+		else:
+			outlines.append({"rect": _drag.rect, "h": 0.03, "color": {"stock": Palette.GREEN, "farm": Palette.WHEAT}.get(tool, Palette.RED), "dashed": true})
 	elif tool in ["mine", "stock", "hunt", "farm"] and _hover != null:
 		outlines.append({"rect": Rect2i(_hover, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	if tool == "build" and placing != "" and _hover != null:
@@ -185,6 +194,8 @@ func _update_live_overlays() -> void:
 			hint = "Marking trees only" if kinds[0] == "tree" else "Marking boulders only"
 		elif _drag.is_empty():
 			hint = "Drag to mark trees and boulders. Shift: trees only. Alt/Option: boulders only."
+	if hint == "" and tool == "stock" and _hover != null and _drag.is_empty():
+		hint = "Click or drag from a stockpile cell to erase." if sim.zone.has(_hover) else "Drag over open ground to paint a stockpile. Start on a stockpile to erase instead."
 	if hint == "" and tool == "hunt" and _hover != null and _drag.is_empty():
 		hint = "Click or drag over sheep to hunt them."
 	if hint == "" and tool == "farm" and _hover != null and _drag.is_empty():
@@ -428,7 +439,7 @@ func _left_down(e: InputEventMouseButton) -> void:
 					set_tool("")
 		return
 	if tool in ["mine", "stock", "hunt", "farm"] and c != null:
-		_drag = {"kind": "rect", "a": c, "rect": Rect2i(c, Vector2i.ONE), "start": e.position}
+		_drag = {"kind": "rect", "a": c, "rect": Rect2i(c, Vector2i.ONE), "start": e.position, "erase": tool == "stock" and sim.zone.has(c)}
 		return
 	# Shift-drag box-selects residents; a plain drag pans the map; a click selects.
 	_drag = {"kind": "box" if e.shift_pressed else "press", "start": e.position, "cur": e.position}
@@ -445,7 +456,9 @@ func _left_up(e: InputEventMouseButton) -> void:
 		"press":
 			_select(_pick(e.position))
 		"rect":
-			if tool == "stock":
+			if tool == "stock" and d.get("erase", false):
+				sim.erase_zone(d.rect)
+			elif tool == "stock":
 				sim.paint_zone(d.rect)
 			elif tool == "farm":
 				sim.paint_farm(d.rect)
@@ -903,6 +916,13 @@ func _screenshot_scene() -> void:
 		sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 2), "wood_axe", 1, 4)
 		selection = {"kind": "res", "ids": [ada.id]}
 		_hud.equip_kind = "axe"
+	if "--erase" in OS.get_cmdline_user_args():  # mid-drag, erasing half the stockpile (issue #63)
+		var z := area(10, 7, 4, 2)
+		set_tool("stock")
+		_drag = {"kind": "rect", "a": z.position, "rect": Rect2i(z.position + Vector2i(2, 0), Vector2i(3, 2)), "start": Vector2.ZERO, "erase": true}
+		_target = Vector3(z.get_center().x, 0, z.get_center().y)
+		_place_camera()
+		selection = {}
 	if "--food" in OS.get_cmdline_user_args():  # meals and raw mutton for the tally bar's Food group (issue #73)
 		var z: Vector2i = area(10, 7, 4, 2).position
 		sim.drop_items(z, "bread", 2)
