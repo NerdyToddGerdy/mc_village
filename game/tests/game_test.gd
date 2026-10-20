@@ -406,6 +406,12 @@ func _test_jobs_grid(game: Game) -> void:
 	check(ada.jobs.mine.pri == 3, "clicking the number cycles it to 3")
 	game.cycle_job_priority(ada, "mine")
 	check(ada.jobs.mine.pri == 1, "and round to 1")
+	ada.jobs.farm.xp = 30
+	hud.refresh(sim)
+	await process_frame
+	var levels: Array = _walk(hud._sel).filter(func(n): return n is Label and n.text.begins_with("Lv "))
+	check(levels.size() == 8, "each job shows its level (%d)" % levels.size())
+	check(levels.any(func(l): return l.text == "Lv 3"), "a level-3 farmer shows Lv 3")
 
 
 func _walk(n: Node) -> Array:

@@ -24,6 +24,7 @@ func _init() -> void:
 		"test_fireplace_reserves_a_kitchen_plot",
 		"test_fireplace_cooks_and_keeps_meals_stocked",
 		"test_jobs_on_off_and_priorities",
+		"test_skills_rise_and_pay_off",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -110,6 +111,12 @@ func test_full_opening() -> void:
 	check(sim.stats.traveler_home, "Tomas moved in")
 	check(s.h2.owner == sim.residents[1].id, "Tomas owns the second house")
 	check(sim.auto_craft, "auto ingredients unlocked")
+	# Skills (issue #48): Ada learned by doing, and Tomas arrived skilled in one job.
+	check(Sim.level(sim.residents[0], "mine") >= 2, "Ada's Mine level rose with practice (level %d)" % Sim.level(sim.residents[0], "mine"))
+	if sim.residents.size() == 2:
+		var tomas: Dictionary = sim.residents[1]
+		var skilled: Array = Defs.JOBS.filter(func(jb): return Sim.level(tomas, jb) >= Tuning.ARRIVAL_LEVEL)
+		check(skilled.size() >= 1, "Tomas arrived skilled in a job (%s)" % [skilled])
 
 
 func test_bench_skips_blocked_recipes_and_comes_before_building() -> void:
@@ -261,6 +268,10 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
 		else:
 			check(sim.residents[0].orders == [], "v%d: residents get an empty order list" % v)
+		if v >= 11:
+			check(Sim.level(sim.residents[0], "build") == 3, "v%d: skills survive" % v)
+		else:
+			check(sim.residents[0].jobs.values().all(func(j): return j.xp == 0 or v >= 11), "v%d: older saves start at level 1" % v)
 		if v >= 10:
 			check(sim.residents[0].jobs.haul.pri == 1 and not sim.residents[0].jobs.hunt.on, "v%d: job toggles and priorities survive" % v)
 		else:
@@ -831,3 +842,110 @@ func test_jobs_on_off_and_priorities() -> void:
 	# Jobs survive a save.
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim2.save_state())))
 	check(loaded.residents[0].jobs == a2.jobs, "job settings survive a save")
+
+
+## Experience that puts a resident at `lv` in a job.
+func set_level(r: Dictionary, job: String, lv: int) -> void:
+	r.jobs[job].xp = 0 if lv <= 1 else Tuning.SKILL_LEVELS[lv - 2]
+
+
+func test_skills_rise_and_pay_off() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	# Levels rise at 8, 25, 50 and 90 points and stop at 5.
+	check(Sim.level(ada, "mine") == 1, "everyone starts at level 1")
+	for i in 7:
+		sim.gain_xp(ada, "mine")
+	check(Sim.level(ada, "mine") == 1 and is_equal_approx(Sim.level_progress(ada, "mine"), 7.0 / 8.0), "7 points: still level 1, most of the way to 2")
+	sim.events.clear()
+	sim.gain_xp(ada, "mine")
+	check(Sim.level(ada, "mine") == 2, "8 points: level 2")
+	check(sim.events.any(func(e): return e.text == "Ada is now level 2 at Mine."), "a new level gets a toast")
+	for pair in [[24, 2], [25, 3], [49, 3], [50, 4], [89, 4], [90, 5], [500, 5]]:
+		ada.jobs.mine.xp = pair[0]
+		check(Sim.level(ada, "mine") == pair[1], "%d points is level %d" % pair)
+	# Each finished task gives a point in its job.
+	var sim2 := Sim.new_game()
+	var a2: Dictionary = sim2.residents[0]
+	var tree: Dictionary = Sim.nearest(sim2.trees, Sim.rcell(a2))
+	sim2.direct_order(a2, tree)
+	run(sim2, 40)
+	check(a2.jobs.mine.xp == 1, "felling a tree, even by direct order, gives 1 Mine point")
+	# Faster: each level above 1 is 15% faster. Better: level 3 drops an extra log.
+	var sim3 := Sim.new_game()
+	var a3: Dictionary = sim3.residents[0]
+	set_level(a3, "mine", 3)
+	var t3: Dictionary = Sim.nearest(sim3.trees, Sim.rcell(a3))
+	var logs: int = t3.logs
+	sim3.direct_order(a3, t3)
+	var ticks := 0
+	for i in 60 * Tuning.TPS:
+		sim3.step()
+		if a3.job != null and a3.job.label == "Chopping a tree":
+			ticks += 1
+		if not t3.alive:
+			break
+	check(absf(ticks - Tuning.CHOP_TIME[0] / 1.3 * Tuning.TPS) <= 2, "level 3 chops 30%% faster (%d ticks)" % ticks)
+	check(count(sim3, "log") == logs + 1, "and gets 1 extra log (%d)" % count(sim3, "log"))
+	set_level(a3, "mine", 5)
+	check(Sim.skill_bonus(a3, "mine") == 2, "level 5 gets 2 extra")
+	# Farm: extra wheat at level 3.
+	var sim4 := Sim.new_game()
+	var a4: Dictionary = sim4.residents[0]
+	set_level(a4, "farm", 3)
+	sim4.paint_farm(open_rect(sim4, Vector2i.ONE))
+	sim4.farm.values()[0].grow = Tuning.WHEAT_GROW
+	run(sim4, 15)
+	check(count(sim4, "wheat") == Tuning.WHEAT_YIELD + 1, "a level-3 farmer harvests 1 extra wheat (%d)" % count(sim4, "wheat"))
+	# Cook: bread from 2 wheat at level 4; the spare wheat goes back out.
+	var sim5 := Sim.new_game()
+	var a5: Dictionary = sim5.residents[0]
+	set_level(a5, "cook", 4)
+	var spot := open_rect(sim5, Vector2i(3, 3))
+	var f := lit_fireplace(sim5, spot.position + Vector2i(1, 0))
+	sim5.set_keep_meals(f, false)
+	sim5.drop_items(spot.position + Vector2i(1, 3), "wheat", 3)
+	sim5.queue_add(f, "bread")
+	run(sim5, 30)
+	check(count(sim5, "bread") == 1 and count(sim5, "wheat") == 1, "a level-4 cook bakes bread from 2 wheat (%d wheat left)" % count(sim5, "wheat"))
+	# Craft: 5 planks from a log at level 4. Toolsmith: +20% uses per level above 1.
+	var sim6 := Sim.new_game()
+	var a6: Dictionary = sim6.residents[0]
+	set_level(a6, "craft", 4)
+	set_level(a6, "toolsmith", 2)
+	var bench := sim6.place_site("bench", open_rect(sim6, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	sim6.drop_items(Sim.rcell(a6) + Vector2i(1, 0), "log", 1)
+	sim6.queue_add(bench, "planks")
+	run(sim6, 30)
+	check(count(sim6, "plank") == 5, "a level-4 crafter gets 5 planks from a log (%d)" % count(sim6, "plank"))
+	sim6.drop_items(Sim.rcell(a6) + Vector2i(1, 0), "plank", 3)
+	sim6.drop_items(Sim.rcell(a6) + Vector2i(-1, 0), "stick", 2)
+	sim6.queue_add(bench, "wood_pick")
+	run(sim6, 40)
+	var picks: Array = sim6.items.values().filter(func(it): return it.type == "wood_pick")
+	var held = a6.pick
+	var uses: int = picks[0].dur if not picks.is_empty() else (held.dur if held != null else -1)
+	check(uses == roundi(Tuning.DURABILITY[1] * 1.2), "a level-2 toolsmith's pickaxe has 20%% more uses (%d)" % uses)
+	# Haul: carries 1 more at level 3.
+	var sim7 := Sim.new_game()
+	var a7: Dictionary = sim7.residents[0]
+	set_level(a7, "haul", 3)
+	check(Sim.carry_cap(a7) == Tuning.CARRY + 1, "a level-3 hauler carries %d" % (Tuning.CARRY + 1))
+	sim7.paint_zone(open_rect(sim7, Vector2i(2, 1)))
+	sim7.drop_items(Sim.rcell(a7) + Vector2i(1, 0), "cobble", 8)
+	var most := 0
+	for i in 20 * Tuning.TPS:
+		sim7.step()
+		if a7.carry != null:
+			most = maxi(most, a7.carry.n)
+	check(most == Tuning.CARRY + 1, "and does (%d per trip)" % most)
+	# Skills survive a save; a direct order isn't stopped by switching its job off.
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim7.save_state())))
+	check(Sim.level(loaded.residents[0], "haul") == 3, "skills survive a save")
+	var t8: Dictionary = Sim.nearest(sim2.trees.filter(func(t): return t.alive), Sim.rcell(a2))
+	sim2.direct_order(a2, t8)
+	run(sim2, 0.1)
+	sim2.set_job_on(a2, "mine", false)
+	check(a2.job != null and is_same(a2.job.target, t8), "switching Mine off doesn't cancel a direct mining order")

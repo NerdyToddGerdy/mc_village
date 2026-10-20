@@ -44,6 +44,8 @@ func _initialize() -> void:
 	if SaveFormat.VERSION >= 10:  # job settings that aren't the defaults
 		sim.set_job_priority(sim.residents[0], "haul", 1)
 		sim.set_job_on(sim.residents[0], "hunt", false)
+	if SaveFormat.VERSION >= 11:
+		sim.residents[0].jobs.build.xp = 30  # a level-3 builder
 	if SaveFormat.VERSION >= 3:
 		var ada: Dictionary = sim.residents[0]
 		var tree = Sim.nearest(sim.trees.filter(func(t): return t.alive), Sim.rcell(ada))

@@ -11,7 +11,8 @@ var kind: String          ## gather, deliver, build, craft, haul, move, arrive
 var label: String         ## Shown as the resident's status.
 var what: String          ## Used in "Can't reach <what>".
 var target = null         ## The entity Dictionary this job is about, if any.
-var work := ""            ## The resident job it counts as (mine, haul, farm...); "" for orders and eating.
+var work := ""            ## The resident job it counts as (mine, haul, farm...), for skills; "" for walking and eating.
+var ordered := false      ## A direct or queued order: switching its job off doesn't stop it.
 var steps: Array = []
 var i := 0
 var holds: Array = []

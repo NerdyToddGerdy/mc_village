@@ -108,7 +108,7 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 static func default_jobs() -> Dictionary:
 	var out := {}
 	for jb in Defs.JOBS:
-		out[jb] = {"on": true, "pri": 2}
+		out[jb] = {"on": true, "pri": 2, "xp": 0}
 	return out
 
 
@@ -121,6 +121,65 @@ static func recipe_job(rec: Dictionary) -> String:
 		if Defs.is_tool_item(o):
 			return "toolsmith"
 	return "craft"
+
+
+## A resident's level in a job, 1 to 5, from their experience (spec §5).
+static func level(r: Dictionary, job: String) -> int:
+	var xp: int = r.jobs[job].get("xp", 0)
+	var lv := 1
+	for need in Tuning.SKILL_LEVELS:
+		if xp >= need:
+			lv += 1
+	return lv
+
+
+## Progress from the current level to the next, 0..1 (1 at the top level).
+static func level_progress(r: Dictionary, job: String) -> float:
+	var lv := level(r, job)
+	if lv > Tuning.SKILL_LEVELS.size():
+		return 1.0
+	var lo: int = 0 if lv == 1 else Tuning.SKILL_LEVELS[lv - 2]
+	var hi: int = Tuning.SKILL_LEVELS[lv - 1]
+	return float(r.jobs[job].get("xp", 0) - lo) / float(hi - lo)
+
+
+## One finished task's worth of experience. Says so when it brings a new level.
+func gain_xp(r: Dictionary, job: String) -> void:
+	var before := level(r, job)
+	r.jobs[job].xp = r.jobs[job].get("xp", 0) + 1
+	var after := level(r, job)
+	if after > before:
+		_toast("%s is now level %d at %s." % [r.name, after, Defs.JOB_NAMES[job]], r.id)
+		rev += 1
+
+
+## How much faster a resident works at a job: 15% per level above 1.
+static func skill_speed(r: Dictionary, job: String) -> float:
+	return 1.0 + Tuning.SKILL_SPEED * (level(r, job) - 1)
+
+
+## +1 at level 3 and +1 more at level 5: extra logs, cobblestone, wheat, and carry capacity.
+static func skill_bonus(r: Dictionary, job: String) -> int:
+	var lv := level(r, job)
+	return (1 if lv >= 3 else 0) + (1 if lv >= 5 else 0)
+
+
+## Items one trip can carry, with the Haul skill's bonus.
+static func carry_cap(r: Dictionary) -> int:
+	return Tuning.CARRY + skill_bonus(r, "haul")
+
+
+## A recipe's inputs and outputs as this resident makes it: a level-4 cook bakes bread from 2
+## wheat, and a level-4 crafter gets 5 planks from a log.
+static func recipe_for(r: Dictionary, rec: Dictionary) -> Dictionary:
+	var out := rec.duplicate(true)
+	if r.is_empty():
+		return out
+	if rec.id == "bread" and level(r, "cook") >= 4:
+		out.inp.wheat = 2
+	if rec.id == "planks" and level(r, "craft") >= 4:
+		out.out.plank = 5
+	return out
 
 
 func resident(id: int) -> Dictionary:
@@ -630,6 +689,7 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 	var kind := "axe" if is_tree else "pick"
 	var j := Job.new("gather", "Going to chop a tree" if is_tree else "Going to break a boulder",
 		"this tree" if is_tree else "this boulder")
+	j.work = "mine"
 	j.target = target
 	target.claim = r.id
 	j.hold({"t": "claim", "ent": target})
@@ -695,6 +755,7 @@ func _eat_job(r: Dictionary):
 func _farm_job(r: Dictionary, crop: Dictionary) -> Job:
 	var ripe := crop_ripe(crop)
 	var j := Job.new("farm", "Going to harvest wheat" if ripe else "Going to plant wheat", "the farm plot")
+	j.work = "farm"
 	j.target = crop
 	crop.claim = r.id
 	j.hold({"t": "claim", "ent": crop})
@@ -739,6 +800,7 @@ static func crop_stage(crop: Dictionary) -> int:
 ## Walk to a sheep, following it if it wanders, then hunt it.
 func _hunt_job(r: Dictionary, target: Dictionary) -> Job:
 	var j := Job.new("gather", "Going to hunt a sheep", "this sheep")
+	j.work = "hunt"
 	j.target = target
 	target.claim = r.id
 	j.hold({"t": "claim", "ent": target})
@@ -773,6 +835,7 @@ func _deliver_job(dest: Dictionary, type: String, n: int, stack: Dictionary) -> 
 
 func _build_job(r: Dictionary, s: Dictionary) -> Job:
 	var j := Job.new("build", "Going to build", "the " + Defs.TEMPLATES[s.tpl].name.to_lower())
+	j.work = "build"
 	j.target = s
 	s.builder = r.id
 	j.hold({"t": "builder", "site": s})
@@ -789,6 +852,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 func _craft_job(r: Dictionary, b: Dictionary, rec: Dictionary) -> Job:
 	var where: String = "the bench" if b.tpl == "bench" else "the " + Defs.TEMPLATES[b.tpl].name.to_lower()
 	var j := Job.new("craft", "Going to " + where, where)
+	j.work = recipe_job(rec)
 	j.target = b
 	b.crafter = r.id
 	b.crafting = rec.name
@@ -984,6 +1048,8 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 					return "needs_pick"
 				if st.what != "eat" and st.what != "graze" and r.hunger < Tuning.HUNGRY_BELOW:
 					total /= Tuning.HUNGRY_SPEED
+				if j.work != "":
+					total /= skill_speed(r, j.work)
 				st.total = total
 				st.t = 0.0
 				j.label = st.label
@@ -1030,10 +1096,10 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			t.des = false
 			_occ_dirty = true
 			if t.kind == "tree":
-				drop_items(t.cell, "log", t.logs)
+				drop_items(t.cell, "log", t.logs + skill_bonus(r, "mine"))
 				stats.felled += 1
 			else:
-				drop_items(t.cell, "cobble", Tuning.BOULDER_COBBLE)
+				drop_items(t.cell, "cobble", Tuning.BOULDER_COBBLE + skill_bonus(r, "mine"))
 				stats.broken_boulders += 1
 			_wear(r, st.tool)
 		"eat":
@@ -1073,14 +1139,14 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			if not is_same(farm.get(crop.cell), crop) or not crop_ripe(crop):
 				return "gone"
 			crop.grow = -1.0
-			drop_items(crop.cell, "wheat", Tuning.WHEAT_YIELD)
+			drop_items(crop.cell, "wheat", Tuning.WHEAT_YIELD + skill_bonus(r, "farm"))
 			stats.harvested = stats.get("harvested", 0) + 1
 			rev += 1
 		"build":
 			_complete_stage(st.site)
 		"craft":
 			var b: Dictionary = st.site
-			var rec: Dictionary = st.recipe
+			var rec := recipe_for(r, st.recipe)
 			var qi: int = b.queue.find(rec.id)
 			if qi < 0 or not has_all(b.store, rec.inp):
 				return "gone"
@@ -1089,9 +1155,17 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			b.queue.remove_at(qi)
 			b.autoq.remove_at(qi)
 			for o in rec.out:
-				drop_items(rcell(r), o, rec.out[o])
+				var uses := -1
+				if Defs.is_tool_item(o):  # Toolsmith: +20% uses per level above 1
+					uses = roundi(full_uses(o) * (1.0 + Tuning.TOOLSMITH_USES * (level(r, "toolsmith") - 1)))
+				drop_items(rcell(r), o, rec.out[o], uses)
 				if Defs.ITEMS[o].get("tool", "") == "pick":
 					stats.pick_crafted = true
+			if b.queue.is_empty():  # a skilled cook's spare wheat goes back out
+				for k in b.store:
+					if b.store[k] > 0:
+						drop_items(b.origin + Vector2i(0, 1), k, b.store[k])
+				b.store = {}
 	return true
 
 
@@ -1113,6 +1187,7 @@ func _claim(r: Dictionary) -> void:
 	while not r.orders.is_empty():
 		var j = _order_job(r, r.orders.pop_front())
 		if j != null:
+			j.ordered = true
 			r.job = j
 			return
 	if r.hunger < Tuning.EAT_BELOW:
@@ -1191,7 +1266,7 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 		"haul":
 			if not jobs.has("haul") or zone.is_empty():
 				return null
-			var hs = _haul_source(c)
+			var hs = _haul_source(c, carry_cap(r))
 			if hs != null:
 				return _tagged(_haul_job(r, hs.stack, hs.dest, hs.n), "haul")
 	return null
@@ -1203,7 +1278,7 @@ func _tagged(j: Job, work: String) -> Job:
 
 
 ## The nearest loose stack that has room in a stockpile, as {stack, dest, n}, or null.
-func _haul_source(c: Vector2i):
+func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 	var loose := stacks_where(func(s): return avail(s) > 0 and not in_zone(s.cell))
 	loose.sort_custom(func(a, b): return manhattan(a.cell, c) < manhattan(b.cell, c))
 	for ls in loose:
@@ -1213,7 +1288,7 @@ func _haul_source(c: Vector2i):
 		var cap := 1 if Defs.is_tool_item(ls.type) else Tuning.STACK
 		var here = items.get(dest)
 		var room: int = cap - (here.n if here != null else 0)
-		return {"stack": ls, "dest": dest, "n": mini(mini(avail(ls), Tuning.CARRY), room)}
+		return {"stack": ls, "dest": dest, "n": mini(mini(avail(ls), carry), room)}
 	return null
 
 
@@ -1229,7 +1304,7 @@ func _try_deliver(r: Dictionary, c: Vector2i, dests: Array, jobs := []):
 			if src.is_empty():
 				continue
 			var st: Dictionary = nearest(src, c)
-			return _deliver_job(s, t, mini(mini(need[t], Tuning.CARRY), avail(st)), st)
+			return _deliver_job(s, t, mini(mini(need[t], carry_cap(r)), avail(st)), st)
 	return null
 
 
@@ -1373,6 +1448,8 @@ func _step_resident(r: Dictionary) -> void:
 			r.job = null
 			r.progress = -1.0
 			_release(r, j)
+			if j.work != "":
+				gain_xp(r, j.work)
 	elif res is String:
 		fail_job(r, res)
 
@@ -1412,8 +1489,10 @@ func _arrive() -> void:
 	var n := residents.size() - 1
 	var who: Array = TRAVELERS[n % TRAVELERS.size()]
 	var t := add_resident(who[0] if n < TRAVELERS.size() else "%s %d" % [who[0], n / TRAVELERS.size() + 1], who[1], spawn)
+	var skill: String = Defs.JOBS[rng.randi_range(0, Defs.JOBS.size() - 1)]
+	t.jobs[skill].xp = Tuning.SKILL_LEVELS[Tuning.ARRIVAL_LEVEL - 2]
 	walk_in(t)
-	_toast("A traveler named %s has arrived." % t.name, t.id)
+	_toast("A traveler named %s has arrived, a skilled %s." % [t.name, Defs.JOB_SKILLED[skill]], t.id)
 
 
 func walk_in(t: Dictionary) -> void:
@@ -1718,7 +1797,7 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 ## Switches a job on or off for a resident (spec §5). Switching off the job they're doing stops it.
 func set_job_on(r: Dictionary, job: String, on: bool) -> void:
 	r.jobs[job].on = on
-	if not on and r.job != null and r.job.work == job:
+	if not on and r.job != null and r.job.work == job and not r.job.ordered:
 		fail_job(r)
 	rev += 1
 
@@ -1773,6 +1852,7 @@ func direct_order(r: Dictionary, target = null, cell = null) -> void:
 			compute_stuck()
 			return
 		r.direct = _gather_job(r, target)
+		r.direct.ordered = true
 	elif target != null and target.kind == "sheep":
 		target.des = true
 		target.unreach_until = 0
@@ -1782,6 +1862,7 @@ func direct_order(r: Dictionary, target = null, cell = null) -> void:
 			if not o.is_empty() and o.job != null and is_same(o.job.target, target):
 				fail_job(o)
 		r.direct = _hunt_job(r, target)
+		r.direct.ordered = true
 	elif cell != null and walkable(cell):
 		r.direct = _move_job(cell)
 
