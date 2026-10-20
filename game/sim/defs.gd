@@ -7,13 +7,15 @@ const ITEMS := {
 	"plank": {"one": "plank", "many": "planks", "label": "Planks"},
 	"stick": {"one": "stick", "many": "sticks", "label": "Sticks"},
 	"cobble": {"one": "cobblestone", "many": "cobblestone", "label": "Cobblestone"},
+	"wool": {"one": "wool", "many": "wool", "label": "Wool"},
+	"mutton": {"one": "raw mutton", "many": "raw mutton", "label": "Mutton"},
 	"wood_axe": {"one": "wooden axe", "many": "wooden axes", "tool": "axe", "tier": 1},
 	"wood_pick": {"one": "wooden pickaxe", "many": "wooden pickaxes", "tool": "pick", "tier": 1},
 	"stone_axe": {"one": "stone axe", "many": "stone axes", "tool": "axe", "tier": 2},
 	"stone_pick": {"one": "stone pickaxe", "many": "stone pickaxes", "tool": "pick", "tier": 2},
 }
 
-const MATERIALS := ["log", "plank", "stick", "cobble"]
+const MATERIALS := ["log", "plank", "stick", "cobble", "wool", "mutton"]
 
 const RECIPES := [
 	{"id": "planks", "name": "Planks", "inp": {"log": 1}, "out": {"plank": 4}},

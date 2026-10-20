@@ -20,6 +20,20 @@ static func cross() -> ImageTexture:
 			_line(img, seg[0], seg[1], 9.0, Palette.RED))
 
 
+## A hunting crosshair: a ring with four ticks, in cut red on a dark under-stroke.
+static func crosshair() -> ImageTexture:
+	return _cached("crosshair", func(img: Image) -> void:
+		for pass_ in [[Palette.SLATE_DEEP, 12.0], [Palette.RED, 5.5]]:
+			var col: Color = pass_[0]
+			var w: float = pass_[1]
+			for i in 48:
+				var a0 := TAU * i / 48.0
+				var a1 := TAU * (i + 1) / 48.0
+				_line(img, Vector2(32, 32) + Vector2(cos(a0), sin(a0)) * 18, Vector2(32, 32) + Vector2(cos(a1), sin(a1)) * 18, w, col)
+			for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
+				_line(img, Vector2(32, 32) + d * 10, Vector2(32, 32) + d * 26, w, col))
+
+
 static func flag() -> ImageTexture:
 	return _cached("flag", func(img: Image) -> void:
 		_line(img, Vector2(12, 62), Vector2(12, 6), 7.0, Palette.SLATE_DEEP)

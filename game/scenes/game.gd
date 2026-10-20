@@ -151,7 +151,7 @@ func _update_live_overlays() -> void:
 	var hint_col := Palette.CHALK
 	if not _drag.is_empty() and _drag.kind == "rect":
 		outlines.append({"rect": _drag.rect, "h": 0.03, "color": Palette.GREEN if tool == "stock" else Palette.RED, "dashed": true})
-	elif tool in ["mine", "stock"] and _hover != null:
+	elif tool in ["mine", "stock", "hunt"] and _hover != null:
 		outlines.append({"rect": Rect2i(_hover, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	if tool == "build" and placing != "" and _hover != null:
 		var origin := _placement_origin()
@@ -168,7 +168,7 @@ func _update_live_overlays() -> void:
 			var turn := keys.first("rotate")
 			hint = (("Place house. %s turns the door." % turn if turn != "" else "Place house.") if placing == "house" else "Place crafting bench.") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
-	if sel != null and sel.kind in ["tree", "boulder"]:
+	if sel != null and sel.kind in ["tree", "boulder", "sheep"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
@@ -178,10 +178,14 @@ func _update_live_overlays() -> void:
 			hint = "Marking trees only" if kinds[0] == "tree" else "Marking boulders only"
 		elif _drag.is_empty():
 			hint = "Drag to mark trees and boulders. Shift: trees only. Alt/Option: boulders only."
+	if hint == "" and tool == "hunt" and _hover != null and _drag.is_empty():
+		hint = "Click or drag over sheep to hunt them."
 	if hint == "" and tool == "" and _drag.is_empty() and selection.get("kind", "") == "res":
 		var hit = _pick(_mouse)
 		if hit != null and hit.kind in ["tree", "boulder"]:
 			hint = "Right-click: Mine. Shift queues it."
+		elif hit != null and hit.kind == "sheep":
+			hint = "Right-click: Hunt. Shift queues it."
 	_world.live_outlines = outlines
 	_world.live_fills = fills
 	_hud.show_hint(hint, _mouse, hint_col)
@@ -268,6 +272,10 @@ func selected_entity():
 			for b in sim.boulders:
 				if b.id == selection.id and b.alive:
 					return b
+		"sheep":
+			for sh in sim.sheep:
+				if sh.id == selection.id and sh.alive:
+					return sh
 		"site":
 			var s := sim.site(selection.id)
 			return null if s.is_empty() else s
@@ -336,7 +344,7 @@ func _mouse_button(e: InputEventMouseButton) -> void:
 		for id in selection.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				var target = hit if hit != null and hit.kind in ["tree", "boulder"] else null
+				var target = hit if hit != null and hit.kind in ["tree", "boulder", "sheep"] else null
 				if e.shift_pressed:
 					sim.queue_order(r, target, cell)
 				else:
@@ -359,7 +367,7 @@ func _left_down(e: InputEventMouseButton) -> void:
 				if not e.shift_pressed:
 					set_tool("")
 		return
-	if tool in ["mine", "stock"] and c != null:
+	if tool in ["mine", "stock", "hunt"] and c != null:
 		_drag = {"kind": "rect", "a": c, "rect": Rect2i(c, Vector2i.ONE), "start": e.position}
 		return
 	# Shift-drag box-selects residents; a plain drag pans the map; a click selects.
@@ -379,6 +387,9 @@ func _left_up(e: InputEventMouseButton) -> void:
 		"rect":
 			if tool == "stock":
 				sim.paint_zone(d.rect)
+			elif tool == "hunt":
+				var hit = _pick(e.position, false) if small else null
+				sim.designate_hunt(d.rect, hit if hit != null and hit.kind == "sheep" else null)
 			else:
 				var hit = _pick(e.position, false) if small else null
 				sim.designate_mine(d.rect, hit if hit != null and hit.kind in ["tree", "boulder"] else null, mine_kinds(e.shift_pressed, e.alt_pressed))
@@ -427,6 +438,7 @@ func _key(e: InputEventKey) -> void:
 		"speed2": set_speed(2)
 		"speed3": set_speed(3)
 		"mine": set_tool("mine")
+		"hunt": set_tool("hunt")
 		"stock": set_tool("stock")
 		"build": set_tool("build")
 		"bench": start_placing("bench")
@@ -568,6 +580,10 @@ func clear_orders(r: Dictionary) -> void:
 	sim.clear_orders(r)
 
 
+func toggle_hunt(target: Dictionary) -> void:
+	sim.designate_hunt(Rect2i(target.cell, Vector2i.ONE), target)
+
+
 func toggle_mine(target: Dictionary) -> void:
 	sim.designate_mine(Rect2i(target.cell, Vector2i.ONE), target)
 
@@ -675,6 +691,12 @@ func _screenshot_scene() -> void:
 	selection = {"kind": "site", "id": house.id}
 	if "--tools" in OS.get_cmdline_user_args():
 		_hud._tools_pinned = true
+	if "--mark-sheep" in OS.get_cmdline_user_args():
+		var near = Sim.nearest(sim.sheep.filter(func(x): return x.alive), Sim.rcell(sim.residents[0]))
+		if near != null:
+			near.des = true
+			_target = Vector3(near.pos.x + 0.5, 0, near.pos.y + 0.5)
+			_place_camera()
 	if "--select-ada" in OS.get_cmdline_user_args():
 		selection = {"kind": "res", "ids": [sim.residents[0].id]}
 	for i in 30:

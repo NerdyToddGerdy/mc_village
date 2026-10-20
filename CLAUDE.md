@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `slice-1-spec.md`: the Slice 1 spec, still the reference for everything Slice 2 doesn't change. It covers architecture, the job system, recipes, construction, controls, saving, the tuning table, and the "carpenter's chalk" UI language.
 - `prototype/founding.html`: a playable, single-file browser prototype of Slice 1.
   - It's opened directly in a browser, with no build step or dependencies beyond Google Fonts.
-  - Rules are tried here before they go into the spec. When a playtest changes a rule, update the prototype, the spec, and the Godot sim.
+  - It covers **Slice 1 only** and stays frozen there. From Slice 2 on, rules live in the specs and the Godot game, which have their own tests and bot playtest. Update the prototype only for Slice 1 rule changes.
   - Its live copy is published as a claude.ai artifact.
 - `game/`: the Godot 4.7 project for Slice 1.
 

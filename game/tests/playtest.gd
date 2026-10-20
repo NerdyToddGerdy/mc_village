@@ -205,6 +205,30 @@ func _initialize() -> void:
 	await drag(screen(at(0, 8)), screen(at(8, 17)))
 	check(game._world.live_outlines.size() > 0 or true, "drag shows an outline")
 
+	# Hunt sheep (issue #42): G, click to mark and unmark, drag to mark a group
+	await key(KEY_G)
+	check(game.tool == "hunt", "G picks Hunt")
+	var flock: Array = sim.sheep.filter(func(x): return x.alive)
+	var one: Dictionary = Sim.nearest(flock, Sim.rcell(ada))
+	await click(game._cam.unproject_position(Vector3(one.pos.x + 0.5, 0.3, one.pos.y + 0.5)))
+	check(one.des, "clicking a sheep marks it for hunting")
+	await click(game._cam.unproject_position(Vector3(one.pos.x + 0.5, 0.3, one.pos.y + 0.5)))
+	check(not one.des, "clicking it again unmarks it")
+	await drag(screen(Vector2i(0, 0)), screen(Vector2i(31, 31)))
+	check(sim.sheep.filter(func(x): return x.des).size() >= 3, "dragging with Hunt marks the sheep (%d)" % sim.sheep.filter(func(x): return x.des).size())
+	await key(KEY_ESCAPE)
+	for x in sim.sheep:
+		x.des = false
+	game.selection = {"kind": "res", "ids": [ada.id]}
+	one = Sim.nearest(sim.sheep.filter(func(x): return x.alive), Sim.rcell(ada))
+	var at_sheep: Vector2 = game._cam.unproject_position(Vector3(one.pos.x + 0.5, 0.3, one.pos.y + 0.5))
+	await move(at_sheep)
+	check(game._hud._hint.text.begins_with("Right-click: Hunt"), "hovering a sheep with Ada selected hints Right-click: Hunt (\"%s\")" % game._hud._hint.text)
+	await click(at_sheep, MOUSE_BUTTON_RIGHT)
+	await run(40)
+	check(not one.alive, "right-click sends Ada to hunt it")
+	check(sim.items.values().any(func(it): return it.type == "wool") and sim.items.values().any(func(it): return it.type == "mutton"), "the hunted sheep drops wool and mutton")
+
 	# Place the bench from the build menu
 	await key(KEY_B)
 	check(game.build_menu_open, "B opens the build menu")

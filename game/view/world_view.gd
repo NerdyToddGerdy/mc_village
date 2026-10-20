@@ -69,6 +69,9 @@ func set_sim(s: Sim) -> void:
 		_people[id].queue_free()
 	_people.clear()
 	_hops.clear()
+	for id in _sheep_nodes:
+		_sheep_nodes[id].queue_free()
+	_sheep_nodes.clear()
 
 
 func _ready() -> void:
@@ -134,6 +137,7 @@ func _process(delta: float) -> void:
 		_build_flags()
 	_build_occluders()
 	_update_people()
+	_update_sheep()
 	_build_live()
 
 
@@ -485,6 +489,49 @@ func _update_people() -> void:
 			bar.texture = _bar_texture(r.progress)
 
 
+# ---------------------------------------------------------------- sheep (issue #42)
+
+static var SHEEP_WOOL := Color("#EEEBE3")
+static var SHEEP_FACE := Color("#5A4E44")
+var _sheep_nodes := {}
+
+
+func _make_sheep() -> Node3D:
+	var n := Node3D.new()
+	var body := Node3D.new()
+	body.name = "Body"
+	n.add_child(body)
+	_part(body, Vector3(0.44, 0.16, 0.30), 0.0, SHEEP_FACE)     # legs, as one dark block
+	_part(body, Vector3(0.56, 0.34, 0.42), 0.14, SHEEP_WOOL)     # woolly body
+	var head := _part(body, Vector3(0.2, 0.22, 0.2), 0.3, SHEEP_FACE)
+	head.name = "Head"
+	head.position.x = 0.34
+	var mark := _sprite(MarkTextures.crosshair(), Vector3(0, 1.0, 0), 0.6, n)
+	mark.name = "Mark"
+	add_child(n)
+	return n
+
+
+## Sheep move every tick, so they're drawn like residents rather than as static blocks. A marked
+## sheep carries a red crosshair that follows it.
+func _update_sheep() -> void:
+	for sh in sim.sheep:
+		if not sh.alive:
+			if _sheep_nodes.has(sh.id):
+				_sheep_nodes[sh.id].queue_free()
+				_sheep_nodes.erase(sh.id)
+			continue
+		if not _sheep_nodes.has(sh.id):
+			_sheep_nodes[sh.id] = _make_sheep()
+		var n: Node3D = _sheep_nodes[sh.id]
+		n.position = Vector3(sh.pos.x + 0.5, 0, sh.pos.y + 0.5)
+		if sh.dest != null:
+			var d: Vector2 = Vector2(sh.dest) - sh.pos
+			if d.length() > 0.01:
+				(n.get_node("Body") as Node3D).rotation.y = atan2(-d.y, d.x)
+		(n.get_node("Mark") as Node3D).visible = sh.des
+
+
 const HOP_STRIDE := 0.5    ## Cells walked per hop.
 const HOP_HEIGHT := 0.12   ## How high a hop lifts the body, in blocks.
 const HOP_SETTLE := 1.5    ## How fast a resident who stops settles back down, blocks per second.
@@ -573,6 +620,9 @@ func pick(origin: Vector3, dir: Vector3, residents := true):
 	for b in sim.boulders:
 		if b.alive:
 			solid.append([b, AABB(Vector3(b.cell.x, 0, b.cell.y), Vector3(1, 0.95, 1))])
+	for sh in sim.sheep:
+		if sh.alive:
+			solid.append([sh, AABB(Vector3(sh.pos.x + 0.15, 0, sh.pos.y + 0.15), Vector3(0.7, 0.7, 0.7))])
 	for s in sim.sites:
 		solid.append([s, AABB(Vector3(s.origin.x, 0, s.origin.y), Vector3(s.size.x, maxf(sim.site_height(s), 0.3), s.size.y))])
 	var hit = _nearest_hit(origin, dir, solid)

@@ -91,7 +91,7 @@ func _ready() -> void:
 	br.add_child(_build_menu)
 	var tools := HBoxContainer.new()
 	tools.add_theme_constant_override("separation", 2)
-	for t in [["mine", "Mine", "X", Palette.RED], ["stock", "Stockpile", "Z", Palette.GREEN], ["build", "Build", "B", Palette.BLUE]]:
+	for t in [["mine", "Mine", "X", Palette.RED], ["hunt", "Hunt", "G", Palette.RED], ["stock", "Stockpile", "Z", Palette.GREEN], ["build", "Build", "B", Palette.BLUE]]:
 		var b := _button(t[1], func(): game.set_tool(t[0]))
 		b.custom_minimum_size = Vector2(96, 52)
 		b.toggle_mode = true
@@ -219,8 +219,9 @@ func _refresh_key_labels() -> void:
 	if sig == _keys_sig:
 		return
 	_keys_sig = sig
-	var names := {"mine": "Mine", "stock": "Stockpile", "build": "Build"}
+	var names := {"mine": "Mine", "hunt": "Hunt", "stock": "Stockpile", "build": "Build"}
 	var tips := {"mine": "Mine trees and boulders. Drag to mark many. Boulders need a pickaxe.",
+		"hunt": "Hunt sheep for wool and mutton. Click or drag over them.",
 		"stock": "Paint a stockpile. Drag over open ground.", "build": "Build"}
 	for t in _tool_btns:
 		var key := k.first(t)
@@ -520,6 +521,11 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		"tree":
 			c.add_child(_row("Tree", "Drops %d logs" % target.logs, false))
 			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target)))
+		"sheep":
+			c.add_child(_row("Sheep", "Drops 1 wool and 1 raw mutton", false))
+			if target.claim != 0:
+				c.add_child(_label("%s is hunting it." % sim.resident(target.claim).get("name", "Someone"), false, Palette.CHALK_DIM))
+			c.add_child(_button("Cancel hunt" if target.des else "Hunt", func(): game.toggle_hunt(target)))
 		"boulder":
 			c.add_child(_row("Boulder", "Drops %d cobblestone" % Tuning.BOULDER_COBBLE, false))
 			if target.des and sim.stuck.any(func(s): return s.focus_kind == "boulder"):

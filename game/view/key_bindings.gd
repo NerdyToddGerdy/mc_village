@@ -9,6 +9,7 @@ const ACTIONS := [
 	# [id, group, label, default keys]
 	["mine", "Orders", "Mine trees and boulders", [KEY_X]],
 	["stock", "Orders", "Paint a stockpile", [KEY_Z]],
+	["hunt", "Orders", "Hunt sheep", [KEY_G]],
 	["build", "Orders", "Open the build menu", [KEY_B]],
 	["bench", "Orders", "Place a crafting bench", [KEY_T]],
 	["house", "Orders", "Place a house", [KEY_H]],
