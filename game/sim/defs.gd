@@ -19,7 +19,8 @@ const ITEMS := {
 	"stone_pick": {"one": "stone pickaxe", "many": "stone pickaxes", "tool": "pick", "tier": 2},
 }
 
-const MATERIALS := ["log", "plank", "stick", "cobble", "wool", "mutton", "wheat"]
+## The tally bar's Materials group, in order (issue #73). Raw mutton is counted under Food instead.
+const MATERIALS := ["log", "plank", "stick", "cobble", "wheat", "wool"]
 
 const RECIPES := [
 	{"id": "planks", "name": "Planks", "inp": {"log": 1}, "out": {"plank": 4}},
