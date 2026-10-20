@@ -24,12 +24,13 @@ $GODOT --path .                                              # play
 $GODOT --headless --path . -s res://tests/run_tests.gd       # sim tests; exit code 1 on failure
 $GODOT --headless --path . -s res://tests/game_test.gd       # real game scene: menu, save, load, start over
 $GODOT --headless --path . -s res://tests/playtest.gd        # bot plays the whole opening through pushed input events (~1 min)
+$GODOT --headless --path . -s res://tests/playtest_village.gd  # Slice 2 bot: founding (by command), then the village through input
 $GODOT --headless --path . --import                          # refresh the class cache after adding a class_name script
 $GODOT --path . --resolution 1280x720 -- --screenshot        # scripted opening, saves user://screenshot.png, quits
 $GODOT --path . --resolution 1280x720 -- --screenshot-menu   # Save game menu, saves user://screenshot_menu.png
 ```
 
-Screenshots and saves (`saves/slot_N.save`) live in `~/Library/Application Support/Godot/app_userdata/Block Village/`. `game_test.gd` and `playtest.gd` write to `test_saves/` and `playtest_saves/` there instead, so they never touch real saves. The playtest pushes input with `push_input(event, true)` (local coordinates) because the window is stretched. It's the quickest way to check view changes without clicking through the game.
+Screenshots and saves (`saves/slot_N.save`) live in `~/Library/Application Support/Godot/app_userdata/Block Village/`. `game_test.gd` and the playtests write to `test_saves/` and `playtest_saves/` there instead, so they never touch real saves. The playtests push input with `push_input(event, true)` (local coordinates) because the window is stretched. Their shared input helpers live in `tests/playtest_base.gd`. It's the quickest way to check view changes without clicking through the game.
 
 There's no single-test runner. To focus on one test, temporarily trim the `tests` list in `tests/run_tests.gd`. Tests are named after the behaviour they cover.
 
@@ -42,7 +43,7 @@ There's no single-test runner. To focus on one test, temporarily trim the `tests
   - `tuning.gd` holds every number. `defs.gd` holds items, recipes and building templates. `goals.gd` holds the founding checklist.
 - `game/view/`: drawing only.
   - `world_view.gd` rebuilds MultiMesh block geometry when `sim.rev` changes and draws residents and per-frame overlays every frame.
-  - `hud.gd` builds the slate-and-chalk HUD from one code-built `Theme`. Panels rebuild only when their content changes, so clicks aren't lost to a rebuild.
+  - `hud.gd` builds the slate-and-chalk HUD from one code-built `Theme`. Panels rebuild only when their content changes, and never while a mouse button is held over them, so clicks aren’t lost to a rebuild.
 - `game/view/key_bindings.gd`: rebindable keys. Input goes through `keys.action_for(event)`; never match raw keycodes in `game.gd`. Tests set `game.keys_path` before adding the game, so they always run with default keys.
 - `game/scenes/game.gd`: ticks the sim at 20 Hz times the current speed, owns the camera and selection, and turns input into sim commands. It also saves and loads slots, storing `Sim.save_state()` with `var_to_str`. The HUD and the menu (`view/game_menu.gd`) call its public methods.
 - **Changing what's saved:** follow `game/sim/save_format.gd`.

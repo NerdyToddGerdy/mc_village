@@ -1,0 +1,302 @@
+extends "res://tests/playtest_base.gd"
+## The Slice 2 bot playtest (issue #51): from the founding to a working village, played through
+## input pushed into the game window. The founding itself is set up with sim commands, since
+## playtest.gd already plays it through input; everything Slice 2 adds is then played by keys,
+## clicks and drags. Each section ends on one of slice-2-spec.md's done criteria. Uses its own save
+## and settings folders. Run from game/:
+##   godot --headless --path . -s res://tests/playtest_village.gd
+
+var _seen: Array = []       ## Every toast text so far, and every job label residents have shown.
+
+
+## Steps the sim like run(), remembering toasts and what residents were doing.
+func play(seconds: float) -> void:
+	for i in int(seconds * Tuning.TPS):
+		game.sim.step()
+		for r in game.sim.residents:
+			if r.job != null and not _seen.has(r.job.label):
+				_seen.append(r.job.label)
+		for ev in game.sim.events:
+			if ev.type == "toast":
+				_seen.append(ev.text)
+				game._hud.add_toast(ev)
+		game.sim.events.clear()
+	game._hud.refresh(game.sim)
+	await frames(3)
+
+
+## Plays a second at a time until `cond` holds, for at most `seconds`. Returns whether it did.
+func play_until(seconds: float, cond: Callable) -> bool:
+	for i in int(seconds):
+		if cond.call():
+			return true
+		await play(1)
+	return cond.call()
+
+
+func seen(text: String) -> bool:
+	return _seen.any(func(t): return text in t)
+
+
+## Points the camera at a cell, so it can be clicked.
+func look_at(c: Vector2i) -> void:
+	game._target = Vector3(c.x + 0.5, 0, c.y + 0.5)
+	game._place_camera()
+	await frames(2)
+
+
+## Whether a cell's screen position is clear of the HUD's corner panels.
+func in_middle(p: Vector2) -> bool:
+	var vis := root.get_visible_rect().size
+	return Rect2(vis * Vector2(0.28, 0.25), vis * Vector2(0.44, 0.45)).has_point(p)
+
+
+## An open spot near `near` where a building of this template can go, or (-1, -1).
+func build_spot(tpl: String, near: Vector2i) -> Vector2i:
+	var sim := game.sim
+	var size: Vector2i = Defs.TEMPLATES[tpl].size
+	for d in range(0, 12):
+		for dx in range(-d, d + 1):
+			for dy in range(-d, d + 1):
+				var o := near + Vector2i(dx, dy)
+				if sim.placement_check(tpl, o, game.rot) != "":
+					continue
+				var ok := true
+				for x in size.x:
+					for y in size.y:
+						var c := o + Vector2i(x, y)
+						ok = ok and sim.walkable(c) and not sim.items.has(c) and not sim.farm.has(c)
+				if ok:
+					return o
+	return Vector2i(-1, -1)
+
+
+## Selects a resident the way a player would: F until it's them.
+func select_resident(r: Dictionary) -> void:
+	for i in game.sim.residents.size() + 1:
+		if game.selection.get("ids", []) == [r.id]:
+			break
+		await key(KEY_F)
+	game._hud.refresh(game.sim)
+	await frames(2)
+
+
+## A w×h rect near `near` where `ok` holds for every cell and both corners are on screen, or a
+## rect at (-1, -1).
+func open_rect_on_screen(near: Vector2i, w: int, h: int, ok: Callable) -> Rect2i:
+	for d in range(0, 10):
+		for dx in range(-d, d + 1):
+			for dy in range(-d, d + 1):
+				var r := Rect2i(near + Vector2i(dx, dy), Vector2i(w, h))
+				if not (in_middle(screen(r.position)) and in_middle(screen(r.end - Vector2i.ONE))):
+					continue
+				var good := true
+				for x in range(r.position.x, r.end.x):
+					for y in range(r.position.y, r.end.y):
+						good = good and ok.call(Vector2i(x, y))
+				if good:
+					return r
+	return Rect2i(-1, -1, 0, 0)
+
+
+## Opens the toolbar's Craft panel on the crafting bench, stepping past the fireplace with Next.
+func open_bench_panel() -> bool:
+	game.selection = {}
+	if not game.craft_menu_open and not await click_button("Craft"):
+		return false
+	for i in 4:
+		game._hud.refresh(game.sim)
+		await frames(2)
+		var bench = game.craft_bench()
+		if bench != null and bench.tpl == "bench":
+			return true
+		await click_button("Next")
+	return false
+
+
+func count(type: String) -> int:
+	var n := 0
+	for k in game.sim.items:
+		if game.sim.items[k].type == type:
+			n += game.sim.items[k].n
+	return n
+
+
+func _initialize() -> void:
+	game = load("res://scenes/main.tscn").instantiate()
+	game.keys_path = "user://test_settings/playtest_village_keys.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.keys_path))
+	# A script error stops this function without quitting; don't hang forever if that happens.
+	create_timer(900.0).timeout.connect(func():
+		printerr("FAIL the playtest stopped (a script error?) and timed out")
+		quit(1))
+	root.add_child(game)
+	await frames(3)
+	game.save_dir = "user://playtest_saves"
+	check(await click_button("Play"), "click Play")
+	# Paused (~) throughout, so only play() advances time and every toast is seen.
+	await key(KEY_QUOTELEFT)
+	check(game.speed == 0, "~ pauses")
+	var sim := game.sim
+	var ada: Dictionary = sim.residents[0]
+
+	# ---- The founding (set up by command; playtest.gd plays it through input). Only the opening's
+	# 18×18 is mined, so the ring of trees and boulders around it is left for the village.
+	sim.designate_mine(area(0, 0, 10, 18))
+	sim.designate_hunt(Rect2i(0, 0, sim.w, sim.h))
+	var bench := sim.place_site("bench", at(8, 10))
+	await play(120)
+	for r in ["planks", "planks", "sticks", "wood_pick"]:
+		sim.queue_add(bench, r)
+	await play(120)
+	sim.paint_zone(area(10, 7, 4, 2))
+	sim.designate_mine(area(0, 0, 18, 18))
+	await play(150)
+	var h1 := sim.place_site("house", at(11, 0))
+	for i in 8:
+		sim.queue_add(bench, "planks")
+	await play(600)
+	var h2 := sim.place_site("house", at(1, 4), 1)
+	for i in 8:
+		sim.queue_add(bench, "planks")
+	check(await play_until(1200, func(): return sim.stats.get("traveler_home", false)), "founding: Tomas has moved in")
+	var tomas: Dictionary = sim.residents[1] if sim.residents.size() > 1 else {}
+	check(h1.done and h2.done and h1.stage == 4 and h2.stage == 4, "both houses are finished with their beds")
+	check(sim.stats.get("sheep_hunted", 0) >= 6, "the clearing's sheep were hunted for wool and mutton (%d)" % sim.stats.get("sheep_hunted", 0))
+	check(not tomas.is_empty() and seen("a skilled"), "Tomas arrived skilled in a job")
+
+	# ---- A bigger stockpile, by drag (Z)
+	await look_at(at(9, 9))
+	await key(KEY_Z)
+	var zr := open_rect_on_screen(at(9, 9), 4, 3, func(p): return sim.walkable(p) and sim.site_at(p) == null and sim.reserved_at(p) == null and not sim.in_zone(p) and not sim.items.has(p) and p != sim.meadow_sign())
+	if zr.position.x >= 0:
+		await drag(screen(zr.position), screen(zr.end - Vector2i.ONE))
+	check(sim.zone.size() >= 16, "Z: a bigger stockpile is painted (%d cells)" % sim.zone.size())
+	await key(KEY_ESCAPE)
+
+	# ---- Farm: paint plots (P); wheat is planted, grows and is harvested
+	await key(KEY_P)
+	var fr := open_rect_on_screen(at(9, 9), 3, 2, func(p): return sim.farm_blocked(p) == "")
+	check(fr.position.x >= 0, "open grass on screen for a farm")
+	await drag(screen(fr.position), screen(fr.end - Vector2i.ONE))
+	await key(KEY_ESCAPE)
+	check(sim.farm.size() == 6, "P: dragging paints 6 farm plots (%d)" % sim.farm.size())
+	check(await play_until(60, func(): return sim.stats.get("planted", 0) >= 6), "the plots are planted")
+	check(await play_until(Tuning.WHEAT_GROW + 90, func(): return sim.stats.get("harvested", 0) >= 3), "the wheat grows and is harvested")
+	check(await play_until(90, func(): return sim.items.values().any(func(it): return it.type == "wheat" and sim.in_zone(it.cell))), "harvested wheat is hauled to the stockpile")
+	check(seen("Planting wheat") and seen("Harvesting wheat"), "residents were seen planting and harvesting")
+
+	# ---- Fireplace (K): placed with its kitchen plot; the standing order bakes bread
+	await key(KEY_K)
+	var fp := build_spot("fireplace", at(9, 9))
+	check(fp.x >= 0, "room for a fireplace and its kitchen plot")
+	await look_at(fp)
+	await click(screen(fp))
+	var fire = sim.site_at(fp)
+	check(fire != null and fire.tpl == "fireplace" and fire.plot != null, "K: the fireplace is placed with a kitchen plot reserved")
+	check(await play_until(240, func(): return fire != null and fire.done and count("bread") + count("cooked_mutton") > 0), "the fireplace is built and bakes or cooks a meal")
+	check(seen("Baking bread") or seen("Cooking mutton"), "residents were seen cooking")
+	game._select(fire)
+	game._hud.refresh(sim)
+	await frames(2)
+	check(visible_label("Keep 6 meals in stock") or find_button("Keep 6 meals in stock") != null, "the fireplace panel shows its standing order")
+	await key(KEY_ESCAPE)
+
+	# ---- Hunger: residents get hungry, fetch food and eat
+	check(await play_until(400, func(): return seen("Eating")), "a hungry resident fetches food and eats (%s)" % [_seen.filter(func(t): return "Eat" in t)])
+
+	# ---- A third house, placed now so there's building to do while trying out the Jobs grid
+	await key(KEY_H)
+	var hc := build_spot("house", at(9, 9))
+	check(hc.x >= 0, "room for a third house")
+	await look_at(hc + Vector2i(2, 2))
+	await click(screen(hc + Vector2i(2, 2)))
+	var h3 = sim.site_at(hc + Vector2i(2, 2))
+	check(h3 != null and h3.tpl == "house", "H: a third house is placed")
+	check(not game._menu.visible, "placing it leaves the menu closed")
+
+	# ---- Jobs: switch Build off for both and see why nothing's built; then priorities
+	for r in [ada, tomas]:
+		await select_resident(r)
+		check(await click_job("build"), "click Build in %s's Jobs grid" % r.name)
+		check(not r.jobs.build.on, "%s's Build is off" % r.name)
+	await play(1)
+	check(find_button("No one does Build") != null, "with Build off for everyone, the stuck list says \"No one does Build\"")
+	for r in [ada, tomas]:
+		await select_resident(r)
+		check(await click_job("build"), "click Build again for %s" % r.name)
+	check(ada.jobs.build.on and tomas.jobs.build.on, "Build is back on for both")
+	await select_resident(tomas)
+	for i in 2:
+		await click_job("farm", 2)
+	check(tomas.jobs.farm.pri == 1, "Tomas's Farm is raised to priority 1")
+	await click_job("farm", 2)
+	check(tomas.jobs.farm.pri == 2, "and cycled back to 2")
+	# Planks for the house, from the toolbar's Craft panel
+	check(await open_bench_panel(), "open the Craft panel on the bench")
+	await key(KEY_QUOTELEFT)
+	for i in 3:
+		await click_button("Queue 5", "Planks")
+	await key(KEY_ESCAPE)
+
+	# ---- Skills: levels rise with work
+	var levels: int = 0
+	for r in sim.residents:
+		for jb in Defs.JOBS:
+			levels = maxi(levels, Sim.level(r, jb))
+	check(levels >= 2 and seen("is now level"), "skill levels rise with work, with a toast (best level %d)" % levels)
+	await select_resident(ada)
+	check(visible_label("Lv "), "the Jobs grid shows levels")
+
+	# ---- Toolsmith: an axe is made, a spare is kept, and a broken axe is replaced from it
+	check(await open_bench_panel(), "open the bench's Craft panel again")
+	check(await click_button("Queue", "Wooden axe"), "queue a wooden axe")
+	await key(KEY_ESCAPE)
+	await look_at(at(9, 9))
+	await key(KEY_X)
+	await drag(screen(Vector2i(1, 1)), screen(Vector2i(sim.w - 2, sim.h - 2)))
+	await key(KEY_ESCAPE)
+	var holder: Array = [null]
+	check(await play_until(300, func():
+		for r in sim.residents:
+			if r.axe != null:
+				holder[0] = r
+		return holder[0] != null and not sim.tool_items("axe", 0).is_empty()), "an axe is in use and the toolsmith keeps a spare")
+	if holder[0] != null:
+		# Wear every axe in use down to its last use, to see one break without waiting an hour.
+		var users: Array = sim.residents.filter(func(r): return r.axe != null)
+		for r in users:
+			r.axe.dur = 1
+		check(await play_until(300, func(): return sim.stats.tools_broken > 0), "an axe breaks (%s)" % [_seen.filter(func(t): return "broke" in t)])
+		check(await play_until(90, func(): return users.all(func(r): return r.axe != null and not r.broken.axe)), "whoever's axe broke fetches the spare instead of stopping")
+		await play(1)
+		check(find_button("Needs a new axe") == null, "and no \"Needs a new axe\" report is left")
+
+	# ---- The meadow: send both residents; they come back with wool and mutton
+	var wool_before := count("wool")
+	var meadow_before: int = sim.meadow_sheep
+	game.selection = {"kind": "res", "ids": [ada.id, tomas.id]}
+	check(await click_button("Send both to the meadow"), "click Send both to the meadow")
+	check(await play_until(90, func(): return ada.away and tomas.away), "both walk off to the meadow")
+	check(await play_until(Tuning.MEADOW_TRIP + 30, func(): return not ada.away and not tomas.away), "both come back")
+	check(sim.meadow_sheep == meadow_before - 2 * Tuning.MEADOW_TAKE, "the meadow has %d fewer sheep" % (2 * Tuning.MEADOW_TAKE))
+	check(count("wool") + (h3.store.get("wool", 0) if h3 != null else 0) >= wool_before + 2 * Tuning.MEADOW_TAKE - 1 or seen("back from the meadow with 2 wool"), "they bring back wool and mutton")
+
+	# ---- The third house gets its bed, and a new traveler arrives
+	for i in 6:
+		if h3 != null and h3.done:
+			break
+		if await open_bench_panel():
+			await key(KEY_QUOTELEFT)
+			await click_button("Queue 5", "Planks")
+			await key(KEY_ESCAPE)
+		await play_until(300, func(): return h3 != null and h3.done)
+	check(h3 != null and h3.done and h3.stage == 4, "the third house is finished, bed and all")
+	check(await play_until(Tuning.ARRIVAL_DELAY + 120, func(): return sim.residents.size() == 3 and not sim.residents[2].arriving), "a third traveler arrives and moves in")
+	check(sim.residents.size() == 3 and sim.residents[2].name == "Mira" and seen("Mira"), "it's Mira, with a toast")
+
+	# ---- Every stall has a reason: anything in the stuck list carries one
+	check(sim.stuck.all(func(s): return s.why != ""), "every stuck item says why")
+
+	print("\n%s" % ("PLAYTEST PASSED" if _failures == 0 else "%d FAILED" % _failures))
+	quit(1 if _failures else 0)

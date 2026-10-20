@@ -84,13 +84,14 @@ Older saves keep loading as the game changes: each save is upgraded step by step
 
 ## Tests
 
-Run these from `game/`. CI runs all three on every push and pull request.
+Run these from `game/`. CI runs them all on every push and pull request.
 
 ```sh
 godot --headless --path . --import                          # once, or after adding a script with a class_name
 godot --headless --path . -s res://tests/run_tests.gd       # game rules, no graphics
 godot --headless --path . -s res://tests/game_test.gd       # the real game scene: menu, saves, input, drawing
 godot --headless --path . -s res://tests/playtest.gd        # a bot plays the opening through real input (~1 min)
+godot --headless --path . -s res://tests/playtest_village.gd  # a bot plays Slice 2's village through real input
 ```
 
 On macOS, `godot` is `/Applications/Godot.app/Contents/MacOS/Godot`.
