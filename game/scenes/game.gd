@@ -903,6 +903,10 @@ func _screenshot_scene() -> void:
 		sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 2), "wood_axe", 1, 4)
 		selection = {"kind": "res", "ids": [ada.id]}
 		_hud.equip_kind = "axe"
+	if "--toast" in OS.get_cmdline_user_args():  # a short toast and one long enough to wrap (issue #71)
+		_hud.add_toast({"text": "Tomas is now level 2 at Mine.", "res_id": 0, "site_id": 0})
+		_hud.add_toast({"text": "A traveler, Mira, has arrived. She claims the new house and needs tools from the bench before she can mine.", "res_id": sim.residents[0].id, "site_id": 0})
+		set_speed(0)
 	for i in 30:
 		await get_tree().process_frame
 	var img := get_viewport().get_texture().get_image()

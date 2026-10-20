@@ -272,6 +272,7 @@ World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`,
   - Spare tools, with how many are in the stockpile and how many are lying loose.
 - Top right: speed controls.
 - Right edge: stuck list, shown only when something is stuck; clicking an entry focuses the camera.
+- Toasts (and the paused notice) sit just below the tally bar, centred in the gap between the goals panel and the stuck list, so they never cover either. A toast too wide for the gap wraps (#71).
 - Bottom left: selection panel (resident, site, or bench, where crafts are queued).
 - Bottom right: orders toolbar — Mine, Stockpile, Build ▸ (Crafting bench, House). Mine is one order for both trees and boulders: a drag marks every tree and boulder in it, and clicking a marked one unmarks it.
 

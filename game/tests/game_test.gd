@@ -69,6 +69,28 @@ func _test_drag(game: Game) -> void:
 	game.set_tool("")
 
 
+## Toasts sit in the gap below the tally bar, clear of the goals panel and the stuck list (issue #71).
+func _test_toasts(game: Game) -> void:
+	var hud: Hud = game._hud
+	hud.add_toast({"text": "Tomas is now level 2 at Mine.", "res_id": 0, "site_id": 0})
+	hud.add_toast({"text": "A traveler, Mira, has arrived. She claims the new house and needs tools from the bench before she can mine anything.", "res_id": game.sim.residents[0].id, "site_id": 0})
+	for i in 3:
+		await process_frame
+	var clear := true
+	var inside := true
+	var view := Rect2(Vector2.ZERO, hud._root.size)
+	for p in hud._toasts.get_children():
+		if not (p as Control).visible or p.is_queued_for_deletion():
+			continue
+		var r := (p as Control).get_global_rect()
+		inside = inside and view.encloses(r)
+		for other in [hud._tally_panel, hud._goals_panel, hud._stuck_panel]:
+			if (other as Control).visible and r.intersects((other as Control).get_global_rect()):
+				clear = false
+	check(clear, "toasts don't cover the tally bar, the goals panel or the stuck list")
+	check(inside, "toasts fit on screen, wrapping when long")
+
+
 func _test_fading(game: Game) -> void:
 	var sim := game.sim
 	var world: WorldView = game._world
@@ -546,6 +568,7 @@ func _initialize() -> void:
 	await _test_fireplace(game)
 	await _test_jobs_grid(game)
 	await _test_equip(game)
+	await _test_toasts(game)
 	await _test_meadow(game)
 	game.open_menu("main")
 	game.restart()
