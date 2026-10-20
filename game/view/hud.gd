@@ -1,7 +1,7 @@
 class_name Hud
 extends CanvasLayer
 ## The slate-board HUD (slice-1-spec.md §12): tallies and goals top left, speed and the stuck list
-## top right, toasts top centre, the selection panel bottom left, orders bottom right.
+## top right, toasts in the gap between them, the selection panel bottom left, orders bottom right.
 ## Panels rebuild only when their content changes, so clicks aren't lost to a rebuild.
 
 var game  ## The Game node; the HUD calls its command methods.
@@ -13,6 +13,8 @@ var _root := Control.new()
 var _tallies := HBoxContainer.new()
 var _tools_btn: Button
 var _tools_drop: PanelContainer
+var _tally_panel: PanelContainer
+var _goals_panel: PanelContainer
 var _tools_list := VBoxContainer.new()
 var _tools_pinned := false
 var _pointer := Vector2(-1, -1)
@@ -53,12 +55,14 @@ func _ready() -> void:
 	_tools_btn.toggle_mode = true
 	_tools_btn.custom_minimum_size = Vector2(0, 36)
 	tally_row.add_child(_tools_btn)
-	tl.add_child(_panel(tally_row, Vector2(0, 0)))
+	_tally_panel = _panel(tally_row, Vector2(0, 0))
+	tl.add_child(_tally_panel)
 	_tools_list.add_theme_constant_override("separation", 10)
 	_tools_drop = _panel(_tools_list, Vector2(290, 0))
 	_tools_drop.visible = false
 	_tools_drop.top_level = true
-	tl.add_child(_panel(_goals, Vector2(290, 0)))
+	_goals_panel = _panel(_goals, Vector2(290, 0))
+	tl.add_child(_goals_panel)
 
 	var tr := _corner(Control.PRESET_TOP_RIGHT)
 	var speed := HBoxContainer.new()
@@ -73,11 +77,10 @@ func _ready() -> void:
 	_stuck_panel = _panel(_stuck, Vector2(250, 0))
 	tr.add_child(_stuck_panel)
 
-	_toasts.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_KEEP_SIZE, 16)
-	_toasts.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_toasts.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_toasts)
 	_paused_label = _panel(_label("Paused. You can still give orders.", true), Vector2.ZERO)
+	_paused_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_toasts.add_child(_paused_label)
 
 	var bl := _corner(Control.PRESET_BOTTOM_LEFT)
@@ -420,6 +423,7 @@ func _input(event: InputEvent) -> void:
 func _process(_delta: float) -> void:
 	if _tools_btn == null:
 		return
+	_place_toasts()
 	var mouse := _pointer
 	var btn_rect := _tools_btn.get_global_rect().grow(4)
 	var open := _tools_pinned or _tools_btn.has_focus() or btn_rect.has_point(mouse)
@@ -470,6 +474,29 @@ func _refresh_toasts() -> void:
 			ch.queue_free()
 
 
+## Toasts sit below the tally bar, centred in the gap between the goals panel and the stuck list,
+## so they never cover either (issue #71). A toast too wide for the gap wraps.
+func _place_toasts() -> void:
+	var view := _root.size
+	var left := 16.0
+	if _goals_panel.visible:
+		left = _goals_panel.get_global_rect().end.x + 12
+	var right := view.x - 16
+	if _stuck_panel.visible:
+		right = _stuck_panel.get_global_rect().position.x - 12
+	var width := maxf(right - left, 240.0)
+	_toasts.position = Vector2(left, _tally_panel.get_global_rect().end.y + 8)
+	_toasts.size = Vector2(width, 0)
+	for p in _toasts.get_children():
+		var lab := p.get_child(0) as Label if p.get_child(0) is Label else p.get_child(0).get_child(0) as Label
+		var rest := 28.0  # the panel's margins
+		if p.get_child(0) is HBoxContainer and p.get_child(0).get_child_count() > 1:
+			rest += 14 + p.get_child(0).get_child(1).get_combined_minimum_size().x
+		var natural := lab.get_theme_font("font").get_string_size(lab.text, HORIZONTAL_ALIGNMENT_LEFT, -1, lab.get_theme_font_size("font_size")).x
+		lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lab.custom_minimum_size.x = minf(ceilf(natural) + 1, width - rest)
+
+
 func add_toast(ev: Dictionary) -> void:
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 14)
@@ -479,6 +506,7 @@ func add_toast(ev: Dictionary) -> void:
 	elif ev.site_id:
 		h.add_child(_button("Show", func(): game.focus_on("site", ev.site_id)))
 	var p := _panel(h, Vector2.ZERO, 10)
+	p.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_toasts.add_child(p)
 	_toast_list.append({"node": p, "until": Time.get_ticks_msec() + 7000})
 	if _toast_list.size() > 3:
