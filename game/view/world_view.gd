@@ -160,6 +160,7 @@ func _build_static() -> void:
 			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.STONE.lightened(0.06))
 	for bush in sim.bushes:
 		_add_bush(solid, bush)
+	_add_signpost(solid, sim.meadow_sign())
 	for k in sim.farm:
 		_add_crop(solid, sim.farm[k])
 	for k in sim.items:
@@ -191,6 +192,18 @@ func _add_bush(b: Batch, bush: Dictionary) -> void:
 	for i in bush.berries:
 		var p: Vector2 = spots[i % spots.size()]
 		b.box(Vector3(cx + p.x - 0.07, 0.42, cz + p.y - 0.07), Vector3(cx + p.x + 0.07, 0.52, cz + p.y + 0.07), Palette.ITEM_COLORS.berries)
+
+
+## The meadow signpost (issue #50): a post with a board pointing off the map's left edge.
+func _add_signpost(b: Batch, c: Vector2i) -> void:
+	var x := c.x + 0.5
+	var z := c.y + 0.5
+	b.box(Vector3(x - 0.09, 0, z - 0.09), Vector3(x + 0.09, 1.8, z + 0.09), Palette.LOG)
+	# An arrow-shaped board pointing off the edge, with a sheep's white fleece painted on it.
+	b.box(Vector3(x - 0.7, 1.15, z - 0.06), Vector3(x + 0.15, 1.6, z + 0.06), Palette.PLANK)
+	b.box(Vector3(x - 0.85, 1.25, z - 0.05), Vector3(x - 0.7, 1.5, z + 0.05), Palette.PLANK)
+	b.box(Vector3(x - 0.45, 1.27, z - 0.08), Vector3(x - 0.12, 1.48, z + 0.08), SHEEP_WOOL)
+	b.box(Vector3(x - 0.55, 1.33, z - 0.08), Vector3(x - 0.45, 1.44, z + 0.08), SHEEP_FACE)
 
 
 static var SOIL := Color("#5E4430")
@@ -564,6 +577,7 @@ func _update_people() -> void:
 		if not _people.has(r.id):
 			_people[r.id] = _make_person(r)
 		var n: Node3D = _people[r.id]
+		n.visible = not r.away  # off the map on a meadow trip
 		var at := drawn_pos(r)
 		n.position = Vector3(at.x + 0.5, 0, at.y + 0.5)
 		(n.get_node("Body") as Node3D).position.y = _hop(r.id, at)
@@ -697,7 +711,7 @@ func ground_cell(origin: Vector3, dir: Vector3):
 ##    swallow clicks meant for what's behind them.
 func pick(origin: Vector3, dir: Vector3, residents := true):
 	if residents:
-		var r = _nearest_hit(origin, dir, sim.residents.map(func(r):
+		var r = _nearest_hit(origin, dir, sim.residents.filter(func(r): return not r.away).map(func(r):
 			var p := Vector3(r.pos.x + 0.5, 0, r.pos.y + 0.5)
 			return [r, AABB(p - Vector3(0.25, 0, 0.25), Vector3(0.5, 1.15, 0.5))]))
 		if r != null:
@@ -716,6 +730,8 @@ func pick(origin: Vector3, dir: Vector3, residents := true):
 		solid.append([bush, AABB(Vector3(bush.cell.x + 0.14, 0, bush.cell.y + 0.14), Vector3(0.72, 0.52, 0.72))])
 	for s in sim.sites:
 		solid.append([s, AABB(Vector3(s.origin.x, 0, s.origin.y), Vector3(s.size.x, maxf(sim.site_height(s), 0.3), s.size.y))])
+	var sign := sim.meadow_sign()
+	solid.append([{"kind": "meadow", "id": 0, "cell": sign}, AABB(Vector3(sign.x - 0.4, 0, sign.y + 0.3), Vector3(1.1, 1.8, 0.4))])
 	for k in sim.farm:
 		var crop: Dictionary = sim.farm[k]
 		solid.append([crop, AABB(Vector3(crop.cell.x, 0, crop.cell.y), Vector3(1, 0.1 + 0.15 * Sim.crop_stage(crop), 1))])

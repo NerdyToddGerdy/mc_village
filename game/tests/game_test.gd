@@ -446,6 +446,40 @@ func _test_equip(game: Game) -> void:
 	check(ada.pick != null and ada.pick.type == "stone_pick" and ada.kept.pick, "she equips it and keeps it")
 
 
+## The signpost shows the meadow; Send to the meadow sends a resident off the map (issue #50).
+func _test_meadow(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var hud: Hud = game._hud
+	var ada: Dictionary = sim.residents[0]
+	var sign := sim.meadow_sign()
+	var p: Vector2 = game._cam.unproject_position(Vector3(sign.x + 0.3, 1.0, sign.y + 0.5))
+	var hit = game._pick(p)
+	check(hit != null and hit.kind == "meadow", "the signpost can be clicked")
+	game._select(hit)
+	hud.refresh(sim)
+	await process_frame
+	check(_walk(hud._sel).any(func(n): return n is Label and n.text == "8 of 8 sheep"), "its panel shows the meadow's sheep")
+	game._select(ada)
+	hud.refresh(sim)
+	await process_frame
+	var send: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text == "Send to the meadow")
+	check(send.size() == 1, "Ada's panel has Send to the meadow")
+	if send.is_empty():
+		return
+	send[0].pressed.emit()
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if ada.away:
+			break
+	hud.refresh(sim)
+	game._world._update_people()
+	await process_frame
+	check(ada.away and not game._world._people[ada.id].visible, "she leaves the map and isn't drawn")
+	check(_walk(hud._sel).any(func(n): return n is Label and n.text.begins_with("At the meadow, back in")), "her panel says when she'll be back")
+	check(game._pick(game._cam.unproject_position(Vector3(ada.pos.x + 0.5, 0.5, ada.pos.y + 0.5))) == null or game._pick(game._cam.unproject_position(Vector3(ada.pos.x + 0.5, 0.5, ada.pos.y + 0.5))).kind != "res", "she can't be clicked while away")
+
+
 func _walk(n: Node) -> Array:
 	var out: Array = [n]
 	for ch in n.get_children():
@@ -512,6 +546,7 @@ func _initialize() -> void:
 	await _test_fireplace(game)
 	await _test_jobs_grid(game)
 	await _test_equip(game)
+	await _test_meadow(game)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")

@@ -175,7 +175,7 @@ func _update_live_overlays() -> void:
 			var turns := {"house": "the door", "bench": "its workshop plot", "fireplace": "its kitchen plot"}
 			hint = "Place %s." % names[placing] + (" %s turns %s." % [turn, turns[placing]] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
-	if sel != null and sel.kind in ["tree", "boulder", "sheep", "bush", "crop"]:
+	if sel != null and sel.kind in ["tree", "boulder", "sheep", "bush", "crop", "meadow"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
@@ -299,6 +299,8 @@ func selected_entity():
 			for b in sim.bushes:
 				if b.id == selection.id:
 					return b
+		"meadow":
+			return {"kind": "meadow", "id": 0, "cell": sim.meadow_sign()}
 		"crop":
 			for c in sim.farm.values():
 				if c.id == selection.id:
@@ -400,6 +402,9 @@ func _right_click(e: InputEventMouseButton) -> void:
 	for id in selection.ids:
 		var r := sim.resident(id)
 		if r.is_empty():
+			continue
+		if r.away:
+			_hud.add_toast({"text": "%s is away at the meadow." % r.name, "res_id": r.id, "site_id": 0})
 			continue
 		if r.get("hunger", 100.0) <= 0.0:
 			_hud.add_toast({"text": "%s is starving and won’t work until fed." % r.name, "res_id": r.id, "site_id": 0})
@@ -684,6 +689,13 @@ func remove_farm_plot(crop: Dictionary) -> void:
 	selection = {}
 
 
+func send_to_meadow(ids: Array) -> void:
+	for id in ids:
+		var r := sim.resident(id)
+		if not r.is_empty():
+			sim.send_to_meadow(r)
+
+
 func equip_tool(r: Dictionary, stack: Dictionary) -> void:
 	sim.equip_order(r, stack)
 
@@ -874,6 +886,17 @@ func _screenshot_scene() -> void:
 		craft_menu_open = true
 	if "--select-ada" in OS.get_cmdline_user_args():
 		selection = {"kind": "res", "ids": [sim.residents[0].id]}
+	if "--meadow" in OS.get_cmdline_user_args():  # the signpost selected, with Ada away on a trip
+		var sign := sim.meadow_sign()
+		var ada: Dictionary = sim.residents[0]
+		sim.fail_job(ada)
+		ada.away = true
+		ada.back_at = sim.tick + 50 * Tuning.TPS
+		sim.meadow_sheep = 6
+		sim.meadow_regrow = 100.0
+		selection = {"kind": "meadow", "id": 0}
+		_target = Vector3(sign.x + 4.0, 0, sign.y + 0.5)
+		_place_camera()
 	if "--equip" in OS.get_cmdline_user_args():  # spare axes about, and Ada's Equip list open
 		var ada: Dictionary = sim.residents[0]
 		sim.drop_items(Sim.rcell(ada) + Vector2i(2, 1), "stone_axe", 1)

@@ -49,7 +49,7 @@ Slice 2 is done when, from a fresh start, a player can:
 
 ## 3. Sheep, hunting and the meadow
 
-**Sheep** are animals that wander slowly within the clearing, avoiding trees, boulders and buildings. Six start in the clearing. None arrive on their own (regrowth is an open question, §13).
+**Sheep** are animals that wander slowly within the clearing, avoiding trees, boulders and buildings. Six start in the clearing. None arrive in the clearing on their own; the meadow regains its sheep (below).
 
 **Hunt order** (default key **G**): click or drag over sheep to mark them, as with Mine. A resident with Hunt switched on walks to the sheep, following it if it moves, and hunts it. A hunt drops **1 wool and 1 raw mutton** where the sheep stood. No tool is needed. Higher Hunt levels hunt faster.
 
@@ -58,6 +58,12 @@ Slice 2 is done when, from a fresh start, a player can:
 - They walk off the map and are **away** for the trip time. While away, they don't work in the village; the panel shows when they'll be back.
 - They return carrying what they found: **2 sheep's worth per resident** (2 wool and 2 raw mutton each), limited by what the meadow has.
 - The meadow holds **8 sheep** to start. When it's empty, the trip returns with nothing and the meadow shows as "No sheep left".
+- **The meadow regains sheep** (decided with the owner, #22): 1 every 4 minutes, up to 8.
+- **How it plays** (#50):
+  - **The signpost** sits at the left edge's middle cell. Clicking it shows the meadow's sheep and when the next one returns. Nothing can be built, stockpiled or farmed on it.
+  - **Sending:** **Send to the meadow** appears in the resident panel, or as "Send both" when two are selected. It's an order: the resident walks to the signpost, then is away for 90 s.
+  - **While away,** residents aren't drawn and can't be clicked or given orders. Right-clicking with one selected says they're away. Their panel shows "At the meadow, back in N s".
+  - **Coming back,** they reappear at the signpost and drop their wool and mutton there for hauling. The meadow's sheep are taken on return, not on departure, and a toast says what they brought. "Meadow has no sheep left" shows while someone heads to an empty meadow.
 - This is a deliberately small taste of Slice 3's expeditions: someone leaves, the village works without them, and they come back carrying something.
 
 ## 4. Food and hunger
@@ -236,6 +242,7 @@ Taken together, the upgrade steps:
 - Gives existing residents every job on at priority 2 (v9→v10, #47).
 - Gives existing residents level 1 in every job (v10→v11, #48).
 - Marks no tools as chosen (v11→v12, equipping).
+- Gives older saves a full meadow with nobody away (v12→v13, #50).
 - Gives existing buildings no reserved plot, so Slice 1 benches reserve nothing (v8→v9, #46).
 - Adds no sheep to the clearing (old saves are past the opening).
 - Gives the meadow its starting 8 sheep.
@@ -262,6 +269,7 @@ All are rebindable (Slice 1, §10).
 | `meadow_sheep` | 8 |
 | `meadow_trip` | 90 s away |
 | `meadow_take` | 2 sheep per resident |
+| `meadow_regrow` | 1 sheep per 240 s, up to 8 |
 | `hunger_drop` | 100 → 0 in 360 s |
 | `eat_below` / `hungry_below` | 40 / 25 |
 | `hungry_slow` | 25% slower |
@@ -279,7 +287,7 @@ All are rebindable (Slice 1, §10).
 
 ## 13. Open questions (not blocking the start)
 
-- **Regrowth (#22):** do trees regrow from saplings, and do sheep return to the clearing or the meadow over time? Without regrowth, a long game runs out of trees, and wool caps the number of beds at 6 + 8 = 14 sheep, so about 4 extra beds. Proposed default for Slice 2: the meadow regains 1 sheep every 4 minutes up to 8, and trees don't regrow yet.
+- **Regrowth (#22):** do trees regrow from saplings? Without regrowth, a long game runs out of trees. (Decided: the meadow regains 1 sheep every 4 minutes up to 8. Trees don't regrow yet.)
 - **Building customization (#21):** still fixed templates in Slice 2.
 
 ## 14. Deferred

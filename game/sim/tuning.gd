@@ -34,6 +34,12 @@ const PLANT_TIME := 2.0                 ## Seconds to plant one farm cell (no se
 const HARVEST_TIME := 2.0               ## Seconds to harvest one ripe cell.
 const WHEAT_GROW := 120.0               ## Seconds from planting to ripe.
 const WHEAT_YIELD := 2                  ## Wheat per harvested cell.
+# The sheep meadow (issue #50). Regrowth is the proposed default for open decision #22.
+const MEADOW_SHEEP := 8                 ## Sheep in the meadow at the start, and the most it holds.
+const MEADOW_TRIP := 90.0               ## Seconds a resident is away on a trip.
+const MEADOW_TAKE := 2                  ## Sheep's worth each resident brings back (wool and raw mutton each).
+const MEADOW_REGROW := 240.0            ## Seconds for the meadow to regain one sheep.
+
 # Skills (issue #47/#48, slice-2-spec.md §5).
 const SKILL_LEVELS := [8, 25, 50, 90]   ## Experience for levels 2, 3, 4 and 5; one point per finished task.
 const SKILL_SPEED := 0.15               ## Work speed added per level above 1.

@@ -46,6 +46,9 @@ func _initialize() -> void:
 		sim.set_job_on(sim.residents[0], "hunt", false)
 	if SaveFormat.VERSION >= 11:
 		sim.residents[0].jobs.build.xp = 30  # a level-3 builder
+	if SaveFormat.VERSION >= 13:  # a meadow part-way to regaining a sheep
+		sim.meadow_sheep = 5
+		sim.meadow_regrow = 60.0
 	if SaveFormat.VERSION >= 12 and sim.residents[0].pick != null:
 		sim.residents[0].kept.pick = true  # a pickaxe she was told to equip
 	if SaveFormat.VERSION >= 3:

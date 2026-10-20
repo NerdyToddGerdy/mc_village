@@ -27,6 +27,7 @@ func _init() -> void:
 		"test_skills_rise_and_pay_off",
 		"test_toolsmith_keeps_spares",
 		"test_equip_a_chosen_tool",
+		"test_meadow_trips",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -270,6 +271,10 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
 		else:
 			check(sim.residents[0].orders == [], "v%d: residents get an empty order list" % v)
+		if v >= 13:
+			check(sim.meadow_sheep == 5 and sim.meadow_regrow > 0.0, "v%d: the meadow's sheep survive" % v)
+		else:
+			check(sim.meadow_sheep == Tuning.MEADOW_SHEEP and sim.residents.all(func(r): return not r.away), "v%d: older saves get a full meadow" % v)
 		if v >= 12:
 			check(sim.residents[0].kept.pick, "v%d: a chosen tool stays chosen" % v)
 		else:
@@ -1052,3 +1057,63 @@ func test_equip_a_chosen_tool() -> void:
 	check(not ada.kept.axe, "a kept tool that breaks is forgotten")
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(loaded.residents[0].has("kept"), "the choice is saved")
+
+
+## Runs until `r` is away on a trip (or `seconds` pass).
+func until_away(sim: Sim, r: Dictionary, seconds := 30.0) -> void:
+	for i in int(seconds * Tuning.TPS):
+		sim.step()
+		if r.away:
+			return
+
+
+func test_meadow_trips() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	check(sim.meadow_sheep == 8, "the meadow starts with 8 sheep")
+	sim.designate_mine(whole_map())
+	sim.send_to_meadow(ada)
+	run(sim, 0.1)
+	check(ada.job != null and ada.job.kind == "trip", "Send to the meadow: Ada heads for the signpost")
+	until_away(sim, ada)
+	check(ada.away, "she walks off the map and is away")
+	var hunger: float = ada.hunger
+	check(absf(sim.back_in(ada) - Tuning.MEADOW_TRIP) < 0.5, "back in about %d seconds (%.1f)" % [int(Tuning.MEADOW_TRIP), sim.back_in(ada)])
+	run(sim, 45)
+	check(ada.away and ada.job == null and ada.hunger == hunger, "while away she doesn't work or get hungry")
+	sim.direct_order(ada, null, Sim.rcell(ada) + Vector2i(1, 0))
+	check(ada.direct == null, "orders can't reach her while she's away")
+	# Saving mid-trip keeps her away.
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	var la: Dictionary = loaded.residents[0]
+	check(la.away and la.back_at == ada.back_at, "saving mid-trip keeps her away, due back at the same time")
+	run(sim, Tuning.MEADOW_TRIP - 45 + 1)
+	check(not ada.away, "she's back after the trip")
+	check(count(sim, "wool") == 2 and count(sim, "mutton") == 2, "with 2 wool and 2 raw mutton (%d, %d)" % [count(sim, "wool"), count(sim, "mutton")])
+	check(sim.meadow_sheep == 6, "the meadow has 6 sheep left")
+	run(loaded, Tuning.MEADOW_TRIP)
+	check(not la.away and loaded.meadow_sheep == 6, "the loaded game's trip comes back too")
+	# Two at once, then the meadow runs out.
+	var tomas := sim.add_resident("Tomas", "8C4F6B", Sim.rcell(ada))
+	sim.meadow_sheep = 3
+	sim.send_to_meadow(ada)
+	sim.send_to_meadow(tomas)
+	until_away(sim, tomas)
+	run(sim, Tuning.MEADOW_TRIP + 1)
+	check(sim.meadow_sheep == 0 and count(sim, "wool") == 2 + 3, "two residents bring back what the meadow had: 3 sheep (%d wool)" % count(sim, "wool"))
+	sim.meadow_regrow = 0.0
+	sim.send_to_meadow(ada)
+	run(sim, 0.5)
+	check(stuck_text(sim).contains("Meadow has no sheep left"), "planning a trip to an empty meadow says so: " + stuck_text(sim))
+	until_away(sim, ada)
+	run(sim, Tuning.MEADOW_TRIP + 1)
+	check(count(sim, "wool") == 5, "and the trip comes back with nothing")
+	# The meadow regains a sheep every 4 minutes, up to 8.
+	sim.meadow_sheep = 0
+	sim.meadow_regrow = 0.0
+	run(sim, Tuning.MEADOW_REGROW + 1)
+	check(sim.meadow_sheep == 1, "the meadow regains a sheep after %d seconds" % int(Tuning.MEADOW_REGROW))
+	sim.meadow_sheep = 8
+	run(sim, Tuning.MEADOW_REGROW + 1)
+	check(sim.meadow_sheep == 8, "and never more than 8")
+	check(sim.placement_check("bench", sim.meadow_sign()) == "The meadow signpost is in the way", "nothing can be built on the signpost")

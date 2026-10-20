@@ -431,7 +431,7 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 - Combat presentation and degree of player control.
 - Death, rescue, and difficulty settings.
 - Terrain modification, building customization beyond fixed templates, verticality, and camera rotation.
-- Resource regeneration and deposit depletion rules.
+- Resource regeneration and deposit depletion rules. (Partly resolved, #22: hunting grounds such as the sheep meadow regain their animals over time. Tree regrowth and deposit depletion are still open.)
 - Exact party sizes, costs, durations, capacities, and balance values.
 - Recruitment beyond free beds, such as requests or an inn. (Resolved for Slice 2, #24: a traveler arrives for each free bed.)
 - How often expeditions require intervention and how many can run simultaneously.
