@@ -29,6 +29,7 @@ var _build_menu: PanelContainer
 var _craft_panel: PanelContainer
 var _craft_box := VBoxContainer.new()
 var _tool_btns := {}
+var _tool_keys := {}            ## Each orders button's keycap Label.
 var _build_items := {}
 var _keys_sig := ""
 var _hint := Label.new()
@@ -104,15 +105,14 @@ func _ready() -> void:
 	br.add_child(_craft_panel)
 	var tools := HBoxContainer.new()
 	tools.add_theme_constant_override("separation", 2)
-	for t in [["mine", "Mine", "X", Palette.RED], ["hunt", "Hunt", "G", Palette.RED], ["stock", "Stockpile", "Z", Palette.GREEN], ["farm", "Farm", "P", Palette.YELLOW], ["build", "Build", "B", Palette.BLUE], ["craft", "Craft", "C", Palette.PLANK]]:
-		var b := _button(t[1], func(): game.set_tool(t[0]))
-		b.custom_minimum_size = Vector2(96, 52)
-		b.toggle_mode = true
-		b.add_theme_color_override("font_color", t[3])
-		b.add_theme_color_override("font_hover_color", t[3])
-		b.add_theme_color_override("font_pressed_color", t[3])
-		_tool_btns[t[0]] = b
-		tools.add_child(b)
+	for t in ["mine", "hunt", "stock", "farm", "build", "craft"]:
+		if t == "craft":  # Craft opens a panel rather than choosing an order, so it stands apart
+			var rule := ColorRect.new()
+			rule.color = Palette.SLATE_DEEP
+			rule.custom_minimum_size = Vector2(2, 0)
+			rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			tools.add_child(rule)
+		tools.add_child(_order_button(t))
 	br.add_child(_panel(tools, Vector2.ZERO, 4))
 
 	_root.add_child(_tools_drop)
@@ -121,6 +121,90 @@ func _ready() -> void:
 	var hs := _box(Color(Palette.SLATE, 0.96), 4, 8)
 	_hint.add_theme_stylebox_override("normal", hs)
 	_root.add_child(_hint)
+
+
+## An orders-toolbar button (issue #74): a chalk name, with the order's world mark as an icon on the
+## left (so colour is never the only signal) and its key as a small keycap on the right.
+func _order_button(t: String) -> Button:
+	var b := _button("", func(): game.set_tool(t))
+	b.custom_minimum_size = Vector2(0, 52)
+	b.toggle_mode = true
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var icon := Control.new()
+	icon.custom_minimum_size = Vector2(18, 18)
+	icon.size = Vector2(18, 18)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.draw.connect(func(): _draw_mark(icon, t))
+	b.add_child(icon)
+	var cap := PanelContainer.new()
+	var cap_box := _box(Color(0, 0, 0, 0), 3, 0, Palette.CHALK_DIM)
+	cap_box.content_margin_left = 5
+	cap_box.content_margin_right = 5
+	cap_box.content_margin_top = 0
+	cap_box.content_margin_bottom = 0
+	cap.add_theme_stylebox_override("panel", cap_box)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cap_label := _label("", false, Palette.CHALK_DIM, 13)
+	cap.add_child(cap_label)
+	b.add_child(cap)
+	_tool_btns[t] = b
+	_tool_keys[t] = cap_label
+	var place := func() -> void:
+		var cs := cap.get_combined_minimum_size()
+		icon.position = Vector2(12, (b.size.y - 18) / 2)
+		cap.size = cs
+		cap.position = Vector2(b.size.x - cs.x - 10, (b.size.y - cs.y) / 2)
+	b.resized.connect(place)
+	cap.minimum_size_changed.connect(place)
+	return b
+
+
+## Sets an orders button's name and keycap, and leaves room for the icon and the keycap.
+func _set_order_label(t: String, name: String, key: String) -> void:
+	var b: Button = _tool_btns[t]
+	b.text = name
+	_tool_keys[t].text = key
+	_tool_keys[t].get_parent().visible = key != ""
+	var right := 12.0
+	if key != "":
+		right = 10 + _font.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 12 + 10
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		var sb := (_theme.get_stylebox(state, "Button") as StyleBoxFlat).duplicate() as StyleBoxFlat
+		sb.content_margin_left = 40
+		sb.content_margin_right = right
+		b.add_theme_stylebox_override(state, sb)
+
+
+## Draws an order's world mark at icon size, with the same dark under-stroke the marks have in the world.
+func _draw_mark(c: Control, t: String) -> void:
+	var dark := Palette.SLATE_DEEP
+	match t:
+		"mine":  # a red slash, like the one across a marked tree
+			c.draw_line(Vector2(4, 14), Vector2(14, 4), dark, 6)
+			c.draw_line(Vector2(4, 14), Vector2(14, 4), Palette.RED, 3)
+		"hunt":  # the crosshair over a marked sheep
+			c.draw_arc(Vector2(9, 9), 6, 0, TAU, 24, dark, 4)
+			c.draw_arc(Vector2(9, 9), 6, 0, TAU, 24, Palette.RED, 2)
+			for d in [Vector2(1, 0), Vector2(0, 1)]:
+				c.draw_line(Vector2(9, 9) - d * 9, Vector2(9, 9) + d * 9, Palette.RED, 2)
+		"stock":  # a green hatched patch
+			c.draw_rect(Rect2(2, 2, 14, 14), Palette.GREEN, false, 1.5)
+			for a in [[Vector2(2, 9), Vector2(9, 2)], [Vector2(2, 16), Vector2(16, 2)], [Vector2(9, 16), Vector2(16, 9)]]:
+				c.draw_line(a[0], a[1], Palette.GREEN, 1.5)
+		"farm":  # rows of wheat on a tilled plot
+			for y in [8.0, 16.0]:
+				c.draw_line(Vector2(1, y), Vector2(17, y), Palette.DIRT, 2)
+				for x in [4.0, 9.0, 14.0]:
+					c.draw_line(Vector2(x, y - 1), Vector2(x, y - 6), Palette.WHEAT, 1.5)
+					c.draw_rect(Rect2(x - 1.5, y - 7, 3, 3), Palette.WHEAT)
+		"build":  # the blue dashed outline of a blueprint
+			var r := [Vector2(2, 2), Vector2(16, 2), Vector2(16, 16), Vector2(2, 16)]
+			for i in 4:
+				c.draw_dashed_line(r[i], r[(i + 1) % 4], Palette.BLUE, 2, 3.5)
+		"craft":  # a small bench
+			c.draw_rect(Rect2(2, 6, 14, 4), Palette.PLANK)
+			c.draw_rect(Rect2(3, 10, 2, 6), Palette.PLANK)
+			c.draw_rect(Rect2(13, 10, 2, 6), Palette.PLANK)
 
 
 # ---------------------------------------------------------------- shared builders (also used by the menu)
@@ -240,7 +324,7 @@ func _refresh_key_labels() -> void:
 		"stock": "Paint a stockpile. Drag over open ground.", "build": "Build"}
 	for t in _tool_btns:
 		var key := k.first(t)
-		_tool_btns[t].text = "%s  %s" % [names[t], key] if key != "" else names[t]
+		_set_order_label(t, names[t], key)
 		_tool_btns[t].tooltip_text = tips[t] + (" (%s)" % key if key != "" else "")
 	var subs := {"bench": "4 logs. Reserves room for a workshop", "house": "8 cobblestone, then 16 planks and 4 logs, then 12 planks, then a bed",
 		"fireplace": "6 cobblestone. Reserves room for a kitchen"}
