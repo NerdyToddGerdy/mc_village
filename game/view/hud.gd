@@ -14,6 +14,8 @@ var _tallies := HBoxContainer.new()
 var _tools_btn: Button
 var _tools_drop: PanelContainer
 var _tally_panel: PanelContainer
+var _tally_seen := {}           ## Item types that have turned up in this game; the rest stay hidden.
+var _tally_sim := 0             ## Which sim _tally_seen belongs to (it resets for a new or loaded game).
 var _goals_panel: PanelContainer
 var _tools_list := VBoxContainer.new()
 var _tools_pinned := false
@@ -365,19 +367,69 @@ func _refresh_tallies(sim: Sim) -> void:
 			loose[s.type] = loose.get(s.type, 0) + s.n
 	for r in sim.residents:
 		tools += int(r.axe != null) + int(r.pick != null)
-	_rebuild(_tallies, "%s%s%d" % [totals, loose, tools], func(c: Container) -> void:
+	if _tally_sim != sim.get_instance_id():
+		_tally_sim = sim.get_instance_id()
+		_tally_seen.clear()
+	for t in totals:
+		_tally_seen[t] = true
+	for site in sim.sites:  # and whatever a building or a queued recipe is waiting for, even at 0
+		if not site.done:
+			for t in sim.current_stage(site).cost:
+				_tally_seen[t] = true
+		for id in site.get("queue", []):
+			for t in Defs.recipe(id).inp:
+				_tally_seen[t] = true
+	var meals := 0
+	for t in Defs.MEALS:
+		meals += totals.get(t, 0)
+	var berries := 0
+	for b in sim.bushes:
+		berries += b.berries
+	var low := meals < sim.residents.size()
+	_rebuild(_tallies, "%s%s%s%d%d" % [totals, loose, _tally_seen.keys(), berries, sim.residents.size()], func(c: Container) -> void:
 		for t in Defs.MATERIALS:
-			var v := VBoxContainer.new()
-			v.add_theme_constant_override("separation", 0)
-			var h := HBoxContainer.new()
-			h.add_child(_label(Defs.ITEMS[t].label, false, Palette.CHALK_DIM, 14))
-			h.add_child(_label(str(totals.get(t, 0)), true, Palette.CHALK, 18))
-			v.add_child(h)
-			if loose.get(t, 0) > 0:
-				v.add_child(_label("%d loose" % loose[t], false, Palette.CHALK_DIM, 12))
-			c.add_child(v))
+			if _tally_seen.has(t):  # zero counts stay hidden until the item first turns up
+				c.add_child(_tally(Defs.ITEMS[t].label, totals.get(t, 0), loose.get(t, 0)))
+		if _tally_seen.has("mutton") or Defs.MEALS.any(func(t): return _tally_seen.has(t)):
+			c.add_child(_divider())
+			var loose_meals := 0
+			for t in Defs.MEALS:
+				loose_meals += loose.get(t, 0)
+			var food := _tally("Food", meals, loose_meals, Palette.YELLOW if low else Palette.CHALK)
+			var lines := PackedStringArray()
+			for t in Defs.MEALS:
+				lines.append("%s %d" % [Defs.ITEMS[t].label, totals.get(t, 0)])
+			var tip := "Meals: %s.\nRaw mutton %d, berries on bushes %d." % [", ".join(lines), totals.get("mutton", 0), berries]
+			if low:
+				tip += "\nFewer meals than residents. Cooks need wheat, or mutton and logs."
+			food.tooltip_text = tip
+			food.mouse_filter = Control.MOUSE_FILTER_STOP
+			c.add_child(food)
+		if c.get_child_count() > 0:
+			c.add_child(_divider()))
 	_tools_btn.text = "Tools  %d  ▾" % tools
 	_refresh_tools(sim)
+
+
+## One tally: a dim name, a bold count, and how many lie outside stockpiles.
+func _tally(name: String, n: int, n_loose: int, color := Palette.CHALK) -> VBoxContainer:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 0)
+	var h := HBoxContainer.new()
+	h.add_child(_label(name, false, Palette.CHALK_DIM, 14))
+	h.add_child(_label(str(n), true, color, 18))
+	v.add_child(h)
+	if n_loose > 0:
+		v.add_child(_label("%d loose" % n_loose, false, Palette.CHALK_DIM, 12))
+	return v
+
+
+## A thin upright rule between tally groups.
+func _divider() -> Control:
+	var d := ColorRect.new()
+	d.color = Palette.SLATE_DEEP
+	d.custom_minimum_size = Vector2(2, 0)
+	return d
 
 
 ## The Tools dropdown (spec §12): each resident's tools with uses left, broken tools, and spares.

@@ -69,6 +69,48 @@ func _test_drag(game: Game) -> void:
 	game.set_tool("")
 
 
+## The tally bar groups Materials, Food and Tools, and hides what hasn't turned up (issue #73).
+func _test_tallies(game: Game) -> void:
+	var hud: Hud = game._hud
+	var sim := game.sim
+	var texts := func() -> Array:
+		hud.refresh(sim)
+		return hud._tallies.get_children().filter(func(n): return n is VBoxContainer and not n.is_queued_for_deletion()).map(func(n): return n.get_child(0).get_child(0).text)
+	for k in sim.items.keys():  # an empty map: nothing has turned up in this game yet
+		if not Defs.is_tool_item(sim.items[k].type):
+			sim.items.erase(k)
+	hud._tally_sim = 0
+	var waiting_for := {}
+	for site in sim.sites:
+		if not site.done:
+			for t in sim.current_stage(site).cost:
+				waiting_for[t] = true
+		for id in site.get("queue", []):
+			for t in Defs.recipe(id).inp:
+				waiting_for[t] = true
+	var shown: Array = texts.call()
+	var hidden_ok := true
+	for t in Defs.MATERIALS:
+		if shown.has(Defs.ITEMS[t].label) != waiting_for.has(t):
+			hidden_ok = false
+	check(hidden_ok, "with nothing about, the bar shows only what's being waited for (%s)" % [shown])
+	check(not shown.has("Food") and not shown.has("Mutton"), "no Food group before any food turns up")
+	sim.drop_items(Sim.rcell(sim.residents[0]), "bread", 1)
+	shown = texts.call()
+	check(shown.has("Food"), "a loaf of bread brings in the Food group")
+	var food: Control = hud._tallies.get_children().filter(func(n): return n is VBoxContainer and not n.is_queued_for_deletion() and n.get_child(0).get_child(0).text == "Food")[0]
+	var count: Label = food.get_child(0).get_child(1)
+	check(count.text == "1" and "Bread 1" in food.tooltip_text, "Food counts meals and lists them on hover (%s)" % count.text)
+	var low := 1 < sim.residents.size()
+	check((count.get_theme_color("font_color") == Palette.YELLOW) == low, "Food is yellow only when meals are fewer than residents")
+	sim.drop_items(Sim.rcell(sim.residents[0]), "wool", 2)
+	check(texts.call().has("Wool"), "wool shows once it turns up")
+	for k in sim.items.keys():
+		if sim.items[k].type == "wool":
+			sim.items.erase(k)
+	check(texts.call().has("Wool") and not sim.items.values().any(func(st): return st.type == "wool"), "and stays, at 0, after it's used up")
+
+
 ## A long status moves below its title instead of running into it (issue #72).
 func _test_headers(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -581,6 +623,7 @@ func _initialize() -> void:
 	await _test_equip(game)
 	await _test_toasts(game)
 	_test_headers(game)
+	_test_tallies(game)
 	await _test_meadow(game)
 	game.open_menu("main")
 	game.restart()

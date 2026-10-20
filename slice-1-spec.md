@@ -266,10 +266,13 @@ World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`,
 +---------------------------------------------------+
 ```
 
-- Top left: material tallies, plus a Tools count. Hovering, focusing or tapping Tools opens a list:
-  - Each resident's equipped axe and pickaxe, with uses left as a bar. The bar turns yellow at 3 uses or fewer.
-  - A "Broke" note for any tool that broke.
-  - Spare tools, with how many are in the stockpile and how many are lying loose.
+- Top left: the tally bar, in three groups split by thin rules (#73):
+  - **Materials:** logs, planks, sticks, cobblestone, wheat and wool. Each appears once it first turns up in the game, or while a building or a queued recipe is waiting for it, so the opening bar stays short. Once shown, it stays, at 0 if need be.
+  - **Food:** stored meals (bread and cooked mutton) as one count, shown once any food has turned up. Hovering lists each meal, raw mutton and the berries left on bushes. The count turns stuck yellow while there are fewer meals than residents.
+  - **Tools:** a count. Hovering, focusing or tapping Tools opens a list:
+    - Each resident's equipped axe and pickaxe, with uses left as a bar. The bar turns yellow at 3 uses or fewer.
+    - A "Broke" note for any tool that broke.
+    - Spare tools, with how many are in the stockpile and how many are lying loose.
 - Top right: speed controls.
 - Right edge: stuck list, shown only when something is stuck; clicking an entry focuses the camera.
 - Panel headers put a title and its status side by side, at least 16 px apart. A status too long for that moves to its own dimmed line under the title (#72).
