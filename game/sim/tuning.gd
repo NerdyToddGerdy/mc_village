@@ -18,6 +18,17 @@ const SEED := 52                        ## Seeds the sim's random numbers (sheep
 const SHEEP_WALK := 0.6                 ## Cells per second.
 const SHEEP_PAUSE := [1.0, 4.0]         ## Seconds a sheep stands still between steps (min, max).
 const HUNT_TIME := 4.0                  ## Seconds to hunt a sheep.
+
+# Hunger (issue #44): 100 is full, 0 is starving.
+const HUNGER_EMPTY_TIME := 360.0        ## Seconds for a full resident to reach 0.
+const EAT_BELOW := 40.0                 ## Below this, a resident's next job is to eat.
+const EAT_UNTIL := 90.0                 ## At a berry bush, keep eating up to this.
+const HUNGRY_BELOW := 25.0              ## Below this, work is slower.
+const HUNGRY_SPEED := 0.75              ## Work speed while hungry.
+const EAT_TIME := 1.5                   ## Seconds to eat one food item or berry.
+const FOOD_VALUE := {"berries": 15.0, "mutton": 20.0, "bread": 50.0, "cooked_mutton": 60.0}
+const BUSH_MAX := 3                     ## Berries a bush holds.
+const BUSH_REGROW := 45.0               ## Seconds for a bush to grow one berry back.
 const CRAFT_TIME := 3.0                 ## Seconds per recipe.
 const STAGE_TIME := 10.0                ## Seconds of build work per construction stage.
 const ARRIVAL_DELAY := 45.0             ## Seconds after a house with a free bed is finished, per traveler.

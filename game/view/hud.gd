@@ -483,7 +483,7 @@ func _refresh_selection(sim: Sim) -> void:
 		for id in sel.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				sig += "%s%s%s%s%s%d%s" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders]
+				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)]
 	elif target != null:
 		sig += "%s" % [target]
 	for s in sim.stuck:
@@ -515,6 +515,9 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		c.add_child(_row("Axe", _tool_text(r.axe) if r.axe != null else ("Broke" if r.broken.axe else "Bare hands")))
 		c.add_child(_row("Pickaxe", _tool_text(r.pick) if r.pick != null else ("Broke" if r.broken.pick else "None")))
 		c.add_child(_row("Carrying", Defs.words(r.carry.type, r.carry.n) if r.carry != null else "Nothing"))
+		var mood := "Starving" if r.hunger <= 0.0 else ("Hungry" if r.hunger < Tuning.HUNGRY_BELOW else ("Peckish" if r.hunger < Tuning.EAT_BELOW else "Fed"))
+		c.add_child(_row("Food", mood))
+		c.add_child(_bar(r.hunger / 100.0, Palette.YELLOW if r.hunger < Tuning.HUNGRY_BELOW else Palette.CHALK))
 		for s in sim.stuck:
 			if s.focus_kind == "res" and s.focus_id == r.id:
 				c.add_child(_reason(s.why))
@@ -533,6 +536,9 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		"tree":
 			c.add_child(_row("Tree", "Drops %d logs" % target.logs, false))
 			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target)))
+		"bush":
+			c.add_child(_row("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX], false))
+			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, 14, true))
 		"sheep":
 			c.add_child(_row("Sheep", "Drops 1 wool and 1 raw mutton", false))
 			if target.claim != 0:
@@ -565,7 +571,7 @@ func _refresh_craft(sim: Sim) -> void:
 			h.add_child(l)
 			h.add_child(_button("Next bench", func(): game.next_craft_bench()))
 			c.add_child(h)
-		_fill_site(c, sim, bench))
+		_fill_bench(c, sim, bench))
 
 
 func _tool_text(t: Dictionary) -> String:
@@ -600,21 +606,40 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		c.add_child(_label("House", true, Palette.CHALK, 24))
 		c.add_child(_label(line, false, Palette.CHALK_DIM, 15, true))
 		return
+	# A finished bench: a short summary here. Its recipes and queue live only in the Craft panel on
+	# the right, which selecting the bench opens.
+	c.add_child(_label("Crafting bench", true, Palette.CHALK, 24))
+	c.add_child(_label(_bench_status(sim, s), false, Palette.CHALK_DIM, 15, true))
+	for x in reasons:
+		c.add_child(_reason(x.why))
+	if not game.craft_menu_open:
+		c.add_child(_button("Open the craft menu", func(): game.open_craft_menu(s)))
+
+
+## What a finished bench is doing, for its panels.
+func _bench_status(sim: Sim, s: Dictionary) -> String:
 	var ready := sim.bench_craftable(s)
 	var ai := sim.bench_active(s)
-	var status := "Nothing queued"
 	if s.crafting != "":
-		status = "Crafting " + s.crafting.to_lower()
-	elif not ready.is_empty():
-		status = "Ready to craft " + ready.name.to_lower()
-	elif not s.queue.is_empty():
-		var head := Defs.recipe(s.queue[maxi(ai, 0)])
-		var missing: PackedStringArray = []
-		for k in head.inp:
-			var have: int = s.store.get(k, 0)
-			if have < head.inp[k]:
-				missing.append(Defs.words(k, head.inp[k] - have))
-		status = "%s %s for %s" % ["Gathering" if ai >= 0 else "Waiting for", ", ".join(missing), head.name.to_lower()]
+		return "Crafting " + s.crafting.to_lower()
+	if not ready.is_empty():
+		return "Ready to craft " + ready.name.to_lower()
+	if s.queue.is_empty():
+		return "Nothing queued"
+	var head := Defs.recipe(s.queue[maxi(ai, 0)])
+	var missing: PackedStringArray = []
+	for k in head.inp:
+		var have: int = s.store.get(k, 0)
+		if have < head.inp[k]:
+			missing.append(Defs.words(k, head.inp[k] - have))
+	return "%s %s for %s" % ["Gathering" if ai >= 0 else "Waiting for", ", ".join(missing), head.name.to_lower()]
+
+
+## The full bench panel: recipes with Queue and Queue 5, then status, reasons and the queue. Shown
+## only in the Craft panel above the toolbar (issue #57).
+func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
+	var reasons := sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id)
+	var status := _bench_status(sim, s)
 	# The title and recipe rows come first and never change size, so the Queue buttons stay put while
 	# the status, reasons and queue below them change (issue #57: buttons used to jump mid-click).
 	c.add_child(_label("Crafting bench", true, Palette.CHALK, 24))

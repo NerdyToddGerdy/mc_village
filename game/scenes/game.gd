@@ -170,7 +170,7 @@ func _update_live_overlays() -> void:
 			var turn := keys.first("rotate")
 			hint = (("Place house. %s turns the door." % turn if turn != "" else "Place house.") if placing == "house" else "Place crafting bench.") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
-	if sel != null and sel.kind in ["tree", "boulder", "sheep"]:
+	if sel != null and sel.kind in ["tree", "boulder", "sheep", "bush"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
@@ -281,6 +281,10 @@ func selected_entity():
 			for sh in sim.sheep:
 				if sh.id == selection.id and sh.alive:
 					return sh
+		"bush":
+			for b in sim.bushes:
+				if b.id == selection.id:
+					return b
 		"site":
 			var s := sim.site(selection.id)
 			return null if s.is_empty() else s
@@ -294,6 +298,18 @@ func _select(hit) -> void:
 		selection = {"kind": "res", "ids": [hit.id]}
 	else:
 		selection = {"kind": hit.kind, "id": hit.id}
+		if hit.kind == "site" and hit.tpl == "bench" and hit.done:
+			open_craft_menu(hit)
+
+
+## Opens the Craft panel on a particular bench (selecting a bench does this).
+func open_craft_menu(bench: Dictionary) -> void:
+	var i := benches().find(bench)
+	if i < 0:
+		return
+	craft_bench_i = i
+	craft_menu_open = true
+	build_menu_open = false
 
 
 # ---------------------------------------------------------------- input
@@ -339,27 +355,41 @@ func _mouse_button(e: InputEventMouseButton) -> void:
 		if not e.pressed:
 			Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 	elif e.button_index == MOUSE_BUTTON_RIGHT and e.pressed:
-		if tool != "" or build_menu_open:
-			set_tool("")
-			return
-		if selection.get("kind", "") != "res":
-			return
-		# Residents aren't order targets, so look past anyone standing in front of the tree or sheep.
-		var hit = _pick(e.position, false)
-		var cell = _cell_at(e.position)
-		for id in selection.ids:
-			var r := sim.resident(id)
-			if not r.is_empty():
-				var target = hit if hit != null and hit.kind in ["tree", "boulder", "sheep"] else null
-				if e.shift_pressed:
-					sim.queue_order(r, target, cell)
-				else:
-					sim.direct_order(r, target, cell)
+		_right_click(e)
 	elif e.button_index == MOUSE_BUTTON_LEFT:
 		if e.pressed:
 			_left_down(e)
 		else:
 			_left_up(e)
+
+
+## Right-click orders the selected residents. It never fails silently: placing a building, it
+## cancels the placement; with Mine, Hunt or Stockpile on, it still gives the order and leaves the
+## tool on; with nobody selected, or someone starving, it says why nothing happened.
+func _right_click(e: InputEventMouseButton) -> void:
+	var has_residents: bool = selection.get("kind", "") == "res" and not selection.ids.is_empty()
+	if build_menu_open or tool == "build" or (tool != "" and not has_residents):
+		set_tool("")
+		return
+	if not has_residents:
+		var key := keys.first("next_res")
+		_hud.add_toast({"text": "Select a resident first." + (" %s selects the next one." % key if key != "" else ""), "res_id": 0, "site_id": 0})
+		return
+	# Residents aren't order targets, so look past anyone standing in front of the tree or sheep.
+	var hit = _pick(e.position, false)
+	var cell = _cell_at(e.position)
+	for id in selection.ids:
+		var r := sim.resident(id)
+		if r.is_empty():
+			continue
+		if r.get("hunger", 100.0) <= 0.0:
+			_hud.add_toast({"text": "%s is starving and won’t work until fed." % r.name, "res_id": r.id, "site_id": 0})
+			continue
+		var target = hit if hit != null and hit.kind in ["tree", "boulder", "sheep"] else null
+		if e.shift_pressed:
+			sim.queue_order(r, target, cell)
+		else:
+			sim.direct_order(r, target, cell)
 
 
 func _left_down(e: InputEventMouseButton) -> void:
@@ -659,6 +689,8 @@ func focus_on(kind: String, id: int) -> void:
 				return
 			selection = {"kind": "site", "id": id}
 			at = Vector3(s.origin.x + s.size.x / 2.0, 0, s.origin.y + s.size.y / 2.0)
+			if s.tpl == "bench" and s.done:
+				open_craft_menu(s)
 		"boulder":
 			for b in sim.boulders:
 				if b.id == id:
@@ -747,6 +779,8 @@ func _screenshot_scene() -> void:
 		selection = {"kind": "site", "id": house.id}
 		_target = Vector3(house.origin.x + 2.5, 0, house.origin.y + 2.5)
 		_place_camera()
+	if "--select-bench" in OS.get_cmdline_user_args():
+		_select(bench)
 	if "--craft" in OS.get_cmdline_user_args():
 		craft_menu_open = true
 	if "--select-ada" in OS.get_cmdline_user_args():

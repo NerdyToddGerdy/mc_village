@@ -27,7 +27,8 @@ static var SKIN := Color("#D9A77C")
 static var STICK := Color("#9C7A4E")
 
 static var ITEM_COLORS := {
-	"wool": Color("#ECEAE2"), "mutton": Color("#C2645A"),
+	"wool": Color("#ECEAE2"), "mutton": Color("#C2645A"), "berries": Color("#B23A5A"),
+	"bread": Color("#D9A35A"), "cooked_mutton": Color("#8C4A32"),
 	"log": Color("#7A5634"), "plank": Color("#C49A62"), "stick": Color("#9C7A4E"), "cobble": Color("#7F827C"),
 	"wood_axe": Color("#C49A62"), "wood_pick": Color("#C49A62"), "stone_axe": Color("#8A8D86"), "stone_pick": Color("#8A8D86"),
 }

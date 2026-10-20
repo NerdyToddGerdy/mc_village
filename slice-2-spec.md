@@ -62,11 +62,19 @@ Slice 2 is done when, from a fresh start, a player can:
 
 ## 4. Food and hunger
 
-**Food items:** wheat, bread, raw mutton, cooked mutton. Residents eat bread and cooked mutton. Raw mutton can be eaten in a pinch for less.
+**Food items:** berries, wheat, bread, raw mutton, cooked mutton. Residents eat berries, bread and cooked mutton. Raw mutton can be eaten in a pinch for less.
+
+**Berry bushes** are the early food, before farms and the fireplace (decided with the owner).
+- **Where:** 6 bushes grow around the opening.
+- **Berries:** each holds up to 3, and one grows back every 45 seconds.
+- **Eating:** a hungry resident walks to the nearest food. At a bush, they eat berries one at a time, 15 each, until nearly full (90) or the bush is bare.
+- **Walking:** bushes don't block it.
+- **Buildings:** a building placed over a bush clears it.
+- **Older saves:** they get the same bushes, minus any that would sit on something.
 
 **Hunger** runs from 100 (full) to 0 and drops steadily, emptying in about 6 minutes of game time.
-- **Eating:** below 40, a resident's next job is to fetch the nearest food and eat it. Food is eaten where it's picked up; no tables yet.
-  - Bread restores 50, cooked mutton 60, and raw mutton 20.
+- **Eating:** below 40, a resident's next job, after any orders you've given them, is to fetch the nearest food and eat it. Food is eaten where it's picked up; no tables yet.
+  - Berries restore 15, raw mutton 20, bread 50, and cooked mutton 60.
 - **Hungry** (below 25): works 25% slower. The resident panel shows "Hungry".
 - **Starving** (0): stops working, and the stuck list shows "Starving: no food stored". There's no death in Slice 2, since death is an open decision (#20). They recover as soon as food exists.
 - **Away residents** (on a meadow trip) don't get hungry while away.
@@ -139,7 +147,8 @@ A resident with **Toolsmith** switched on keeps the village in spare tools:
 ## 7a. Craft menu in the toolbar (#57)
 
 Once a crafting bench is finished, a **Craft** button appears in the orders toolbar (default key C, rebindable).
-- It opens the bench panel above the toolbar, the same panel you get by selecting the bench, so crafting doesn't need the bench in view.
+- It opens the bench panel above the toolbar, so crafting doesn't need the bench in view.
+- **The recipes and queue appear only there, on the right.** Selecting the bench in the world, or its entry in the stuck list, opens the Craft panel at that bench. The selection panel on the left shows just a summary: the bench's status, any stuck reason, and an "Open the craft menu" button when the panel is closed.
 - With more than one bench, the panel says "Bench 1 of 2" and has **Next bench**.
 - Esc closes it.
 - **Steady layout:** the bench panel lists its recipes first, at a fixed size, and keeps the status, stuck reasons and queue in a fixed-height area below. The Queue buttons never move under the cursor.
@@ -211,7 +220,9 @@ All are rebindable (Slice 1, §10).
 | `hunger_drop` | 100 → 0 in 360 s |
 | `eat_below` / `hungry_below` | 40 / 25 |
 | `hungry_slow` | 25% slower |
-| `food_value` | bread 50, cooked mutton 60, raw mutton 20 |
+| `food_value` | berries 15, raw mutton 20, bread 50, cooked mutton 60 |
+| `bush_max` / `bush_regrow` | 3 berries / 45 s each |
+| `eat_until` (at a bush) / `eat_time` | 90 / 1.5 s per item |
 | `plant_time` / `harvest_time` | 2 s / 2 s |
 | `wheat_grow` | 120 s |
 | `wheat_yield` | 2 |

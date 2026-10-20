@@ -231,6 +231,68 @@ func _test_craft_menu(game: Game) -> void:
 		check(bench.queue.size() == 1, "Queue in the craft panel queues a craft at the bench")
 	_key(game, KEY_ESCAPE)
 	check(not game.craft_menu_open and not game._menu.visible, "Esc closes the craft panel first")
+	# Selecting the bench opens the Craft panel; the recipes appear only there, not on the left.
+	game._select(bench)
+	hud.refresh(game.sim)
+	await process_frame
+	check(game.craft_menu_open, "selecting the bench opens the craft panel")
+	var left_queue := _walk(hud._sel).filter(func(n): return n is Button and n.text.begins_with("Queue"))
+	var right_queue := _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Queue"))
+	check(left_queue.is_empty() and right_queue.size() == 2 * Defs.RECIPES.size(), "the recipe list is only on the right (%d left, %d right)" % [left_queue.size(), right_queue.size()])
+	check(_walk(hud._sel).any(func(n): return n is Label and n.text == "Crafting bench"), "the left panel still names the bench and its status")
+	_key(game, KEY_ESCAPE)
+
+
+func _right(game: Game, pos: Vector2, shift := false) -> void:
+	var e := InputEventMouseButton.new()
+	e.button_index = MOUSE_BUTTON_RIGHT
+	e.pressed = true
+	e.shift_pressed = shift
+	e.position = pos
+	game._unhandled_input(e)
+
+
+## A right-click either gives the order or says why it didn't.
+func _test_right_click_never_silent(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var ada: Dictionary = sim.residents[0]
+	var tree: Dictionary = {}
+	var at := Vector2.ZERO
+	for t in sim.trees:
+		var p: Vector2 = game._cam.unproject_position(Vector3(t.cell.x + 0.5, 1.5, t.cell.y + 0.5))
+		if Rect2(Vector2(200, 150), Vector2(880, 420)).has_point(p) and is_same(game._pick(p, false), t):
+			tree = t
+			at = p
+			break
+	check(not tree.is_empty(), "a tree in view to right-click")
+	if tree.is_empty():
+		return
+	# Mine tool on, Ada selected: the order still goes through, and the tool stays on.
+	game.selection = {"kind": "res", "ids": [ada.id]}
+	game.set_tool("mine")
+	_right(game, at)
+	check(ada.direct != null and is_same(ada.direct.target, tree), "with Mine on, right-click still orders Ada to mine the tree")
+	check(game.tool == "mine", "and the Mine tool stays on")
+	game.set_tool("")
+	# Something else selected: nothing silent, a message instead.
+	sim.fail_job(ada)
+	ada.direct = null
+	game.selection = {"kind": "tree", "id": tree.id}
+	var toasts := game._hud._toast_list.size()
+	_right(game, at)
+	check(ada.direct == null and game._hud._toast_list.size() == toasts + 1, "with no resident selected, right-click says to select one")
+	# Placing a building: right-click cancels the placement, as before.
+	game.selection = {"kind": "res", "ids": [ada.id]}
+	game.start_placing("house")
+	_right(game, at)
+	check(game.tool == "" and ada.direct == null, "while placing a building, right-click cancels the placement")
+	# Starving: says so instead of ignoring the order.
+	ada.hunger = 0.0
+	toasts = game._hud._toast_list.size()
+	_right(game, at)
+	check(ada.direct == null and game._hud._toast_list.size() == toasts + 1, "a starving resident's order explains why it won't happen")
+	ada.hunger = 100.0
 
 
 func _walk(n: Node) -> Array:
@@ -294,6 +356,7 @@ func _initialize() -> void:
 	_test_smooth_movement(game)
 	await _test_rebinding(game)
 	await _test_craft_menu(game)
+	await _test_right_click_never_silent(game)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")

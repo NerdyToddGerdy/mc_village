@@ -12,12 +12,31 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 6
+const VERSION := 7
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7}
+
+
+## v7: hunger and berry bushes (issue #44). Residents start full. Older saves get the same berry
+## bushes as a new game, placed relative to the opening (shifted on 32×32 maps); any that land on a
+## tree, boulder or building are dropped when the save loads.
+static func _v6_to_v7(d: Dictionary) -> Dictionary:
+	for r in d.state.residents:
+		if not r.has("hunger"):
+			r.hunger = 100.0
+	if not d.state.has("bushes"):
+		var o: Vector2i = Tuning.OPENING_OFFSET if int(d.state.w) > 18 else Vector2i.ZERO
+		var next_id: int = d.state.next_id
+		var list: Array = []
+		for p in Sim.START_BUSHES:
+			list.append({"id": next_id, "kind": "bush", "cell": Vector2i(p[0], p[1]) + o, "berries": Tuning.BUSH_MAX, "regrow": 0.0})
+			next_id += 1
+		d.state.bushes = list
+		d.state.next_id = next_id
+	return d
 
 
 ## v6: houses have a fourth stage, the bed (issue #43). A finished house in an older save gets a
