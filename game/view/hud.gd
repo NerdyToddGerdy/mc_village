@@ -33,6 +33,7 @@ var _hint := Label.new()
 var _paused_label: PanelContainer
 var _sigs := {}
 var _toast_list: Array = []
+var equip_kind := ""          ## "axe" or "pick" while the resident panel lists tools to equip, else "".
 
 
 func _ready() -> void:
@@ -487,7 +488,10 @@ func _refresh_selection(sim: Sim) -> void:
 		for id in sel.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s" % [r.jobs]
+				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s%s%s" % [r.jobs, r.kept, equip_kind]
+		for kind in ["axe", "pick"]:  # Equip appears when there's a tool to choose
+			for st in sim.tool_items(kind, 0):
+				sig += "%s%s%s" % [st.type, st.dur, st.cell]
 	elif target != null and target.kind == "crop":
 		sig += "%d %d %d" % [Sim.crop_stage(target), int(target.grow / Tuning.WHEAT_GROW * 20.0), target.claim]
 	elif target != null:
@@ -518,8 +522,8 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		c.add_child(head)
 		if r.progress >= 0:
 			c.add_child(_bar(r.progress))
-		c.add_child(_row("Axe", _tool_text(r.axe) if r.axe != null else ("Broke" if r.broken.axe else "Bare hands")))
-		c.add_child(_row("Pickaxe", _tool_text(r.pick) if r.pick != null else ("Broke" if r.broken.pick else "None")))
+		_add_tool_row(c, sim, r, "axe")
+		_add_tool_row(c, sim, r, "pick")
 		c.add_child(_row("Carrying", Defs.words(r.carry.type, r.carry.n) if r.carry != null else "Nothing"))
 		var mood := "Starving" if r.hunger <= 0.0 else ("Hungry" if r.hunger < Tuning.HUNGRY_BELOW else ("Peckish" if r.hunger < Tuning.EAT_BELOW else "Fed"))
 		c.add_child(_row("Food", mood))
@@ -532,6 +536,8 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			for i in r.orders.size():
 				c.add_child(_label("%d  %s" % [i + 1, Sim.order_text(r.orders[i])], false, Palette.CHALK, 14))
 			c.add_child(_button("Clear orders", func(): game.clear_orders(r)))
+		if equip_kind != "":
+			return  # the tool list takes the Jobs grid's room while it's open
 		if r.axe == null and not r.broken.axe:
 			c.add_child(_label("Chopping by hand is slow. Stone needs a pickaxe.", false, Palette.CHALK_DIM, 15, true))
 		_add_jobs_grid(c, r)
@@ -653,6 +659,46 @@ func _level_cell(r: Dictionary, jb: String) -> Control:
 	return box
 
 
+## A resident's axe or pickaxe, with Equip to choose another one (lying about or stockpiled).
+func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
+	var t = r[kind]
+	var none := "Bare hands" if kind == "axe" else "None"
+	var text: String = _tool_text(t) if t != null else ("Broke" if r.broken[kind] else none)
+	var h := _row("Axe" if kind == "axe" else "Pickaxe", text)
+	var spare := sim.tool_items(kind, 0)
+	if not spare.is_empty() or equip_kind == kind:
+		var b := _button("Close" if equip_kind == kind else "Equip", func(): equip_kind = "" if equip_kind == kind else kind)
+		b.add_theme_font_size_override("font_size", 13)
+		b.tooltip_text = "Choose which %s %s uses" % ["axe" if kind == "axe" else "pickaxe", r.name]
+		h.add_child(b)
+	c.add_child(h)
+	if t != null and r.kept[kind]:
+		var k := HBoxContainer.new()
+		var l := _label("Kept until it breaks.", false, Palette.CHALK_DIM, 13)
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		k.add_child(l)
+		var auto := _button("Use the best", func(): game.release_kept_tool(r, kind))
+		auto.add_theme_font_size_override("font_size", 13)
+		auto.tooltip_text = "Let %s swap it for a better one when there is one" % r.name
+		k.add_child(auto)
+		c.add_child(k)
+	if equip_kind != kind:
+		return
+	if spare.is_empty():
+		c.add_child(_label("No other %s is lying about or stockpiled." % ("axe" if kind == "axe" else "pickaxe"), false, Palette.CHALK_DIM, 13, true))
+		return
+	spare.sort_custom(func(a, b): return Defs.ITEMS[a.type].tier > Defs.ITEMS[b.type].tier or (a.type == b.type and a.dur > b.dur))
+	for st in spare:
+		var where := "in the stockpile" if sim.in_zone(st.cell) else "on the ground"
+		var it: Dictionary = Defs.ITEMS[st.type]
+		var b := _button("%s, %d %s left, %s" % [it.one.substr(0, 1).to_upper() + it.one.substr(1), st.dur, "use" if st.dur == 1 else "uses", where], func():
+			equip_kind = ""
+			game.equip_tool(r, st))
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.add_theme_font_size_override("font_size", 13)
+		c.add_child(b)
+
+
 func _tool_text(t: Dictionary) -> String:
 	return "%s, %d %s left" % ["Stone" if t.tier == 2 else "Wooden", t.dur, "use" if t.dur == 1 else "uses"]
 
@@ -745,8 +791,12 @@ func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 		lower.add_child(_label("Queue. Items that can’t be made yet are skipped. Click one to remove it.", false, Palette.CHALK_DIM, 13, true))
 		var flow := HFlowContainer.new()
 		for i in s.queue.size():
-			var auto: bool = s.autoq[i]
-			flow.add_child(_button("%s%s ×" % [Defs.recipe(s.queue[i]).name, " (auto)" if auto else ""], func(): game.unqueue_craft(s, i)))
+			var mark := ""
+			if str(s.autoq[i]) == "toolsmith":
+				mark = " (toolsmith)"
+			elif s.autoq[i]:
+				mark = " (auto)"
+			flow.add_child(_button("%s%s ×" % [Defs.recipe(s.queue[i]).name, mark], func(): game.unqueue_craft(s, i)))
 		lower.add_child(flow)
 	if s.tpl == "fireplace":
 		var on: bool = s.get("keep_meals", true)

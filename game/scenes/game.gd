@@ -310,6 +310,7 @@ func selected_entity():
 
 
 func _select(hit) -> void:
+	_hud.equip_kind = ""
 	if hit == null:
 		selection = {}
 	elif hit.kind == "res":
@@ -683,6 +684,14 @@ func remove_farm_plot(crop: Dictionary) -> void:
 	selection = {}
 
 
+func equip_tool(r: Dictionary, stack: Dictionary) -> void:
+	sim.equip_order(r, stack)
+
+
+func release_kept_tool(r: Dictionary, kind: String) -> void:
+	sim.release_kept_tool(r, kind)
+
+
 func toggle_job(r: Dictionary, job: String) -> void:
 	sim.set_job_on(r, job, not r.jobs[job].on)
 
@@ -865,6 +874,12 @@ func _screenshot_scene() -> void:
 		craft_menu_open = true
 	if "--select-ada" in OS.get_cmdline_user_args():
 		selection = {"kind": "res", "ids": [sim.residents[0].id]}
+	if "--equip" in OS.get_cmdline_user_args():  # spare axes about, and Ada's Equip list open
+		var ada: Dictionary = sim.residents[0]
+		sim.drop_items(Sim.rcell(ada) + Vector2i(2, 1), "stone_axe", 1)
+		sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 2), "wood_axe", 1, 4)
+		selection = {"kind": "res", "ids": [ada.id]}
+		_hud.equip_kind = "axe"
 	for i in 30:
 		await get_tree().process_frame
 	var img := get_viewport().get_texture().get_image()

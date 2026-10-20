@@ -47,6 +47,8 @@ The game opens on the main menu. Choose **Play**. The goals panel at the top lef
 5. **Build a house** for Ada (H), then a second one. **Queue 5** on the bench saves clicks on planks.
 6. A traveler, **Tomas**, arrives and moves into the spare house.
 
+Select a resident to see their tools, hunger and jobs. Switch jobs on or off and set their priorities in the **Jobs** grid. Use **Equip** to hand them a particular axe or pickaxe.
+
 If something is stuck, a yellow flag appears over it and in the **Stuck** list at the top right, with the reason. Click an entry to go there.
 
 ### Controls

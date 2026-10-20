@@ -164,6 +164,15 @@ A resident with **Toolsmith** switched on keeps the village in spare tools:
 - A resident whose tool breaks **fetches a spare** instead of stopping. Their "Axe broke" report clears as soon as they pick it up.
 - **Nothing to make a spare from:** the stuck list says why ("Toolsmith needs 2 more sticks for a spare axe").
 - **No toolsmith at all:** Slice 1's rule holds, and residents stop and report.
+- **In use** means someone holds a tool of that kind or has had one break. **A spare** is any axe or pickaxe lying about or stockpiled.
+- **Which tier:** stone when there's enough cobblestone on hand for it, otherwise wood. Its planks and sticks are queued ahead of it like any other recipe, once that's unlocked.
+- **One entry at a time:** each kind gets one toolsmith entry, at the first finished bench. If you remove the entry, the toolsmith queues it again. To stop it, switch Toolsmith off.
+- **While a spare is coming:** a resident whose tool broke shows "Axe broke. Waiting for the toolsmith’s spare" until it's made.
+
+**Equipping a chosen tool** (owner's request, made alongside #49):
+- **The Equip button:** the resident panel's Axe and Pickaxe rows show **Equip** whenever an axe or pickaxe is lying about or stockpiled. It lists each one with its uses left and where it is, best first.
+- **Choosing one** is a direct order: the resident walks over and picks it up, leaving the tool they had where the new one lay.
+- **Keeping it:** a chosen tool is **kept until it breaks**. The resident doesn't swap it for a better one lying around. "Kept until it breaks" shows under the row, with **Use the best** to let them swap again.
 - No repairs yet. Worn tools keep their uses (Slice 1, §7).
 
 ## 7. Recruitment
@@ -226,6 +235,7 @@ Taken together, the upgrade steps:
 - Adds no farm plots (v7→v8, #45).
 - Gives existing residents every job on at priority 2 (v9→v10, #47).
 - Gives existing residents level 1 in every job (v10→v11, #48).
+- Marks no tools as chosen (v11→v12, equipping).
 - Gives existing buildings no reserved plot, so Slice 1 benches reserve nothing (v8→v9, #46).
 - Adds no sheep to the clearing (old saves are past the opening).
 - Gives the meadow its starting 8 sheep.

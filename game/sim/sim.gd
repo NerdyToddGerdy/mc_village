@@ -99,7 +99,7 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 	var r := {"id": _id(), "kind": "res", "name": rname, "shirt": shirt, "pos": Vector2(cell),
 		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null,
 		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false,
-		"orders": [], "hunger": 100.0, "jobs": default_jobs()}
+		"orders": [], "hunger": 100.0, "jobs": default_jobs(), "kept": {"axe": false, "pick": false}}
 	residents.append(r)
 	return r
 
@@ -651,6 +651,51 @@ func expand_queues() -> void:
 				break
 
 
+const TOOL_NAMES := {"axe": "axe", "pick": "pickaxe"}
+
+
+## Whether anyone has the Toolsmith job switched on.
+func has_toolsmith() -> bool:
+	return residents.any(func(r): return r.jobs.toolsmith.on)
+
+
+## Whether a "(toolsmith)" entry for this tool kind is queued at any bench.
+func _spare_queued(kind: String) -> bool:
+	for b in sites:
+		if b.done and b.tpl == "bench":
+			for i in b.queue.size():
+				if str(b.autoq[i]) == "toolsmith" and Defs.ITEMS[Defs.recipe(b.queue[i]).out.keys()[0]].tool == kind:
+					return true
+	return false
+
+
+## The toolsmith's standing order (spec §6): while anyone has Toolsmith on, keep one spare of each
+## tool kind someone uses, of the best tier the bench can make from what's on hand. Queued as
+## "(toolsmith)" entries at the first finished bench, one per kind at a time.
+func keep_tools_stocked() -> void:
+	if not has_toolsmith():
+		return
+	var bench = null
+	for b in sites:
+		if b.done and b.tpl == "bench":
+			bench = b
+			break
+	if bench == null:
+		return
+	for kind in ["axe", "pick"]:
+		var used := residents.any(func(r): return r[kind] != null or r.broken[kind])
+		if not used or not tool_items(kind, 0).is_empty() or _spare_queued(kind):
+			continue
+		var cobble: int = free_count("cobble")
+		for b in sites:
+			cobble += b.store.get("cobble", 0) if b.done and b.tpl == "bench" else 0
+		var id: String = ("stone_" if cobble >= Defs.recipe("stone_" + kind).inp.cobble else "wood_") + kind
+		bench.queue.append(id)
+		bench.autoq.append("toolsmith")
+		if auto_craft:
+			expand_queues()
+
+
 ## The fireplace's standing order (spec §4): while stored meals are fewer than MEAL_STOCK, queue
 ## one meal whose inputs exist, bread first. One at a time, so it never queues what it can't make.
 func keep_meals_stocked() -> void:
@@ -695,7 +740,7 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 	j.hold({"t": "claim", "ent": target})
 	var cur: int = r[kind].tier if r[kind] != null else 0
 	var better := tool_items(kind, cur)
-	if not better.is_empty():
+	if not better.is_empty() and not (r.kept[kind] and r[kind] != null):  # a tool you chose stays
 		_fetch_tool(j, nearest(better, rcell(r)))
 	j.step(_goto([target.cell], true))
 	j.step({"op": "work", "what": "gather", "target": target, "tool": kind,
@@ -929,6 +974,7 @@ func _wear(r: Dictionary, kind: String) -> void:
 	if t.dur <= 0:
 		r[kind] = null
 		r.broken[kind] = true
+		r.kept[kind] = false
 		stats.tools_broken += 1
 		_toast("%s’s %s broke." % [r.name, Defs.ITEMS[t.type].one], r.id)
 
@@ -1019,6 +1065,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				drop_items(s.cell, old.type, 1, old.dur)
 			r[it.tool] = {"type": s.type, "tier": it.tier, "dur": s.dur}
 			r.broken[it.tool] = false
+			r.kept[it.tool] = st.get("keep", false)
 			rev += 1
 			return true
 		"deposit":
@@ -1199,6 +1246,7 @@ func _claim(r: Dictionary) -> void:
 	if auto_craft:
 		expand_queues()
 	keep_meals_stocked()
+	keep_tools_stocked()
 	# Jobs switched on, priority 1 first; within a priority, Slice 1's order (spec §5).
 	for p in [1, 2, 3]:
 		var jobs: Array = Defs.JOBS.filter(func(jb): return r.jobs[jb].on and r.jobs[jb].pri == p)
@@ -1379,6 +1427,7 @@ func step() -> void:
 		expand_queues()
 	if tick % 10 == 0:
 		keep_meals_stocked()
+		keep_tools_stocked()
 	if tick % 10 == 0:
 		for s in sites:
 			if not s.done:
@@ -1550,6 +1599,8 @@ func compute_stuck() -> void:
 			var rec := Defs.recipe(s.queue[0])
 			cost = rec.inp
 			label = rec.name
+			if str(s.autoq[0]) == "toolsmith":
+				label = "Toolsmith"
 		else:
 			continue
 		var worst := ""
@@ -1564,6 +1615,9 @@ func compute_stuck() -> void:
 			var why := "%s %s %d more %s" % [label, verb, worst_n, it.one if worst_n == 1 else it.many]
 			if label == "Bed":
 				why = "House needs a bed: %d more %s" % [worst_n, it.one if worst_n == 1 else it.many]
+			elif label == "Toolsmith":
+				var kind: String = Defs.ITEMS[Defs.recipe(s.queue[0]).out.keys()[0]].tool
+				why = "Toolsmith needs %d more %s for a spare %s" % [worst_n, it.one if worst_n == 1 else it.many, TOOL_NAMES[kind]]
 			_add_stuck(tpl.name, why,
 				mid, site_height(s) + 0.4, "site", s.id)
 	_stuck_unstaffed()
@@ -1577,7 +1631,10 @@ func compute_stuck() -> void:
 		for k in ["axe", "pick"]:
 			if r.broken[k] and r[k] == null:
 				var tname := "Axe" if k == "axe" else "Pickaxe"
-				_add_stuck(r.name, "%s broke. Needs a new %s" % [tname, tname.to_lower()], at, 1.6, "res", r.id)
+				if _spare_queued(k):
+					_add_stuck(r.name, "%s broke. Waiting for the toolsmith’s spare" % tname, at, 1.6, "res", r.id)
+				else:
+					_add_stuck(r.name, "%s broke. Needs a new %s" % [tname, tname.to_lower()], at, 1.6, "res", r.id)
 		if r.note != null and r.note.until > tick:
 			_add_stuck(r.name, r.note.text, at, 1.6, "res", r.id)
 	if zone.is_empty():
@@ -1884,6 +1941,31 @@ func queue_order(r: Dictionary, target = null, cell = null) -> void:
 		r.orders.append({"kind": "hunt", "id": target.id})
 	elif cell != null and walkable(cell):
 		r.orders.append({"kind": "move", "cell": cell})
+
+
+## Equip order (resident panel): go and pick up this tool, dropping the one in hand where it lay.
+## A tool chosen this way is kept until it breaks, instead of being swapped for a better one.
+func equip_order(r: Dictionary, stack: Dictionary) -> void:
+	if r.arriving or avail(stack) < 1 or not Defs.is_tool_item(stack.type):
+		return
+	if r.job != null:
+		fail_job(r)
+	r.note = null
+	r.orders.clear()
+	var it: Dictionary = Defs.ITEMS[stack.type]
+	var j := Job.new("equip", "Going to get the %s" % it.one, "the %s" % it.one)
+	j.ordered = true
+	stack.res += 1
+	var hd := j.hold({"t": "stack", "stack": stack, "n": 1})
+	j.step(_goto([stack.cell], false))
+	j.step({"op": "pickup_tool", "stack": stack, "hold": hd, "keep": true})
+	r.direct = j
+
+
+## Lets a resident swap a chosen tool for the best one about again.
+func release_kept_tool(r: Dictionary, kind: String) -> void:
+	r.kept[kind] = false
+	rev += 1
 
 
 func clear_orders(r: Dictionary) -> void:

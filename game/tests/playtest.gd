@@ -442,6 +442,26 @@ func _initialize() -> void:
 		await frames(2)
 	check(ada.jobs.mine.pri == 1, "clicking Mine's number twice makes it priority 1 (%d)" % ada.jobs.mine.pri)
 
+	# Toolsmith (issue #49) and Equip: a spare is kept, and Ada can be told to equip it
+	var spare_kinds: Array = ["axe", "pick"].filter(func(k): return not sim.tool_items(k, 0).is_empty())
+	check(not spare_kinds.is_empty(), "the toolsmith keeps a spare tool in stock")
+	if not spare_kinds.is_empty():
+		game.selection = {"kind": "res", "ids": [ada.id]}
+		check(await click_button("Equip"), "click Equip in Ada's panel")
+		game._hud.refresh(sim)
+		await frames(2)
+		var opt: Button = null
+		for n in _all(game._hud._sel):
+			if n is Button and (" uses left, " in n.text):
+				opt = n
+				break
+		check(opt != null, "Equip lists the spare")
+		if opt != null:
+			await click(opt.get_global_rect().get_center())
+			check(ada.direct != null and ada.direct.kind == "equip" or ada.job != null and ada.job.kind == "equip", "choosing it sends Ada to get it")
+			await run(10)
+			check(ada.kept.axe or ada.kept.pick, "Ada equips it and keeps it")
+
 	# Tools dropdown on hover
 	var tb: Button = game._hud._tools_btn
 	await move(Vector2(1000, 430))
