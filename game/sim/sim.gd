@@ -17,6 +17,8 @@ var trees: Array = []        ## {id, kind:"tree", cell, logs, alive, des, claim,
 var boulders: Array = []     ## {id, kind:"boulder", cell, alive, des, claim, unreach_until}
 var sheep: Array = []        ## {id, kind:"sheep", pos, cell, dest, wait, alive, des, claim, unreach_until}
 var bushes: Array = []       ## {id, kind:"bush", cell, berries, regrow}: berry bushes (issue #44)
+var meadow_sheep := Tuning.MEADOW_SHEEP  ## Sheep left in the meadow off the map (issue #50).
+var meadow_regrow := 0.0     ## Seconds toward the meadow's next sheep.
 var rng := RandomNumberGenerator.new()  ## Seeded and saved, so a game replays exactly.
 var items := {}              ## Vector2i -> {cell, type, n, res}
 var zone := {}               ## Vector2i -> true: stockpile cells
@@ -99,7 +101,8 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 	var r := {"id": _id(), "kind": "res", "name": rname, "shirt": shirt, "pos": Vector2(cell),
 		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null,
 		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false,
-		"orders": [], "hunger": 100.0, "jobs": default_jobs(), "kept": {"axe": false, "pick": false}}
+		"orders": [], "hunger": 100.0, "jobs": default_jobs(), "kept": {"axe": false, "pick": false},
+		"away": false, "back_at": 0}
 	residents.append(r)
 	return r
 
@@ -1081,6 +1084,13 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
 			r.carry = null
 			return true
+		"depart":
+			r.away = true
+			r.back_at = tick + int(Tuning.MEADOW_TRIP * Tuning.TPS)
+			r.path = []
+			r.progress = -1.0
+			rev += 1
+			return true
 		"move_in":
 			st.site.owner = r.id
 			r.arriving = false
@@ -1412,7 +1422,16 @@ func step() -> void:
 	for sh in sheep:
 		if sh.alive:
 			_step_sheep(sh)
+	if meadow_sheep < Tuning.MEADOW_SHEEP:
+		meadow_regrow += Tuning.DT
+		if meadow_regrow >= Tuning.MEADOW_REGROW:
+			meadow_regrow = 0.0
+			meadow_sheep += 1
 	for r in residents:
+		if r.away:
+			if tick >= r.back_at:
+				_return_from_meadow(r)
+			continue
 		_step_resident(r)
 	_step_arrivals()
 	var kinds := {}
@@ -1501,6 +1520,50 @@ func _step_resident(r: Dictionary) -> void:
 				gain_xp(r, j.work)
 	elif res is String:
 		fail_job(r, res)
+
+
+# ---------------------------------------------------------------- the sheep meadow (issue #50)
+
+## The signpost at the map's left edge, where trips to the meadow leave and come back.
+func meadow_sign() -> Vector2i:
+	return Vector2i(0, h / 2)
+
+
+## Sends a resident to the meadow: they walk to the signpost, then are away for the trip.
+func send_to_meadow(r: Dictionary) -> void:
+	if r.arriving or r.away:
+		return
+	if r.job != null:
+		fail_job(r)
+	r.note = null
+	r.orders.clear()
+	var j := Job.new("trip", "Heading to the meadow", "the meadow signpost")
+	j.ordered = true
+	j.step(_goto([meadow_sign()], true))
+	j.step({"op": "depart"})
+	r.direct = j
+
+
+func _return_from_meadow(r: Dictionary) -> void:
+	r.away = false
+	var c = nearest_walkable(meadow_sign())
+	r.pos = Vector2(c if c != null else meadow_sign())
+	r.path = []
+	var take := mini(Tuning.MEADOW_TAKE, meadow_sheep)
+	meadow_sheep -= take
+	if take > 0:
+		drop_items(rcell(r), "wool", take)
+		drop_items(rcell(r), "mutton", take)
+		stats.meadow_trips = stats.get("meadow_trips", 0) + 1
+		_toast("%s is back from the meadow with %d wool and %d raw mutton." % [r.name, take, take], r.id)
+	else:
+		_toast("%s is back from the meadow with nothing: no sheep were left." % r.name, r.id)
+	rev += 1
+
+
+## Seconds until an away resident is back.
+func back_in(r: Dictionary) -> float:
+	return maxf(0.0, float(r.back_at - tick) / Tuning.TPS)
 
 
 ## Travelers, in the order they arrive. The first is always Tomas.
@@ -1621,8 +1684,15 @@ func compute_stuck() -> void:
 			_add_stuck(tpl.name, why,
 				mid, site_height(s) + 0.4, "site", s.id)
 	_stuck_unstaffed()
+	if meadow_sheep == 0:
+		for r in residents:
+			if not r.away and r.job != null and r.job.kind == "trip":
+				_add_stuck("Meadow", "Meadow has no sheep left", Vector2(meadow_sign()) + Vector2(0.5, 0.5), 1.4, "res", r.id)
+				break
 	var has_food := food_available()
 	for r in residents:
+		if r.away:
+			continue
 		var at: Vector2 = r.pos + Vector2(0.5, 0.5)
 		if r.hunger <= 0.0 and not has_food:
 			_add_stuck(r.name, "Starving: no food stored", at, 1.6, "res", r.id)
@@ -1747,7 +1817,7 @@ func paint_zone(rect: Rect2i) -> void:
 	for x in range(rect.position.x, rect.end.x):
 		for y in range(rect.position.y, rect.end.y):
 			var c := Vector2i(x, y)
-			if walkable(c) and site_at(c) == null and not farm.has(c) and reserved_at(c) == null:
+			if walkable(c) and site_at(c) == null and not farm.has(c) and reserved_at(c) == null and c != meadow_sign():
 				zone[c] = true
 	rev += 1
 
@@ -1760,6 +1830,8 @@ func farm_blocked(c: Vector2i) -> String:
 		return "a building"
 	if farm.has(c):
 		return "a farm plot"
+	if c == meadow_sign():
+		return "the signpost"
 	if zone.has(c):
 		return "a stockpile"
 	if reserved_at(c) != null:
@@ -1812,6 +1884,8 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 	var foot := Rect2i(origin, size)
 	if origin.x < 0 or origin.y < 0 or origin.x + size.x > w or origin.y + size.y > h:
 		return "Too close to the edge"
+	if foot.has_point(meadow_sign()):
+		return "The meadow signpost is in the way"
 	for s in sites:
 		if Rect2i(s.origin, s.size).intersects(foot):
 			return "Overlaps another building"
@@ -1890,7 +1964,7 @@ func cancel_site(s: Dictionary) -> void:
 ## Right-click order for one resident: mine a tree or boulder, or walk to a cell. It replaces
 ## whatever they're doing and any queued orders.
 func direct_order(r: Dictionary, target = null, cell = null) -> void:
-	if r.arriving:
+	if r.arriving or r.away:
 		return
 	if r.job != null:
 		fail_job(r)
@@ -1927,7 +2001,7 @@ func direct_order(r: Dictionary, target = null, cell = null) -> void:
 ## Shift + right-click: adds an order to the end of the resident's list. Orders run one after
 ## another once their current work is done, then the resident goes back to claiming jobs.
 func queue_order(r: Dictionary, target = null, cell = null) -> void:
-	if r.arriving:
+	if r.arriving or r.away:
 		return
 	if target != null and (target.kind == "tree" or target.kind == "boulder"):
 		target.des = true
@@ -1946,7 +2020,7 @@ func queue_order(r: Dictionary, target = null, cell = null) -> void:
 ## Equip order (resident panel): go and pick up this tool, dropping the one in hand where it lay.
 ## A tool chosen this way is kept until it breaks, instead of being swapped for a better one.
 func equip_order(r: Dictionary, stack: Dictionary) -> void:
-	if r.arriving or avail(stack) < 1 or not Defs.is_tool_item(stack.type):
+	if r.arriving or r.away or avail(stack) < 1 or not Defs.is_tool_item(stack.type):
 		return
 	if r.job != null:
 		fail_job(r)
@@ -2031,7 +2105,7 @@ func save_state() -> Dictionary:
 		"items": items_out, "zone": zone.duplicate(), "sites": sites_out, "residents": res_out,
 		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
 		"sheep": sheep.duplicate(true), "rng_state": rng.state, "bushes": bushes.duplicate(true),
-		"farm": farm.duplicate(true)}
+		"farm": farm.duplicate(true), "meadow_sheep": meadow_sheep, "meadow_regrow": meadow_regrow}
 
 
 static func from_state(d: Dictionary) -> Sim:
@@ -2062,6 +2136,8 @@ static func from_state(d: Dictionary) -> Sim:
 		return true)
 	s.rng.state = d.rng_state
 	s.farm = d.farm.duplicate(true)
+	s.meadow_sheep = d.meadow_sheep
+	s.meadow_regrow = d.meadow_regrow
 	for o in s.trees + s.boulders + s.sheep + s.farm.values():
 		o.claim = 0
 		o.unreach_until = 0

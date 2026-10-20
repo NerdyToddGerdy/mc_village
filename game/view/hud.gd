@@ -488,10 +488,12 @@ func _refresh_selection(sim: Sim) -> void:
 		for id in sel.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s%s%s" % [r.jobs, r.kept, equip_kind]
+				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s%s%s%s%d" % [r.jobs, r.kept, equip_kind, r.away, int(sim.back_in(r))]
 		for kind in ["axe", "pick"]:  # Equip appears when there's a tool to choose
 			for st in sim.tool_items(kind, 0):
 				sig += "%s%s%s" % [st.type, st.dur, st.cell]
+	elif target != null and target.kind == "meadow":
+		sig += "%d %d" % [sim.meadow_sheep, int(sim.meadow_regrow)]
 	elif target != null and target.kind == "crop":
 		sig += "%d %d %d" % [Sim.crop_stage(target), int(target.grow / Tuning.WHEAT_GROW * 20.0), target.claim]
 	elif target != null:
@@ -511,17 +513,23 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		if rs.size() > 1:
 			c.add_child(_label("%d residents" % rs.size(), true, Palette.CHALK, 24))
 			for r in rs:
-				c.add_child(_label("%s: %s" % [r.name, r.job.label if r.job != null else "Idle"], false, Palette.CHALK_DIM))
+				c.add_child(_label("%s: %s" % [r.name, _status(sim, r)], false, Palette.CHALK_DIM))
+			if rs.size() == 2:
+				_add_meadow_button(c, sim, rs)
 			return
 		if rs.is_empty():
 			return
 		var r: Dictionary = rs[0]
-		var head := _row(r.name, r.job.label if r.job != null else "Idle", false)
+		var head := _row(r.name, _status(sim, r), false)
 		(head.get_child(0) as Label).add_theme_font_override("font", _bold)
 		(head.get_child(0) as Label).add_theme_font_size_override("font_size", 24)
 		c.add_child(head)
 		if r.progress >= 0:
 			c.add_child(_bar(r.progress))
+		if r.away:
+			c.add_child(_label("Off the map at the sheep meadow. Away residents don’t work or get hungry.", false, Palette.CHALK_DIM, 14, true))
+			c.add_child(_bar(1.0 - sim.back_in(r) / Tuning.MEADOW_TRIP, Palette.GREEN))
+			return
 		_add_tool_row(c, sim, r, "axe")
 		_add_tool_row(c, sim, r, "pick")
 		c.add_child(_row("Carrying", Defs.words(r.carry.type, r.carry.n) if r.carry != null else "Nothing"))
@@ -538,6 +546,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			c.add_child(_button("Clear orders", func(): game.clear_orders(r)))
 		if equip_kind != "":
 			return  # the tool list takes the Jobs grid's room while it's open
+		_add_meadow_button(c, sim, [r])
 		if r.axe == null and not r.broken.axe:
 			c.add_child(_label("Chopping by hand is slow. Stone needs a pickaxe.", false, Palette.CHALK_DIM, 15, true))
 		_add_jobs_grid(c, r)
@@ -552,6 +561,11 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		"bush":
 			c.add_child(_row("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX], false))
 			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, 14, true))
+		"meadow":
+			c.add_child(_row("Sheep meadow", "%d of %d sheep" % [sim.meadow_sheep, Tuning.MEADOW_SHEEP], false))
+			var more := "" if sim.meadow_sheep >= Tuning.MEADOW_SHEEP else " The next one in %d seconds." % ceili(Tuning.MEADOW_REGROW - sim.meadow_regrow)
+			c.add_child(_label("Off the map, past this signpost. The meadow regains a sheep every %d minutes.%s" % [int(Tuning.MEADOW_REGROW / 60.0), more], false, Palette.CHALK_DIM, 14, true))
+			c.add_child(_label("Select one or two residents and choose Send to the meadow. Each brings back %d wool and %d raw mutton." % [Tuning.MEADOW_TAKE, Tuning.MEADOW_TAKE], false, Palette.CHALK_DIM, 14, true))
 		"crop":
 			var stage := Sim.crop_stage(target)
 			var status := "Empty, waiting to be planted"
@@ -697,6 +711,25 @@ func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.add_theme_font_size_override("font_size", 13)
 		c.add_child(b)
+
+
+## What a resident is doing, for panel headings.
+func _status(sim: Sim, r: Dictionary) -> String:
+	if r.away:
+		return "At the meadow, back in %d s" % ceili(sim.back_in(r))
+	return r.job.label if r.job != null else "Idle"
+
+
+## Send to the meadow (issue #50), for one or two selected residents who are here.
+func _add_meadow_button(c: Container, sim: Sim, rs: Array) -> void:
+	if rs.any(func(r): return r.away or r.arriving):
+		return
+	var text := "Send to the meadow" if rs.size() == 1 else "Send both to the meadow"
+	var b := _button(text, func(): game.send_to_meadow(rs.map(func(r): return r.id)))
+	b.tooltip_text = "Away %d seconds. Each brings back %d wool and %d raw mutton. The meadow has %d sheep." % [int(Tuning.MEADOW_TRIP), Tuning.MEADOW_TAKE, Tuning.MEADOW_TAKE, sim.meadow_sheep]
+	c.add_child(b)
+	if sim.meadow_sheep == 0:
+		c.add_child(_reason("Meadow has no sheep left"))
 
 
 func _tool_text(t: Dictionary) -> String:
