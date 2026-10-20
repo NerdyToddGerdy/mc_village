@@ -261,8 +261,33 @@ func _menu_item(title: String, sub: String, key: String, on_press: Callable) -> 
 	return b
 
 
+## The selection panel's content width at its narrowest (330 wide less its margins).
+const HEAD_FIT := 306.0
+
+
+## A panel's title with its status on the right. When the two won't fit side by side, the status
+## moves to its own dimmed line below the title, so they never run together (issue #72).
+func _head(title: String, status: String, bold := false, size := 15) -> Control:
+	var t := _label(title, bold, Palette.CHALK, size)
+	var title_w := (_bold if bold else _font).get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var status_w := _font.get_string_size(status, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+	if title_w + 16 + status_w <= HEAD_FIT:
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 16)
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(t)
+		h.add_child(_label(status))
+		return h
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	v.add_child(t)
+	v.add_child(_label(status, false, Palette.CHALK_DIM, 15, true))
+	return v
+
+
 func _row(left: String, right: String, left_dim := true) -> HBoxContainer:
 	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 16)
 	var l := _label(left, false, Palette.CHALK_DIM if left_dim else Palette.CHALK)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -555,10 +580,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		if rs.is_empty():
 			return
 		var r: Dictionary = rs[0]
-		var head := _row(r.name, _status(sim, r), false)
-		(head.get_child(0) as Label).add_theme_font_override("font", _bold)
-		(head.get_child(0) as Label).add_theme_font_size_override("font_size", 24)
-		c.add_child(head)
+		c.add_child(_head(r.name, _status(sim, r), true, 24))
 		if r.progress >= 0:
 			c.add_child(_bar(r.progress))
 		if r.away:
@@ -591,13 +613,13 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		return
 	match target.kind:
 		"tree":
-			c.add_child(_row("Tree", "Drops %d logs" % target.logs, false))
+			c.add_child(_head("Tree", "Drops %d logs" % target.logs))
 			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target)))
 		"bush":
-			c.add_child(_row("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX], false))
+			c.add_child(_head("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX]))
 			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, 14, true))
 		"meadow":
-			c.add_child(_row("Sheep meadow", "%d of %d sheep" % [sim.meadow_sheep, Tuning.MEADOW_SHEEP], false))
+			c.add_child(_head("Sheep meadow", "%d of %d sheep" % [sim.meadow_sheep, Tuning.MEADOW_SHEEP]))
 			var more := "" if sim.meadow_sheep >= Tuning.MEADOW_SHEEP else " The next one in %d seconds." % ceili(Tuning.MEADOW_REGROW - sim.meadow_regrow)
 			c.add_child(_label("Off the map, past this signpost. The meadow regains a sheep every %d minutes.%s" % [int(Tuning.MEADOW_REGROW / 60.0), more], false, Palette.CHALK_DIM, 14, true))
 			c.add_child(_label("Select one or two residents and choose Send to the meadow. Each brings back %d wool and %d raw mutton." % [Tuning.MEADOW_TAKE, Tuning.MEADOW_TAKE], false, Palette.CHALK_DIM, 14, true))
@@ -608,7 +630,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 				status = "Ripe wheat, waiting to be harvested"
 			elif stage > 0:
 				status = "Wheat growing, %d%%" % int(target.grow / Tuning.WHEAT_GROW * 100.0)
-			c.add_child(_row("Farm plot", status, false))
+			c.add_child(_head("Farm plot", status))
 			if stage > 0 and stage < 4:
 				c.add_child(_bar(target.grow / Tuning.WHEAT_GROW, Palette.YELLOW))
 			if target.claim != 0:
@@ -617,12 +639,12 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			c.add_child(_label("Wheat takes %d minutes to grow and gives %d when harvested." % [int(Tuning.WHEAT_GROW / 60.0), Tuning.WHEAT_YIELD], false, Palette.CHALK_DIM, 14, true))
 			c.add_child(_button("Remove this plot", func(): game.remove_farm_plot(target)))
 		"sheep":
-			c.add_child(_row("Sheep", "Drops 1 wool and 1 raw mutton", false))
+			c.add_child(_head("Sheep", "Drops 1 wool and 1 raw mutton"))
 			if target.claim != 0:
 				c.add_child(_label("%s is hunting it." % sim.resident(target.claim).get("name", "Someone"), false, Palette.CHALK_DIM))
 			c.add_child(_button("Cancel hunt" if target.des else "Hunt", func(): game.toggle_hunt(target)))
 		"boulder":
-			c.add_child(_row("Boulder", "Drops %d cobblestone" % Tuning.BOULDER_COBBLE, false))
+			c.add_child(_head("Boulder", "Drops %d cobblestone" % Tuning.BOULDER_COBBLE))
 			if target.des and sim.stuck.any(func(s): return s.focus_kind == "boulder"):
 				c.add_child(_reason("Needs a pickaxe"))
 			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target)))
@@ -777,7 +799,7 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	if not s.done:
 		var st := sim.current_stage(s)
 		var stage_line: String = "Stage %d of %d: %s" % [s.stage + 1, tpl.stages.size(), st.name.to_lower()] if tpl.stages.size() > 1 else "Blueprint"
-		c.add_child(_row(tpl.name, stage_line, false))
+		c.add_child(_head(tpl.name, stage_line))
 		if not sim.footprint_clear(s):
 			c.add_child(_label("Clearing the ground first: %s." % Sim.clearing_text(sim.site_obstacles(s)), false, Palette.CHALK, 15, true))
 		for k in st.cost:
