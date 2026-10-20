@@ -25,6 +25,8 @@ func _init() -> void:
 		"test_fireplace_cooks_and_keeps_meals_stocked",
 		"test_jobs_on_off_and_priorities",
 		"test_skills_rise_and_pay_off",
+		"test_toolsmith_keeps_spares",
+		"test_equip_a_chosen_tool",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -268,6 +270,10 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
 		else:
 			check(sim.residents[0].orders == [], "v%d: residents get an empty order list" % v)
+		if v >= 12:
+			check(sim.residents[0].kept.pick, "v%d: a chosen tool stays chosen" % v)
+		else:
+			check(sim.residents.all(func(r): return r.kept == {"axe": false, "pick": false}), "v%d: no tool was chosen in older saves" % v)
 		if v >= 11:
 			check(Sim.level(sim.residents[0], "build") == 3, "v%d: skills survive" % v)
 		else:
@@ -949,3 +955,100 @@ func test_skills_rise_and_pay_off() -> void:
 	run(sim2, 0.1)
 	sim2.set_job_on(a2, "mine", false)
 	check(a2.job != null and is_same(a2.job.target, t8), "switching Mine off doesn't cancel a direct mining order")
+
+
+func test_toolsmith_keeps_spares() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	ada.axe = {"type": "wood_axe", "tier": 1, "dur": 1}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "plank", 6)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 0), "stick", 4)
+	run(sim, 1)
+	check(bench.queue.has("wood_axe") and bench.autoq.has("toolsmith"), "with an axe in use, the toolsmith queues a spare (%s %s)" % [bench.queue, bench.autoq])
+	check(not bench.queue.has("wood_pick") and not bench.queue.has("stone_pick"), "no spare pickaxe while nobody uses one")
+	run(sim, 20)
+	check(sim.tool_items("axe", 0).size() == 1, "the spare axe is made and waits")
+	run(sim, 5)
+	check(bench.queue.is_empty(), "one spare is enough")
+	# The axe breaks: Ada fetches the spare instead of stopping.
+	var tree: Dictionary = Sim.nearest(sim.trees, Sim.rcell(ada))
+	sim.direct_order(ada, tree)
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if not tree.alive:
+			break
+	check(ada.axe == null and ada.broken.axe, "the old axe breaks")
+	sim.designate_mine(whole_map(), null, ["tree"])  # more to chop, so she needs an axe
+	run(sim, 20)
+	check(ada.axe != null and not ada.broken.axe, "she picks up the spare (%s)" % [ada.axe])
+	check(not stuck_text(sim).contains("Axe broke"), "and the report clears: " + stuck_text(sim))
+	check(bench.queue.has("wood_axe"), "the toolsmith queues the next spare")
+	# The best tier the bench can make: stone once there's cobblestone.
+	var sim2 := Sim.new_game()
+	var a2: Dictionary = sim2.residents[0]
+	var b2 := sim2.place_site("bench", open_rect(sim2, Vector2i(3, 3)).position + Vector2i(1, 0))
+	b2.stage = 1
+	b2.done = true
+	a2.pick = {"type": "wood_pick", "tier": 1, "dur": 5}
+	sim2.drop_items(Sim.rcell(a2) + Vector2i(1, 0), "cobble", 3)
+	run(sim2, 1)
+	check(b2.queue.has("stone_pick"), "with cobblestone about, the spare is a stone pickaxe (%s)" % [b2.queue])
+	check(stuck_text(sim2).contains("Toolsmith needs 2 more sticks for a spare pickaxe"), "short of sticks, it says so: " + stuck_text(sim2))
+	# No toolsmith: Slice 1's rule. Nothing is queued, and a broken tool stops the resident.
+	var sim3 := Sim.new_game()
+	var a3: Dictionary = sim3.residents[0]
+	var b3 := sim3.place_site("bench", open_rect(sim3, Vector2i(3, 3)).position + Vector2i(1, 0))
+	b3.stage = 1
+	b3.done = true
+	sim3.set_job_on(a3, "toolsmith", false)
+	a3.axe = {"type": "wood_axe", "tier": 1, "dur": 1}
+	sim3.drop_items(Sim.rcell(a3) + Vector2i(1, 0), "plank", 6)
+	sim3.drop_items(Sim.rcell(a3) + Vector2i(-1, 0), "stick", 4)
+	var t3: Dictionary = Sim.nearest(sim3.trees, Sim.rcell(a3))
+	sim3.direct_order(a3, t3)
+	run(sim3, 30)
+	check(b3.queue.is_empty(), "with no toolsmith, no spares are queued")
+	check(a3.axe == null and stuck_text(sim3).contains("Axe broke. Needs a new axe"), "and a broken axe stops and reports: " + stuck_text(sim3))
+
+
+func test_equip_a_chosen_tool() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var c := Sim.rcell(ada)
+	sim.drop_items(c + Vector2i(2, 0), "stone_axe", 1)
+	sim.drop_items(c + Vector2i(-2, 0), "wood_axe", 1)
+	var wood: Dictionary = sim.items[c + Vector2i(-2, 0)]
+	sim.equip_order(ada, wood)
+	run(sim, 5)
+	check(ada.axe != null and ada.axe.type == "wood_axe" and ada.kept.axe, "Equip: Ada fetches the wooden axe and keeps it")
+	# A kept tool isn't swapped for a better one lying about.
+	var tree: Dictionary = Sim.nearest(sim.trees, Sim.rcell(ada))
+	sim.direct_order(ada, tree)
+	run(sim, 20)
+	check(not tree.alive and ada.axe.type == "wood_axe", "she chops with it rather than fetching the stone axe")
+	# Equip another: the one in hand is dropped where the new one lay.
+	var stone: Dictionary = sim.items[c + Vector2i(2, 0)]
+	sim.equip_order(ada, stone)
+	run(sim, 8)
+	check(ada.axe.type == "stone_axe" and sim.items.has(c + Vector2i(2, 0)) and sim.items[c + Vector2i(2, 0)].type == "wood_axe", "equipping the stone axe leaves the wooden one in its place")
+	sim.equip_order(ada, sim.items[c + Vector2i(2, 0)])
+	run(sim, 8)
+	check(ada.axe.type == "wood_axe" and ada.kept.axe, "she can be told to take the wooden one back")
+	# "Use the best": back to swapping for a better tool when she next works.
+	sim.release_kept_tool(ada, "axe")
+	var t2: Dictionary = Sim.nearest(sim.trees.filter(func(t): return t.alive), Sim.rcell(ada))
+	sim.direct_order(ada, t2)
+	run(sim, 20)
+	check(ada.axe.type == "stone_axe", "released, she picks up the better axe for her next tree")
+	# A kept tool that breaks is forgotten.
+	ada.kept.axe = true
+	ada.axe.dur = 1
+	var t3: Dictionary = Sim.nearest(sim.trees.filter(func(t): return t.alive), Sim.rcell(ada))
+	sim.direct_order(ada, t3)
+	run(sim, 20)
+	check(not ada.kept.axe, "a kept tool that breaks is forgotten")
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.residents[0].has("kept"), "the choice is saved")

@@ -414,6 +414,38 @@ func _test_jobs_grid(game: Game) -> void:
 	check(levels.any(func(l): return l.text == "Lv 3"), "a level-3 farmer shows Lv 3")
 
 
+## Equip in the resident panel lists tools lying about and sends the resident for the chosen one.
+func _test_equip(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var hud: Hud = game._hud
+	var ada: Dictionary = sim.residents[0]
+	game._select(ada)
+	hud.refresh(sim)
+	await process_frame
+	check(not _walk(hud._sel).any(func(n): return n is Button and n.text == "Equip"), "no Equip button while there's no tool to equip")
+	var c := Sim.rcell(ada) + Vector2i(1, 0)
+	sim.drop_items(c, "stone_pick", 1)
+	hud.refresh(sim)
+	await process_frame
+	var eq: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text == "Equip")
+	check(eq.size() == 1, "a pickaxe on the ground brings an Equip button on the Pickaxe row")
+	if eq.is_empty():
+		return
+	eq[0].pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	var choice: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text.begins_with("Stone pickaxe"))
+	check(choice.size() == 1 and choice[0].text.ends_with("on the ground"), "Equip lists it, with its uses and where it is")
+	if choice.is_empty():
+		return
+	choice[0].pressed.emit()
+	check(ada.direct != null and ada.direct.kind == "equip", "choosing it sends Ada to get it")
+	for i in 5 * Tuning.TPS:
+		sim.step()
+	check(ada.pick != null and ada.pick.type == "stone_pick" and ada.kept.pick, "she equips it and keeps it")
+
+
 func _walk(n: Node) -> Array:
 	var out: Array = [n]
 	for ch in n.get_children():
@@ -479,6 +511,7 @@ func _initialize() -> void:
 	await _test_farm_tool(game)
 	await _test_fireplace(game)
 	await _test_jobs_grid(game)
+	await _test_equip(game)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")
