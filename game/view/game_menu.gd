@@ -108,6 +108,8 @@ func _render_main() -> void:
 	_box.add_child(_big_button("Load game", func(): show_view("load")))
 	_box.add_child(_big_button("Controls", func(): show_view("keys")))
 	_box.add_child(_big_button("Start over", func(): _ask("Start a new game? Anything you haven’t saved will be lost.", "Start over", "restart")))
+	if not OS.has_feature("web"):  # a browser tab can't be quit from inside the game
+		_box.add_child(_big_button("Quit", func(): _ask("Quit Block Village? Anything you haven’t saved will be lost.", "Quit", "quit")))
 	_add_confirm()
 	_box.add_child(hud.label("Saves are kept on this computer. Esc or M opens this menu.", false, Palette.CHALK_DIM, 13, true))
 
@@ -290,6 +292,7 @@ func _do_confirmed() -> void:
 	_confirm = {}
 	match c.action:
 		"restart": game.restart()
+		"quit": game.quit_game()
 		"rebind": _rebind(c.target, c.code)
 		"save": _save(c.slot)
 		"load":

@@ -111,6 +111,26 @@ func _test_tallies(game: Game) -> void:
 	check(texts.call().has("Wool") and not sim.items.values().any(func(st): return st.type == "wool"), "and stays, at 0, after it's used up")
 
 
+## The main menu's Quit asks first; Cancel leaves the game running (issue #60). Confirming would end
+## the test run, so it isn't pressed.
+func _test_quit(game: Game, menu) -> void:
+	game.open_menu("main")
+	await process_frame
+	var quit_btn: Array = _walk(menu).filter(func(n): return n is Button and n.text == "Quit" and not n.is_queued_for_deletion())
+	check(quit_btn.size() == 1, "the main menu has a Quit button")
+	if quit_btn.size() != 1:
+		return
+	quit_btn[0].pressed.emit()
+	await process_frame
+	check(not menu._confirm.is_empty() and menu._confirm.action == "quit" and "Quit Block Village?" in menu._confirm.text, "Quit asks first")
+	var cancel: Array = _walk(menu).filter(func(n): return n is Button and n.text == "Cancel" and not n.is_queued_for_deletion())
+	if cancel.size() == 1:
+		cancel[0].pressed.emit()
+	await process_frame
+	check(menu._confirm.is_empty() and menu.visible and is_instance_valid(game), "Cancel leaves the game running, on the menu")
+	game.close_menu()
+
+
 ## A long status moves below its title instead of running into it (issue #72).
 func _test_headers(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -627,6 +647,7 @@ func _initialize() -> void:
 	_test_headers(game)
 	_test_tallies(game)
 	await _test_meadow(game)
+	await _test_quit(game, menu)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")

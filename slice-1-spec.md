@@ -48,7 +48,7 @@ project/
 - So job and step logic never needs to be serializable.
 - The prototype saves through the artifact's private per-player storage and falls back to the browser's local storage. The Godot game writes `user://saves/slot_N.save` (text, via `var_to_str`), one file per slot.
 
-**Main menu.** Opens on launch and with the Menu button or Esc. It has Play/Resume, Save game, Load game and Start over, and the game pauses while it's open. Overwriting a slot, loading and starting over each ask for confirmation on the page.
+**Main menu.** Opens on launch and with the Menu button or Esc. It has Play/Resume, Save game, Load game, Controls, Start over and Quit, and the game pauses while it's open. Overwriting a slot, loading, starting over and quitting each ask for confirmation on the page. Quit is hidden in a web build, where a browser tab can't be quit from inside the game (#60).
 
 ## 3. World model
 
