@@ -295,6 +295,49 @@ func _test_right_click_never_silent(game: Game) -> void:
 	ada.hunger = 100.0
 
 
+## P picks the Farm tool, dragging paints plots, and a plot can be selected and removed (issue #45).
+func _test_farm_tool(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var hud: Hud = game._hud
+	var start := Sim.rcell(sim.residents[0])
+	var rect := Rect2i()
+	for d in range(2, 10):
+		for c in [start + Vector2i(d, 0), start + Vector2i(0, d), start - Vector2i(d, 0), start - Vector2i(0, d)]:
+			var r := Rect2i(c, Vector2i(2, 2))
+			if [r.position, r.position + Vector2i(1, 0), r.position + Vector2i(0, 1), r.end - Vector2i.ONE].all(func(x): return sim.farm_blocked(x) == ""):
+				rect = r
+				break
+		if rect.size != Vector2i.ZERO:
+			break
+	check(rect.size != Vector2i.ZERO, "open grass near Ada for a farm")
+	_key(game, KEY_P)
+	check(game.tool == "farm", "P picks the Farm tool")
+	hud.refresh(sim)
+	check(hud._tool_btns.farm.button_pressed, "and the Farm button shows it's on")
+	var a: Vector2 = game._cam.unproject_position(Vector3(rect.position.x + 0.5, 0.0, rect.position.y + 0.5))
+	var b: Vector2 = game._cam.unproject_position(Vector3(rect.end.x - 0.5, 0.0, rect.end.y - 0.5))
+	_mouse(game, "move", a)
+	_mouse(game, "down", a)
+	_mouse(game, "move", b)
+	_mouse(game, "up", b)
+	check(sim.farm.size() == 4, "dragging paints a 2×2 farm (%d plots)" % sim.farm.size())
+	_key(game, KEY_ESCAPE)
+	check(game.tool == "", "Esc puts the Farm tool away")
+	var crop: Dictionary = sim.farm[rect.position]
+	crop.grow = Tuning.WHEAT_GROW * 0.5
+	game._select(game._pick(a))
+	check(game.selection.get("kind", "") == "crop", "clicking a plot selects it")
+	hud.refresh(sim)
+	await process_frame
+	check(_walk(hud._sel).any(func(n): return n is Label and n.text.begins_with("Wheat growing")), "its panel shows the wheat growing")
+	var remove: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text == "Remove this plot")
+	check(remove.size() == 1, "with a button to remove it")
+	if remove.size() == 1:
+		remove[0].pressed.emit()
+	check(sim.farm.size() == 3 and not sim.farm.has(rect.position), "removing takes away just that plot")
+
+
 func _walk(n: Node) -> Array:
 	var out: Array = [n]
 	for ch in n.get_children():
@@ -357,6 +400,7 @@ func _initialize() -> void:
 	await _test_rebinding(game)
 	await _test_craft_menu(game)
 	await _test_right_click_never_silent(game)
+	await _test_farm_tool(game)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")

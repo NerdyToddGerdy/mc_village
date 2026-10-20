@@ -384,6 +384,19 @@ func _initialize() -> void:
 	check(Goals.current(sim) < 0, "every founding goal is done")
 	check(visible_label("Slice 1 complete"), "the goals panel says Slice 1 is complete")
 
+	# Farm plots (issue #45): P, drag over open grass, and residents plant wheat
+	await key(KEY_P)
+	check(game.tool == "farm", "P picks Farm")
+	var fc := open_cell(at(12, 12), Vector2i(3, 2))
+	await drag(screen(fc), screen(fc + Vector2i(2, 1)))
+	check(sim.farm.size() >= 4, "dragging paints farm plots (%d)" % sim.farm.size())
+	await key(KEY_ESCAPE)
+	for i in 40:
+		await run(1)
+		if sim.stats.get("planted", 0) > 0:
+			break
+	check(sim.stats.get("planted", 0) > 0, "residents plant wheat on the new farm")
+
 	# Tools dropdown on hover
 	var tb: Button = game._hud._tools_btn
 	await move(Vector2(1000, 430))

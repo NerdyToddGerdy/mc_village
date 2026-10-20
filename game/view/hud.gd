@@ -97,7 +97,7 @@ func _ready() -> void:
 	br.add_child(_craft_panel)
 	var tools := HBoxContainer.new()
 	tools.add_theme_constant_override("separation", 2)
-	for t in [["mine", "Mine", "X", Palette.RED], ["hunt", "Hunt", "G", Palette.RED], ["stock", "Stockpile", "Z", Palette.GREEN], ["build", "Build", "B", Palette.BLUE], ["craft", "Craft", "C", Palette.PLANK]]:
+	for t in [["mine", "Mine", "X", Palette.RED], ["hunt", "Hunt", "G", Palette.RED], ["stock", "Stockpile", "Z", Palette.GREEN], ["farm", "Farm", "P", Palette.YELLOW], ["build", "Build", "B", Palette.BLUE], ["craft", "Craft", "C", Palette.PLANK]]:
 		var b := _button(t[1], func(): game.set_tool(t[0]))
 		b.custom_minimum_size = Vector2(96, 52)
 		b.toggle_mode = true
@@ -225,10 +225,11 @@ func _refresh_key_labels() -> void:
 	if sig == _keys_sig:
 		return
 	_keys_sig = sig
-	var names := {"mine": "Mine", "hunt": "Hunt", "stock": "Stockpile", "build": "Build", "craft": "Craft"}
+	var names := {"mine": "Mine", "hunt": "Hunt", "stock": "Stockpile", "farm": "Farm", "build": "Build", "craft": "Craft"}
 	var tips := {"mine": "Mine trees and boulders. Drag to mark many. Boulders need a pickaxe.",
 		"hunt": "Hunt sheep for wool and mutton. Click or drag over them.",
 		"craft": "Queue crafts at the bench",
+		"farm": "Paint a farm plot over open grass. Residents plant and harvest wheat.",
 		"stock": "Paint a stockpile. Drag over open ground.", "build": "Build"}
 	for t in _tool_btns:
 		var key := k.first(t)
@@ -484,6 +485,8 @@ func _refresh_selection(sim: Sim) -> void:
 			var r := sim.resident(id)
 			if not r.is_empty():
 				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)]
+	elif target != null and target.kind == "crop":
+		sig += "%d %d %d" % [Sim.crop_stage(target), int(target.grow / Tuning.WHEAT_GROW * 20.0), target.claim]
 	elif target != null:
 		sig += "%s" % [target]
 	for s in sim.stuck:
@@ -539,6 +542,21 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		"bush":
 			c.add_child(_row("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX], false))
 			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, 14, true))
+		"crop":
+			var stage := Sim.crop_stage(target)
+			var status := "Empty, waiting to be planted"
+			if stage == 4:
+				status = "Ripe wheat, waiting to be harvested"
+			elif stage > 0:
+				status = "Wheat growing, %d%%" % int(target.grow / Tuning.WHEAT_GROW * 100.0)
+			c.add_child(_row("Farm plot", status, false))
+			if stage > 0 and stage < 4:
+				c.add_child(_bar(target.grow / Tuning.WHEAT_GROW, Palette.YELLOW))
+			if target.claim != 0:
+				var who: String = sim.resident(target.claim).get("name", "Someone")
+				c.add_child(_label("%s is %s it." % [who, "harvesting" if stage == 4 else "planting"], false, Palette.CHALK_DIM))
+			c.add_child(_label("Wheat takes %d minutes to grow and gives %d when harvested." % [int(Tuning.WHEAT_GROW / 60.0), Tuning.WHEAT_YIELD], false, Palette.CHALK_DIM, 14, true))
+			c.add_child(_button("Remove this plot", func(): game.remove_farm_plot(target)))
 		"sheep":
 			c.add_child(_row("Sheep", "Drops 1 wool and 1 raw mutton", false))
 			if target.claim != 0:

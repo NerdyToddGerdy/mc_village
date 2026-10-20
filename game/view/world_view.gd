@@ -160,6 +160,8 @@ func _build_static() -> void:
 			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.STONE.lightened(0.06))
 	for bush in sim.bushes:
 		_add_bush(solid, bush)
+	for k in sim.farm:
+		_add_crop(solid, sim.farm[k])
 	for k in sim.items:
 		_add_item(solid, sim.items[k])
 	for s in sim.sites:
@@ -187,6 +189,32 @@ func _add_bush(b: Batch, bush: Dictionary) -> void:
 	for i in bush.berries:
 		var p: Vector2 = spots[i % spots.size()]
 		b.box(Vector3(cx + p.x - 0.07, 0.42, cz + p.y - 0.07), Vector3(cx + p.x + 0.07, 0.52, cz + p.y + 0.07), Palette.ITEM_COLORS.berries)
+
+
+static var SOIL := Color("#5E4430")
+static var SPROUT := Color("#7FA84A")
+static var WHEAT_RIPE := Color("#D8B65A")
+
+
+## A tilled plot with two furrows, and wheat rising through three stages to golden ripe ears
+## (issue #45).
+func _add_crop(b: Batch, crop: Dictionary) -> void:
+	var x: float = crop.cell.x
+	var z: float = crop.cell.y
+	b.box(Vector3(x + 0.04, 0, z + 0.04), Vector3(x + 0.96, 0.03, z + 0.96), SOIL)
+	var stage := Sim.crop_stage(crop)
+	for row in 2:
+		var rz := z + 0.27 + row * 0.46
+		b.box(Vector3(x + 0.1, 0.03, rz - 0.09), Vector3(x + 0.9, 0.06, rz + 0.09), SOIL.darkened(0.18))
+		if stage == 0:
+			continue
+		var height: float = [0.0, 0.14, 0.3, 0.46, 0.58][stage]
+		var col: Color = [SPROUT, SPROUT, SPROUT.lerp(WHEAT_RIPE, 0.35), SPROUT.lerp(WHEAT_RIPE, 0.6), WHEAT_RIPE][stage]
+		for i in 3:
+			var cx := x + 0.2 + i * 0.3
+			b.box(Vector3(cx - 0.06, 0.06, rz - 0.06), Vector3(cx + 0.06, 0.06 + height, rz + 0.06), col)
+			if stage == 4:
+				b.box(Vector3(cx - 0.08, 0.06 + height, rz - 0.08), Vector3(cx + 0.08, 0.2 + height, rz + 0.08), WHEAT_RIPE.lightened(0.15))
 
 
 func _add_item(b: Batch, s: Dictionary) -> void:
@@ -639,7 +667,7 @@ func ground_cell(origin: Vector3, dir: Vector3):
 ## What a camera ray points at, in priority order:
 ## 1. a resident, even behind a tree, since their silhouette shows through (skipped when
 ##    `residents` is false, as when Mine is active);
-## 2. the nearest tree trunk, boulder or building;
+## 2. the nearest tree trunk, boulder, sheep, bush, building or farm plot;
 ## 3. a tree canopy, only when nothing else is under the cursor, so leaves in front don't
 ##    swallow clicks meant for what's behind them.
 func pick(origin: Vector3, dir: Vector3, residents := true):
@@ -663,6 +691,9 @@ func pick(origin: Vector3, dir: Vector3, residents := true):
 		solid.append([bush, AABB(Vector3(bush.cell.x + 0.14, 0, bush.cell.y + 0.14), Vector3(0.72, 0.52, 0.72))])
 	for s in sim.sites:
 		solid.append([s, AABB(Vector3(s.origin.x, 0, s.origin.y), Vector3(s.size.x, maxf(sim.site_height(s), 0.3), s.size.y))])
+	for k in sim.farm:
+		var crop: Dictionary = sim.farm[k]
+		solid.append([crop, AABB(Vector3(crop.cell.x, 0, crop.cell.y), Vector3(1, 0.1 + 0.15 * Sim.crop_stage(crop), 1))])
 	var hit = _nearest_hit(origin, dir, solid)
 	if hit != null:
 		return hit

@@ -21,6 +21,7 @@ var rng := RandomNumberGenerator.new()  ## Seeded and saved, so a game replays e
 var items := {}              ## Vector2i -> {cell, type, n, res}
 var zone := {}               ## Vector2i -> true: stockpile cells
 var zone_res := {}           ## Vector2i -> resident id hauling into that cell
+var farm := {}               ## Vector2i -> {id, kind:"crop", cell, grow, claim, unreach_until}: farm plots (issue #45)
 var sites: Array = []        ## Construction sites and finished buildings.
 var residents: Array = []
 var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafted": false,
@@ -603,6 +604,51 @@ func _eat_job(r: Dictionary):
 	return j
 
 
+## Plant an empty farm cell or harvest a ripe one (issue #45). Farmers stand on the cell.
+func _farm_job(r: Dictionary, crop: Dictionary) -> Job:
+	var ripe := crop_ripe(crop)
+	var j := Job.new("farm", "Going to harvest wheat" if ripe else "Going to plant wheat", "the farm plot")
+	j.target = crop
+	crop.claim = r.id
+	j.hold({"t": "claim", "ent": crop})
+	j.step(_goto([crop.cell], false))
+	j.step({"op": "work", "what": "harvest" if ripe else "plant", "target": crop,
+		"label": "Harvesting wheat" if ripe else "Planting wheat"})
+	return j
+
+
+## The nearest farm cell that needs planting or harvesting, ripe ones first, or null.
+func _farm_work(c: Vector2i):
+	var ripe: Array = []
+	var empty: Array = []
+	for k in farm:
+		var crop: Dictionary = farm[k]
+		if crop.claim != 0 or _cooling(crop) or not walkable(crop.cell):
+			continue
+		if crop_ripe(crop):
+			ripe.append(crop)
+		elif crop.grow < 0.0:
+			empty.append(crop)
+	if not ripe.is_empty():
+		return nearest(ripe, c)
+	if not empty.is_empty():
+		return nearest(empty, c)
+	return null
+
+
+static func crop_ripe(crop: Dictionary) -> bool:
+	return crop.grow >= Tuning.WHEAT_GROW
+
+
+## 0 for an empty plot, 1 to 3 while wheat grows, 4 when it's ripe.
+static func crop_stage(crop: Dictionary) -> int:
+	if crop.grow < 0.0:
+		return 0
+	if crop.grow >= Tuning.WHEAT_GROW:
+		return 4
+	return 1 + mini(2, int(crop.grow / Tuning.WHEAT_GROW * 3.0))
+
+
 ## Walk to a sheep, following it if it wanders, then hunt it.
 func _hunt_job(r: Dictionary, target: Dictionary) -> Job:
 	var j := Job.new("gather", "Going to hunt a sheep", "this sheep")
@@ -867,6 +913,10 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.STAGE_TIME
 		"hunt":
 			return Tuning.HUNT_TIME
+		"plant":
+			return Tuning.PLANT_TIME
+		"harvest":
+			return Tuning.HARVEST_TIME
 		"eat", "graze":
 			return Tuning.EAT_TIME
 		_:
@@ -913,6 +963,21 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			drop_items(sh.cell, "wool", 1)
 			drop_items(sh.cell, "mutton", 1)
 			stats.sheep_hunted = stats.get("sheep_hunted", 0) + 1
+			rev += 1
+		"plant":
+			var crop: Dictionary = st.target
+			if not is_same(farm.get(crop.cell), crop) or crop.grow >= 0.0:
+				return "gone"
+			crop.grow = 0.0
+			stats.planted = stats.get("planted", 0) + 1
+			rev += 1
+		"harvest":
+			var crop: Dictionary = st.target
+			if not is_same(farm.get(crop.cell), crop) or not crop_ripe(crop):
+				return "gone"
+			crop.grow = -1.0
+			drop_items(crop.cell, "wheat", Tuning.WHEAT_YIELD)
+			stats.harvested = stats.get("harvested", 0) + 1
 			rev += 1
 		"build":
 			_complete_stage(st.site)
@@ -973,6 +1038,10 @@ func _claim(r: Dictionary) -> void:
 		r.job = _build_job(r, _nearest_site(ready, c))
 		return
 	if _try_deliver(r, c, sites.filter(func(s): return not s.done and footprint_clear(s))):
+		return
+	var crop = _farm_work(c)
+	if crop != null:
+		r.job = _farm_job(r, crop)
 		return
 	var targets: Array = []
 	if not r.broken.axe or not tool_items("axe", 0).is_empty():
@@ -1061,6 +1130,13 @@ func step() -> void:
 			if b.regrow >= Tuning.BUSH_REGROW:
 				b.regrow = 0.0
 				b.berries += 1
+				rev += 1
+	for k in farm:
+		var crop: Dictionary = farm[k]
+		if crop.grow >= 0.0 and crop.grow < Tuning.WHEAT_GROW:
+			var before := crop_stage(crop)
+			crop.grow = minf(Tuning.WHEAT_GROW, crop.grow + Tuning.DT)
+			if crop_stage(crop) != before:
 				rev += 1
 	var hunger_drop := 100.0 / Tuning.HUNGER_EMPTY_TIME * Tuning.DT
 	for r in residents:
@@ -1338,9 +1414,57 @@ func paint_zone(rect: Rect2i) -> void:
 	for x in range(rect.position.x, rect.end.x):
 		for y in range(rect.position.y, rect.end.y):
 			var c := Vector2i(x, y)
-			if walkable(c) and site_at(c) == null:
+			if walkable(c) and site_at(c) == null and not farm.has(c):
 				zone[c] = true
 	rev += 1
+
+
+## Why a cell can't be a farm plot, or "" when it can: farms go on open grass only (issue #45).
+func farm_blocked(c: Vector2i) -> String:
+	if not walkable(c):
+		return "not open ground"
+	if site_at(c) != null:
+		return "a building"
+	if zone.has(c):
+		return "a stockpile"
+	for b in bushes:
+		if b.cell == c:
+			return "a bush"
+	return ""
+
+
+## Paints farm plots over the open grass in `rect` (Farm order, issue #45). Returns how many cells
+## were added.
+func paint_farm(rect: Rect2i) -> int:
+	var n := 0
+	for x in range(rect.position.x, rect.end.x):
+		for y in range(rect.position.y, rect.end.y):
+			var c := Vector2i(x, y)
+			if farm.has(c) or farm_blocked(c) != "":
+				continue
+			farm[c] = {"id": _id(), "kind": "crop", "cell": c, "grow": -1.0, "claim": 0, "unreach_until": 0}
+			n += 1
+	rev += 1
+	return n
+
+
+## Removes farm plots in `rect`; anything growing there is lost.
+func clear_farm(rect: Rect2i) -> void:
+	for x in range(rect.position.x, rect.end.x):
+		for y in range(rect.position.y, rect.end.y):
+			_drop_crop(Vector2i(x, y))
+	rev += 1
+
+
+func _drop_crop(c: Vector2i) -> void:
+	var crop = farm.get(c)
+	if crop == null:
+		return
+	if crop.claim != 0:
+		var r := resident(crop.claim)
+		if not r.is_empty() and r.job != null and is_same(r.job.target, crop):
+			fail_job(r)
+	farm.erase(c)
 
 
 ## Why a blueprint can't go here, or "" when it can. Trees, boulders and stockpile cells don't
@@ -1364,6 +1488,7 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 	_occ_dirty = true
 	for c in site_cells(s):
 		zone.erase(c)
+		_drop_crop(c)
 	_mark_obstacles(s)
 	rev += 1
 	return s
@@ -1497,7 +1622,8 @@ func save_state() -> Dictionary:
 	return {"w": w, "h": h, "tick": tick, "next_id": next_id, "trees": trees.duplicate(true), "boulders": boulders.duplicate(true),
 		"items": items_out, "zone": zone.duplicate(), "sites": sites_out, "residents": res_out,
 		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
-		"sheep": sheep.duplicate(true), "rng_state": rng.state, "bushes": bushes.duplicate(true)}
+		"sheep": sheep.duplicate(true), "rng_state": rng.state, "bushes": bushes.duplicate(true),
+		"farm": farm.duplicate(true)}
 
 
 static func from_state(d: Dictionary) -> Sim:
@@ -1527,7 +1653,8 @@ static func from_state(d: Dictionary) -> Sim:
 				return false
 		return true)
 	s.rng.state = d.rng_state
-	for o in s.trees + s.boulders + s.sheep:
+	s.farm = d.farm.duplicate(true)
+	for o in s.trees + s.boulders + s.sheep + s.farm.values():
 		o.claim = 0
 		o.unreach_until = 0
 	for rd in d.residents:
