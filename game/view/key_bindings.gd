@@ -11,6 +11,7 @@ const ACTIONS := [
 	["stock", "Orders", "Paint a stockpile", [KEY_Z]],
 	["hunt", "Orders", "Hunt sheep", [KEY_G]],
 	["build", "Orders", "Open the build menu", [KEY_B]],
+	["craft", "Orders", "Open the craft menu", [KEY_C]],
 	["bench", "Orders", "Place a crafting bench", [KEY_T]],
 	["house", "Orders", "Place a house", [KEY_H]],
 	["rotate", "Orders", "Turn the house door while placing", [KEY_R]],

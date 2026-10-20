@@ -133,6 +133,14 @@ A resident with **Toolsmith** switched on keeps the village in spare tools:
 - **A finished house without a bed** shows "House needs a bed: 3 more wool" in the stuck list once wool runs short, since that's what's stopping arrivals.
 - Food doesn't gate arrivals, but newcomers do need feeding, so food production has to grow with the village.
 
+## 7a. Craft menu in the toolbar (#57)
+
+Once a crafting bench is finished, a **Craft** button appears in the orders toolbar (default key C, rebindable).
+- It opens the bench panel above the toolbar, the same panel you get by selecting the bench, so crafting doesn't need the bench in view.
+- With more than one bench, the panel says "Bench 1 of 2" and has **Next bench**.
+- Esc closes it.
+- **Steady layout:** the bench panel lists its recipes first, at a fixed size, and keeps the status, stuck reasons and queue in a fixed-height area below. The Queue buttons never move under the cursor.
+
 ## 8. Buildings and orders added
 
 **Job buildings start simple and evolve in place.** Each job building starts as its simplest form and reserves the plot its next form needs.
