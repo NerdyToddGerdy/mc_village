@@ -37,7 +37,10 @@ Slice 2 is done when, from a fresh start, a player can:
   - There's room for a third house, farm plots, the fireplace and the reserved plots that let buildings grow.
   - Ada starts near the middle, and the camera opens on her.
   - Saves record the map size, so older 18×18 saves keep their size.
-- **House stages** become Foundation → Walls → Roof → **Bed**. The bed stage costs 3 wool and 3 planks, and the bed is placed inside, against the wall opposite the door.
+- **House stages** become Foundation → Walls → Roof → **Bed**. The bed stage costs 3 wool and 3 planks.
+  - The bed sits in the house's **top corner**: the back corner, furthest from the camera.
+  - It's two cells long, with a plank frame, a white pillow and a red blanket.
+  - The roof is cut away while the bed is being built, and whenever the house is selected or hovered, so the bed can be seen.
 - **The clearing starts with 6 sheep**, enough wool for the two opening beds.
 - **Arrivals need a free bed** (§7). Tomas comes once the second house, bed included, is finished.
 - **Ada's house** is hers when its bed is finished, not when its roof is.
@@ -129,7 +132,7 @@ A resident with **Toolsmith** switched on keeps the village in spare tools:
 ## 7. Recruitment
 
 - **A traveler arrives when a finished house has a free bed**, after a short delay (45 seconds). One arrives per free bed, one at a time.
-- They walk in from the map edge and claim the house. The first traveler is always Tomas; later names come from a list.
+- They walk in from the map edge and claim the house. The first traveler is always Tomas; then Mira, Jonas, Elsa, Bram, Ines, Otto and Lena.
 - **A finished house without a bed** shows "House needs a bed: 3 more wool" in the stuck list once wool runs short, since that's what's stopping arrivals.
 - Food doesn't gate arrivals, but newcomers do need feeding, so food production has to grow with the village.
 

@@ -465,9 +465,8 @@ func _on_site_done(s: Dictionary) -> void:
 		if not auto_craft:
 			auto_craft = true
 			_toast("The bench now makes the planks and sticks a recipe needs.")
-	elif not arrived and arrival_at < 0:
-		arrival_at = tick + int(Tuning.ARRIVAL_DELAY * Tuning.TPS)
-		_toast("The second house is finished. Someone may come to live in it.", 0, s.id)
+	else:
+		_toast("The house is finished, bed and all. Someone may come to live in it.", 0, s.id)
 
 
 # ---------------------------------------------------------------- bench queue
@@ -978,8 +977,7 @@ func step() -> void:
 			_step_sheep(sh)
 	for r in residents:
 		_step_resident(r)
-	if arrival_at >= 0 and not arrived and tick >= arrival_at:
-		_arrive()
+	_step_arrivals()
 	var kinds := {}
 	var working := 0
 	for r in residents:
@@ -1061,14 +1059,43 @@ func _step_resident(r: Dictionary) -> void:
 		fail_job(r, res)
 
 
+## Travelers, in the order they arrive. The first is always Tomas.
+const TRAVELERS := [["Tomas", "8C4F6B"], ["Mira", "6B7F3A"], ["Jonas", "8A6A2E"], ["Elsa", "4F6A8C"],
+	["Bram", "7A4A6E"], ["Ines", "3E7E6A"], ["Otto", "8C5A3E"], ["Lena", "5E5A8C"]]
+
+
+## A finished house whose bed nobody sleeps in yet, or null.
+func free_house():
+	for s in sites:
+		if s.tpl == "house" and s.done and s.owner == 0:
+			return s
+	return null
+
+
+## No free bed, no arrival (spec §7): while a finished house has a free bed, a traveler comes after
+## the arrival delay. One walks in at a time.
+func _step_arrivals() -> void:
+	if residents.any(func(r): return r.arriving):
+		return
+	if arrival_at < 0:
+		if free_house() != null:
+			arrival_at = tick + int(Tuning.ARRIVAL_DELAY * Tuning.TPS)
+	elif tick >= arrival_at:
+		arrival_at = -1
+		if free_house() != null:
+			_arrive()
+
+
 func _arrive() -> void:
 	arrived = true
 	var spawn := Vector2i(0, h - 1)
 	if not walkable(spawn):
 		spawn = nearest_walkable(spawn)
-	var t := add_resident("Tomas", "8C4F6B", spawn)
+	var n := residents.size() - 1
+	var who: Array = TRAVELERS[n % TRAVELERS.size()]
+	var t := add_resident(who[0] if n < TRAVELERS.size() else "%s %d" % [who[0], n / TRAVELERS.size() + 1], who[1], spawn)
 	walk_in(t)
-	_toast("A traveler named Tomas has arrived.", t.id)
+	_toast("A traveler named %s has arrived." % t.name, t.id)
 
 
 func walk_in(t: Dictionary) -> void:
@@ -1137,8 +1164,10 @@ func compute_stuck() -> void:
 				worst_n = short
 		if worst_n > 0:
 			var it: Dictionary = Defs.ITEMS[worst]
-			_add_stuck("Crafting bench" if s.done else tpl.name,
-				"%s %s %d more %s" % [label, verb, worst_n, it.one if worst_n == 1 else it.many],
+			var why := "%s %s %d more %s" % [label, verb, worst_n, it.one if worst_n == 1 else it.many]
+			if label == "Bed":
+				why = "House needs a bed: %d more %s" % [worst_n, it.one if worst_n == 1 else it.many]
+			_add_stuck("Crafting bench" if s.done else tpl.name, why,
 				mid, site_height(s) + 0.4, "site", s.id)
 	for r in residents:
 		var at: Vector2 = r.pos + Vector2(0.5, 0.5)
@@ -1162,7 +1191,7 @@ func compute_stuck() -> void:
 func site_height(s: Dictionary) -> float:
 	if s.tpl == "bench":
 		return 0.75 if s.done else 0.2
-	return [0.2, 0.5, 2.5, 4.0][mini(s.stage, 3)]
+	return [0.2, 0.5, 2.5, 4.0, 4.0][mini(s.stage, 4)]
 
 
 # ---------------------------------------------------------------- commands

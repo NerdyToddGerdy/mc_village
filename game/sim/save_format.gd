@@ -12,12 +12,21 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 5
+const VERSION := 6
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6}
+
+
+## v6: houses have a fourth stage, the bed (issue #43). A finished house in an older save gets a
+## finished bed, so its resident stays housed.
+static func _v5_to_v6(d: Dictionary) -> Dictionary:
+	for s in d.state.sites:
+		if s.tpl == "house" and s.done and s.stage < 4:
+			s.stage = 4
+	return d
 
 
 ## v5: sheep and the sim's random-number state (issue #42). Older saves are past the opening, so

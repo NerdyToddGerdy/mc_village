@@ -95,7 +95,7 @@ func _test_fading(game: Game) -> void:
 	check(not world.faded_trees.has(tree.id), "the tree turns solid again when nothing behind it is focused")
 	sim.cancel_site(bench)
 	var house := sim.place_site("house", at(11, 0))
-	house.stage = 3
+	house.stage = 4
 	house.done = true
 	sim.rev += 1
 	await process_frame

@@ -230,6 +230,11 @@ func _initialize() -> void:
 	await run(40)
 	check(not one.alive, "right-click sends Ada to hunt it")
 	check(sim.items.values().any(func(it): return it.type == "wool") and sim.items.values().any(func(it): return it.type == "mutton"), "the hunted sheep drops wool and mutton")
+	# The houses' beds need 6 wool in all: mark the rest of the flock.
+	await key(KEY_G)
+	await drag(screen(Vector2i(0, 0)), screen(Vector2i(31, 31)))
+	await key(KEY_ESCAPE)
+	check(sim.sheep.filter(func(x): return x.alive).all(func(x): return x.des), "the rest of the flock is marked for wool")
 
 	# Place the bench from the build menu
 	await key(KEY_B)
@@ -262,7 +267,7 @@ func _initialize() -> void:
 	# Stockpile and boulders
 	await key(KEY_Z)
 	check(game.tool == "stock", "Z picks Stockpile")
-	var zc := open_cell(Vector2i(12, 7), Vector2i(4, 2))
+	var zc := open_cell(at(12, 7), Vector2i(4, 2))
 	await drag(screen(zc), screen(zc + Vector2i(3, 1)))
 	check(sim.zone.size() >= 6, "dragging paints a stockpile (%d cells)" % sim.zone.size())
 	await key(KEY_X)
@@ -283,7 +288,7 @@ func _initialize() -> void:
 	check(sim.sites.size() == sites_before, "clicking an invalid spot places nothing")
 	await key(KEY_R)
 	check(game.rot == 1, "R turns the door")
-	var house_origin := open_cell(Vector2i(11, 0), Vector2i(5, 5))
+	var house_origin := open_cell(at(11, 0), Vector2i(5, 5))
 	await move(screen(house_origin + Vector2i(2, 2)))
 	check("Place house" in game._hud._hint.text, "hint over a valid spot: \"%s\"" % game._hud._hint.text)
 	await click(screen(house_origin + Vector2i(2, 2)))
@@ -310,7 +315,7 @@ func _initialize() -> void:
 
 	# Second house and the traveler
 	await key(KEY_H)
-	var origin2 := open_cell(Vector2i(1, 4), Vector2i(5, 5))
+	var origin2 := open_cell(at(1, 4), Vector2i(5, 5))
 	await click(screen(origin2 + Vector2i(2, 2)))
 	var h2 = sim.site_at(origin2 + Vector2i(2, 2))
 	check(h2 != null, "second house placed")
@@ -330,21 +335,28 @@ func _initialize() -> void:
 	check(game.selection.get("ids", []) == [ada.id], "F selects the next resident")
 
 	# Right-click order with a hint
-	var t2: Dictionary = Sim.nearest(sim.trees.filter(func(t): return t.alive and t.claim == 0), Sim.rcell(ada))
+	# A free tree that's actually what's under the cursor at its screen spot (not hidden behind a house).
+	var t2: Dictionary = {}
+	for cand in sim.trees.filter(func(t): return t.alive and t.claim == 0):
+		var p: Vector2 = screen(cand.cell, 1.5)
+		var vis := root.get_visible_rect().size
+		var middle := Rect2(vis * Vector2(0.3, 0.28), vis * Vector2(0.4, 0.4))  # clear of the HUD's corner panels
+		if middle.has_point(p) and is_same(game._pick(p, false), cand):
+			t2 = cand
+			break
 	if not t2.is_empty():
 		await move(screen(t2.cell, 1.5))
-		check(game._hud._hint.text.begins_with("Right-click: Mine"), "hovering a tree with Ada selected hints Right-click: Mine")
+		check(game._hud._hint.text.begins_with("Right-click: Mine"), "hovering a tree with Ada selected hints Right-click: Mine (got \"%s\"; under cursor %s; tree at %s)" % [game._hud._hint.text, game._pick(game._mouse), t2.cell])
 		await click(screen(t2.cell, 1.5), MOUSE_BUTTON_RIGHT)
 		check(ada.job != null and is_same(ada.job.target, t2) or ada.direct != null, "right-click orders Ada to mine that tree")
 
 	# Shift + right-click queues orders; the panel lists them and can clear them
-	var queue_trees: Array = sim.trees.filter(func(t): return t.alive and t.claim == 0).slice(0, 2)
-	check(queue_trees.size() == 2, "two free trees to queue orders on")
-	if queue_trees.size() == 2:
+	var vis2 := root.get_visible_rect().size
+	if true:
 		game.selection = {"kind": "res", "ids": [ada.id]}
-		for t in queue_trees:
-			await move(screen(t.cell, 1.5))
-			await click(screen(t.cell, 1.5), MOUSE_BUTTON_RIGHT, true)
+		# Two walks to open ground in the middle of the screen, queued with Shift + right-click
+		for spot in [Vector2(0.45, 0.45), Vector2(0.55, 0.5)]:
+			await click(vis2 * spot, MOUSE_BUTTON_RIGHT, true)
 		check(ada.orders.size() >= 1, "Shift + right-click queues orders (%d)" % ada.orders.size())
 		game._hud.refresh(sim)
 		await frames(2)

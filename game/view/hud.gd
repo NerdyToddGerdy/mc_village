@@ -596,7 +596,7 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		return
 	if s.tpl == "house":
 		var owner := sim.resident(s.owner)
-		var line := "Home of %s." % owner.name if not owner.is_empty() else ("Empty. A traveler should arrive soon." if sim.arrival_at >= 0 and not sim.arrived else "Empty.")
+		var line := "Home of %s." % owner.name if not owner.is_empty() else ("Empty. A traveler should arrive soon." if sim.arrival_at >= 0 else "Empty.")
 		c.add_child(_label("House", true, Palette.CHALK, 24))
 		c.add_child(_label(line, false, Palette.CHALK_DIM, 15, true))
 		return
