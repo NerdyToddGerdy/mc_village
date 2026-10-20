@@ -218,6 +218,26 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if stage == 2:
 		_add_roof(ghost, o, gcol)
 	# A finished roof is drawn by _build_occluders, so it can be cut away.
+	if stage == 3:
+		_add_bed(ghost, o, true)
+	elif stage >= 4:
+		_add_bed(solid, o, false)
+
+
+static var BED_BLANKET := Color("#B83A3A")
+
+
+## The bed sits in the house's top corner: the back corner, furthest from the camera (issue #43).
+## Two cells long against the back wall, with a plank frame, a red blanket and a white pillow.
+func _add_bed(b: Batch, o: Vector2i, ghost: bool) -> void:
+	var g := Color(Palette.BLUE, 0.45)
+	var x0 := float(o.x + 1) + 0.1
+	var z0 := float(o.y + 1) + 0.1
+	b.box(Vector3(x0, 0.5, z0), Vector3(x0 + 1.8, 0.72, z0 + 0.8), g if ghost else Palette.PLANK)
+	if ghost:
+		return
+	b.box(Vector3(x0 + 0.05, 0.72, z0 + 0.05), Vector3(x0 + 0.55, 0.84, z0 + 0.75), Palette.ITEM_COLORS.wool)
+	b.box(Vector3(x0 + 0.6, 0.72, z0 + 0.03), Vector3(x0 + 1.77, 0.82, z0 + 0.77), BED_BLANKET)
 
 
 func _add_roof(b: Batch, o: Vector2i, color: Color) -> void:
@@ -278,7 +298,7 @@ func _build_occluders() -> void:
 	see_through.apply(_trees_faded)
 	var roofs := Batch.new()
 	for s in sim.sites:
-		if s.tpl == "house" and s.done and not open_roofs.has(s.id):
+		if s.tpl == "house" and s.stage >= 3 and not open_roofs.has(s.id):
 			_add_roof(roofs, s.origin, Palette.ROOF)
 	roofs.apply(_roofs)
 

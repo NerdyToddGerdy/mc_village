@@ -9,6 +9,8 @@ extends SceneTree
 func _initialize() -> void:
 	var sim := Sim.new_game()
 	sim.designate_mine(area(0, 0, 10, 18))
+	if SaveFormat.VERSION >= 6:
+		sim.designate_hunt(Rect2i(0, 0, sim.w, sim.h))  # wool for the beds
 	var bench := sim.place_site("bench", at(8, 10))
 	_run(sim, 120)
 	for r in ["planks", "planks", "sticks", "wood_pick"]:

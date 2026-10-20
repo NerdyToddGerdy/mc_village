@@ -20,7 +20,7 @@ const SHEEP_PAUSE := [1.0, 4.0]         ## Seconds a sheep stands still between 
 const HUNT_TIME := 4.0                  ## Seconds to hunt a sheep.
 const CRAFT_TIME := 3.0                 ## Seconds per recipe.
 const STAGE_TIME := 10.0                ## Seconds of build work per construction stage.
-const ARRIVAL_DELAY := 45.0             ## Seconds after the spare house is finished.
+const ARRIVAL_DELAY := 45.0             ## Seconds after a house with a free bed is finished, per traveler.
 const UNREACHABLE_COOLDOWN := 8.0       ## Seconds before retrying a target that couldn't be reached.
 
 ## Indexed by tool tier: 0 = bare hands, 1 = wooden, 2 = stone.

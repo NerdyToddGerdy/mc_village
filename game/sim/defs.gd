@@ -34,6 +34,7 @@ const TEMPLATES := {
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},
 		{"name": "Walls", "verb": "need", "cost": {"plank": 16, "log": 4}},
 		{"name": "Roof", "verb": "needs", "cost": {"plank": 12}},
+		{"name": "Bed", "verb": "needs", "cost": {"wool": 3, "plank": 3}},
 	]},
 }
 

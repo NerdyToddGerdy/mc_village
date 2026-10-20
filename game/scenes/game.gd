@@ -183,7 +183,7 @@ func _update_live_overlays() -> void:
 	if hint == "" and tool == "hunt" and _hover != null and _drag.is_empty():
 		hint = "Click or drag over sheep to hunt them."
 	if hint == "" and tool == "" and _drag.is_empty() and selection.get("kind", "") == "res":
-		var hit = _pick(_mouse)
+		var hit = _pick(_mouse, false)
 		if hit != null and hit.kind in ["tree", "boulder"]:
 			hint = "Right-click: Mine. Shift queues it."
 		elif hit != null and hit.kind == "sheep":
@@ -219,6 +219,9 @@ func _update_focus(sel) -> void:
 	var roofs: Array = []
 	if sel != null and sel.kind == "site" and sel.tpl == "house":
 		roofs.append(sel.id)
+	for s in sim.sites:
+		if s.tpl == "house" and s.stage == 3 and not s.done and not roofs.has(s.id):
+			roofs.append(s.id)  # watch the bed go in while its stage is being built
 	if _hover != null:
 		var h = sim.site_at(_hover)
 		if h != null and h.tpl == "house" and not roofs.has(h.id):
@@ -341,7 +344,8 @@ func _mouse_button(e: InputEventMouseButton) -> void:
 			return
 		if selection.get("kind", "") != "res":
 			return
-		var hit = _pick(e.position)
+		# Residents aren't order targets, so look past anyone standing in front of the tree or sheep.
+		var hit = _pick(e.position, false)
 		var cell = _cell_at(e.position)
 		for id in selection.ids:
 			var r := sim.resident(id)
@@ -735,6 +739,14 @@ func _screenshot_scene() -> void:
 			near.des = true
 			_target = Vector3(near.pos.x + 0.5, 0, near.pos.y + 0.5)
 			_place_camera()
+	if "--bed" in OS.get_cmdline_user_args():
+		house.store = {"plank": 99, "wool": 3, "log": 4}
+		house.stage = 4
+		house.done = true
+		sim.rev += 1
+		selection = {"kind": "site", "id": house.id}
+		_target = Vector3(house.origin.x + 2.5, 0, house.origin.y + 2.5)
+		_place_camera()
 	if "--craft" in OS.get_cmdline_user_args():
 		craft_menu_open = true
 	if "--select-ada" in OS.get_cmdline_user_args():

@@ -17,6 +17,7 @@ func _init() -> void:
 		"test_bigger_clearing",
 		"test_sheep_wander_and_replay",
 		"test_hunting_sheep",
+		"test_beds_and_free_bed_arrivals",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -71,6 +72,7 @@ func stuck_text(sim: Sim) -> String:
 ## Plays the founding moment the way a player would, end to end.
 func play_opening(sim: Sim) -> Dictionary:
 	sim.designate_mine(area(0, 0, 10, 18))
+	sim.designate_hunt(whole_map())  # wool for the two beds
 	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
 	for r in ["planks", "planks", "sticks", "wood_pick"]:
@@ -195,6 +197,7 @@ func test_mine_marks_trees_and_boulders() -> void:
 func test_save_and_load_mid_game() -> void:
 	var sim := Sim.new_game()
 	sim.designate_mine(area(0, 0, 10, 18))
+	sim.designate_hunt(whole_map())
 	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
 	for r in ["planks", "planks", "sticks", "wood_pick"]:
@@ -449,4 +452,37 @@ func test_hunting_sheep() -> void:
 	check(Sim.order_text(ada2.orders[0]) == "Hunt a sheep", "Shift + right-click queues a hunt")
 	run(sim2, 120)
 	check(not far.alive and not sim2.sheep[1].alive, "both ordered hunts happen")
+
+
+## Issue #43: a bed is a house's last stage, and travelers come only for free beds.
+func test_beds_and_free_bed_arrivals() -> void:
+	var sim := Sim.new_game()
+	var s := play_opening(sim)
+	check(s.h1.stage == 4 and s.h2.stage == 4, "both opening houses got their beds")
+	check(sim.stats.get("sheep_hunted", 0) == 6, "the six sheep were hunted for wool")
+	check(Goals.LIST[5].t == "Hunt sheep for wool" and Goals.done(sim, 5), "the founding goals include hunting for wool")
+	# A house with no wool for its bed: finished up to the roof, never done, and nobody comes.
+	var bench: Dictionary = s.bench
+	for k in sim.items.keys():
+		if sim.items[k].type == "wool":
+			sim.items.erase(k)
+	var h3 := sim.place_site("house", at(11, 11))
+	for i in 8:
+		sim.queue_add(bench, "planks")
+	sim.designate_mine(whole_map())
+	run(sim, 900)
+	check(h3.stage == 3 and not h3.done, "without wool the third house stops at its bed stage (stage %d)" % h3.stage)
+	check(stuck_text(sim).contains("House needs a bed: 3 more wool"), "it says why: " + stuck_text(sim))
+	check(sim.residents.size() == 2, "no free bed, no arrival")
+	# Wool arrives (as from the meadow, #50): the bed gets built and a third resident comes.
+	sim.drop_items(Sim.rcell(sim.residents[0]), "wool", 3)
+	run(sim, 200)
+	check(h3.done, "with wool the bed is built")
+	check(sim.residents.size() == 3 and sim.residents[2].name == "Mira", "a third traveler, Mira, arrives for the free bed")
+	run(sim, 60)
+	check(h3.owner == sim.residents[2].id, "and moves into it")
+	# An older save: finished houses had three stages and get a finished bed.
+	var raw = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v5.save"))
+	var up := SaveFormat.upgrade(raw)
+	check(up.data.state.sites.filter(func(x): return x.tpl == "house" and x.done).all(func(x): return x.stage == 4), "older saves' finished houses get a finished bed")
 
