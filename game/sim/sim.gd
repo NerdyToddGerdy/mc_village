@@ -16,6 +16,7 @@ var next_id := 1
 var trees: Array = []        ## {id, kind:"tree", cell, logs, alive, des, claim, unreach_until}
 var boulders: Array = []     ## {id, kind:"boulder", cell, alive, des, claim, unreach_until}
 var sheep: Array = []        ## {id, kind:"sheep", pos, cell, dest, wait, alive, des, claim, unreach_until}
+var bushes: Array = []       ## {id, kind:"bush", cell, berries, regrow}: berry bushes (issue #44)
 var rng := RandomNumberGenerator.new()  ## Seeded and saved, so a game replays exactly.
 var items := {}              ## Vector2i -> {cell, type, n, res}
 var zone := {}               ## Vector2i -> true: stockpile cells
@@ -50,6 +51,8 @@ const RING_TREES := [[9, 2], [26, 2], [14, 3], [17, 3], [8, 5], [11, 5], [26, 7]
 const RING_BOULDERS := [[6, 7], [3, 8], [28, 11], [25, 13], [3, 14], [14, 25], [19, 26], [21, 26], [17, 30], [24, 30]]
 ## Six sheep around the opening (issue #42): wool for the two opening beds. Open ground, in map cells.
 const START_SHEEP := [[21, 8], [12, 24], [24, 19], [8, 12], [22, 24], [20, 20]]
+## Berry bushes, in opening coordinates (like OPENING_TREES): early food before farms (issue #44).
+const START_BUSHES := [[5, 10], [12, 6], [4, 14], [13, 14], [8, 13], [16, 12]]
 
 
 static func new_game() -> Sim:
@@ -65,10 +68,18 @@ static func new_game() -> Sim:
 		s.boulders.append({"id": s._id(), "kind": "boulder", "cell": c,
 			"alive": true, "des": false, "claim": 0, "unreach_until": 0})
 	s.rng.seed = Tuning.SEED
+	for p in START_BUSHES:
+		s.add_bush(Vector2i(p[0], p[1]) + o)
 	for p in START_SHEEP:
 		s.add_sheep(Vector2i(p[0], p[1]))
 	s.add_resident("Ada", "3E6E7E", OPENING_START + o)
 	return s
+
+
+func add_bush(cell: Vector2i) -> Dictionary:
+	var b := {"id": _id(), "kind": "bush", "cell": cell, "berries": Tuning.BUSH_MAX, "regrow": 0.0}
+	bushes.append(b)
+	return b
 
 
 func add_sheep(cell: Vector2i) -> Dictionary:
@@ -87,7 +98,7 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 	var r := {"id": _id(), "kind": "res", "name": rname, "shirt": shirt, "pos": Vector2(cell),
 		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null,
 		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false,
-		"orders": []}
+		"orders": [], "hunger": 100.0}
 	residents.append(r)
 	return r
 
@@ -436,6 +447,7 @@ func _clear_footprint(s: Dictionary) -> void:
 			var it: Dictionary = items[c]
 			items.erase(c)
 			drop_items(exit, it.type, it.n, it.get("dur", -1))
+	bushes = bushes.filter(func(b): return not Rect2i(s.origin, s.size).has_point(b.cell))
 	for r in residents + sheep:
 		var c := rcell(r)
 		if Rect2i(s.origin, s.size).has_point(c):
@@ -547,6 +559,47 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 	j.step(_goto([target.cell], true))
 	j.step({"op": "work", "what": "gather", "target": target, "tool": kind,
 		"label": "Chopping a tree" if is_tree else "Breaking a boulder"})
+	return j
+
+
+## Food lying around or stockpiled, nearest first: {kind:"stack", stack} or {kind:"bush", bush}, or {}.
+func _nearest_food(c: Vector2i) -> Dictionary:
+	var best := {}
+	var bd := 1 << 30
+	for k in items:
+		var s: Dictionary = items[k]
+		if Tuning.FOOD_VALUE.has(s.type) and avail(s) > 0 and manhattan(s.cell, c) < bd:
+			bd = manhattan(s.cell, c)
+			best = {"kind": "stack", "stack": s}
+	for b in bushes:
+		if b.berries > 0 and manhattan(b.cell, c) < bd:
+			bd = manhattan(b.cell, c)
+			best = {"kind": "bush", "bush": b}
+	return best
+
+
+func food_available() -> bool:
+	return not _nearest_food(Vector2i.ZERO).is_empty()
+
+
+## Go and eat (issue #44): pick up the nearest food and eat it, or eat berries off a bush until
+## nearly full or the bush is bare.
+func _eat_job(r: Dictionary):
+	var f := _nearest_food(rcell(r))
+	if f.is_empty():
+		return null
+	var j := Job.new("eat", "Going to eat", "the food")
+	if f.kind == "bush":
+		j.label = "Going to pick berries"
+		j.step(_goto([f.bush.cell], false))
+		j.step({"op": "work", "what": "graze", "target": f.bush, "label": "Eating berries"})
+		return j
+	var stack: Dictionary = f.stack
+	stack.res += 1
+	var hd := j.hold({"t": "stack", "stack": stack, "n": 1})
+	j.step(_goto([stack.cell], false))
+	j.step({"op": "pickup", "stack": stack, "n": 1, "hold": hd})
+	j.step({"op": "work", "what": "eat", "label": "Eating %s" % Defs.ITEMS[stack.type].one})
 	return j
 
 
@@ -789,6 +842,8 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				var total := _work_time(r, st)
 				if total < 0.0:
 					return "needs_pick"
+				if st.what != "eat" and st.what != "graze" and r.hunger < Tuning.HUNGRY_BELOW:
+					total /= Tuning.HUNGRY_SPEED
 				st.total = total
 				st.t = 0.0
 				j.label = st.label
@@ -812,6 +867,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.STAGE_TIME
 		"hunt":
 			return Tuning.HUNT_TIME
+		"eat", "graze":
+			return Tuning.EAT_TIME
 		_:
 			return Tuning.CRAFT_TIME
 
@@ -832,6 +889,21 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				drop_items(t.cell, "cobble", Tuning.BOULDER_COBBLE)
 				stats.broken_boulders += 1
 			_wear(r, st.tool)
+		"eat":
+			if r.carry == null:
+				return "gone"
+			r.hunger = minf(100.0, r.hunger + Tuning.FOOD_VALUE.get(r.carry.type, 0.0))
+			r.carry = null
+		"graze":
+			var bush: Dictionary = st.target
+			if bush.berries <= 0 or not bushes.has(bush):
+				return true
+			bush.berries -= 1
+			r.hunger = minf(100.0, r.hunger + Tuning.FOOD_VALUE.berries)
+			rev += 1
+			if bush.berries > 0 and r.hunger < Tuning.EAT_UNTIL:
+				st.erase("total")  # eat another berry
+				return false
 		"hunt":
 			var sh: Dictionary = st.target
 			if not sh.alive:
@@ -866,6 +938,12 @@ func _finish_work(r: Dictionary, st: Dictionary):
 ## Picks the resident's next job. Priority (spec §5): craft > deliver to a bench > build >
 ## deliver to a site > mine > haul.
 func _claim(r: Dictionary) -> void:
+	# Starving residents only eat (spec §4); hungry ones eat after any orders you've given them.
+	if r.hunger <= 0.0:
+		var ej = _eat_job(r)
+		if ej != null:
+			r.job = ej
+		return
 	if r.direct != null:
 		r.job = r.direct
 		r.direct = null
@@ -874,6 +952,11 @@ func _claim(r: Dictionary) -> void:
 		var j = _order_job(r, r.orders.pop_front())
 		if j != null:
 			r.job = j
+			return
+	if r.hunger < Tuning.EAT_BELOW:
+		var ej = _eat_job(r)
+		if ej != null:
+			r.job = ej
 			return
 	var c := rcell(r)
 	if auto_craft:
@@ -972,6 +1055,17 @@ func zone_dest(type: String):
 
 func step() -> void:
 	tick += 1
+	for b in bushes:
+		if b.berries < Tuning.BUSH_MAX:
+			b.regrow += Tuning.DT
+			if b.regrow >= Tuning.BUSH_REGROW:
+				b.regrow = 0.0
+				b.berries += 1
+				rev += 1
+	var hunger_drop := 100.0 / Tuning.HUNGER_EMPTY_TIME * Tuning.DT
+	for r in residents:
+		if not r.get("away", false):
+			r.hunger = maxf(0.0, r.hunger - hunger_drop)
 	for sh in sheep:
 		if sh.alive:
 			_step_sheep(sh)
@@ -1038,6 +1132,8 @@ func _step_sheep(sh: Dictionary) -> void:
 
 
 func _step_resident(r: Dictionary) -> void:
+	if r.hunger <= 0.0 and r.job != null and r.job.kind != "eat":
+		fail_job(r)  # starving: drop everything and go eat
 	if r.job == null:
 		if r.arriving:
 			return
@@ -1169,8 +1265,13 @@ func compute_stuck() -> void:
 				why = "House needs a bed: %d more %s" % [worst_n, it.one if worst_n == 1 else it.many]
 			_add_stuck("Crafting bench" if s.done else tpl.name, why,
 				mid, site_height(s) + 0.4, "site", s.id)
+	var has_food := food_available()
 	for r in residents:
 		var at: Vector2 = r.pos + Vector2(0.5, 0.5)
+		if r.hunger <= 0.0 and not has_food:
+			_add_stuck(r.name, "Starving: no food stored", at, 1.6, "res", r.id)
+		elif r.hunger < Tuning.HUNGRY_BELOW and not has_food:
+			_add_stuck(r.name, "Hungry: no food stored", at, 1.6, "res", r.id)
 		for k in ["axe", "pick"]:
 			if r.broken[k] and r[k] == null:
 				var tname := "Axe" if k == "axe" else "Pickaxe"
@@ -1396,7 +1497,7 @@ func save_state() -> Dictionary:
 	return {"w": w, "h": h, "tick": tick, "next_id": next_id, "trees": trees.duplicate(true), "boulders": boulders.duplicate(true),
 		"items": items_out, "zone": zone.duplicate(), "sites": sites_out, "residents": res_out,
 		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
-		"sheep": sheep.duplicate(true), "rng_state": rng.state}
+		"sheep": sheep.duplicate(true), "rng_state": rng.state, "bushes": bushes.duplicate(true)}
 
 
 static func from_state(d: Dictionary) -> Sim:
@@ -1416,6 +1517,15 @@ static func from_state(d: Dictionary) -> Sim:
 	s.arrived = d.arrived
 	s.auto_craft = d.auto_craft
 	s.sheep = d.sheep.duplicate(true)
+	# Bushes added to older saves (v7) may sit where something now stands; drop those.
+	s.bushes = d.bushes.duplicate(true).filter(func(b):
+		for o in s.trees + s.boulders:
+			if o.alive and o.cell == b.cell:
+				return false
+		for st in s.sites:
+			if Rect2i(st.origin, st.size).has_point(b.cell):
+				return false
+		return true)
 	s.rng.state = d.rng_state
 	for o in s.trees + s.boulders + s.sheep:
 		o.claim = 0

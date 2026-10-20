@@ -183,7 +183,7 @@ The Slice 1 subset of brief §12.
 | Left-click | Select resident, site, bench, tree, or boulder |
 | Left-drag on the map | Pan the camera (with no order active) |
 | Shift + drag | Select multiple residents |
-| Right-click with selection | Contextual order (mine, move); cursor previews it |
+| Right-click with selection | Contextual order (mine, hunt, move); cursor previews it. It never fails silently: placing a building, it cancels the placement; with Mine, Hunt or Stockpile on, it still orders the selected residents and leaves the tool on; with nobody selected, or a starving resident, a message says why |
 | Shift + right-click | Queue a mine or move order after the current one |
 | Toolbar → drag | Paint mine or stockpile; place a blueprint |
 | R (while placing) | Rotate blueprint |

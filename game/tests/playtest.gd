@@ -254,12 +254,15 @@ func _initialize() -> void:
 	# Queue crafts by clicking the bench and its Queue buttons
 	await click(screen(bench_cell, 0.4))
 	check(game.selection.get("kind", "") == "site" and game.selection.id == bench.id, "clicking the bench selects it (got %s)" % [game.selection])
+	check(game.craft_menu_open, "selecting the bench opens the craft panel on the right")
 	# Pause while queueing, so nothing gets crafted between clicks and the count is exact.
 	await key(KEY_QUOTELEFT)
 	check(game.speed == 0, "~ pauses")
 	for r in ["Planks", "Planks", "Sticks", "Wooden pickaxe"]:
 		check(await click_button("Queue", r), "click Queue for %s" % r)
 	check(bench.queue.size() == 4, "4 crafts queued (%s)" % [bench.queue])
+	await key(KEY_ESCAPE)
+	check(not game.craft_menu_open, "Esc closes the craft panel")
 	await key(KEY_1)
 	await run(150)
 	check(sim.stats.pick_crafted, "a wooden pickaxe is crafted")
@@ -322,6 +325,7 @@ func _initialize() -> void:
 	await click(screen(bench_cell, 0.4))
 	await click_button("Queue 5", "Planks")
 	await click_button("Queue 5", "Planks")
+	await key(KEY_ESCAPE)
 	await run(1000)
 	check(h2 != null and h2.done, "second house finished")
 	check(sim.residents.size() == 2 and sim.stats.traveler_home, "Tomas arrives and moves in")
@@ -371,6 +375,7 @@ func _initialize() -> void:
 	await click(screen(bench_cell, 0.4))
 	for i in 4:
 		await click_button("Queue", "Planks")
+	await key(KEY_ESCAPE)
 	for i in 60:
 		await run(1)
 		if sim.stats.division:

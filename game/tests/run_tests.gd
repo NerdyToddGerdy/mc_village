@@ -18,6 +18,7 @@ func _init() -> void:
 		"test_sheep_wander_and_replay",
 		"test_hunting_sheep",
 		"test_beds_and_free_bed_arrivals",
+		"test_hunger_and_eating",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -442,7 +443,7 @@ func test_hunting_sheep() -> void:
 	check(count(sim, "wool") >= 1 and count(sim, "mutton") >= 1, "a hunted sheep drops wool and raw mutton")
 	run(sim, 300)
 	check(sim.sheep.all(func(x): return not x.alive), "she hunts every marked sheep")
-	check(count(sim, "wool") == 6 and count(sim, "mutton") == 6, "six sheep give 6 wool and 6 mutton (%d, %d)" % [count(sim, "wool"), count(sim, "mutton")])
+	check(count(sim, "wool") == 6 and count(sim, "mutton") >= 5, "six sheep give 6 wool and 6 mutton, less any Ada ate (%d, %d)" % [count(sim, "wool"), count(sim, "mutton")])
 	var sim2 := Sim.new_game()
 	var ada2: Dictionary = sim2.residents[0]
 	var far: Dictionary = sim2.sheep[0]
@@ -485,4 +486,61 @@ func test_beds_and_free_bed_arrivals() -> void:
 	var raw = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v5.save"))
 	var up := SaveFormat.upgrade(raw)
 	check(up.data.state.sites.filter(func(x): return x.tpl == "house" and x.done).all(func(x): return x.stage == 4), "older saves' finished houses get a finished bed")
+
+
+## Issue #44: hunger drops, residents eat before they starve, and starving ones stop and recover.
+func test_hunger_and_eating() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	check(ada.hunger == 100.0 and sim.bushes.size() == 6, "Ada starts full, with six berry bushes about")
+	run(sim, 60)
+	check(absf(ada.hunger - (100.0 - 60.0 * 100.0 / Tuning.HUNGER_EMPTY_TIME)) < 0.5, "hunger drops steadily (%.1f after a minute)" % ada.hunger)
+	# Hungry: she goes to the nearest bush and eats berries until nearly full.
+	ada.hunger = 35.0
+	var labels: Array = []
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if ada.job != null and not labels.has(ada.job.label):
+			labels.append(ada.job.label)
+	check(labels.has("Eating berries"), "a hungry resident picks berries (%s)" % [labels])
+	var eaten: Array = sim.bushes.filter(func(b): return b.berries < Tuning.BUSH_MAX)
+	check(eaten.size() == 1 and eaten[0].berries == 0, "she eats until the bush is bare (3 berries, up to 45 food)")
+	check(ada.hunger > 35.0 + 2 * Tuning.FOOD_VALUE.berries, "she's well fed again (%.1f)" % ada.hunger)
+	ada.hunger = 100.0
+	run(sim, Tuning.BUSH_REGROW * Tuning.BUSH_MAX + 1)
+	check(not eaten.is_empty() and eaten[0].berries == Tuning.BUSH_MAX, "the bare bush grows its berries back")
+	# Food on the ground is eaten too, by its value.
+	for b in sim.bushes:
+		b.berries = 0
+		b.regrow = -9999.0
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "mutton", 1)
+	ada.hunger = 30.0
+	run(sim, 10)
+	check(count(sim, "mutton") == 0 and absf(ada.hunger - (30.0 + 20.0 - 10.0 * 100.0 / Tuning.HUNGER_EMPTY_TIME)) < 2.0, "raw mutton on the ground is eaten for 20 (%.1f)" % ada.hunger)
+	# Hungry work is slower.
+	var sim2 := Sim.new_game()
+	var a2: Dictionary = sim2.residents[0]
+	for b in sim2.bushes:
+		b.berries = 0
+		b.regrow = -9999.0
+	a2.hunger = 20.0
+	var tree: Dictionary = Sim.nearest(sim2.trees, Sim.rcell(a2))
+	sim2.direct_order(a2, tree)
+	var chop_ticks := 0
+	for i in 60 * Tuning.TPS:
+		sim2.step()
+		if a2.job != null and a2.job.label == "Chopping a tree":
+			chop_ticks += 1
+		if not tree.alive:
+			break
+	check(absf(chop_ticks - Tuning.CHOP_TIME[0] / Tuning.HUNGRY_SPEED * Tuning.TPS) <= 2, "a hungry resident chops 25%% slower (%d ticks)" % chop_ticks)
+	# Starving: stops working, says why, and recovers once there's food.
+	a2.hunger = 0.0
+	sim2.designate_mine(whole_map())
+	run(sim2, 5)
+	check(a2.job == null, "a starving resident with no food stops working")
+	check(stuck_text(sim2).contains("Starving: no food stored"), "and the stuck list says why: " + stuck_text(sim2))
+	sim2.drop_items(Sim.rcell(a2), "mutton", 2)
+	run(sim2, 6)
+	check(a2.hunger > 0.0 and not stuck_text(sim2).contains("Starving"), "food appears and she eats and recovers (%.1f)" % a2.hunger)
 

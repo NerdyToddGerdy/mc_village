@@ -158,6 +158,8 @@ func _build_static() -> void:
 			var c: Vector2i = b.cell
 			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), Palette.STONE)
 			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.STONE.lightened(0.06))
+	for bush in sim.bushes:
+		_add_bush(solid, bush)
 	for k in sim.items:
 		_add_item(solid, sim.items[k])
 	for s in sim.sites:
@@ -171,6 +173,20 @@ func _build_static() -> void:
 	col.apply(_over_col)
 	_build_marks()
 	_build_hatch()
+
+
+static var BUSH_GREEN := Color("#3F6B33")
+
+
+## A low leafy bush with a red dot for each berry it holds (issue #44).
+func _add_bush(b: Batch, bush: Dictionary) -> void:
+	var cx: float = bush.cell.x + 0.5
+	var cz: float = bush.cell.y + 0.5
+	b.box(Vector3(cx - 0.36, 0, cz - 0.36), Vector3(cx + 0.36, 0.42, cz + 0.36), BUSH_GREEN)
+	var spots := [Vector2(-0.18, 0.2), Vector2(0.2, -0.12), Vector2(0.05, 0.22)]
+	for i in bush.berries:
+		var p: Vector2 = spots[i % spots.size()]
+		b.box(Vector3(cx + p.x - 0.07, 0.42, cz + p.y - 0.07), Vector3(cx + p.x + 0.07, 0.52, cz + p.y + 0.07), Palette.ITEM_COLORS.berries)
 
 
 func _add_item(b: Batch, s: Dictionary) -> void:
@@ -643,6 +659,8 @@ func pick(origin: Vector3, dir: Vector3, residents := true):
 	for sh in sim.sheep:
 		if sh.alive:
 			solid.append([sh, AABB(Vector3(sh.pos.x + 0.15, 0, sh.pos.y + 0.15), Vector3(0.7, 0.7, 0.7))])
+	for bush in sim.bushes:
+		solid.append([bush, AABB(Vector3(bush.cell.x + 0.14, 0, bush.cell.y + 0.14), Vector3(0.72, 0.52, 0.72))])
 	for s in sim.sites:
 		solid.append([s, AABB(Vector3(s.origin.x, 0, s.origin.y), Vector3(s.size.x, maxf(sim.site_height(s), 0.3), s.size.y))])
 	var hit = _nearest_hit(origin, dir, solid)
