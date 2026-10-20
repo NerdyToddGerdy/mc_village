@@ -34,6 +34,11 @@ const PLANT_TIME := 2.0                 ## Seconds to plant one farm cell (no se
 const HARVEST_TIME := 2.0               ## Seconds to harvest one ripe cell.
 const WHEAT_GROW := 120.0               ## Seconds from planting to ripe.
 const WHEAT_YIELD := 2                  ## Wheat per harvested cell.
+# Skills (issue #47/#48, slice-2-spec.md §5).
+const SKILL_LEVELS := [8, 25, 50, 90]   ## Experience for levels 2, 3, 4 and 5; one point per finished task.
+const SKILL_SPEED := 0.15               ## Work speed added per level above 1.
+const TOOLSMITH_USES := 0.2             ## Extra tool uses per Toolsmith level above 1.
+const ARRIVAL_LEVEL := 3                ## A new arrival's level in their one skilled job.
 const CRAFT_TIME := 3.0                 ## Seconds per bench recipe.
 const BAKE_TIME := 3.0                  ## Seconds to bake bread at the fireplace.
 const COOK_TIME := 3.0                  ## Seconds to cook mutton at the fireplace.

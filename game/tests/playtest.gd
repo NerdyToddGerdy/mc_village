@@ -330,6 +330,8 @@ func _initialize() -> void:
 	check(h2 != null and h2.done, "second house finished")
 	check(sim.residents.size() == 2 and sim.stats.traveler_home, "Tomas arrives and moves in")
 	var tomas: Dictionary = sim.residents[1] if sim.residents.size() > 1 else {}
+	check(not tomas.is_empty() and Defs.JOBS.any(func(jb): return Sim.level(tomas, jb) >= Tuning.ARRIVAL_LEVEL), "Tomas arrives skilled in one job")
+	check(Sim.level(ada, "mine") >= 2, "Ada's Mine level has risen with practice (level %d)" % Sim.level(ada, "mine"))
 
 	# Toast button and next-resident key
 	game._hud.add_toast({"text": "Tomas moved into the new house.", "res_id": tomas.get("id", 0), "site_id": 0})
@@ -434,7 +436,7 @@ func _initialize() -> void:
 			if n is Button and n.text == "Mine":
 				grid_mine = n
 		var row: Array = grid_mine.get_parent().get_children()
-		var pri_btn: Button = row[row.find(grid_mine) + 1]
+		var pri_btn: Button = row[row.find(grid_mine) + 2]  # name, level, priority
 		await click(pri_btn.get_global_rect().get_center())
 		game._hud.refresh(sim)
 		await frames(2)

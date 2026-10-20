@@ -605,7 +605,7 @@ func _add_jobs_grid(c: Container, r: Dictionary) -> void:
 	(title.get_child(1) as Label).add_theme_font_size_override("font_size", 13)
 	c.add_child(title)
 	var grid := GridContainer.new()
-	grid.columns = 4
+	grid.columns = 6
 	grid.add_theme_constant_override("h_separation", 2)
 	grid.add_theme_constant_override("v_separation", 2)
 	for jb in Defs.JOBS:
@@ -621,6 +621,7 @@ func _add_jobs_grid(c: Container, r: Dictionary) -> void:
 			for k in ["font_color", "font_hover_color", "font_pressed_color"]:
 				on.add_theme_color_override(k, Color(Palette.CHALK_DIM, 0.55))
 		grid.add_child(on)
+		grid.add_child(_level_cell(r, jb))
 		var pri := _button(str(st.pri) if st.on else "–", func(): game.cycle_job_priority(r, jb))
 		pri.custom_minimum_size = Vector2(30, 0)
 		pri.disabled = not st.on
@@ -628,6 +629,28 @@ func _add_jobs_grid(c: Container, r: Dictionary) -> void:
 		pri.tooltip_text = "Priority %d. Click to change it." % st.pri
 		grid.add_child(pri)
 	c.add_child(grid)
+
+
+## A job's level, with a thin bar of progress to the next one (issue #48).
+func _level_cell(r: Dictionary, jb: String) -> Control:
+	var lv := Sim.level(r, jb)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 1)
+	box.custom_minimum_size = Vector2(30, 0)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.mouse_filter = Control.MOUSE_FILTER_PASS
+	var l := _label("Lv %d" % lv, lv >= Tuning.ARRIVAL_LEVEL, Palette.CHALK if lv > 1 else Palette.CHALK_DIM, 12)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(l)
+	var bar := _bar(Sim.level_progress(r, jb), Palette.GREEN)
+	bar.custom_minimum_size = Vector2(28, 3)
+	box.add_child(bar)
+	var xp: int = r.jobs[jb].get("xp", 0)
+	if lv > Tuning.SKILL_LEVELS.size():
+		box.tooltip_text = "Level %d at %s, the top level." % [lv, Defs.JOB_NAMES[jb]]
+	else:
+		box.tooltip_text = "Level %d at %s: %d of %d points to level %d. Each level works %d%% faster." % [lv, Defs.JOB_NAMES[jb], xp, Tuning.SKILL_LEVELS[lv - 1], lv + 1, roundi(Tuning.SKILL_SPEED * 100)]
+	return box
 
 
 func _tool_text(t: Dictionary) -> String:

@@ -37,6 +37,9 @@ const RECIPES := [
 const JOBS := ["mine", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
 const JOB_NAMES := {"mine": "Mine", "haul": "Haul", "build": "Build", "craft": "Craft", "toolsmith": "Toolsmith",
 	"farm": "Farm", "cook": "Cook", "hunt": "Hunt"}
+## "Tomas is a skilled farmer."
+const JOB_SKILLED := {"mine": "miner", "haul": "hauler", "build": "builder", "craft": "crafter", "toolsmith": "toolsmith",
+	"farm": "farmer", "cook": "cook", "hunt": "hunter"}
 
 ## Meals the fireplace's standing order keeps in stock.
 const MEALS := ["bread", "cooked_mutton"]

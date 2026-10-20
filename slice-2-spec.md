@@ -134,6 +134,15 @@ Each resident has, for **every** job:
 | Craft | Planks recipe gives 5 instead of 4 at level 4 and up |
 | Build, Hunt | Speed only |
 
+**How skills apply** (#48):
+- **Experience:** a point is earned when a whole task finishes: a tree felled, a stage built, a recipe made, a plot planted or harvested, a sheep hunted, a load hauled or delivered. That's true whether the work was claimed or ordered directly. Carrying to a site counts as Build. Carrying ingredients to a station counts as the recipe's job.
+- **New levels:** reaching one gets a toast, for example "Ada is now level 2 at Mine".
+- **Speed:** the 15% per level applies to the work itself (chopping, building, crafting, planting), not to walking.
+- **Bread at level 4:** a level-4 cook still waits for the recipe's 3 wheat at the fireplace but uses only 2. The spare wheat counts toward the next bread, and when the queue empties it's put back out.
+- **Tools:** a toolsmith's extra uses are rounded. A level-2 wooden pickaxe has 12 uses.
+- **Carry capacity:** the Haul bonus applies to all carrying, hauling and deliveries alike.
+- **Direct orders:** switching a job off doesn't cancel a direct or queued order of that kind.
+
 **New arrivals** start at level 1 everywhere except one job, picked by the sim's seeded random number generator, which starts at level 3. A traveler's toast says it ("Tomas is a skilled farmer").
 
 **How work maps to jobs** (#47):
@@ -216,6 +225,7 @@ Taken together, the upgrade steps:
 - Adds a finished bed to every finished house (so old saves keep their residents housed).
 - Adds no farm plots (v7→v8, #45).
 - Gives existing residents every job on at priority 2 (v9→v10, #47).
+- Gives existing residents level 1 in every job (v10→v11, #48).
 - Gives existing buildings no reserved plot, so Slice 1 benches reserve nothing (v8→v9, #46).
 - Adds no sheep to the clearing (old saves are past the opening).
 - Gives the meadow its starting 8 sheep.

@@ -12,12 +12,21 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 10
+const VERSION := 11
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11}
+
+
+## v11: experience in each job (issue #48). Everyone in an older save starts at level 1.
+static func _v10_to_v11(d: Dictionary) -> Dictionary:
+	for r in d.state.residents:
+		for jb in r.jobs:
+			if not r.jobs[jb].has("xp"):
+				r.jobs[jb].xp = 0
+	return d
 
 
 ## v10: residents' jobs, each on or off with a priority (issue #47). Everyone starts with every
