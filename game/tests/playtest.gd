@@ -216,6 +216,8 @@ func _initialize() -> void:
 		await frames(2)
 		check(visible_label("Queued orders"), "the resident panel lists queued orders")
 		check(await click_button("Clear orders"), "click Clear orders")
+		check(not ada.orders.is_empty() and find_button("Click again to clear orders") != null, "the first click only asks to confirm")
+		check(await click_button("Click again to clear orders"), "click it again")
 		check(ada.orders.is_empty(), "Clear orders empties the list")
 
 	# Two residents doing different work at once: one mines while the other crafts

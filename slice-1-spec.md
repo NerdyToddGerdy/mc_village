@@ -276,6 +276,10 @@ World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`,
     - Spare tools, with how many are in the stockpile and how many are lying loose.
 - Top right: speed controls.
 - Right edge: stuck list, shown only when something is stuck; clicking an entry focuses the camera.
+- Buttons come in three styles, set as theme type variations (#75):
+  - **Primary** (chalk outline): a panel's main action, such as Send to the meadow, Queue, Mine, Hunt, Save here or Load.
+  - **Secondary** (dim text in a faint outline): inline actions such as Equip, Close, Next, Queue 5, Use the best, Back and Cancel, and the tools in the Equip list.
+  - **Destructive** (cut red outline): actions that throw work away (Remove this plot, Cancel blueprint, Clear orders). The first click only arms the button, which then reads "Click again to …" for 3 seconds. A second click in that time acts.
 - Panel headers put a title and its status side by side, at least 16 px apart. A status too long for that moves to its own dimmed line under the title (#72).
 - Toasts (and the paused notice) sit just below the tally bar, centred in the gap between the goals panel and the stuck list, so they never cover either. A toast too wide for the gap wraps (#71).
 - Bottom left: selection panel (resident, site, or bench, where crafts are queued).
