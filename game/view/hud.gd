@@ -32,6 +32,7 @@ var _keys_sig := ""
 var _hint := Label.new()
 var _paused_label: PanelContainer
 var _sigs := {}
+var _held := false            ## A mouse button is down; panels wait to rebuild until it's released.
 var _toast_list: Array = []
 var equip_kind := ""          ## "axe" or "pick" while the resident panel lists tools to equip, else "".
 
@@ -289,6 +290,10 @@ func _reason(text: String) -> Label:
 func _rebuild(c: Container, sig: String, fill: Callable) -> void:
 	if _sigs.get(c.get_instance_id(), "") == sig:
 		return
+	# Rebuilding between a button's press and release would swallow the click (the press lands on
+	# the old button, the release on nothing), so a panel under a held button waits for the release.
+	if _held and c.is_visible_in_tree() and c.get_global_rect().has_point(_pointer):
+		return
 	_sigs[c.get_instance_id()] = sig
 	for ch in c.get_children():
 		ch.queue_free()
@@ -408,6 +413,8 @@ func _tool_row(type: String, dur: int) -> VBoxContainer:
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouse:
 		_pointer = event.position
+	if event is InputEventMouseButton:
+		_held = event.pressed
 
 
 func _process(_delta: float) -> void:
