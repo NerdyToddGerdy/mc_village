@@ -99,9 +99,28 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 	var r := {"id": _id(), "kind": "res", "name": rname, "shirt": shirt, "pos": Vector2(cell),
 		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null,
 		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false,
-		"orders": [], "hunger": 100.0}
+		"orders": [], "hunger": 100.0, "jobs": default_jobs()}
 	residents.append(r)
 	return r
+
+
+## Every job on, at priority 2 (spec §5).
+static func default_jobs() -> Dictionary:
+	var out := {}
+	for jb in Defs.JOBS:
+		out[jb] = {"on": true, "pri": 2}
+	return out
+
+
+## Which job a recipe's work belongs to: the fireplace's is Cook, the bench's tools are Toolsmith,
+## and the rest (planks, sticks) is Craft.
+static func recipe_job(rec: Dictionary) -> String:
+	if rec.get("at", "bench") == "fireplace":
+		return "cook"
+	for o in rec.out:
+		if Defs.is_tool_item(o):
+			return "toolsmith"
+	return "craft"
 
 
 func resident(id: int) -> Dictionary:
@@ -409,8 +428,11 @@ static func has_all(store: Dictionary, need: Dictionary) -> bool:
 
 
 ## The first queued recipe whose inputs exist somewhere. Blocked recipes are skipped (spec §6).
-func bench_active(b: Dictionary) -> int:
+## `jobs`, when given, limits it to recipes of those jobs.
+func bench_active(b: Dictionary, jobs := []) -> int:
 	for i in b.queue.size():
+		if not jobs.is_empty() and not jobs.has(recipe_job(Defs.recipe(b.queue[i]))):
+			continue
 		var inp: Dictionary = Defs.recipe(b.queue[i]).inp
 		var ok := true
 		for k in inp:
@@ -423,19 +445,21 @@ func bench_active(b: Dictionary) -> int:
 
 
 ## A queued recipe whose inputs are already at the bench, or {}.
-func bench_craftable(b: Dictionary) -> Dictionary:
+func bench_craftable(b: Dictionary, jobs := []) -> Dictionary:
 	for id in b.queue:
 		var rec := Defs.recipe(id)
+		if not jobs.is_empty() and not jobs.has(recipe_job(rec)):
+			continue
 		if has_all(b.store, rec.inp):
 			return rec
 	return {}
 
 
 ## Materials a site (or a finished bench's active recipe) still needs delivered.
-func stage_needs(s: Dictionary) -> Dictionary:
+func stage_needs(s: Dictionary, jobs := []) -> Dictionary:
 	var cost := {}
 	if s.done:
-		var ai := bench_active(s)
+		var ai := bench_active(s, jobs)
 		if ai >= 0:
 			cost = Defs.recipe(s.queue[ai]).inp
 	else:
@@ -1100,41 +1124,86 @@ func _claim(r: Dictionary) -> void:
 	if auto_craft:
 		expand_queues()
 	keep_meals_stocked()
-	var benches := sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty() and s.crafter == 0 and not bench_craftable(s).is_empty() and not _cooling(s))
-	if not benches.is_empty():
-		var b: Dictionary = _nearest_site(benches, c)
-		r.job = _craft_job(r, b, bench_craftable(b))
-		return
-	if _try_deliver(r, c, sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty())):
-		return
-	var ready := sites.filter(func(s): return not s.done and s.builder == 0 and has_all(s.store, current_stage(s).cost) and not _cooling(s) and footprint_clear(s))
-	if not ready.is_empty():
-		r.job = _build_job(r, _nearest_site(ready, c))
-		return
-	if _try_deliver(r, c, sites.filter(func(s): return not s.done and footprint_clear(s))):
-		return
-	var crop = _farm_work(c)
-	if crop != null:
-		r.job = _farm_job(r, crop)
-		return
-	var targets: Array = []
-	if not r.broken.axe or not tool_items("axe", 0).is_empty():
-		for t in trees:
-			if t.alive and t.des and t.claim == 0 and not _cooling(t):
-				targets.append(t)
-	if r.pick != null or not tool_items("pick", 0).is_empty():
-		for b in boulders:
-			if b.alive and b.des and b.claim == 0 and not _cooling(b):
-				targets.append(b)
-	for sh in sheep:
-		if sh.alive and sh.des and sh.claim == 0 and not _cooling(sh):
-			targets.append(sh)
-	if not targets.is_empty():
-		var t: Dictionary = nearest(targets, c)
-		r.job = _hunt_job(r, t) if t.kind == "sheep" else _gather_job(r, t)
-		return
-	if zone.is_empty():
-		return
+	# Jobs switched on, priority 1 first; within a priority, Slice 1's order (spec §5).
+	for p in [1, 2, 3]:
+		var jobs: Array = Defs.JOBS.filter(func(jb): return r.jobs[jb].on and r.jobs[jb].pri == p)
+		if jobs.is_empty():
+			continue
+		for kind in CLAIM_ORDER:
+			var j = _claim_kind(r, c, kind, jobs)
+			if j != null:
+				r.job = j
+				return
+
+
+## The kinds of work, in the order a resident looks for them within one priority.
+const CLAIM_ORDER := ["station", "build", "farm", "gather", "haul"]
+
+
+## A job of this kind for `r`, using only the jobs in `jobs`, or null.
+func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
+	match kind:
+		"station":
+			var st_jobs: Array = jobs.filter(func(jb): return jb in ["craft", "toolsmith", "cook"])
+			if st_jobs.is_empty():
+				return null
+			var benches := sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty() and s.crafter == 0 and not bench_craftable(s, st_jobs).is_empty() and not _cooling(s))
+			if not benches.is_empty():
+				var b: Dictionary = _nearest_site(benches, c)
+				var rec := bench_craftable(b, st_jobs)
+				return _tagged(_craft_job(r, b, rec), recipe_job(rec))
+			var dj = _try_deliver(r, c, sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty()), st_jobs)
+			if dj != null:
+				return _tagged(dj, recipe_job(Defs.recipe(dj.target.queue[bench_active(dj.target, st_jobs)])))
+		"build":
+			if not jobs.has("build"):
+				return null
+			var ready := sites.filter(func(s): return not s.done and s.builder == 0 and has_all(s.store, current_stage(s).cost) and not _cooling(s) and footprint_clear(s))
+			if not ready.is_empty():
+				return _tagged(_build_job(r, _nearest_site(ready, c)), "build")
+			var dj = _try_deliver(r, c, sites.filter(func(s): return not s.done and footprint_clear(s)))
+			if dj != null:
+				return _tagged(dj, "build")
+		"farm":
+			if not jobs.has("farm"):
+				return null
+			var crop = _farm_work(c)
+			if crop != null:
+				return _tagged(_farm_job(r, crop), "farm")
+		"gather":
+			var targets: Array = []
+			if jobs.has("mine"):
+				if not r.broken.axe or not tool_items("axe", 0).is_empty():
+					for t in trees:
+						if t.alive and t.des and t.claim == 0 and not _cooling(t):
+							targets.append(t)
+				if r.pick != null or not tool_items("pick", 0).is_empty():
+					for b in boulders:
+						if b.alive and b.des and b.claim == 0 and not _cooling(b):
+							targets.append(b)
+			if jobs.has("hunt"):
+				for sh in sheep:
+					if sh.alive and sh.des and sh.claim == 0 and not _cooling(sh):
+						targets.append(sh)
+			if not targets.is_empty():
+				var t: Dictionary = nearest(targets, c)
+				return _tagged(_hunt_job(r, t), "hunt") if t.kind == "sheep" else _tagged(_gather_job(r, t), "mine")
+		"haul":
+			if not jobs.has("haul") or zone.is_empty():
+				return null
+			var hs = _haul_source(c)
+			if hs != null:
+				return _tagged(_haul_job(r, hs.stack, hs.dest, hs.n), "haul")
+	return null
+
+
+func _tagged(j: Job, work: String) -> Job:
+	j.work = work
+	return j
+
+
+## The nearest loose stack that has room in a stockpile, as {stack, dest, n}, or null.
+func _haul_source(c: Vector2i):
 	var loose := stacks_where(func(s): return avail(s) > 0 and not in_zone(s.cell))
 	loose.sort_custom(func(a, b): return manhattan(a.cell, c) < manhattan(b.cell, c))
 	for ls in loose:
@@ -1144,23 +1213,24 @@ func _claim(r: Dictionary) -> void:
 		var cap := 1 if Defs.is_tool_item(ls.type) else Tuning.STACK
 		var here = items.get(dest)
 		var room: int = cap - (here.n if here != null else 0)
-		r.job = _haul_job(r, ls, dest, mini(mini(avail(ls), Tuning.CARRY), room))
-		return
+		return {"stack": ls, "dest": dest, "n": mini(mini(avail(ls), Tuning.CARRY), room)}
+	return null
 
 
-func _try_deliver(r: Dictionary, c: Vector2i, dests: Array) -> bool:
+## A delivery to one of `dests` that still needs materials, or null. `jobs` limits a station's
+## deliveries to recipes of those jobs.
+func _try_deliver(r: Dictionary, c: Vector2i, dests: Array, jobs := []):
 	for s in dests:
 		if _cooling(s):
 			continue
-		var need := stage_needs(s)
+		var need := stage_needs(s, jobs)
 		for t in need:
 			var src := stacks_where(func(st): return st.type == t and avail(st) > 0 and not _on_finished_bench(st, s))
 			if src.is_empty():
 				continue
 			var st: Dictionary = nearest(src, c)
-			r.job = _deliver_job(s, t, mini(mini(need[t], Tuning.CARRY), avail(st)), st)
-			return true
-	return false
+			return _deliver_job(s, t, mini(mini(need[t], Tuning.CARRY), avail(st)), st)
+	return null
 
 
 ## A finished bench drops its crafts on its own cell; those aren't fed back in.
@@ -1417,6 +1487,7 @@ func compute_stuck() -> void:
 				why = "House needs a bed: %d more %s" % [worst_n, it.one if worst_n == 1 else it.many]
 			_add_stuck(tpl.name, why,
 				mid, site_height(s) + 0.4, "site", s.id)
+	_stuck_unstaffed()
 	var has_food := food_available()
 	for r in residents:
 		var at: Vector2 = r.pos + Vector2(0.5, 0.5)
@@ -1444,6 +1515,49 @@ func compute_stuck() -> void:
 				break
 		if full:
 			_add_stuck("Stockpile", "Stockpile is full", Vector2(zone.keys()[0]) + Vector2(0.5, 0.5), 0.6, "", 0)
+
+
+## "No one does Farm" (spec §9): there's work of a job and every resident has that job off.
+func _stuck_unstaffed() -> void:
+	if residents.is_empty():
+		return
+	for jb in Defs.JOBS:
+		if residents.any(func(r): return r.jobs[jb].on):
+			continue
+		var at = _work_at(jb)
+		if at != null:
+			_add_stuck(Defs.JOB_NAMES[jb], "No one does %s" % Defs.JOB_NAMES[jb], Vector2(at) + Vector2(0.5, 0.5), 0.8, "", 0)
+
+
+## A cell where work of this job is waiting, or null when there's none.
+func _work_at(jb: String):
+	match jb:
+		"mine":
+			for o in trees + boulders:
+				if o.alive and o.des:
+					return o.cell
+		"hunt":
+			for sh in sheep:
+				if sh.alive and sh.des:
+					return sh.cell
+		"farm":
+			var crop = _farm_work(Vector2i.ZERO)
+			if crop != null:
+				return crop.cell
+		"build":
+			for st in sites:
+				if not st.done:
+					return st.origin
+		"haul":
+			if not zone.is_empty():
+				var hs = _haul_source(Vector2i.ZERO)
+				if hs != null:
+					return hs.stack.cell
+		_:
+			for st in sites:
+				if st.done and is_station(st) and st.queue.any(func(id): return recipe_job(Defs.recipe(id)) == jb):
+					return st.origin
+	return null
 
 
 func site_height(s: Dictionary) -> float:
@@ -1599,6 +1713,20 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 	_mark_obstacles(s)
 	rev += 1
 	return s
+
+
+## Switches a job on or off for a resident (spec §5). Switching off the job they're doing stops it.
+func set_job_on(r: Dictionary, job: String, on: bool) -> void:
+	r.jobs[job].on = on
+	if not on and r.job != null and r.job.work == job:
+		fail_job(r)
+	rev += 1
+
+
+## Sets a job's priority, 1 (first) to 3.
+func set_job_priority(r: Dictionary, job: String, pri: int) -> void:
+	r.jobs[job].pri = clampi(pri, 1, 3)
+	rev += 1
 
 
 ## Turns the fireplace's "Keep meals in stock" standing order on or off.

@@ -382,6 +382,8 @@ func _initialize() -> void:
 			break
 	check(sim.stats.division, "both residents work at different jobs at once")
 	check(Goals.current(sim) < 0, "every founding goal is done")
+	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
+	await frames(2)
 	check(visible_label("Slice 1 complete"), "the goals panel says Slice 1 is complete")
 
 	# Farm plots (issue #45): P, drag over open grass, and residents plant wheat
@@ -419,6 +421,24 @@ func _initialize() -> void:
 			break
 	check(fire != null and fire.done, "the fireplace is built")
 	check(cooked, "and its standing order cooks the hunted mutton")
+
+	# Jobs grid (issue #47): switch Ada's Haul off and back on, and raise Mine to priority 1
+	game.selection = {"kind": "res", "ids": [ada.id]}
+	check(await click_button("Haul"), "click Haul in Ada's Jobs grid")
+	check(not ada.jobs.haul.on, "Haul is switched off")
+	check(await click_button("Haul"), "click Haul again")
+	check(ada.jobs.haul.on, "Haul is back on")
+	for i in 2:
+		var grid_mine: Button = null
+		for n in _all(game._hud._sel):
+			if n is Button and n.text == "Mine":
+				grid_mine = n
+		var row: Array = grid_mine.get_parent().get_children()
+		var pri_btn: Button = row[row.find(grid_mine) + 1]
+		await click(pri_btn.get_global_rect().get_center())
+		game._hud.refresh(sim)
+		await frames(2)
+	check(ada.jobs.mine.pri == 1, "clicking Mine's number twice makes it priority 1 (%d)" % ada.jobs.mine.pri)
 
 	# Tools dropdown on hover
 	var tb: Button = game._hud._tools_btn
@@ -462,7 +482,8 @@ func _initialize() -> void:
 	check(await click_button("Back"), "click Back from Controls")
 	check(await click_button("Start over"), "click Start over")
 	check(await click_button("Start over", "", true), "confirm Start over (the button in the confirmation)")
-	check(game.sim.tick == 0 and not game._menu.visible, "a fresh game starts")
+	# Start over resumes play, so a slow frame may already have ticked the new game once or twice.
+	check(game.sim.tick < Tuning.TPS and not game._menu.visible, "a fresh game starts (tick %d)" % game.sim.tick)
 
 	# Camera
 	var before: Vector3 = game._target

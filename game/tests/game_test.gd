@@ -382,6 +382,32 @@ func _test_fireplace(game: Game) -> void:
 	_key(game, KEY_ESCAPE)
 
 
+## The resident panel's Jobs grid switches jobs and cycles priorities (issue #47).
+func _test_jobs_grid(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var hud: Hud = game._hud
+	var ada: Dictionary = sim.residents[0]
+	game.selection = {"kind": "res", "ids": [ada.id]}
+	hud.refresh(sim)
+	await process_frame
+	var haul: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text == "Haul")
+	check(haul.size() == 1 and haul[0].button_pressed, "the Jobs grid shows Haul, switched on")
+	if haul.size() == 1:
+		haul[0].pressed.emit()
+	check(not ada.jobs.haul.on, "clicking Haul switches it off")
+	hud.refresh(sim)
+	await process_frame
+	var buttons: Array = _walk(hud._sel).filter(func(n): return n is Button)
+	var mine_i := buttons.find(buttons.filter(func(b): return b.text == "Mine")[0])
+	var pri: Button = buttons[mine_i + 1]
+	check(pri.text == "2", "Mine shows priority 2")
+	pri.pressed.emit()
+	check(ada.jobs.mine.pri == 3, "clicking the number cycles it to 3")
+	game.cycle_job_priority(ada, "mine")
+	check(ada.jobs.mine.pri == 1, "and round to 1")
+
+
 func _walk(n: Node) -> Array:
 	var out: Array = [n]
 	for ch in n.get_children():
@@ -446,6 +472,7 @@ func _initialize() -> void:
 	await _test_right_click_never_silent(game)
 	await _test_farm_tool(game)
 	await _test_fireplace(game)
+	await _test_jobs_grid(game)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")

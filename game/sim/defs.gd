@@ -33,6 +33,11 @@ const RECIPES := [
 	{"id": "cooked_mutton", "name": "Cooked mutton", "inp": {"mutton": 1, "log": 1}, "out": {"cooked_mutton": 1}, "at": "fireplace", "doing": "Cooking mutton"},
 ]
 
+## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
+const JOBS := ["mine", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
+const JOB_NAMES := {"mine": "Mine", "haul": "Haul", "build": "Build", "craft": "Craft", "toolsmith": "Toolsmith",
+	"farm": "Farm", "cook": "Cook", "hunt": "Hunt"}
+
 ## Meals the fireplace's standing order keeps in stock.
 const MEALS := ["bread", "cooked_mutton"]
 

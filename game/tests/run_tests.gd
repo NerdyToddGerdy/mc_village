@@ -23,6 +23,7 @@ func _init() -> void:
 		"test_farm_plots_need_open_grass",
 		"test_fireplace_reserves_a_kitchen_plot",
 		"test_fireplace_cooks_and_keeps_meals_stocked",
+		"test_jobs_on_off_and_priorities",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -260,6 +261,10 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
 		else:
 			check(sim.residents[0].orders == [], "v%d: residents get an empty order list" % v)
+		if v >= 10:
+			check(sim.residents[0].jobs.haul.pri == 1 and not sim.residents[0].jobs.hunt.on, "v%d: job toggles and priorities survive" % v)
+		else:
+			check(sim.residents.all(func(r): return r.jobs == Sim.default_jobs()), "v%d: residents get every job on at priority 2" % v)
 		var fires: Array = sim.sites.filter(func(s): return s.tpl == "fireplace")
 		if v >= 9:
 			check(fires.size() == 1 and fires[0].plot is Rect2i, "v%d: the fireplace and its reserved plot survive" % v)
@@ -755,3 +760,74 @@ func test_fireplace_cooks_and_keeps_meals_stocked() -> void:
 	a2.hunger = 35.0
 	run(sim2, 20)
 	check(count(sim2, "mutton") == 1 and a2.hunger > 50.0, "a hungry resident eats berries and leaves raw mutton for cooking")
+
+
+func test_jobs_on_off_and_priorities() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	check(ada.jobs == Sim.default_jobs() and ada.jobs.size() == 8, "Ada starts with all 8 jobs on at priority 2")
+	# Haul off: loose logs are never hauled, and the stuck list says no one does it.
+	sim.paint_zone(open_rect(sim, Vector2i(2, 1)))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "log", 4)
+	sim.set_job_on(ada, "haul", false)
+	var hauled := false
+	for i in 20 * Tuning.TPS:
+		sim.step()
+		if ada.job != null and ada.job.kind == "haul":
+			hauled = true
+	check(not hauled and count(sim, "log") == 4, "with Haul off, Ada never hauls")
+	check(stuck_text(sim).contains("No one does Haul"), "and the stuck list says no one does Haul: " + stuck_text(sim))
+	sim.set_job_on(ada, "haul", true)
+	run(sim, 20)
+	check(sim.items.values().all(func(it): return sim.in_zone(it.cell)), "Haul back on: the logs are hauled")
+	check(not stuck_text(sim).contains("No one does"), "and the reason goes away")
+	# Priority 1 work comes before priority 2, against Slice 1's order (mining before hauling).
+	var sim2 := Sim.new_game()
+	var a2: Dictionary = sim2.residents[0]
+	sim2.paint_zone(open_rect(sim2, Vector2i(2, 1)))
+	sim2.drop_items(Sim.rcell(a2) + Vector2i(0, 1), "cobble", 4)
+	sim2.designate_mine(whole_map())
+	run(sim2, 1)
+	check(a2.job != null and a2.job.work == "mine", "at equal priorities, mining comes before hauling (%s)" % (a2.job.work if a2.job else "idle"))
+	sim2.set_job_priority(a2, "haul", 1)
+	check(a2.job != null and a2.job.work == "mine", "changing a priority doesn't interrupt the current job")
+	sim2.fail_job(a2)
+	run(sim2, 0.1)
+	check(a2.job != null and a2.job.work == "haul", "with Haul at priority 1, she hauls first (%s)" % (a2.job.work if a2.job else "idle"))
+	# Switching off the job she's doing stops it.
+	sim2.set_job_on(a2, "haul", false)
+	check(a2.job == null or a2.job.work != "haul", "switching a job off stops it")
+	# Direct orders still work with every job off.
+	for jb in Defs.JOBS:
+		sim2.set_job_on(a2, jb, false)
+	run(sim2, 2)
+	check(a2.job == null, "with every job off, she claims nothing")
+	var tree: Dictionary = Sim.nearest(sim2.trees.filter(func(t): return t.alive and t.claim == 0), Sim.rcell(a2))
+	sim2.direct_order(a2, tree)
+	run(sim2, 1)
+	check(a2.job != null and is_same(a2.job.target, tree), "a direct order still works with every job off")
+	check(stuck_text(sim2).contains("No one does Mine"), "and the other marked trees say no one mines: " + stuck_text(sim2))
+	# Eating comes before jobs, and is never switched off.
+	a2.hunger = 30.0
+	sim2.fail_job(a2)
+	run(sim2, 0.1)
+	check(a2.job != null and a2.job.kind == "eat", "a hungry resident eats even with every job off")
+	# Station work is split by job: with Toolsmith off, Ada makes planks but not the pickaxe.
+	var sim3 := Sim.new_game()
+	var a3: Dictionary = sim3.residents[0]
+	var bench := sim3.place_site("bench", open_rect(sim3, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	sim3.drop_items(Sim.rcell(a3) + Vector2i(1, 0), "log", 4)
+	sim3.set_job_on(a3, "toolsmith", false)
+	for r in ["planks", "planks", "sticks", "wood_pick"]:
+		sim3.queue_add(bench, r)
+	run(sim3, 60)
+	check(bench.queue == ["wood_pick"], "with Toolsmith off, the pickaxe waits (%s)" % [bench.queue])
+	check(stuck_text(sim3).contains("No one does Toolsmith"), "and says why: " + stuck_text(sim3))
+	sim3.set_job_on(a3, "toolsmith", true)
+	run(sim3, 20)
+	check(sim3.stats.pick_crafted, "Toolsmith on: the pickaxe is made")
+	# Jobs survive a save.
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim2.save_state())))
+	check(loaded.residents[0].jobs == a2.jobs, "job settings survive a save")

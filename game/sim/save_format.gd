@@ -12,12 +12,21 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 9
+const VERSION := 10
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10}
+
+
+## v10: residents' jobs, each on or off with a priority (issue #47). Everyone starts with every
+## job on at priority 2, which is how they worked before.
+static func _v9_to_v10(d: Dictionary) -> Dictionary:
+	for r in d.state.residents:
+		if not r.has("jobs"):
+			r.jobs = Sim.default_jobs()
+	return d
 
 
 ## v9: reserved plots for job buildings, and the fireplace's standing order (issue #46). Benches

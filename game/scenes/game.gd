@@ -683,6 +683,15 @@ func remove_farm_plot(crop: Dictionary) -> void:
 	selection = {}
 
 
+func toggle_job(r: Dictionary, job: String) -> void:
+	sim.set_job_on(r, job, not r.jobs[job].on)
+
+
+## Priority 1 → 2 → 3 → 1.
+func cycle_job_priority(r: Dictionary, job: String) -> void:
+	sim.set_job_priority(r, job, r.jobs[job].pri % 3 + 1)
+
+
 func set_keep_meals(f: Dictionary, on: bool) -> void:
 	sim.set_keep_meals(f, on)
 

@@ -88,7 +88,7 @@ Slice 2 is done when, from a fresh start, a player can:
 - **A plot is replanted only once its harvest has been collected** (decided with the owner). With no stockpile to take it to, the wheat waits on the plot and the stuck list says "Harvested wheat needs a stockpile before replanting".
 - **Where plots go:** only open grass. Trees, boulders, berry bushes, buildings and stockpile cells are skipped when painting. A stockpile can't be painted over a farm either. Placing a building over plots clears them, as it does stockpile cells. Plots can't go on a reserved plot (§8).
 - **Selecting a plot** shows its state (empty, growing with a percentage, ripe) and who is working it, with **Remove this plot**.
-- **Until job toggles exist (#47)** every resident farms. Farm work comes after building and delivering to sites, and before mining. Ripe cells are harvested before empty ones are planted.
+- Farming is the **Farm** job (§5). Within a priority, farm work comes after building and delivering to sites, and before mining. Ripe cells are harvested before empty ones are planted.
 
 **Fireplace.** A new job building (build menu, default key **K**). It's a 1×1 stone fireplace costing 6 cobblestone. Placing it reserves the **3×3 plot** around it that the kitchen will need later (§8). Like the bench, it has a queue, worked by residents with Cook switched on:
 
@@ -102,7 +102,7 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 - Turning the standing order off removes the meals it queued. The switch sits in the fireplace's panel.
 - Selecting a finished fireplace opens its panel on the right, as the bench does. The toolbar's **Craft** button and its **Next** button step through every finished bench and fireplace.
 - Hungry residents leave raw mutton for the fireplace. They eat it only when there's no other food.
-- **Until job toggles exist (#47)** every resident cooks, and fireplace work ranks with bench work.
+- Fireplace work is the **Cook** job (§5) and ranks with bench work.
 
 ## 5. Jobs, priorities and skills
 
@@ -135,6 +135,16 @@ Each resident has, for **every** job:
 | Build, Hunt | Speed only |
 
 **New arrivals** start at level 1 everywhere except one job, picked by the sim's seeded random number generator, which starts at level 3. A traveler's toast says it ("Tomas is a skilled farmer").
+
+**How work maps to jobs** (#47):
+- **Mine:** marked trees and boulders. **Hunt:** marked sheep. **Farm:** planting and harvesting.
+- **Build:** building, and carrying materials to construction sites.
+- **Craft / Toolsmith / Cook:** making and carrying ingredients for station recipes. Planks and sticks are Craft, tools are Toolsmith, fireplace recipes are Cook. With Toolsmith off, a resident still makes the planks and sticks queued ahead of a pickaxe and leaves the pickaxe itself.
+- **Haul:** carrying loose items to stockpiles.
+- Within one priority, the order is: station work (Craft, Toolsmith, Cook), then Build, then Farm, then Mine and Hunt (nearest first), then Haul.
+- Switching off the job a resident is doing stops it. Changing a priority doesn't interrupt current work.
+- With every job off, a resident still eats and follows direct and queued orders.
+- "No one does X" appears in the stuck list when there's work of that job and every resident has it off.
 
 **Character panel.** The resident panel gains a **Jobs** grid. Each row shows a job's on/off switch, priority (1, 2 or 3; click to cycle) and level with a progress bar to the next level.
 
@@ -205,6 +215,7 @@ Taken together, the upgrade steps:
 - Gives existing residents full hunger, all jobs on at priority 2, and level 1 everywhere.
 - Adds a finished bed to every finished house (so old saves keep their residents housed).
 - Adds no farm plots (v7→v8, #45).
+- Gives existing residents every job on at priority 2 (v9→v10, #47).
 - Gives existing buildings no reserved plot, so Slice 1 benches reserve nothing (v8→v9, #46).
 - Adds no sheep to the clearing (old saves are past the opening).
 - Gives the meadow its starting 8 sheep.
