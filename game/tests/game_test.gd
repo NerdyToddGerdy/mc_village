@@ -368,6 +368,14 @@ func _test_farm_tool(game: Game) -> void:
 	check(remove.size() == 1, "with a button to remove it")
 	if remove.size() == 1:
 		remove[0].pressed.emit()
+		check(sim.farm.has(rect.position) and remove[0].text == "Click again to remove the plot", "the first click only asks to confirm")
+		check(remove[0].theme_type_variation == "Destructive", "removing a plot is styled as destructive")
+		hud.refresh(sim)
+		await process_frame
+		var again: Array = _walk(hud._sel).filter(func(n): return n is Button and not n.is_queued_for_deletion() and n.text == "Click again to remove the plot")
+		check(again.size() == 1, "and stays armed across a panel rebuild")
+		if again.size() == 1:
+			again[0].pressed.emit()
 	check(sim.farm.size() == 3 and not sim.farm.has(rect.position), "removing takes away just that plot")
 
 

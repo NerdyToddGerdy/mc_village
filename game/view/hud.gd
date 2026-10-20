@@ -29,6 +29,9 @@ var _build_menu: PanelContainer
 var _craft_panel: PanelContainer
 var _craft_box := VBoxContainer.new()
 var _tool_btns := {}
+var _armed_key := ""            ## The Destructive button waiting for its second click, if any.
+var _armed_until := 0
+const ARM_MS := 3000
 var _build_items := {}
 var _keys_sig := ""
 var _hint := Label.new()
@@ -129,8 +132,8 @@ func label(text: String, bold := false, color := Palette.CHALK, size := 15, wrap
 	return _label(text, bold, color, size, wrap)
 
 
-func button(text: String, on_press: Callable) -> Button:
-	return _button(text, on_press)
+func button(text: String, on_press: Callable, style := "") -> Button:
+	return _button(text, on_press, style)
 
 
 func box(bg: Color, radius: int, margin: int, border := Color(0, 0, 0, 0)) -> StyleBoxFlat:
@@ -164,6 +167,18 @@ func _make_theme() -> void:
 	var focus := _box(Color(0, 0, 0, 0), 4, 8, Palette.CHALK)
 	focus.set_border_width_all(2)
 	_theme.set_stylebox("focus", "Button", focus)
+	# Three button variations (issue #75). Primary: a panel's main action. Secondary: inline actions.
+	# Destructive: actions that throw work away; they take a second click to confirm.
+	for v in [["Primary", Palette.CHALK, Palette.CHALK, Palette.CHALK], ["Secondary", Color(Palette.CHALK_DIM, 0.35), Palette.CHALK_DIM, Palette.CHALK], ["Destructive", Palette.RED, Palette.RED, Palette.RED]]:
+		_theme.set_type_variation(v[0], "Button")
+		_theme.set_stylebox("normal", v[0], _box(Color(0, 0, 0, 0), 4, 8, v[1]))
+		for state in ["hover", "pressed", "hover_pressed"]:
+			_theme.set_stylebox(state, v[0], _box(Palette.SLATE_DEEP, 4, 8, v[3]))
+		_theme.set_stylebox("disabled", v[0], _box(Color(0, 0, 0, 0), 4, 8, Palette.SLATE_DEEP))
+		_theme.set_color("font_color", v[0], v[2])
+		_theme.set_color("font_focus_color", v[0], v[2])
+		_theme.set_color("font_hover_color", v[0], v[3])
+		_theme.set_color("font_pressed_color", v[0], v[3])
 	var tip := _box(Palette.SLATE, 4, 8, Palette.SLATE_DEEP)
 	_theme.set_stylebox("panel", "TooltipPanel", tip)
 	_theme.set_color("font_color", "TooltipLabel", Palette.CHALK)
@@ -217,11 +232,30 @@ func _label(text: String, bold := false, color := Palette.CHALK, size := 15, wra
 	return l
 
 
-func _button(text: String, on_press: Callable) -> Button:
+func _button(text: String, on_press: Callable, style := "") -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_ALL
+	b.theme_type_variation = style
 	b.pressed.connect(on_press)
+	return b
+
+
+## A Destructive button: the first click arms it ("Click again to …") for a few seconds, and only a
+## second click acts. `key` names what it destroys, so the armed state survives a panel rebuild.
+func _destructive(text: String, confirm: String, key: String, on_press: Callable) -> Button:
+	var armed := _armed_key == key and Time.get_ticks_msec() < _armed_until
+	var b := _button(confirm if armed else text, func(): pass, "Destructive")
+	b.pressed.connect(func() -> void:
+		if _armed_key == key and Time.get_ticks_msec() < _armed_until:
+			_armed_key = ""
+			on_press.call()
+		else:
+			_armed_key = key
+			_armed_until = Time.get_ticks_msec() + ARM_MS
+			b.text = confirm)
+	b.set_meta("disarmed_text", text)
+	b.set_meta("arm_key", key)
 	return b
 
 
@@ -448,6 +482,11 @@ func _input(event: InputEvent) -> void:
 func _process(_delta: float) -> void:
 	if _tools_btn == null:
 		return
+	if _armed_key != "" and Time.get_ticks_msec() >= _armed_until:
+		_armed_key = ""
+		for n in _sel.find_children("*", "Button", true, false):
+			if n.has_meta("disarmed_text"):
+				n.text = n.get_meta("disarmed_text")
 	_place_toasts()
 	var mouse := _pointer
 	var btn_rect := _tools_btn.get_global_rect().grow(4)
@@ -527,9 +566,9 @@ func add_toast(ev: Dictionary) -> void:
 	h.add_theme_constant_override("separation", 14)
 	h.add_child(_label(ev.text))
 	if ev.res_id:
-		h.add_child(_button("Go to them", func(): game.focus_on("res", ev.res_id)))
+		h.add_child(_button("Go to them", func(): game.focus_on("res", ev.res_id), "Secondary"))
 	elif ev.site_id:
-		h.add_child(_button("Show", func(): game.focus_on("site", ev.site_id)))
+		h.add_child(_button("Show", func(): game.focus_on("site", ev.site_id), "Secondary"))
 	var p := _panel(h, Vector2.ZERO, 10)
 	p.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_toasts.add_child(p)
@@ -600,7 +639,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			c.add_child(_label("Queued orders", true))
 			for i in r.orders.size():
 				c.add_child(_label("%d  %s" % [i + 1, Sim.order_text(r.orders[i])], false, Palette.CHALK, 14))
-			c.add_child(_button("Clear orders", func(): game.clear_orders(r)))
+			c.add_child(_destructive("Clear orders", "Click again to clear orders", "orders:%d" % r.id, func(): game.clear_orders(r)))
 		if equip_kind != "":
 			return  # the tool list takes the Jobs grid's room while it's open
 		_add_meadow_button(c, sim, [r])
@@ -614,7 +653,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 	match target.kind:
 		"tree":
 			c.add_child(_head("Tree", "Drops %d logs" % target.logs))
-			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target)))
+			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target), "Secondary" if target.des else "Primary"))
 		"bush":
 			c.add_child(_head("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX]))
 			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, 14, true))
@@ -637,17 +676,17 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 				var who: String = sim.resident(target.claim).get("name", "Someone")
 				c.add_child(_label("%s is %s it." % [who, "harvesting" if stage == 4 else "planting"], false, Palette.CHALK_DIM))
 			c.add_child(_label("Wheat takes %d minutes to grow and gives %d when harvested." % [int(Tuning.WHEAT_GROW / 60.0), Tuning.WHEAT_YIELD], false, Palette.CHALK_DIM, 14, true))
-			c.add_child(_button("Remove this plot", func(): game.remove_farm_plot(target)))
+			c.add_child(_destructive("Remove this plot", "Click again to remove the plot", "plot:%d" % target.id, func(): game.remove_farm_plot(target)))
 		"sheep":
 			c.add_child(_head("Sheep", "Drops 1 wool and 1 raw mutton"))
 			if target.claim != 0:
 				c.add_child(_label("%s is hunting it." % sim.resident(target.claim).get("name", "Someone"), false, Palette.CHALK_DIM))
-			c.add_child(_button("Cancel hunt" if target.des else "Hunt", func(): game.toggle_hunt(target)))
+			c.add_child(_button("Cancel hunt" if target.des else "Hunt", func(): game.toggle_hunt(target), "Secondary" if target.des else "Primary"))
 		"boulder":
 			c.add_child(_head("Boulder", "Drops %d cobblestone" % Tuning.BOULDER_COBBLE))
 			if target.des and sim.stuck.any(func(s): return s.focus_kind == "boulder"):
 				c.add_child(_reason("Needs a pickaxe"))
-			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target)))
+			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target), "Secondary" if target.des else "Primary"))
 		"site":
 			_fill_site(c, sim, target)
 
@@ -668,7 +707,7 @@ func _refresh_craft(sim: Sim) -> void:
 			var l := _label("%d of %d" % [game.craft_bench_i % n + 1, n], false, Palette.CHALK_DIM, 14)
 			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			h.add_child(l)
-			h.add_child(_button("Next", func(): game.next_craft_bench()))
+			h.add_child(_button("Next", func(): game.next_craft_bench(), "Secondary"))
 			c.add_child(h)
 		_fill_bench(c, sim, bench))
 
@@ -738,7 +777,7 @@ func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
 	var h := _row("Axe" if kind == "axe" else "Pickaxe", text)
 	var spare := sim.tool_items(kind, 0)
 	if not spare.is_empty() or equip_kind == kind:
-		var b := _button("Close" if equip_kind == kind else "Equip", func(): equip_kind = "" if equip_kind == kind else kind)
+		var b := _button("Close" if equip_kind == kind else "Equip", func(): equip_kind = "" if equip_kind == kind else kind, "Secondary")
 		b.add_theme_font_size_override("font_size", 13)
 		b.tooltip_text = "Choose which %s %s uses" % ["axe" if kind == "axe" else "pickaxe", r.name]
 		h.add_child(b)
@@ -748,7 +787,7 @@ func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
 		var l := _label("Kept until it breaks.", false, Palette.CHALK_DIM, 13)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		k.add_child(l)
-		var auto := _button("Use the best", func(): game.release_kept_tool(r, kind))
+		var auto := _button("Use the best", func(): game.release_kept_tool(r, kind), "Secondary")
 		auto.add_theme_font_size_override("font_size", 13)
 		auto.tooltip_text = "Let %s swap it for a better one when there is one" % r.name
 		k.add_child(auto)
@@ -765,6 +804,7 @@ func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
 		var b := _button("%s, %d %s left, %s" % [it.one.substr(0, 1).to_upper() + it.one.substr(1), st.dur, "use" if st.dur == 1 else "uses", where], func():
 			equip_kind = ""
 			game.equip_tool(r, st))
+		b.theme_type_variation = "Secondary"
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.add_theme_font_size_override("font_size", 13)
 		c.add_child(b)
@@ -782,7 +822,7 @@ func _add_meadow_button(c: Container, sim: Sim, rs: Array) -> void:
 	if rs.any(func(r): return r.away or r.arriving):
 		return
 	var text := "Send to the meadow" if rs.size() == 1 else "Send both to the meadow"
-	var b := _button(text, func(): game.send_to_meadow(rs.map(func(r): return r.id)))
+	var b := _button(text, func(): game.send_to_meadow(rs.map(func(r): return r.id)), "Primary")
 	b.tooltip_text = "Away %d seconds. Each brings back %d wool and %d raw mutton. The meadow has %d sheep." % [int(Tuning.MEADOW_TRIP), Tuning.MEADOW_TAKE, Tuning.MEADOW_TAKE, sim.meadow_sheep]
 	c.add_child(b)
 	if sim.meadow_sheep == 0:
@@ -813,7 +853,7 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		if s.stage + 1 < tpl.stages.size():
 			var nxt: Dictionary = tpl.stages[s.stage + 1]
 			c.add_child(_label("%s next: %s." % [nxt.name, Defs.cost_text(nxt.cost)], false, Palette.CHALK_DIM, 15, true))
-		c.add_child(_button("Cancel blueprint", func(): game.cancel_site(s)))
+		c.add_child(_destructive("Cancel blueprint", "Click again to cancel the blueprint", "site:%d" % s.id, func(): game.cancel_site(s)))
 		return
 	if s.tpl == "house":
 		var owner := sim.resident(s.owner)
@@ -828,7 +868,7 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	for x in reasons:
 		c.add_child(_reason(x.why))
 	if not game.craft_menu_open:
-		c.add_child(_button("Open the craft menu", func(): game.open_craft_menu(s)))
+		c.add_child(_button("Open the craft menu", func(): game.open_craft_menu(s), "Primary"))
 
 
 ## What a finished bench or fireplace is doing, for its panels.
@@ -868,8 +908,8 @@ func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 		l.add_theme_constant_override("line_spacing", -2)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(l)
-		h.add_child(_button("Queue", func(): game.queue_craft(s, rec.id)))
-		h.add_child(_button("Queue 5", func(): game.queue_craft(s, rec.id, 5)))
+		h.add_child(_button("Queue", func(): game.queue_craft(s, rec.id), "Primary"))
+		h.add_child(_button("Queue 5", func(): game.queue_craft(s, rec.id, 5), "Secondary"))
 		c.add_child(h)
 	var lower := VBoxContainer.new()
 	lower.add_theme_constant_override("separation", 6)
@@ -890,7 +930,7 @@ func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 		lower.add_child(flow)
 	if s.tpl == "fireplace":
 		var on: bool = s.get("keep_meals", true)
-		var keep := _button("Keep %d meals in stock: %s" % [Tuning.MEAL_STOCK, "on" if on else "off"], func(): game.set_keep_meals(s, not on))
+		var keep := _button("Keep %d meals in stock: %s" % [Tuning.MEAL_STOCK, "on" if on else "off"], func(): game.set_keep_meals(s, not on), "Secondary")
 		keep.toggle_mode = true
 		keep.set_pressed_no_signal(on)
 		lower.add_child(keep)

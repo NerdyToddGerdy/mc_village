@@ -136,9 +136,8 @@ func _render_keys() -> void:
 			var name := hud.label(a[2], false, Palette.CHALK, 14)
 			name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			grid.add_child(name)
-			var change := hud.button("Cancel" if waiting else "Change", func(): _listen(a[0]))
+			var change := hud.button("Cancel" if waiting else "Change", func(): _listen(a[0]), "Secondary")
 			change.custom_minimum_size = Vector2(80, 30)
-			change.add_theme_stylebox_override("normal", hud.box(Color(0, 0, 0, 0), 4, 6, Palette.CHALK_DIM))
 			grid.add_child(change)
 		for row in FIXED_ROWS.get(g, []):
 			grid.add_child(hud.label(row[0], true, Palette.CHALK_DIM, 14))
@@ -159,7 +158,7 @@ func _render_keys() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.add_child(_back_button())
-	var reset := hud.button("Reset to defaults", _reset_keys)
+	var reset := hud.button("Reset to defaults", _reset_keys, "Secondary")
 	reset.add_theme_stylebox_override("normal", hud.box(Color(0, 0, 0, 0), 4, 10, Palette.CHALK_DIM))
 	row.add_child(reset)
 	_box.add_child(row)
@@ -240,7 +239,7 @@ func _render_slots() -> void:
 			b = hud.button("Load", func(): _ask("Load slot %d? Anything you haven’t saved will be lost." % n, "Load slot %d" % n, "load", n))
 			b.disabled = meta == null or unreadable
 		b.custom_minimum_size = Vector2(110, 40)
-		b.add_theme_stylebox_override("normal", hud.box(Color(0, 0, 0, 0), 4, 10, Palette.CHALK if not b.disabled else Palette.SLATE_DEEP))
+		b.theme_type_variation = "Primary"
 		row.add_child(b)
 		var slot_panel := PanelContainer.new()
 		slot_panel.add_theme_stylebox_override("panel", hud.box(Color(Palette.SLATE_DEEP, 0.5), 6, 10, Palette.SLATE_DEEP))
@@ -253,9 +252,8 @@ func _render_slots() -> void:
 
 
 func _back_button() -> Button:
-	var b := hud.button("Back", func(): show_view("main"))
+	var b := hud.button("Back", func(): show_view("main"), "Secondary")
 	b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	b.add_theme_stylebox_override("normal", hud.box(Color(0, 0, 0, 0), 4, 10, Palette.CHALK_DIM))
 	return b
 
 
@@ -275,8 +273,7 @@ func _add_confirm() -> void:
 	go.add_theme_color_override("font_color", Palette.YELLOW)
 	go.add_theme_stylebox_override("normal", hud.box(Color(0, 0, 0, 0), 4, 10, Palette.YELLOW))
 	h.add_child(go)
-	var cancel := hud.button("Cancel", func(): _confirm = {}; _render())
-	cancel.add_theme_stylebox_override("normal", hud.box(Color(0, 0, 0, 0), 4, 10, Palette.CHALK_DIM))
+	var cancel := hud.button("Cancel", func(): _confirm = {}; _render(), "Secondary")
 	h.add_child(cancel)
 	v.add_child(h)
 	var p := PanelContainer.new()
