@@ -39,6 +39,7 @@ func _init() -> void:
 		"test_upgrades_run_in_order",
 		"test_newer_or_damaged_saves_are_refused",
 		"test_save_file_round_trip",
+		"test_erasing_stockpile_cells",
 	]
 	for t in tests:
 		_current = t
@@ -336,6 +337,53 @@ func test_dropped_tools_keep_their_wear() -> void:
 		if bo.axe != null:
 			break
 	check(bo.axe != null and bo.axe.type == "wood_axe" and bo.axe.dur == 3, "the next resident picks it up with its 3 uses (%s)" % [bo.axe])
+
+
+## Erasing stockpile cells (issue #63): stacks left on them are re-hauled to the cells that are left,
+## a haul on its way to an erased cell goes to another one, and erasing every cell stops hauling.
+func test_erasing_stockpile_cells() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	ada.hunger = 100.0
+	sim.residents[0].jobs.mine.on = false
+	var rect := open_rect(sim, Vector2i(4, 1))
+	sim.paint_zone(rect)
+	check(sim.zone.size() == 4, "a 4-cell stockpile")
+	var first := rect.position
+	sim.drop_items(first, "log", 3)  # already stockpiled
+	check(sim.erase_zone(Rect2i(first, Vector2i.ONE)) == 1 and not sim.in_zone(first), "erasing one cell takes just that cell")
+	check(sim.items.has(first) and sim.items[first].n == 3, "the logs on it stay where they are")
+	run(sim, 40)
+	check(not sim.items.has(first) and count(sim, "log") == 3 and sim.items.values().all(func(st): return sim.in_zone(st.cell)), "and are hauled to the cells that are left")
+	# A haul on its way to a cell that's erased heads for another one.
+	sim.drop_items(Sim.rcell(ada) + Vector2i(0, 2) if sim.walkable(Sim.rcell(ada) + Vector2i(0, 2)) else Sim.rcell(ada), "plank", 2)
+	var dest = null
+	for i in 400:
+		sim.step()
+		if ada.job != null and ada.job.kind == "haul" and ada.carry != null:
+			for st in ada.job.steps:
+				if st.op == "haul_drop":
+					dest = st.cell
+			break
+	check(dest != null, "Ada is carrying planks to a stockpile cell")
+	if dest != null:
+		sim.erase_zone(Rect2i(dest, Vector2i.ONE))
+		check(ada.job != null and ada.job.kind == "haul" and ada.carry != null, "erasing that cell doesn't drop her load")
+		var new_dest = null
+		for st in ada.job.steps:
+			if st.op == "haul_drop":
+				new_dest = st.cell
+		check(new_dest != null and new_dest != dest and sim.in_zone(new_dest) and sim.zone_res.get(new_dest, 0) == ada.id, "she heads for another cell instead")
+		run(sim, 30)
+		var planks: Array = sim.stacks_where(func(st): return st.type == "plank")
+		check(planks.size() == 1 and sim.in_zone(planks[0].cell) and ada.carry == null, "and puts the planks there")
+		check(not sim.zone_res.has(dest), "nothing is left holding the erased cell")
+	# Erasing every cell: stacks stay where they are and nothing more is hauled.
+	sim.erase_zone(Rect2i(0, 0, sim.w, sim.h))
+	check(sim.zone.is_empty() and sim.zone_res.is_empty(), "erasing a big rectangle takes every stockpile cell")
+	var before := sim.items.duplicate()
+	run(sim, 20)
+	check(sim.items.keys() == before.keys() and (ada.job == null or ada.job.kind != "haul"), "with no stockpile, nothing is hauled and the stacks stay put")
 
 
 func test_upgrades_run_in_order() -> void:
