@@ -245,6 +245,7 @@ The world is a building site; the player is the foreman. Orders are chalk marks 
 | Build blue | `#6FA8DC` | Blueprint ghosts, build progress |
 | Store green | `#8CC084` | Stockpile zones |
 | Stuck yellow | `#E8C547` | Stuck flags, stuck list |
+| Wheat | `#D8B65A` | Farm plots and the Farm order (#74). Kept apart from stuck yellow, which means only "stuck". |
 
 World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`, stone `#8A8D86`, log `#7A5634`, plank `#C49A62`.
 
@@ -266,10 +267,13 @@ World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`,
 +---------------------------------------------------+
 ```
 
-- Top left: material tallies, plus a Tools count. Hovering, focusing or tapping Tools opens a list:
-  - Each resident's equipped axe and pickaxe, with uses left as a bar. The bar turns yellow at 3 uses or fewer.
-  - A "Broke" note for any tool that broke.
-  - Spare tools, with how many are in the stockpile and how many are lying loose.
+- Top left: the tally bar, in three groups split by thin rules (#73):
+  - **Materials:** logs, planks, sticks, cobblestone, wheat and wool. Each appears once it first turns up in the game, or while a building or a queued recipe is waiting for it, so the opening bar stays short. Once shown, it stays, at 0 if need be.
+  - **Food:** stored meals (bread and cooked mutton) as one count, shown once any food has turned up. Hovering lists each meal, raw mutton and the berries left on bushes. The count turns stuck yellow while there are fewer meals than residents.
+  - **Tools:** a count. Hovering, focusing or tapping Tools opens a list:
+    - Each resident's equipped axe and pickaxe, with uses left as a bar. The bar turns yellow at 3 uses or fewer.
+    - A "Broke" note for any tool that broke.
+    - Spare tools, with how many are in the stockpile and how many are lying loose.
 - Top right: speed controls.
 - Right edge: stuck list, shown only when something is stuck; clicking an entry focuses the camera.
 - Buttons come in three styles, set as theme type variations (#75):
@@ -279,7 +283,7 @@ World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`,
 - Panel headers put a title and its status side by side, at least 16 px apart. A status too long for that moves to its own dimmed line under the title (#72).
 - Toasts (and the paused notice) sit just below the tally bar, centred in the gap between the goals panel and the stuck list, so they never cover either. A toast too wide for the gap wraps (#71).
 - Bottom left: selection panel (resident, site, or bench, where crafts are queued).
-- Bottom right: orders toolbar — Mine, Stockpile, Build ▸ (Crafting bench, House). Mine is one order for both trees and boulders: a drag marks every tree and boulder in it, and clicking a marked one unmarks it.
+- Bottom right: orders toolbar — Mine, Hunt, Stockpile, Farm, Build ▸ (Crafting bench, House, Fireplace), then Craft past a thin rule, since it opens a panel instead of choosing an order. Each label is chalk, with an icon on the left drawn like the order's mark in the world (red slash, red crosshair, green hatch, wheat rows, blue dashed square, a bench for Craft) and the key as a small keycap on the right, hidden when unbound (#74). Mine is one order for both trees and boulders: a drag marks every tree and boulder in it, and clicking a marked one unmarks it.
 
 **World marks.** Shape always differs, so colour is never the only signal.
 

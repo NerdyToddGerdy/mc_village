@@ -11,6 +11,7 @@ static var RED := Color("#F25C54")
 static var BLUE := Color("#6FA8DC")
 static var GREEN := Color("#8CC084")
 static var YELLOW := Color("#E8C547")
+static var WHEAT := Color("#D8B65A")   ## Farm plots and the Farm order (issue #74); yellow stays for stuck.
 static var SKY := Color("#A9B8B0")
 
 # World

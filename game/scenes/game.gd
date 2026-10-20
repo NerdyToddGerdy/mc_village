@@ -152,7 +152,7 @@ func _update_live_overlays() -> void:
 	var hint := ""
 	var hint_col := Palette.CHALK
 	if not _drag.is_empty() and _drag.kind == "rect":
-		outlines.append({"rect": _drag.rect, "h": 0.03, "color": {"stock": Palette.GREEN, "farm": Palette.YELLOW}.get(tool, Palette.RED), "dashed": true})
+		outlines.append({"rect": _drag.rect, "h": 0.03, "color": {"stock": Palette.GREEN, "farm": Palette.WHEAT}.get(tool, Palette.RED), "dashed": true})
 	elif tool in ["mine", "stock", "hunt", "farm"] and _hover != null:
 		outlines.append({"rect": Rect2i(_hover, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	if tool == "build" and placing != "" and _hover != null:
@@ -903,6 +903,11 @@ func _screenshot_scene() -> void:
 		sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 2), "wood_axe", 1, 4)
 		selection = {"kind": "res", "ids": [ada.id]}
 		_hud.equip_kind = "axe"
+	if "--food" in OS.get_cmdline_user_args():  # meals and raw mutton for the tally bar's Food group (issue #73)
+		var z: Vector2i = area(10, 7, 4, 2).position
+		sim.drop_items(z, "bread", 2)
+		sim.drop_items(z + Vector2i(1, 0), "mutton", 3)
+		sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(1, 1), "cooked_mutton", 1)
 	if "--toast" in OS.get_cmdline_user_args():  # a short toast and one long enough to wrap (issue #71)
 		_hud.add_toast({"text": "Tomas is now level 2 at Mine.", "res_id": 0, "site_id": 0})
 		_hud.add_toast({"text": "A traveler, Mira, has arrived. She claims the new house and needs tools from the bench before she can mine.", "res_id": sim.residents[0].id, "site_id": 0})
