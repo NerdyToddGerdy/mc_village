@@ -238,7 +238,7 @@ func _test_craft_menu(game: Game) -> void:
 	check(game.craft_menu_open, "selecting the bench opens the craft panel")
 	var left_queue := _walk(hud._sel).filter(func(n): return n is Button and n.text.begins_with("Queue"))
 	var right_queue := _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Queue"))
-	check(left_queue.is_empty() and right_queue.size() == 2 * Defs.RECIPES.size(), "the recipe list is only on the right (%d left, %d right)" % [left_queue.size(), right_queue.size()])
+	check(left_queue.is_empty() and right_queue.size() == 2 * Defs.recipes_at("bench").size(), "the recipe list is only on the right (%d left, %d right)" % [left_queue.size(), right_queue.size()])
 	check(_walk(hud._sel).any(func(n): return n is Label and n.text == "Crafting bench"), "the left panel still names the bench and its status")
 	_key(game, KEY_ESCAPE)
 
@@ -338,6 +338,50 @@ func _test_farm_tool(game: Game) -> void:
 	check(sim.farm.size() == 3 and not sim.farm.has(rect.position), "removing takes away just that plot")
 
 
+## K places a fireplace with its kitchen plot shown; selecting it opens its own recipes and the
+## standing order (issue #46).
+func _test_fireplace(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var hud: Hud = game._hud
+	_key(game, KEY_K)
+	check(game.tool == "build" and game.placing == "fireplace", "K picks the fireplace")
+	var ada_cell := Sim.rcell(sim.residents[0])
+	var spot := Vector2i(-1, -1)
+	for d in range(2, 10):
+		for c in [ada_cell + Vector2i(d, 0), ada_cell + Vector2i(0, d), ada_cell - Vector2i(d, 0), ada_cell - Vector2i(0, d)]:
+			if sim.placement_check("fireplace", c) == "" and sim.walkable(c):
+				spot = c
+				break
+		if spot.x >= 0:
+			break
+	var p: Vector2 = game._cam.unproject_position(Vector3(spot.x + 0.5, 0.0, spot.y + 0.5))
+	_mouse(game, "move", p)
+	game._update_live_overlays()
+	check(game._world.live_outlines.any(func(o): return o.rect == Sim.plot_rect("fireplace", spot, game.rot)), "placing shows the kitchen plot it reserves")
+	check(game._hud._hint.text.begins_with("Place fireplace."), "with a hint: \"%s\"" % game._hud._hint.text)
+	_mouse(game, "down", p)
+	var f = sim.site_at(spot)
+	check(f != null and f.tpl == "fireplace" and f.plot != null, "clicking places the fireplace with its plot")
+	if f == null:
+		return
+	f.stage = 1
+	f.done = true
+	sim.rev += 1
+	game._select(f)
+	hud.refresh(sim)
+	await process_frame
+	check(game.craft_menu_open, "selecting the fireplace opens its menu")
+	var rows := _walk(hud._craft_box).filter(func(n): return n is Button and n.text == "Queue")
+	check(rows.size() == 2, "it lists its two recipes, bread and cooked mutton (%d)" % rows.size())
+	var keep: Array = _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Keep 6 meals"))
+	check(keep.size() == 1 and keep[0].text.ends_with("on"), "the standing order shows, on by default")
+	if keep.size() == 1:
+		keep[0].pressed.emit()
+	check(not f.keep_meals, "clicking it turns the standing order off")
+	_key(game, KEY_ESCAPE)
+
+
 func _walk(n: Node) -> Array:
 	var out: Array = [n]
 	for ch in n.get_children():
@@ -401,6 +445,7 @@ func _initialize() -> void:
 	await _test_craft_menu(game)
 	await _test_right_click_never_silent(game)
 	await _test_farm_tool(game)
+	await _test_fireplace(game)
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")

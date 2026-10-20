@@ -323,6 +323,32 @@ func site_at(c: Vector2i):
 	return null
 
 
+## Job buildings with a crafting queue: the bench and the fireplace.
+static func is_station(s: Dictionary) -> bool:
+	return Defs.TEMPLATES[s.tpl].get("station", false)
+
+
+## The 3×3 a job building reserves to grow into (spec §8), with the building in the middle of its
+## back wall. `rot` turns which side the plot opens toward. Null for buildings that don't grow.
+static func plot_rect(tpl: String, origin: Vector2i, rot: int):
+	if not Defs.TEMPLATES[tpl].has("plot"):
+		return null
+	match rot % 4:
+		0: return Rect2i(origin + Vector2i(-1, 0), Vector2i(3, 3))
+		1: return Rect2i(origin + Vector2i(-2, -1), Vector2i(3, 3))
+		2: return Rect2i(origin + Vector2i(-1, -2), Vector2i(3, 3))
+		_: return Rect2i(origin + Vector2i(0, -1), Vector2i(3, 3))
+
+
+## The site whose reserved plot covers `c` (not counting its own footprint), or null.
+func reserved_at(c: Vector2i):
+	for s in sites:
+		var p = s.get("plot")
+		if p != null and p.has_point(c) and not Rect2i(s.origin, s.size).has_point(c):
+			return s
+	return null
+
+
 func current_stage(s: Dictionary) -> Dictionary:
 	return Defs.TEMPLATES[s.tpl].stages[s.stage]
 
@@ -466,6 +492,9 @@ func _on_site_done(s: Dictionary) -> void:
 	if s.tpl == "bench":
 		_toast("The crafting bench is ready. Select it to queue crafts.", 0, s.id)
 		return
+	if s.tpl == "fireplace":
+		_toast("The fireplace is lit. It keeps %d meals in stock when there's wheat or mutton." % Tuning.MEAL_STOCK, 0, s.id)
+		return
 	stats.houses += 1
 	var ada: Dictionary = residents[0]
 	var ada_home := false
@@ -511,7 +540,7 @@ func queue_remove(b: Dictionary, i: int) -> void:
 ## of it, repeatedly, so a pickaxe expands into sticks and the sticks into planks (spec §6).
 func expand_queues() -> void:
 	for b in sites:
-		if not (b.done and b.tpl == "bench") or b.queue.is_empty():
+		if not (b.done and is_station(b)) or b.queue.is_empty():
 			continue
 		for _guard in 12:
 			if b.queue.size() >= 30:
@@ -520,7 +549,7 @@ func expand_queues() -> void:
 			for i in b.queue.size():
 				var inp: Dictionary = Defs.recipe(b.queue[i]).inp
 				for k in inp:
-					var p := Defs.producer(k)
+					var p := Defs.producer(k, b.tpl)
 					if p.is_empty():
 						continue
 					var short: int = inp[k] - b.store.get(k, 0) - b.incoming.get(k, 0) - free_count(k)
@@ -536,6 +565,33 @@ func expand_queues() -> void:
 				if inserted:
 					break
 			if not inserted:
+				break
+
+
+## The fireplace's standing order (spec §4): while stored meals are fewer than MEAL_STOCK, queue
+## one meal whose inputs exist, bread first. One at a time, so it never queues what it can't make.
+func keep_meals_stocked() -> void:
+	var meals := 0
+	for m in Defs.MEALS:
+		meals += free_count(m)
+	for f in sites:
+		if not (f.done and f.tpl == "fireplace" and f.get("keep_meals", true)):
+			continue
+		if f.autoq.has(true):
+			meals += 1  # already making one
+			continue
+		if meals >= Tuning.MEAL_STOCK:
+			continue
+		for id in Defs.MEALS.map(func(m): return Defs.producer(m, "fireplace").id):
+			var inp: Dictionary = Defs.recipe(id).inp
+			var ok := true
+			for k in inp:
+				if f.store.get(k, 0) + f.incoming.get(k, 0) + free_count(k) < inp[k]:
+					ok = false
+			if ok:
+				f.queue.append(id)
+				f.autoq.append(true)
+				meals += 1
 				break
 
 
@@ -567,16 +623,23 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 func _nearest_food(c: Vector2i) -> Dictionary:
 	var best := {}
 	var bd := 1 << 30
+	var raw := {}
 	for k in items:
 		var s: Dictionary = items[k]
-		if Tuning.FOOD_VALUE.has(s.type) and avail(s) > 0 and manhattan(s.cell, c) < bd:
+		if not Tuning.FOOD_VALUE.has(s.type) or avail(s) <= 0:
+			continue
+		if s.type == "mutton":  # raw mutton is for the fireplace; eaten only in a pinch
+			if raw.is_empty() or manhattan(s.cell, c) < manhattan(raw.stack.cell, c):
+				raw = {"kind": "stack", "stack": s}
+			continue
+		if manhattan(s.cell, c) < bd:
 			bd = manhattan(s.cell, c)
 			best = {"kind": "stack", "stack": s}
 	for b in bushes:
 		if b.berries > 0 and manhattan(b.cell, c) < bd:
 			bd = manhattan(b.cell, c)
 			best = {"kind": "bush", "bush": b}
-	return best
+	return raw if best.is_empty() else best
 
 
 func food_available() -> bool:
@@ -627,7 +690,7 @@ func _farm_work(c: Vector2i):
 			continue
 		if crop_ripe(crop):
 			ripe.append(crop)
-		elif crop.grow < 0.0:
+		elif crop.grow < 0.0 and not items.has(crop.cell):  # the last harvest is collected first
 			empty.append(crop)
 	if not ripe.is_empty():
 		return nearest(ripe, c)
@@ -668,7 +731,9 @@ func _fetch_tool(j: Job, stack: Dictionary) -> void:
 
 
 func _deliver_job(dest: Dictionary, type: String, n: int, stack: Dictionary) -> Job:
-	var dest_name: String = "bench" if dest.done else Defs.TEMPLATES[dest.tpl].name.to_lower()
+	var dest_name: String = Defs.TEMPLATES[dest.tpl].name.to_lower()
+	if dest.done and dest.tpl == "bench":
+		dest_name = "bench"
 	var j := Job.new("deliver", "Hauling %s to the %s" % [Defs.ITEMS[type].many, dest_name], "the " + dest_name)
 	j.target = dest
 	stack.res += n
@@ -687,20 +752,25 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 	j.target = s
 	s.builder = r.id
 	j.hold({"t": "builder", "site": s})
-	var label: String = "Building the bench" if s.tpl == "bench" else "Building " + current_stage(s).name.to_lower()
+	var label: String = "Building " + current_stage(s).name.to_lower()
+	if s.tpl == "bench":
+		label = "Building the bench"
+	elif s.tpl == "fireplace":
+		label = "Building the fireplace"
 	j.step(_goto(site_cells(s), true))
 	j.step({"op": "work", "what": "build", "site": s, "label": label})
 	return j
 
 
 func _craft_job(r: Dictionary, b: Dictionary, rec: Dictionary) -> Job:
-	var j := Job.new("craft", "Going to the bench", "the bench")
+	var where: String = "the bench" if b.tpl == "bench" else "the " + Defs.TEMPLATES[b.tpl].name.to_lower()
+	var j := Job.new("craft", "Going to " + where, where)
 	j.target = b
 	b.crafter = r.id
 	b.crafting = rec.name
 	j.hold({"t": "crafter", "site": b})
 	j.step(_goto(site_cells(b), true))
-	j.step({"op": "work", "what": "craft", "site": b, "recipe": rec, "label": "Crafting " + rec.name.to_lower()})
+	j.step({"op": "work", "what": "craft", "site": b, "recipe": rec, "label": rec.get("doing", "Crafting " + rec.name.to_lower())})
 	return j
 
 
@@ -920,6 +990,9 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 		"eat", "graze":
 			return Tuning.EAT_TIME
 		_:
+			match st.get("recipe", {}).get("id", ""):
+				"bread": return Tuning.BAKE_TIME
+				"cooked_mutton": return Tuning.COOK_TIME
 			return Tuning.CRAFT_TIME
 
 
@@ -966,7 +1039,7 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			rev += 1
 		"plant":
 			var crop: Dictionary = st.target
-			if not is_same(farm.get(crop.cell), crop) or crop.grow >= 0.0:
+			if not is_same(farm.get(crop.cell), crop) or crop.grow >= 0.0 or items.has(crop.cell):
 				return "gone"
 			crop.grow = 0.0
 			stats.planted = stats.get("planted", 0) + 1
@@ -1026,12 +1099,13 @@ func _claim(r: Dictionary) -> void:
 	var c := rcell(r)
 	if auto_craft:
 		expand_queues()
-	var benches := sites.filter(func(s): return s.done and s.tpl == "bench" and not s.queue.is_empty() and s.crafter == 0 and not bench_craftable(s).is_empty() and not _cooling(s))
+	keep_meals_stocked()
+	var benches := sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty() and s.crafter == 0 and not bench_craftable(s).is_empty() and not _cooling(s))
 	if not benches.is_empty():
 		var b: Dictionary = _nearest_site(benches, c)
 		r.job = _craft_job(r, b, bench_craftable(b))
 		return
-	if _try_deliver(r, c, sites.filter(func(s): return s.done and s.tpl == "bench" and not s.queue.is_empty())):
+	if _try_deliver(r, c, sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty())):
 		return
 	var ready := sites.filter(func(s): return not s.done and s.builder == 0 and has_all(s.store, current_stage(s).cost) and not _cooling(s) and footprint_clear(s))
 	if not ready.is_empty():
@@ -1158,6 +1232,8 @@ func step() -> void:
 		stats.division = true
 	if auto_craft and tick % 10 == 0:
 		expand_queues()
+	if tick % 10 == 0:
+		keep_meals_stocked()
 	if tick % 10 == 0:
 		for s in sites:
 			if not s.done:
@@ -1321,7 +1397,7 @@ func compute_stuck() -> void:
 			cost = st.cost
 			label = "Bench" if s.tpl == "bench" else st.name
 			verb = st.verb
-		elif s.tpl == "bench" and not s.queue.is_empty() and s.crafter == 0 and bench_craftable(s).is_empty() and bench_active(s) < 0:
+		elif is_station(s) and not s.queue.is_empty() and s.crafter == 0 and bench_craftable(s).is_empty() and bench_active(s) < 0:
 			var rec := Defs.recipe(s.queue[0])
 			cost = rec.inp
 			label = rec.name
@@ -1339,7 +1415,7 @@ func compute_stuck() -> void:
 			var why := "%s %s %d more %s" % [label, verb, worst_n, it.one if worst_n == 1 else it.many]
 			if label == "Bed":
 				why = "House needs a bed: %d more %s" % [worst_n, it.one if worst_n == 1 else it.many]
-			_add_stuck("Crafting bench" if s.done else tpl.name, why,
+			_add_stuck(tpl.name, why,
 				mid, site_height(s) + 0.4, "site", s.id)
 	var has_food := food_available()
 	for r in residents:
@@ -1354,6 +1430,11 @@ func compute_stuck() -> void:
 				_add_stuck(r.name, "%s broke. Needs a new %s" % [tname, tname.to_lower()], at, 1.6, "res", r.id)
 		if r.note != null and r.note.until > tick:
 			_add_stuck(r.name, r.note.text, at, 1.6, "res", r.id)
+	if zone.is_empty():
+		for k in farm:
+			if farm[k].grow < 0.0 and items.has(k):
+				_add_stuck("Farm", "Harvested wheat needs a stockpile before replanting", Vector2(k) + Vector2(0.5, 0.5), 0.6, "crop", farm[k].id)
+				break
 	if not zone.is_empty():
 		var loose := stacks_where(func(s): return avail(s) > 0 and not in_zone(s.cell))
 		var full := not loose.is_empty()
@@ -1368,6 +1449,8 @@ func compute_stuck() -> void:
 func site_height(s: Dictionary) -> float:
 	if s.tpl == "bench":
 		return 0.75 if s.done else 0.2
+	if s.tpl == "fireplace":
+		return 0.7 if s.done else 0.2
 	return [0.2, 0.5, 2.5, 4.0, 4.0][mini(s.stage, 4)]
 
 
@@ -1414,7 +1497,7 @@ func paint_zone(rect: Rect2i) -> void:
 	for x in range(rect.position.x, rect.end.x):
 		for y in range(rect.position.y, rect.end.y):
 			var c := Vector2i(x, y)
-			if walkable(c) and site_at(c) == null and not farm.has(c):
+			if walkable(c) and site_at(c) == null and not farm.has(c) and reserved_at(c) == null:
 				zone[c] = true
 	rev += 1
 
@@ -1425,8 +1508,12 @@ func farm_blocked(c: Vector2i) -> String:
 		return "not open ground"
 	if site_at(c) != null:
 		return "a building"
+	if farm.has(c):
+		return "a farm plot"
 	if zone.has(c):
 		return "a stockpile"
+	if reserved_at(c) != null:
+		return "a reserved plot"
 	for b in bushes:
 		if b.cell == c:
 			return "a bush"
@@ -1440,7 +1527,7 @@ func paint_farm(rect: Rect2i) -> int:
 	for x in range(rect.position.x, rect.end.x):
 		for y in range(rect.position.y, rect.end.y):
 			var c := Vector2i(x, y)
-			if farm.has(c) or farm_blocked(c) != "":
+			if farm_blocked(c) != "":
 				continue
 			farm[c] = {"id": _id(), "kind": "crop", "cell": c, "grow": -1.0, "claim": 0, "unreach_until": 0}
 			n += 1
@@ -1467,31 +1554,61 @@ func _drop_crop(c: Vector2i) -> void:
 	farm.erase(c)
 
 
-## Why a blueprint can't go here, or "" when it can. Trees, boulders and stockpile cells don't
-## block placement: the blueprint clears them (spec §8).
-func placement_check(tpl: String, origin: Vector2i) -> String:
+## Why a blueprint can't go here, or "" when it can. Trees, boulders, stockpile cells and farm plots
+## don't block placement: the blueprint clears them (spec §8). Reserved plots do, and a job
+## building's own plot needs room too (Slice 2 spec §8).
+func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 	var size: Vector2i = Defs.TEMPLATES[tpl].size
+	var foot := Rect2i(origin, size)
 	if origin.x < 0 or origin.y < 0 or origin.x + size.x > w or origin.y + size.y > h:
 		return "Too close to the edge"
-	for x in range(origin.x, origin.x + size.x):
-		for y in range(origin.y, origin.y + size.y):
-			if site_at(Vector2i(x, y)) != null:
-				return "Overlaps another building"
+	for s in sites:
+		if Rect2i(s.origin, s.size).intersects(foot):
+			return "Overlaps another building"
+	for s in sites:
+		if s.get("plot") != null and s.plot.intersects(foot):
+			return "Overlaps a reserved plot"
+	var plot = plot_rect(tpl, origin, rot)
+	if plot != null:
+		var no_room := "Not enough room to grow into a %s" % Defs.TEMPLATES[tpl].plot
+		if not Rect2i(0, 0, w, h).encloses(plot):
+			return no_room
+		for s in sites:
+			if Rect2i(s.origin, s.size).intersects(plot) or (s.get("plot") != null and s.plot.intersects(plot)):
+				return no_room
 	return ""
 
 
 func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 	var s := {"id": _id(), "kind": "site", "tpl": tpl, "origin": origin, "size": Defs.TEMPLATES[tpl].size,
 		"rot": rot, "stage": 0, "store": {}, "incoming": {}, "builder": 0, "crafter": 0, "crafting": "",
-		"done": false, "owner": 0, "queue": [], "autoq": [], "unreach_until": 0}
+		"done": false, "owner": 0, "queue": [], "autoq": [], "unreach_until": 0,
+		"plot": plot_rect(tpl, origin, rot)}
+	if tpl == "fireplace":
+		s.keep_meals = true
 	sites.append(s)
 	_occ_dirty = true
 	for c in site_cells(s):
 		zone.erase(c)
 		_drop_crop(c)
+	if s.plot != null:  # the reserved plot is kept clear of stockpiles and farms
+		for x in range(s.plot.position.x, s.plot.end.x):
+			for y in range(s.plot.position.y, s.plot.end.y):
+				zone.erase(Vector2i(x, y))
+				_drop_crop(Vector2i(x, y))
 	_mark_obstacles(s)
 	rev += 1
 	return s
+
+
+## Turns the fireplace's "Keep meals in stock" standing order on or off.
+func set_keep_meals(f: Dictionary, on: bool) -> void:
+	f.keep_meals = on
+	if not on:
+		for i in range(f.queue.size() - 1, -1, -1):
+			if f.autoq[i]:
+				queue_remove(f, i)
+	rev += 1
 
 
 func cancel_site(s: Dictionary) -> void:

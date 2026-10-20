@@ -26,6 +26,11 @@ func _initialize() -> void:
 	sim.place_site("house", at(1, 4), 1)
 	if SaveFormat.VERSION >= 8:
 		sim.paint_farm(area(15, 15, 2, 2))  # wheat planted and growing when saved
+	if SaveFormat.VERSION >= 9:  # a fireplace blueprint with its reserved kitchen plot
+		for c in [at(14, 9), at(4, 12), at(2, 1), at(15, 2)]:
+			if sim.placement_check("fireplace", c) == "":
+				sim.place_site("fireplace", c)
+				break
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	var walked := 0

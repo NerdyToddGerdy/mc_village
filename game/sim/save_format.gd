@@ -12,12 +12,21 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 8
+const VERSION := 9
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9}
+
+
+## v9: reserved plots for job buildings, and the fireplace's standing order (issue #46). Benches
+## from older saves reserve nothing.
+static func _v8_to_v9(d: Dictionary) -> Dictionary:
+	for s in d.state.sites:
+		if not s.has("plot"):
+			s.plot = null
+	return d
 
 
 ## v8: farm plots and growing wheat (issue #45). Older saves have no farms.

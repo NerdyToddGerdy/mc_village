@@ -87,8 +87,10 @@ func _ready() -> void:
 	var bm := VBoxContainer.new()
 	_build_items.bench = _menu_item("Crafting bench", "4 logs", "", func(): game.start_placing("bench"))
 	_build_items.house = _menu_item("House", "8 cobblestone, then 16 planks and 4 logs, then 12 planks", "", func(): game.start_placing("house"))
+	_build_items.fireplace = _menu_item("Fireplace", "6 cobblestone", "", func(): game.start_placing("fireplace"))
 	bm.add_child(_build_items.bench)
 	bm.add_child(_build_items.house)
+	bm.add_child(_build_items.fireplace)
 	_build_menu = _panel(bm, Vector2(260, 0), 6)
 	br.add_child(_build_menu)
 	_craft_box.add_theme_constant_override("separation", 4)
@@ -228,15 +230,16 @@ func _refresh_key_labels() -> void:
 	var names := {"mine": "Mine", "hunt": "Hunt", "stock": "Stockpile", "farm": "Farm", "build": "Build", "craft": "Craft"}
 	var tips := {"mine": "Mine trees and boulders. Drag to mark many. Boulders need a pickaxe.",
 		"hunt": "Hunt sheep for wool and mutton. Click or drag over them.",
-		"craft": "Queue crafts at the bench",
+		"craft": "Queue crafts at the bench or the fireplace",
 		"farm": "Paint a farm plot over open grass. Residents plant and harvest wheat.",
 		"stock": "Paint a stockpile. Drag over open ground.", "build": "Build"}
 	for t in _tool_btns:
 		var key := k.first(t)
 		_tool_btns[t].text = "%s  %s" % [names[t], key] if key != "" else names[t]
 		_tool_btns[t].tooltip_text = tips[t] + (" (%s)" % key if key != "" else "")
-	var subs := {"bench": "4 logs", "house": "8 cobblestone, then 16 planks and 4 logs, then 12 planks"}
-	var titles := {"bench": "Crafting bench", "house": "House"}
+	var subs := {"bench": "4 logs. Reserves room for a workshop", "house": "8 cobblestone, then 16 planks and 4 logs, then 12 planks, then a bed",
+		"fireplace": "6 cobblestone. Reserves room for a kitchen"}
+	var titles := {"bench": "Crafting bench", "house": "House", "fireplace": "Fireplace"}
 	for b in _build_items:
 		_build_items[b].text = "%s   %s\n%s" % [titles[b], k.first(b), subs[b]]
 	var speed_actions := {0: "pause", 1: "speed1", 2: "speed2", 3: "speed3"}
@@ -584,10 +587,10 @@ func _refresh_craft(sim: Sim) -> void:
 	_rebuild(_craft_box, sig, func(c: Container) -> void:
 		if n > 1:
 			var h := HBoxContainer.new()
-			var l := _label("Bench %d of %d" % [game.craft_bench_i % n + 1, n], false, Palette.CHALK_DIM, 14)
+			var l := _label("%d of %d" % [game.craft_bench_i % n + 1, n], false, Palette.CHALK_DIM, 14)
 			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			h.add_child(l)
-			h.add_child(_button("Next bench", func(): game.next_craft_bench()))
+			h.add_child(_button("Next", func(): game.next_craft_bench()))
 			c.add_child(h)
 		_fill_bench(c, sim, bench))
 
@@ -624,9 +627,9 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		c.add_child(_label("House", true, Palette.CHALK, 24))
 		c.add_child(_label(line, false, Palette.CHALK_DIM, 15, true))
 		return
-	# A finished bench: a short summary here. Its recipes and queue live only in the Craft panel on
-	# the right, which selecting the bench opens.
-	c.add_child(_label("Crafting bench", true, Palette.CHALK, 24))
+	# A finished bench or fireplace: a short summary here. Its recipes and queue live only in the
+	# Craft panel on the right, which selecting it opens.
+	c.add_child(_label(tpl.name, true, Palette.CHALK, 24))
 	c.add_child(_label(_bench_status(sim, s), false, Palette.CHALK_DIM, 15, true))
 	for x in reasons:
 		c.add_child(_reason(x.why))
@@ -634,14 +637,18 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		c.add_child(_button("Open the craft menu", func(): game.open_craft_menu(s)))
 
 
-## What a finished bench is doing, for its panels.
+## What a finished bench or fireplace is doing, for its panels.
 func _bench_status(sim: Sim, s: Dictionary) -> String:
 	var ready := sim.bench_craftable(s)
 	var ai := sim.bench_active(s)
 	if s.crafting != "":
-		return "Crafting " + s.crafting.to_lower()
+		var rec := {}
+		for r in Defs.RECIPES:
+			if r.name == s.crafting:
+				rec = r
+		return rec.get("doing", "Crafting " + s.crafting.to_lower())
 	if not ready.is_empty():
-		return "Ready to craft " + ready.name.to_lower()
+		return "Ready to make " + ready.name.to_lower()
 	if s.queue.is_empty():
 		return "Nothing queued"
 	var head := Defs.recipe(s.queue[maxi(ai, 0)])
@@ -660,8 +667,8 @@ func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 	var status := _bench_status(sim, s)
 	# The title and recipe rows come first and never change size, so the Queue buttons stay put while
 	# the status, reasons and queue below them change (issue #57: buttons used to jump mid-click).
-	c.add_child(_label("Crafting bench", true, Palette.CHALK, 24))
-	for rec in Defs.RECIPES:
+	c.add_child(_label(Defs.TEMPLATES[s.tpl].name, true, Palette.CHALK, 24))
+	for rec in Defs.recipes_at(s.tpl):
 		var h := HBoxContainer.new()
 		var l := _label("%s\n%s → %s" % [rec.name, Defs.cost_text(rec.inp), Defs.cost_text(rec.out)], false, Palette.CHALK, 13)
 		l.add_theme_constant_override("line_spacing", -2)
@@ -683,7 +690,15 @@ func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 			var auto: bool = s.autoq[i]
 			flow.add_child(_button("%s%s ×" % [Defs.recipe(s.queue[i]).name, " (auto)" if auto else ""], func(): game.unqueue_craft(s, i)))
 		lower.add_child(flow)
-	lower.add_child(_label("Missing planks and sticks are queued automatically." if sim.auto_craft else "Once Ada’s house is finished, the bench queues the planks and sticks a recipe needs.", false, Palette.CHALK_DIM, 13, true))
+	if s.tpl == "fireplace":
+		var on: bool = s.get("keep_meals", true)
+		var keep := _button("Keep %d meals in stock: %s" % [Tuning.MEAL_STOCK, "on" if on else "off"], func(): game.set_keep_meals(s, not on))
+		keep.toggle_mode = true
+		keep.set_pressed_no_signal(on)
+		lower.add_child(keep)
+		lower.add_child(_label("While stored bread and cooked mutton are fewer than %d, cooks make whichever the wheat, mutton and logs allow." % Tuning.MEAL_STOCK, false, Palette.CHALK_DIM, 13, true))
+	else:
+		lower.add_child(_label("Missing planks and sticks are queued automatically." if sim.auto_craft else "Once Ada’s house is finished, the bench queues the planks and sticks a recipe needs.", false, Palette.CHALK_DIM, 13, true))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 96)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

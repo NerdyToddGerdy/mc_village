@@ -397,6 +397,29 @@ func _initialize() -> void:
 			break
 	check(sim.stats.get("planted", 0) > 0, "residents plant wheat on the new farm")
 
+	# Fireplace (issue #46): K, click open ground; it's built, and cooks the hunted mutton
+	await key(KEY_K)
+	check(game.placing == "fireplace", "K picks Fireplace")
+	var fp := Vector2i(-1, -1)
+	for c in [at(9, 8), at(12, 9), at(6, 9), at(9, 13), at(13, 5)]:
+		var p: Vector2 = screen(c)
+		var vis := root.get_visible_rect().size
+		if sim.placement_check("fireplace", c, game.rot) == "" and sim.walkable(c) and Rect2(vis * Vector2(0.3, 0.25), vis * Vector2(0.4, 0.45)).has_point(p):
+			fp = c
+			break
+	check(fp.x >= 0, "an open spot for the fireplace")
+	await click(screen(fp))
+	var fire = sim.site_at(fp)
+	check(fire != null and fire.tpl == "fireplace" and fire.plot != null, "the fireplace is placed with a kitchen plot reserved")
+	var cooked := false
+	for i in 120:
+		await run(1)
+		if fire != null and fire.done and sim.items.values().any(func(it): return it.type == "cooked_mutton"):
+			cooked = true
+			break
+	check(fire != null and fire.done, "the fireplace is built")
+	check(cooked, "and its standing order cooks the hunted mutton")
+
 	# Tools dropdown on hover
 	var tb: Button = game._hud._tools_btn
 	await move(Vector2(1000, 430))

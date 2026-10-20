@@ -158,7 +158,10 @@ func _update_live_overlays() -> void:
 	if tool == "build" and placing != "" and _hover != null:
 		var origin := _placement_origin()
 		var size: Vector2i = Defs.TEMPLATES[placing].size
-		var err := sim.placement_check(placing, origin)
+		var err := sim.placement_check(placing, origin, rot)
+		var plot = Sim.plot_rect(placing, origin, rot)
+		if plot != null:
+			outlines.append({"rect": plot, "h": 0.02, "color": Color(Palette.RED if err != "" else Palette.CHALK, 0.6), "dashed": true})
 		outlines.append({"rect": Rect2i(origin, size), "h": 0.03, "color": Palette.RED if err != "" else Palette.BLUE, "dashed": true})
 		if err == "" and placing == "house":
 			fills.append({"rect": Rect2i(sim.door_cell(origin, rot), Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.55)})
@@ -168,7 +171,9 @@ func _update_live_overlays() -> void:
 		else:
 			var clr := Sim.clearing_text(sim.obstacles_in(Rect2i(origin, size)))
 			var turn := keys.first("rotate")
-			hint = (("Place house. %s turns the door." % turn if turn != "" else "Place house.") if placing == "house" else "Place crafting bench.") + (" Clears %s." % clr if clr != "" else "")
+			var names := {"house": "house", "bench": "crafting bench", "fireplace": "fireplace"}
+			var turns := {"house": "the door", "bench": "its workshop plot", "fireplace": "its kitchen plot"}
+			hint = "Place %s." % names[placing] + (" %s turns %s." % [turn, turns[placing]] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
 	if sel != null and sel.kind in ["tree", "boulder", "sheep", "bush", "crop"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
@@ -311,7 +316,7 @@ func _select(hit) -> void:
 		selection = {"kind": "res", "ids": [hit.id]}
 	else:
 		selection = {"kind": hit.kind, "id": hit.id}
-		if hit.kind == "site" and hit.tpl == "bench" and hit.done:
+		if hit.kind == "site" and Sim.is_station(hit) and hit.done:
 			open_craft_menu(hit)
 
 
@@ -410,7 +415,7 @@ func _left_down(e: InputEventMouseButton) -> void:
 	if tool == "build":
 		if placing != "" and c != null:
 			var origin := _placement_origin()
-			if sim.placement_check(placing, origin) == "":
+			if sim.placement_check(placing, origin, rot) == "":
 				var s := sim.place_site(placing, origin, rot)
 				selection = {"kind": "site", "id": s.id}
 				if not e.shift_pressed:
@@ -498,6 +503,7 @@ func _key(e: InputEventKey) -> void:
 		"build": set_tool("build")
 		"bench": start_placing("bench")
 		"house": start_placing("house")
+		"fireplace": start_placing("fireplace")
 		"rotate":
 			if tool == "build":
 				rot = (rot + 1) % 4
@@ -604,9 +610,9 @@ func set_speed(v: int) -> void:
 		_acc = 0.0  # no leftover time may tick the sim after pausing
 
 
-## Finished benches, for the Craft panel.
+## Finished benches and fireplaces, for the Craft panel.
 func benches() -> Array:
-	return sim.sites.filter(func(s): return s.done and s.tpl == "bench")
+	return sim.sites.filter(func(s): return s.done and Sim.is_station(s))
 
 
 ## The bench the Craft panel is showing, or null before any bench is finished.
@@ -677,6 +683,10 @@ func remove_farm_plot(crop: Dictionary) -> void:
 	selection = {}
 
 
+func set_keep_meals(f: Dictionary, on: bool) -> void:
+	sim.set_keep_meals(f, on)
+
+
 func toggle_mine(target: Dictionary) -> void:
 	sim.designate_mine(Rect2i(target.cell, Vector2i.ONE), target)
 
@@ -710,7 +720,7 @@ func focus_on(kind: String, id: int) -> void:
 				return
 			selection = {"kind": "site", "id": id}
 			at = Vector3(s.origin.x + s.size.x / 2.0, 0, s.origin.y + s.size.y / 2.0)
-			if s.tpl == "bench" and s.done:
+			if Sim.is_station(s) and s.done:
 				open_craft_menu(s)
 		"boulder":
 			for b in sim.boulders:
@@ -828,6 +838,18 @@ func _screenshot_scene() -> void:
 		tool = "farm"
 		_target = Vector3(fa.get_center().x, 0, fa.get_center().y)
 		_place_camera()
+	if "--fireplace" in OS.get_cmdline_user_args():
+		for c in [at(12, 9), at(9, 8), at(6, 9), at(13, 5), at(9, 13)]:
+			if sim.placement_check("fireplace", c) == "" and sim.walkable(c):
+				var f := sim.place_site("fireplace", c)
+				f.stage = 1
+				f.done = true
+				sim.queue_add(f, "bread")
+				sim.rev += 1
+				_select(f)
+				_target = Vector3(c.x + 0.5, 0, c.y + 1.5)
+				_place_camera()
+				break
 	if "--select-bench" in OS.get_cmdline_user_args():
 		_select(bench)
 	if "--craft" in OS.get_cmdline_user_args():

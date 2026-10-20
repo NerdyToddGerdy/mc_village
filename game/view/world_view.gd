@@ -168,6 +168,8 @@ func _build_static() -> void:
 		_add_site(solid, ghost, s)
 		if not s.done:
 			_outline(dark, col, Rect2i(s.origin, s.size), 0.52 if s.stage >= 1 else 0.02, Palette.BLUE, true)
+		if s.get("plot") != null:  # the reserved plot it will grow into, faint
+			_outline(dark, col, s.plot, 0.02, Color(Palette.CHALK, 0.35), true)
 	solid.apply(_solid)
 	ghost.apply(_ghost)
 	_occluder_sig = ""
@@ -237,6 +239,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 		var top := Palette.PLANK if s.done else Color(Palette.BLUE, 0.45)
 		b.box(Vector3(o.x + 0.1, 0, o.y + 0.1), Vector3(o.x + 0.9, 0.75, o.y + 0.9), top)
 		return
+	if s.tpl == "fireplace":
+		_add_fireplace(solid if s.done else ghost, s)
+		return
 	var stage: int = s.stage
 	var gcol := Color(Palette.BLUE, 0.4)
 	for x in range(o.x, o.x + 5):
@@ -266,6 +271,26 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 		_add_bed(ghost, o, true)
 	elif stage >= 4:
 		_add_bed(solid, o, false)
+
+
+static var EMBER := Color("#E8763A")
+
+
+## A squat cobblestone hearth with a chimney at the back and embers in its mouth, which faces its
+## kitchen plot (issue #46).
+func _add_fireplace(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var done: bool = s.done
+	var stone: Color = Palette.COBBLE if done else Color(Palette.BLUE, 0.45)
+	b.box(Vector3(o.x + 0.08, 0, o.y + 0.08), Vector3(o.x + 0.92, 0.5, o.y + 0.92), stone)
+	# The back is away from the plot: rot 0 opens toward +y, 1 toward -x, 2 toward -y, 3 toward +x.
+	var back := [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)][int(s.get("rot", 0)) % 4] as Vector2
+	var c := Vector2(o.x + 0.5, o.y + 0.5)
+	var ch := c + back * 0.24
+	b.box(Vector3(ch.x - 0.2, 0.5, ch.y - 0.2), Vector3(ch.x + 0.2, 1.05, ch.y + 0.2), stone.darkened(0.08) if done else stone)
+	if done:
+		var m := c - back * 0.3
+		b.box(Vector3(m.x - 0.2, 0.06, m.y - 0.2), Vector3(m.x + 0.2, 0.3, m.y + 0.2), EMBER)
 
 
 static var BED_BLANKET := Color("#B83A3A")
@@ -371,7 +396,7 @@ func _outline(dark: Batch, col: Batch, rect: Rect2i, h: float, color: Color, das
 		for pc in pieces:
 			var p0: Vector2 = a + dirv * pc[0]
 			var p1: Vector2 = a + dirv * pc[1]
-			_seg(dark, p0, p1, h, 0.13, Palette.SLATE_DEEP)
+			_seg(dark, p0, p1, h, 0.13, Color(Palette.SLATE_DEEP, color.a))
 			_seg(col, p0, p1, h + 0.005, 0.06, color)
 
 
