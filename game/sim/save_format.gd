@@ -12,12 +12,24 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 4
+const VERSION := 5
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5}
+
+
+## v5: sheep and the sim's random-number state (issue #42). Older saves are past the opening, so
+## they get no sheep; their random numbers start from the game's seed.
+static func _v4_to_v5(d: Dictionary) -> Dictionary:
+	if not d.state.has("sheep"):
+		d.state.sheep = []
+	if not d.state.has("rng_state"):
+		var g := RandomNumberGenerator.new()
+		g.seed = Tuning.SEED
+		d.state.rng_state = g.state
+	return d
 
 
 ## v4: the map size is saved (issue #52). Everything before v4 was played on the 18×18 map.

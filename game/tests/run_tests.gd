@@ -15,6 +15,8 @@ func _init() -> void:
 		"test_auto_ingredients_unlock_with_first_house",
 		"test_blueprint_clears_trees_and_boulders",
 		"test_bigger_clearing",
+		"test_sheep_wander_and_replay",
+		"test_hunting_sheep",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -395,3 +397,56 @@ static func at(x: int, y: int) -> Vector2i:
 
 static func area(x: int, y: int, w: int, h: int) -> Rect2i:
 	return Rect2i(Vector2i(x, y) + Tuning.OPENING_OFFSET, Vector2i(w, h))
+
+
+## Issue #42: sheep wander on open ground, and the same game wanders the same way every time.
+func test_sheep_wander_and_replay() -> void:
+	var a := Sim.new_game()
+	var b := Sim.new_game()
+	check(a.sheep.size() == 6, "six sheep at the start")
+	var start: Array = a.sheep.map(func(sh): return sh.cell)
+	for i in 60 * Tuning.TPS:
+		a.step()
+		b.step()
+		for sh in a.sheep:
+			if not a.in_bounds(sh.cell) or not a.walkable(sh.cell):
+				check(false, "sheep %d left open ground at %s" % [sh.id, sh.cell])
+				return
+	check(a.sheep.map(func(sh): return sh.cell) != start, "sheep wander")
+	check(a.sheep.map(func(sh): return sh.pos) == b.sheep.map(func(sh): return sh.pos), "two games from the same seed wander identically")
+	var loaded := Sim.from_state(str_to_var(var_to_str(a.save_state())))
+	for i in 20 * Tuning.TPS:
+		a.step()
+		loaded.step()
+	check(a.sheep.map(func(sh): return sh.pos) == loaded.sheep.map(func(sh): return sh.pos), "a saved game keeps wandering exactly as it would have")
+
+
+func test_hunting_sheep() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var sh: Dictionary = Sim.nearest(sim.sheep, Sim.rcell(ada))
+	sim.designate_hunt(Rect2i(sh.cell, Vector2i.ONE))
+	check(sh.des, "marking a sheep for hunting")
+	sim.designate_hunt(Rect2i(sh.cell, Vector2i.ONE), sh)
+	check(not sh.des, "clicking a marked sheep unmarks it")
+	sim.designate_hunt(Rect2i(0, 0, sim.w, sim.h))
+	check(sim.sheep.all(func(x): return x.des), "a drag over the whole map marks every sheep")
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if not sh.alive:
+			break
+	check(not sh.alive, "Ada follows and hunts the nearest sheep")
+	check(count(sim, "wool") >= 1 and count(sim, "mutton") >= 1, "a hunted sheep drops wool and raw mutton")
+	run(sim, 300)
+	check(sim.sheep.all(func(x): return not x.alive), "she hunts every marked sheep")
+	check(count(sim, "wool") == 6 and count(sim, "mutton") == 6, "six sheep give 6 wool and 6 mutton (%d, %d)" % [count(sim, "wool"), count(sim, "mutton")])
+	var sim2 := Sim.new_game()
+	var ada2: Dictionary = sim2.residents[0]
+	var far: Dictionary = sim2.sheep[0]
+	sim2.direct_order(ada2, far)
+	check(ada2.direct != null and far.des, "right-clicking a sheep orders a hunt")
+	sim2.queue_order(ada2, sim2.sheep[1])
+	check(Sim.order_text(ada2.orders[0]) == "Hunt a sheep", "Shift + right-click queues a hunt")
+	run(sim2, 120)
+	check(not far.alive and not sim2.sheep[1].alive, "both ordered hunts happen")
+

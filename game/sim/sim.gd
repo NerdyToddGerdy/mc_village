@@ -15,6 +15,8 @@ var tick := 0
 var next_id := 1
 var trees: Array = []        ## {id, kind:"tree", cell, logs, alive, des, claim, unreach_until}
 var boulders: Array = []     ## {id, kind:"boulder", cell, alive, des, claim, unreach_until}
+var sheep: Array = []        ## {id, kind:"sheep", pos, cell, dest, wait, alive, des, claim, unreach_until}
+var rng := RandomNumberGenerator.new()  ## Seeded and saved, so a game replays exactly.
 var items := {}              ## Vector2i -> {cell, type, n, res}
 var zone := {}               ## Vector2i -> true: stockpile cells
 var zone_res := {}           ## Vector2i -> resident id hauling into that cell
@@ -46,6 +48,8 @@ const RING_TREES := [[9, 2], [26, 2], [14, 3], [17, 3], [8, 5], [11, 5], [26, 7]
 	[4, 16], [27, 17], [30, 17], [5, 20], [27, 21], [30, 23], [5, 25], [26, 25], [11, 27], [14, 27], [30, 27],
 	[22, 28], [19, 29], [5, 30], [10, 30], [13, 30]]
 const RING_BOULDERS := [[6, 7], [3, 8], [28, 11], [25, 13], [3, 14], [14, 25], [19, 26], [21, 26], [17, 30], [24, 30]]
+## Six sheep around the opening (issue #42): wool for the two opening beds. Open ground, in map cells.
+const START_SHEEP := [[21, 8], [12, 24], [24, 19], [8, 12], [22, 24], [20, 20]]
 
 
 static func new_game() -> Sim:
@@ -60,8 +64,18 @@ static func new_game() -> Sim:
 	for c in rocks:
 		s.boulders.append({"id": s._id(), "kind": "boulder", "cell": c,
 			"alive": true, "des": false, "claim": 0, "unreach_until": 0})
+	s.rng.seed = Tuning.SEED
+	for p in START_SHEEP:
+		s.add_sheep(Vector2i(p[0], p[1]))
 	s.add_resident("Ada", "3E6E7E", OPENING_START + o)
 	return s
+
+
+func add_sheep(cell: Vector2i) -> Dictionary:
+	var sh := {"id": _id(), "kind": "sheep", "pos": Vector2(cell), "cell": cell, "dest": null, "wait": rng.randf_range(Tuning.SHEEP_PAUSE[0], Tuning.SHEEP_PAUSE[1]),
+		"alive": true, "des": false, "claim": 0, "unreach_until": 0}
+	sheep.append(sh)
+	return sh
 
 
 func _id() -> int:
@@ -422,13 +436,17 @@ func _clear_footprint(s: Dictionary) -> void:
 			var it: Dictionary = items[c]
 			items.erase(c)
 			drop_items(exit, it.type, it.n, it.get("dur", -1))
-	for r in residents:
+	for r in residents + sheep:
 		var c := rcell(r)
 		if Rect2i(s.origin, s.size).has_point(c):
 			var p = nearest_walkable(c)
 			if p != null:
 				r.pos = Vector2(p)
-				r.path = []
+				if r.kind == "sheep":
+					r.cell = p
+					r.dest = null
+				else:
+					r.path = []
 
 
 func _on_site_done(s: Dictionary) -> void:
@@ -530,6 +548,17 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 	j.step(_goto([target.cell], true))
 	j.step({"op": "work", "what": "gather", "target": target, "tool": kind,
 		"label": "Chopping a tree" if is_tree else "Breaking a boulder"})
+	return j
+
+
+## Walk to a sheep, following it if it wanders, then hunt it.
+func _hunt_job(r: Dictionary, target: Dictionary) -> Job:
+	var j := Job.new("gather", "Going to hunt a sheep", "this sheep")
+	j.target = target
+	target.claim = r.id
+	j.hold({"t": "claim", "ent": target})
+	j.step({"op": "chase", "target": target, "planned_for": null})
+	j.step({"op": "work", "what": "hunt", "target": target, "label": "Hunting a sheep"})
 	return j
 
 
@@ -652,6 +681,32 @@ func _wear(r: Dictionary, kind: String) -> void:
 ## tick, or a String naming why the job failed.
 func _run_step(r: Dictionary, j: Job, st: Dictionary):
 	match st.op:
+		"chase":
+			var t: Dictionary = st.target
+			if not t.alive:
+				return "gone"
+			if manhattan(rcell(r), t.cell) <= 1:
+				r.path = []
+				r.pos = Vector2(rcell(r))
+				return true
+			if st.planned_for != t.cell or r.path.is_empty():
+				var goals := adj_set([t.cell])
+				goals[t.cell] = true
+				var p = find_path(rcell(r), goals)
+				if p == null:
+					return "unreachable"
+				r.path = p
+				st.planned_for = t.cell
+			var nxt: Vector2i = r.path[0]
+			var to: Vector2 = Vector2(nxt) - r.pos
+			var dist: float = to.length()
+			var step_len := Tuning.WALK * Tuning.DT
+			if dist <= step_len:
+				r.pos = Vector2(nxt)
+				r.path.pop_front()
+			else:
+				r.pos += to / dist * step_len
+			return false
 		"goto":
 			if not st.planned:
 				var goals := adj_set(st.cells) if st.adj else cell_set(st.cells)
@@ -756,6 +811,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.BREAK_TIME[tier] if tier > 0 else -1.0
 		"build":
 			return Tuning.STAGE_TIME
+		"hunt":
+			return Tuning.HUNT_TIME
 		_:
 			return Tuning.CRAFT_TIME
 
@@ -776,6 +833,16 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				drop_items(t.cell, "cobble", Tuning.BOULDER_COBBLE)
 				stats.broken_boulders += 1
 			_wear(r, st.tool)
+		"hunt":
+			var sh: Dictionary = st.target
+			if not sh.alive:
+				return "gone"
+			sh.alive = false
+			sh.des = false
+			drop_items(sh.cell, "wool", 1)
+			drop_items(sh.cell, "mutton", 1)
+			stats.sheep_hunted = stats.get("sheep_hunted", 0) + 1
+			rev += 1
 		"build":
 			_complete_stage(st.site)
 		"craft":
@@ -834,8 +901,12 @@ func _claim(r: Dictionary) -> void:
 		for b in boulders:
 			if b.alive and b.des and b.claim == 0 and not _cooling(b):
 				targets.append(b)
+	for sh in sheep:
+		if sh.alive and sh.des and sh.claim == 0 and not _cooling(sh):
+			targets.append(sh)
 	if not targets.is_empty():
-		r.job = _gather_job(r, nearest(targets, c))
+		var t: Dictionary = nearest(targets, c)
+		r.job = _hunt_job(r, t) if t.kind == "sheep" else _gather_job(r, t)
 		return
 	if zone.is_empty():
 		return
@@ -902,6 +973,9 @@ func zone_dest(type: String):
 
 func step() -> void:
 	tick += 1
+	for sh in sheep:
+		if sh.alive:
+			_step_sheep(sh)
 	for r in residents:
 		_step_resident(r)
 	if arrival_at >= 0 and not arrived and tick >= arrival_at:
@@ -922,6 +996,47 @@ func step() -> void:
 				_mark_obstacles(s)
 	if tick % 5 == 0:
 		compute_stuck()
+
+
+## Sheep wander one cell at a time with pauses, staying on walkable ground. A sheep being hunted
+## stands still once its hunter is next to it.
+func _step_sheep(sh: Dictionary) -> void:
+	if sh.claim != 0:
+		var hunter := resident(sh.claim)
+		if not hunter.is_empty() and hunter.pos.distance_to(sh.pos) <= 1.5:
+			return
+	if sh.dest == null:
+		sh.wait -= Tuning.DT
+		if sh.wait > 0.0:
+			return
+		var dirs: Array = DIRS.duplicate()
+		for i in range(dirs.size() - 1, 0, -1):
+			var k := rng.randi_range(0, i)
+			var tmp = dirs[i]
+			dirs[i] = dirs[k]
+			dirs[k] = tmp
+		for d in dirs:
+			var n: Vector2i = sh.cell + d
+			if walkable(n):
+				sh.dest = n
+				break
+		if sh.dest == null:
+			sh.wait = Tuning.SHEEP_PAUSE[0]
+		return
+	var dest: Vector2i = sh.dest
+	if not walkable(dest):
+		sh.dest = null
+		return
+	var to: Vector2 = Vector2(dest) - sh.pos
+	var step_len := Tuning.SHEEP_WALK * Tuning.DT
+	if to.length() <= step_len:
+		sh.pos = Vector2(dest)
+		sh.cell = dest
+		sh.dest = null
+		sh.wait = rng.randf_range(Tuning.SHEEP_PAUSE[0], Tuning.SHEEP_PAUSE[1])
+	else:
+		sh.pos += to.normalized() * step_len
+		sh.cell = Vector2i(roundi(sh.pos.x), roundi(sh.pos.y))
 
 
 func _step_resident(r: Dictionary) -> void:
@@ -1074,6 +1189,21 @@ func designate_mine(rect: Rect2i, single = null, kinds := ["tree", "boulder"]) -
 	rev += 1
 
 
+## Marks sheep in `rect` to be hunted (Hunt order, issue #42). A single click on an already-marked
+## sheep (pass it as `single`) unmarks it instead.
+func designate_hunt(rect: Rect2i, single = null) -> void:
+	var hit: Array = [single] if single != null else sheep.filter(func(sh): return sh.alive and rect.has_point(sh.cell))
+	var all_on := not hit.is_empty() and hit.all(func(o): return o.des)
+	for o in hit:
+		o.des = not (single != null and all_on)
+		o.unreach_until = 0
+		if not o.des and o.claim != 0:
+			var r := resident(o.claim)
+			if not r.is_empty() and r.job != null and is_same(r.job.target, o):
+				fail_job(r)
+	rev += 1
+
+
 func paint_zone(rect: Rect2i) -> void:
 	for x in range(rect.position.x, rect.end.x):
 		for y in range(rect.position.y, rect.end.y):
@@ -1143,6 +1273,15 @@ func direct_order(r: Dictionary, target = null, cell = null) -> void:
 			compute_stuck()
 			return
 		r.direct = _gather_job(r, target)
+	elif target != null and target.kind == "sheep":
+		target.des = true
+		target.unreach_until = 0
+		rev += 1
+		if target.claim != 0 and target.claim != r.id:
+			var o := resident(target.claim)
+			if not o.is_empty() and o.job != null and is_same(o.job.target, target):
+				fail_job(o)
+		r.direct = _hunt_job(r, target)
 	elif cell != null and walkable(cell):
 		r.direct = _move_job(cell)
 
@@ -1157,6 +1296,11 @@ func queue_order(r: Dictionary, target = null, cell = null) -> void:
 		target.unreach_until = 0
 		rev += 1
 		r.orders.append({"kind": "mine", "target_kind": target.kind, "id": target.id})
+	elif target != null and target.kind == "sheep":
+		target.des = true
+		target.unreach_until = 0
+		rev += 1
+		r.orders.append({"kind": "hunt", "id": target.id})
 	elif cell != null and walkable(cell):
 		r.orders.append({"kind": "move", "cell": cell})
 
@@ -1168,6 +1312,8 @@ func clear_orders(r: Dictionary) -> void:
 static func order_text(o: Dictionary) -> String:
 	if o.kind == "move":
 		return "Walk to a spot"
+	if o.kind == "hunt":
+		return "Hunt a sheep"
 	return "Mine a tree" if o.target_kind == "tree" else "Mine a boulder"
 
 
@@ -1176,6 +1322,11 @@ static func order_text(o: Dictionary) -> String:
 func _order_job(r: Dictionary, o: Dictionary):
 	if o.kind == "move":
 		return _move_job(o.cell) if walkable(o.cell) else null
+	if o.kind == "hunt":
+		for sh in sheep:
+			if sh.id == o.id:
+				return _hunt_job(r, sh) if sh.alive and (sh.claim == 0 or sh.claim == r.id) else null
+		return null
 	var list := trees if o.target_kind == "tree" else boulders
 	for t in list:
 		if t.id != o.id:
@@ -1215,7 +1366,8 @@ func save_state() -> Dictionary:
 		sites_out.append(c)
 	return {"w": w, "h": h, "tick": tick, "next_id": next_id, "trees": trees.duplicate(true), "boulders": boulders.duplicate(true),
 		"items": items_out, "zone": zone.duplicate(), "sites": sites_out, "residents": res_out,
-		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft}
+		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
+		"sheep": sheep.duplicate(true), "rng_state": rng.state}
 
 
 static func from_state(d: Dictionary) -> Sim:
@@ -1234,7 +1386,9 @@ static func from_state(d: Dictionary) -> Sim:
 	s.arrival_at = d.arrival_at
 	s.arrived = d.arrived
 	s.auto_craft = d.auto_craft
-	for o in s.trees + s.boulders:
+	s.sheep = d.sheep.duplicate(true)
+	s.rng.state = d.rng_state
+	for o in s.trees + s.boulders + s.sheep:
 		o.claim = 0
 		o.unreach_until = 0
 	for rd in d.residents:
