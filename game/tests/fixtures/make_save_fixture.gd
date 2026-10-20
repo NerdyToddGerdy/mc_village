@@ -24,6 +24,8 @@ func _initialize() -> void:
 		sim.queue_add(bench, "planks")
 	_run(sim, 600)
 	sim.place_site("house", at(1, 4), 1)
+	if SaveFormat.VERSION >= 8:
+		sim.paint_farm(area(15, 15, 2, 2))  # wheat planted and growing when saved
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	var walked := 0

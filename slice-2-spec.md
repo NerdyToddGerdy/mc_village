@@ -84,6 +84,10 @@ Slice 2 is done when, from a fresh start, a player can:
 - Wheat **grows** for 2 minutes, drawn as rising stages.
 - When ripe, a farmer **harvests** it (2 seconds) for 2 wheat, and the cell goes back to empty.
 - Ripe wheat that isn't harvested waits; it doesn't spoil.
+- Harvested wheat drops on the cell and is hauled to a stockpile like anything else. The stock bar counts it.
+- **Where plots go:** only open grass. Trees, boulders, berry bushes, buildings and stockpile cells are skipped when painting. A stockpile can't be painted over a farm either. Placing a building over plots clears them, as it does stockpile cells. From #46, plots also can't go on a reserved plot.
+- **Selecting a plot** shows its state (empty, growing with a percentage, ripe) and who is working it, with **Remove this plot**.
+- **Until job toggles exist (#47)** every resident farms. Farm work comes after building and delivering to sites, and before mining. Ripe cells are harvested before empty ones are planted.
 
 **Fireplace.** A new job building (build menu, default key **K**). It's a 1×1 stone fireplace costing 6 cobblestone. Placing it reserves the **3×3 plot** around it that the kitchen will need later (§8). Like the bench, it has a queue, worked by residents with Cook switched on:
 
@@ -192,6 +196,7 @@ Taken together, the upgrade steps:
 - Record the map size as 18×18 for saves from before v4, so older saves keep their size (v3→v4).
 - Gives existing residents full hunger, all jobs on at priority 2, and level 1 everywhere.
 - Adds a finished bed to every finished house (so old saves keep their residents housed).
+- Adds no farm plots (v7→v8, #45).
 - Adds no sheep to the clearing (old saves are past the opening).
 - Gives the meadow its starting 8 sheep.
 

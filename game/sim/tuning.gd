@@ -29,6 +29,11 @@ const EAT_TIME := 1.5                   ## Seconds to eat one food item or berry
 const FOOD_VALUE := {"berries": 15.0, "mutton": 20.0, "bread": 50.0, "cooked_mutton": 60.0}
 const BUSH_MAX := 3                     ## Berries a bush holds.
 const BUSH_REGROW := 45.0               ## Seconds for a bush to grow one berry back.
+# Farms (issue #45).
+const PLANT_TIME := 2.0                 ## Seconds to plant one farm cell (no seeds needed).
+const HARVEST_TIME := 2.0               ## Seconds to harvest one ripe cell.
+const WHEAT_GROW := 120.0               ## Seconds from planting to ripe.
+const WHEAT_YIELD := 2                  ## Wheat per harvested cell.
 const CRAFT_TIME := 3.0                 ## Seconds per recipe.
 const STAGE_TIME := 10.0                ## Seconds of build work per construction stage.
 const ARRIVAL_DELAY := 45.0             ## Seconds after a house with a free bed is finished, per traveler.

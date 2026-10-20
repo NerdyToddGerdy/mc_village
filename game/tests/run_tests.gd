@@ -19,6 +19,8 @@ func _init() -> void:
 		"test_hunting_sheep",
 		"test_beds_and_free_bed_arrivals",
 		"test_hunger_and_eating",
+		"test_farm_plant_grow_harvest",
+		"test_farm_plots_need_open_grass",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -256,6 +258,10 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
 		else:
 			check(sim.residents[0].orders == [], "v%d: residents get an empty order list" % v)
+		if v >= 8:
+			check(not sim.farm.is_empty() and sim.farm.values().any(func(c): return c.grow >= 0.0), "v%d: farm plots and growing wheat survive" % v)
+		else:
+			check(sim.farm.is_empty(), "v%d: older saves start with no farms" % v)
 		run(sim, 60)
 		check(sim.stats.traveler_home, "v%d: Tomas finishes moving in after loading" % v)
 
@@ -544,3 +550,99 @@ func test_hunger_and_eating() -> void:
 	run(sim2, 6)
 	check(a2.hunger > 0.0 and not stuck_text(sim2).contains("Starving"), "food appears and she eats and recovers (%.1f)" % a2.hunger)
 
+
+
+## An open rect of grass near Ada, `size` cells, where a farm plot can go.
+func open_rect(sim: Sim, size: Vector2i) -> Rect2i:
+	var start := Sim.rcell(sim.residents[0])
+	for d in range(1, 12):
+		for x in range(start.x - d, start.x + d):
+			for y in range(start.y - d, start.y + d):
+				var r := Rect2i(Vector2i(x, y), size)
+				var ok := true
+				for cx in range(r.position.x, r.end.x):
+					for cy in range(r.position.y, r.end.y):
+						if sim.farm_blocked(Vector2i(cx, cy)) != "":
+							ok = false
+				if ok:
+					return r
+	return Rect2i()
+
+
+func test_farm_plant_grow_harvest() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	ada.hunger = 100.0
+	var rect := open_rect(sim, Vector2i(3, 2))
+	check(rect.size != Vector2i.ZERO, "found open grass for a farm")
+	check(sim.paint_farm(rect) == 6 and sim.farm.size() == 6, "Farm paints six plots")
+	# Ada plants every empty cell, 2 seconds each, without seeds.
+	var labels: Array = []
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if ada.job != null and not labels.has(ada.job.label):
+			labels.append(ada.job.label)
+	check(labels.has("Planting wheat"), "Ada plants wheat (%s)" % [labels])
+	check(sim.farm.values().all(func(c): return c.grow >= 0.0), "every plot is planted")
+	check(sim.stats.get("planted", 0) == 6, "six cells planted, once each")
+	var stages := {}
+	for c in sim.farm.values():
+		stages[Sim.crop_stage(c)] = true
+	check(stages.has(1) and not stages.has(4), "young wheat is at its first stage")
+	# It grows through visible stages over 2 minutes.
+	var crop: Dictionary = sim.farm.values()[0]
+	var seen := {}
+	while not Sim.crop_ripe(crop):
+		seen[Sim.crop_stage(crop)] = true
+		sim.step()
+	check(seen.has(1) and seen.has(2) and seen.has(3), "wheat shows three growing stages (%s)" % [seen.keys()])
+	# Ripe wheat is harvested for 2 wheat each, and the plot is empty again (then replanted).
+	labels.clear()
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if ada.job != null and not labels.has(ada.job.label):
+			labels.append(ada.job.label)
+	check(labels.has("Harvesting wheat"), "Ada harvests ripe wheat (%s)" % [labels])
+	check(sim.stats.get("harvested", 0) == 6, "all six cells harvested (%d)" % sim.stats.get("harvested", 0))
+	check(count(sim, "wheat") == 6 * Tuning.WHEAT_YIELD, "each harvest gives %d wheat (%d)" % [Tuning.WHEAT_YIELD, count(sim, "wheat")])
+	check(sim.stats.get("planted", 0) == 12, "the empty plots are planted again")
+	# Ripe wheat waits: with nobody to harvest it, it stays ripe and doesn't spoil.
+	var sim2 := Sim.new_game()
+	sim2.residents[0].hunger = 100.0
+	sim2.paint_farm(open_rect(sim2, Vector2i.ONE))
+	var c2: Dictionary = sim2.farm.values()[0]
+	c2.grow = Tuning.WHEAT_GROW
+	sim2.residents.clear()
+	run(sim2, 300)
+	check(Sim.crop_ripe(c2) and sim2.farm.has(c2.cell), "ripe wheat waits without spoiling")
+	# Farm plots and growth survive a save.
+	var saved := Sim.from_state(sim.save_state())
+	check(saved.farm.size() == 6, "farm plots survive a save")
+	var grows: Array = sim.farm.keys().map(func(k): return sim.farm[k].grow)
+	var loaded: Array = sim.farm.keys().map(func(k): return saved.farm[k].grow)
+	check(grows == loaded, "and so does each cell's growth")
+	check(saved.farm.values().all(func(c): return c.claim == 0), "claims are cleared on load")
+
+
+func test_farm_plots_need_open_grass() -> void:
+	var sim := Sim.new_game()
+	var tree: Dictionary = sim.trees[0]
+	check(sim.paint_farm(Rect2i(tree.cell, Vector2i.ONE)) == 0, "no farm on a tree")
+	var bush: Dictionary = sim.bushes[0]
+	check(sim.paint_farm(Rect2i(bush.cell, Vector2i.ONE)) == 0, "no farm on a berry bush")
+	var house_rect := open_rect(sim, Vector2i(5, 5))
+	var house := sim.place_site("house", house_rect.position)
+	check(sim.paint_farm(house_rect) == 0, "no farm over a building")
+	var free := open_rect(sim, Vector2i(2, 1))
+	sim.paint_zone(free)
+	check(sim.paint_farm(free) == 0 and sim.farm_blocked(free.position) == "a stockpile", "no farm over a stockpile")
+	var plot := open_rect(sim, Vector2i(2, 1))
+	check(sim.paint_farm(plot) == 2, "farm on open grass")
+	sim.paint_zone(plot)
+	check(not sim.zone.has(plot.position), "and a stockpile can't be painted over a farm")
+	# A building placed over a farm clears it, like a stockpile.
+	sim.cancel_site(house)
+	sim.place_site("bench", plot.position)
+	check(not sim.farm.has(plot.position) and sim.farm.has(plot.position + Vector2i(1, 0)), "a building placed on a plot clears just that cell")
+	sim.clear_farm(Rect2i(plot.position, Vector2i(2, 1)))
+	check(sim.farm.is_empty(), "plots can be removed")

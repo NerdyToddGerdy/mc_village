@@ -9,7 +9,7 @@ const ELEVATION_SIN := 0.57735         ## sin(35.26°), for converting screen dr
 var sim: Sim
 var speed := 1
 var last_speed := 1
-var tool := ""                          ## "", "mine", "stock" or "build"
+var tool := ""                          ## "", "mine", "hunt", "stock", "farm" or "build"
 var placing := ""                       ## Template being placed while tool == "build".
 var rot := 0
 var build_menu_open := false
@@ -152,8 +152,8 @@ func _update_live_overlays() -> void:
 	var hint := ""
 	var hint_col := Palette.CHALK
 	if not _drag.is_empty() and _drag.kind == "rect":
-		outlines.append({"rect": _drag.rect, "h": 0.03, "color": Palette.GREEN if tool == "stock" else Palette.RED, "dashed": true})
-	elif tool in ["mine", "stock", "hunt"] and _hover != null:
+		outlines.append({"rect": _drag.rect, "h": 0.03, "color": {"stock": Palette.GREEN, "farm": Palette.YELLOW}.get(tool, Palette.RED), "dashed": true})
+	elif tool in ["mine", "stock", "hunt", "farm"] and _hover != null:
 		outlines.append({"rect": Rect2i(_hover, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	if tool == "build" and placing != "" and _hover != null:
 		var origin := _placement_origin()
@@ -170,7 +170,7 @@ func _update_live_overlays() -> void:
 			var turn := keys.first("rotate")
 			hint = (("Place house. %s turns the door." % turn if turn != "" else "Place house.") if placing == "house" else "Place crafting bench.") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
-	if sel != null and sel.kind in ["tree", "boulder", "sheep", "bush"]:
+	if sel != null and sel.kind in ["tree", "boulder", "sheep", "bush", "crop"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
@@ -182,6 +182,15 @@ func _update_live_overlays() -> void:
 			hint = "Drag to mark trees and boulders. Shift: trees only. Alt/Option: boulders only."
 	if hint == "" and tool == "hunt" and _hover != null and _drag.is_empty():
 		hint = "Click or drag over sheep to hunt them."
+	if hint == "" and tool == "farm" and _hover != null and _drag.is_empty():
+		var why := sim.farm_blocked(_hover)
+		if sim.farm.has(_hover):
+			hint = "Already a farm plot."
+		elif why != "":
+			hint = "Farms go on open grass, not on %s." % why
+			hint_col = Palette.YELLOW
+		else:
+			hint = "Drag over open grass to paint a farm."
 	if hint == "" and tool == "" and _drag.is_empty() and selection.get("kind", "") == "res":
 		var hit = _pick(_mouse, false)
 		if hit != null and hit.kind in ["tree", "boulder"]:
@@ -285,6 +294,10 @@ func selected_entity():
 			for b in sim.bushes:
 				if b.id == selection.id:
 					return b
+		"crop":
+			for c in sim.farm.values():
+				if c.id == selection.id:
+					return c
 		"site":
 			var s := sim.site(selection.id)
 			return null if s.is_empty() else s
@@ -403,7 +416,7 @@ func _left_down(e: InputEventMouseButton) -> void:
 				if not e.shift_pressed:
 					set_tool("")
 		return
-	if tool in ["mine", "stock", "hunt"] and c != null:
+	if tool in ["mine", "stock", "hunt", "farm"] and c != null:
 		_drag = {"kind": "rect", "a": c, "rect": Rect2i(c, Vector2i.ONE), "start": e.position}
 		return
 	# Shift-drag box-selects residents; a plain drag pans the map; a click selects.
@@ -423,6 +436,8 @@ func _left_up(e: InputEventMouseButton) -> void:
 		"rect":
 			if tool == "stock":
 				sim.paint_zone(d.rect)
+			elif tool == "farm":
+				sim.paint_farm(d.rect)
 			elif tool == "hunt":
 				var hit = _pick(e.position, false) if small else null
 				sim.designate_hunt(d.rect, hit if hit != null and hit.kind == "sheep" else null)
@@ -479,6 +494,7 @@ func _key(e: InputEventKey) -> void:
 		"craft": toggle_craft_menu()
 		"hunt": set_tool("hunt")
 		"stock": set_tool("stock")
+		"farm": set_tool("farm")
 		"build": set_tool("build")
 		"bench": start_placing("bench")
 		"house": start_placing("house")
@@ -656,6 +672,11 @@ func toggle_hunt(target: Dictionary) -> void:
 	sim.designate_hunt(Rect2i(target.cell, Vector2i.ONE), target)
 
 
+func remove_farm_plot(crop: Dictionary) -> void:
+	sim.clear_farm(Rect2i(crop.cell, Vector2i.ONE))
+	selection = {}
+
+
 func toggle_mine(target: Dictionary) -> void:
 	sim.designate_mine(Rect2i(target.cell, Vector2i.ONE), target)
 
@@ -778,6 +799,34 @@ func _screenshot_scene() -> void:
 		sim.rev += 1
 		selection = {"kind": "site", "id": house.id}
 		_target = Vector3(house.origin.x + 2.5, 0, house.origin.y + 2.5)
+		_place_camera()
+	if "--farm" in OS.get_cmdline_user_args():
+		var fa := area(12, 12, 4, 3)
+		for d in 10:  # the nearest spot where the whole plot is open grass
+			var found := false
+			for dx in range(-d, d + 1):
+				for dy in range(-d, d + 1):
+					var r := Rect2i(fa.position + Vector2i(dx, dy), fa.size)
+					var ok := true
+					for x in range(r.position.x, r.end.x):
+						for y in range(r.position.y, r.end.y):
+							ok = ok and sim.farm_blocked(Vector2i(x, y)) == ""
+					if ok and not found:
+						fa = r
+						found = true
+			if found:
+				break
+		sim.paint_farm(fa)
+		var i := 0
+		for k in sim.farm:  # one plot at each stage, from empty to ripe
+			sim.farm[k].grow = [-1.0, 1.0, 50.0, 90.0, Tuning.WHEAT_GROW][i % 5]
+			i += 1
+		sim.rev += 1
+		var crop = sim.farm.get(fa.position + Vector2i(1, 1))
+		if crop != null:
+			selection = {"kind": "crop", "id": crop.id}
+		tool = "farm"
+		_target = Vector3(fa.get_center().x, 0, fa.get_center().y)
 		_place_camera()
 	if "--select-bench" in OS.get_cmdline_user_args():
 		_select(bench)

@@ -9,6 +9,7 @@ const ITEMS := {
 	"cobble": {"one": "cobblestone", "many": "cobblestone", "label": "Cobblestone"},
 	"wool": {"one": "wool", "many": "wool", "label": "Wool"},
 	"mutton": {"one": "raw mutton", "many": "raw mutton", "label": "Mutton"},
+	"wheat": {"one": "wheat", "many": "wheat", "label": "Wheat"},
 	"berries": {"one": "berry", "many": "berries", "label": "Berries"},
 	"bread": {"one": "bread", "many": "bread", "label": "Bread"},
 	"cooked_mutton": {"one": "cooked mutton", "many": "cooked mutton", "label": "Cooked mutton"},
@@ -18,7 +19,7 @@ const ITEMS := {
 	"stone_pick": {"one": "stone pickaxe", "many": "stone pickaxes", "tool": "pick", "tier": 2},
 }
 
-const MATERIALS := ["log", "plank", "stick", "cobble", "wool", "mutton"]
+const MATERIALS := ["log", "plank", "stick", "cobble", "wool", "mutton", "wheat"]
 
 const RECIPES := [
 	{"id": "planks", "name": "Planks", "inp": {"log": 1}, "out": {"plank": 4}},
