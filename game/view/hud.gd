@@ -487,7 +487,7 @@ func _refresh_selection(sim: Sim) -> void:
 		for id in sel.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)]
+				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s" % [r.jobs]
 	elif target != null and target.kind == "crop":
 		sig += "%d %d %d" % [Sim.crop_stage(target), int(target.grow / Tuning.WHEAT_GROW * 20.0), target.claim]
 	elif target != null:
@@ -534,6 +534,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			c.add_child(_button("Clear orders", func(): game.clear_orders(r)))
 		if r.axe == null and not r.broken.axe:
 			c.add_child(_label("Chopping by hand is slow. Stone needs a pickaxe.", false, Palette.CHALK_DIM, 15, true))
+		_add_jobs_grid(c, r)
 		return
 	if target == null:
 		c.add_child(_label("That’s gone.", false, Palette.CHALK_DIM))
@@ -593,6 +594,40 @@ func _refresh_craft(sim: Sim) -> void:
 			h.add_child(_button("Next", func(): game.next_craft_bench()))
 			c.add_child(h)
 		_fill_bench(c, sim, bench))
+
+
+## The Jobs grid (issue #47): each job's on/off switch and its priority, 1 first. Click a job's name
+## to switch it, and its number to cycle the priority.
+func _add_jobs_grid(c: Container, r: Dictionary) -> void:
+	var title := _row("Jobs", "Priority 1 goes first", false)
+	(title.get_child(0) as Label).add_theme_font_override("font", _bold)
+	(title.get_child(1) as Label).add_theme_color_override("font_color", Palette.CHALK_DIM)
+	(title.get_child(1) as Label).add_theme_font_size_override("font_size", 13)
+	c.add_child(title)
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 2)
+	grid.add_theme_constant_override("v_separation", 2)
+	for jb in Defs.JOBS:
+		var st: Dictionary = r.jobs[jb]
+		var on := _button(Defs.JOB_NAMES[jb], func(): game.toggle_job(r, jb))
+		on.toggle_mode = true
+		on.set_pressed_no_signal(st.on)
+		on.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		on.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		on.add_theme_font_size_override("font_size", 14)
+		on.tooltip_text = "%s is %s. Click to switch it %s." % [Defs.JOB_NAMES[jb], "on" if st.on else "off", "off" if st.on else "on"]
+		if not st.on:
+			for k in ["font_color", "font_hover_color", "font_pressed_color"]:
+				on.add_theme_color_override(k, Color(Palette.CHALK_DIM, 0.55))
+		grid.add_child(on)
+		var pri := _button(str(st.pri) if st.on else "–", func(): game.cycle_job_priority(r, jb))
+		pri.custom_minimum_size = Vector2(30, 0)
+		pri.disabled = not st.on
+		pri.add_theme_font_size_override("font_size", 14)
+		pri.tooltip_text = "Priority %d. Click to change it." % st.pri
+		grid.add_child(pri)
+	c.add_child(grid)
 
 
 func _tool_text(t: Dictionary) -> String:
