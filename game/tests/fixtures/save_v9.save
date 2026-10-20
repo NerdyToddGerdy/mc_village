@@ -1,0 +1,1087 @@
+{
+"camera": {
+"size": 17.0,
+"target": Vector3(9, 0, 9)
+},
+"saved_at": 1792440000,
+"speed": 1,
+"state": {
+"arrival_at": -1,
+"arrived": true,
+"auto_craft": true,
+"boulders": [{
+"alive": false,
+"cell": Vector2i(18, 19),
+"claim": 0,
+"des": false,
+"id": 41,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(21, 17),
+"claim": 0,
+"des": false,
+"id": 42,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(14, 12),
+"claim": 0,
+"des": false,
+"id": 43,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(17, 11),
+"claim": 0,
+"des": false,
+"id": 44,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(23, 10),
+"claim": 0,
+"des": false,
+"id": 45,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(14, 23),
+"claim": 0,
+"des": false,
+"id": 46,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(6, 7),
+"claim": 0,
+"des": true,
+"id": 47,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(3, 8),
+"claim": 0,
+"des": true,
+"id": 48,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(28, 11),
+"claim": 0,
+"des": false,
+"id": 49,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(25, 13),
+"claim": 0,
+"des": false,
+"id": 50,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(3, 14),
+"claim": 0,
+"des": true,
+"id": 51,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(14, 25),
+"claim": 0,
+"des": true,
+"id": 52,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(19, 26),
+"claim": 0,
+"des": false,
+"id": 53,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(21, 26),
+"claim": 0,
+"des": false,
+"id": 54,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(17, 30),
+"claim": 0,
+"des": true,
+"id": 55,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(24, 30),
+"claim": 0,
+"des": true,
+"id": 56,
+"kind": "boulder",
+"unreach_until": 0
+}],
+"bushes": [{
+"berries": 3,
+"cell": Vector2i(12, 17),
+"id": 57,
+"kind": "bush",
+"regrow": 0.0
+}, {
+"berries": 3,
+"cell": Vector2i(19, 13),
+"id": 58,
+"kind": "bush",
+"regrow": 0.0
+}, {
+"berries": 3,
+"cell": Vector2i(11, 21),
+"id": 59,
+"kind": "bush",
+"regrow": 0.0
+}, {
+"berries": 3,
+"cell": Vector2i(20, 21),
+"id": 60,
+"kind": "bush",
+"regrow": 0.0
+}, {
+"berries": 3,
+"cell": Vector2i(15, 20),
+"id": 61,
+"kind": "bush",
+"regrow": 0.0
+}, {
+"berries": 3,
+"cell": Vector2i(23, 19),
+"id": 62,
+"kind": "bush",
+"regrow": 0.0
+}],
+"farm": {
+Vector2i(22, 22): {
+"cell": Vector2i(22, 22),
+"claim": 0,
+"grow": -1.0,
+"id": 73,
+"kind": "crop",
+"unreach_until": 0
+},
+Vector2i(22, 23): {
+"cell": Vector2i(22, 23),
+"claim": 0,
+"grow": -1.0,
+"id": 74,
+"kind": "crop",
+"unreach_until": 0
+},
+Vector2i(23, 22): {
+"cell": Vector2i(23, 22),
+"claim": 0,
+"grow": -1.0,
+"id": 75,
+"kind": "crop",
+"unreach_until": 0
+},
+Vector2i(23, 23): {
+"cell": Vector2i(23, 23),
+"claim": 0,
+"grow": -1.0,
+"id": 76,
+"kind": "crop",
+"unreach_until": 0
+}
+},
+"h": 32,
+"items": {
+Vector2i(4, 16): {
+"cell": Vector2i(4, 16),
+"n": 3,
+"res": 0,
+"type": "log"
+},
+Vector2i(5, 20): {
+"cell": Vector2i(5, 20),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(5, 25): {
+"cell": Vector2i(5, 25),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(5, 30): {
+"cell": Vector2i(5, 30),
+"n": 5,
+"res": 0,
+"type": "log"
+},
+Vector2i(8, 5): {
+"cell": Vector2i(8, 5),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(8, 23): {
+"cell": Vector2i(8, 23),
+"n": 5,
+"res": 0,
+"type": "log"
+},
+Vector2i(9, 2): {
+"cell": Vector2i(9, 2),
+"n": 6,
+"res": 0,
+"type": "log"
+},
+Vector2i(9, 10): {
+"cell": Vector2i(9, 10),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(10, 30): {
+"cell": Vector2i(10, 30),
+"n": 6,
+"res": 0,
+"type": "log"
+},
+Vector2i(11, 5): {
+"cell": Vector2i(11, 5),
+"n": 5,
+"res": 0,
+"type": "log"
+},
+Vector2i(11, 27): {
+"cell": Vector2i(11, 27),
+"n": 6,
+"res": 0,
+"type": "log"
+},
+Vector2i(13, 9): {
+"cell": Vector2i(13, 9),
+"n": 6,
+"res": 0,
+"type": "log"
+},
+Vector2i(13, 30): {
+"cell": Vector2i(13, 30),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(14, 27): {
+"cell": Vector2i(14, 27),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(15, 18): {
+"cell": Vector2i(15, 18),
+"n": 5,
+"res": 0,
+"type": "plank"
+},
+Vector2i(16, 9): {
+"cell": Vector2i(16, 9),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(16, 18): {
+"cell": Vector2i(16, 18),
+"n": 2,
+"res": 0,
+"type": "stick"
+},
+Vector2i(17, 3): {
+"cell": Vector2i(17, 3),
+"n": 6,
+"res": 0,
+"type": "log"
+},
+Vector2i(18, 19): {
+"cell": Vector2i(18, 19),
+"n": 6,
+"res": 0,
+"type": "cobble"
+},
+Vector2i(19, 26): {
+"cell": Vector2i(19, 26),
+"n": 6,
+"res": 0,
+"type": "cobble"
+},
+Vector2i(19, 29): {
+"cell": Vector2i(19, 29),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(20, 12): {
+"cell": Vector2i(20, 12),
+"n": 2,
+"res": 0,
+"type": "log"
+},
+Vector2i(20, 23): {
+"cell": Vector2i(20, 23),
+"n": 5,
+"res": 0,
+"type": "log"
+},
+Vector2i(21, 17): {
+"cell": Vector2i(21, 17),
+"n": 2,
+"res": 0,
+"type": "cobble"
+},
+Vector2i(21, 26): {
+"cell": Vector2i(21, 26),
+"n": 6,
+"res": 0,
+"type": "cobble"
+},
+Vector2i(22, 13): {
+"cell": Vector2i(22, 13),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(22, 16): {
+"cell": Vector2i(22, 16),
+"n": 4,
+"res": 0,
+"type": "cooked_mutton"
+},
+Vector2i(22, 17): {
+"cell": Vector2i(22, 17),
+"n": 2,
+"res": 0,
+"type": "bread"
+},
+Vector2i(22, 20): {
+"cell": Vector2i(22, 20),
+"n": 5,
+"res": 0,
+"type": "log"
+},
+Vector2i(22, 22): {
+"cell": Vector2i(22, 22),
+"n": 2,
+"res": 0,
+"type": "wheat"
+},
+Vector2i(22, 23): {
+"cell": Vector2i(22, 23),
+"n": 2,
+"res": 0,
+"type": "wheat"
+},
+Vector2i(22, 28): {
+"cell": Vector2i(22, 28),
+"n": 6,
+"res": 0,
+"type": "log"
+},
+Vector2i(23, 10): {
+"cell": Vector2i(23, 10),
+"n": 6,
+"res": 0,
+"type": "cobble"
+},
+Vector2i(23, 22): {
+"cell": Vector2i(23, 22),
+"n": 2,
+"res": 0,
+"type": "wheat"
+},
+Vector2i(23, 23): {
+"cell": Vector2i(23, 23),
+"n": 2,
+"res": 0,
+"type": "wheat"
+},
+Vector2i(25, 13): {
+"cell": Vector2i(25, 13),
+"n": 6,
+"res": 0,
+"type": "cobble"
+},
+Vector2i(26, 2): {
+"cell": Vector2i(26, 2),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(26, 7): {
+"cell": Vector2i(26, 7),
+"n": 6,
+"res": 0,
+"type": "log"
+},
+Vector2i(26, 11): {
+"cell": Vector2i(26, 11),
+"n": 6,
+"res": 0,
+"type": "log"
+},
+Vector2i(26, 25): {
+"cell": Vector2i(26, 25),
+"n": 5,
+"res": 0,
+"type": "log"
+},
+Vector2i(27, 1): {
+"cell": Vector2i(27, 1),
+"n": 1,
+"res": 0,
+"type": "mutton"
+},
+Vector2i(27, 17): {
+"cell": Vector2i(27, 17),
+"n": 5,
+"res": 0,
+"type": "log"
+},
+Vector2i(27, 21): {
+"cell": Vector2i(27, 21),
+"n": 5,
+"res": 0,
+"type": "log"
+},
+Vector2i(28, 11): {
+"cell": Vector2i(28, 11),
+"n": 6,
+"res": 0,
+"type": "cobble"
+},
+Vector2i(29, 8): {
+"cell": Vector2i(29, 8),
+"n": 4,
+"res": 0,
+"type": "log"
+},
+Vector2i(30, 17): {
+"cell": Vector2i(30, 17),
+"n": 6,
+"res": 0,
+"type": "log"
+},
+Vector2i(30, 23): {
+"cell": Vector2i(30, 23),
+"n": 6,
+"res": 0,
+"type": "log"
+},
+Vector2i(30, 27): {
+"cell": Vector2i(30, 27),
+"n": 5,
+"res": 0,
+"type": "log"
+}
+},
+"next_id": 79,
+"residents": [{
+"arriving": false,
+"axe": null,
+"broken": {
+"axe": false,
+"pick": true
+},
+"carry": null,
+"hunger": 41.00000000009868,
+"id": 69,
+"kind": "res",
+"name": "Ada",
+"orders": [{
+"id": 17,
+"kind": "mine",
+"target_kind": "tree"
+}, {
+"cell": Vector2i(14, 4),
+"kind": "move"
+}],
+"pick": null,
+"pos": Vector2(14, 4),
+"shirt": "3E6E7E"
+}, {
+"arriving": true,
+"axe": null,
+"broken": {
+"axe": false,
+"pick": false
+},
+"carry": null,
+"hunger": 99.73611111111117,
+"id": 78,
+"kind": "res",
+"name": "Tomas",
+"orders": [],
+"pick": null,
+"pos": Vector2(2.7500005, 31),
+"shirt": "8C4F6B"
+}],
+"rng_state": -6591493128524675852,
+"sheep": [{
+"alive": false,
+"cell": Vector2i(26, 1),
+"claim": 0,
+"des": false,
+"dest": null,
+"id": 63,
+"kind": "sheep",
+"pos": Vector2(26, 1),
+"unreach_until": 0,
+"wait": 3.6725923061370853
+}, {
+"alive": false,
+"cell": Vector2i(7, 20),
+"claim": 0,
+"des": false,
+"dest": null,
+"id": 64,
+"kind": "sheep",
+"pos": Vector2(7, 20),
+"unreach_until": 0,
+"wait": 2.427641487121586
+}, {
+"alive": false,
+"cell": Vector2i(21, 21),
+"claim": 0,
+"des": false,
+"dest": null,
+"id": 65,
+"kind": "sheep",
+"pos": Vector2(21, 21),
+"unreach_until": 0,
+"wait": 1.1535700798034723
+}, {
+"alive": false,
+"cell": Vector2i(11, 9),
+"claim": 0,
+"des": false,
+"dest": null,
+"id": 66,
+"kind": "sheep",
+"pos": Vector2(11, 9),
+"unreach_until": 0,
+"wait": 1.7999664306640628
+}, {
+"alive": false,
+"cell": Vector2i(27, 29),
+"claim": 0,
+"des": false,
+"dest": Vector2i(26, 29),
+"id": 67,
+"kind": "sheep",
+"pos": Vector2(26.97, 29),
+"unreach_until": 0,
+"wait": -0.04499893188476645
+}, {
+"alive": false,
+"cell": Vector2i(21, 19),
+"claim": 0,
+"des": false,
+"dest": Vector2i(22, 19),
+"id": 68,
+"kind": "sheep",
+"pos": Vector2(21.090002, 19),
+"unreach_until": 0,
+"wait": -0.016075611114497165
+}],
+"sites": [{
+"autoq": [false],
+"builder": 0,
+"crafter": 0,
+"crafting": "",
+"done": true,
+"id": 70,
+"incoming": {},
+"kind": "site",
+"origin": Vector2i(15, 17),
+"owner": 0,
+"plot": Rect2i(14, 17, 3, 3),
+"queue": ["stone_axe"],
+"rot": 0,
+"size": Vector2i(1, 1),
+"stage": 1,
+"store": {
+"log": 0,
+"plank": 0,
+"stick": 0
+},
+"tpl": "bench",
+"unreach_until": 0
+}, {
+"autoq": [],
+"builder": 0,
+"crafter": 0,
+"crafting": "",
+"done": true,
+"id": 71,
+"incoming": {},
+"kind": "site",
+"origin": Vector2i(18, 7),
+"owner": 69,
+"plot": null,
+"queue": [],
+"rot": 0,
+"size": Vector2i(5, 5),
+"stage": 4,
+"store": {},
+"tpl": "house",
+"unreach_until": 0
+}, {
+"autoq": [],
+"builder": 0,
+"crafter": 0,
+"crafting": "",
+"done": true,
+"id": 72,
+"incoming": {},
+"kind": "site",
+"origin": Vector2i(8, 11),
+"owner": 0,
+"plot": null,
+"queue": [],
+"rot": 1,
+"size": Vector2i(5, 5),
+"stage": 4,
+"store": {},
+"tpl": "house",
+"unreach_until": 0
+}, {
+"autoq": [],
+"builder": 0,
+"crafter": 0,
+"crafting": "",
+"done": true,
+"id": 77,
+"incoming": {},
+&"keep_meals": true,
+"kind": "site",
+"origin": Vector2i(21, 16),
+"owner": 0,
+"plot": Rect2i(20, 16, 3, 3),
+"queue": [],
+"rot": 0,
+"size": Vector2i(1, 1),
+"stage": 1,
+"store": {
+"log": 0,
+"mutton": 0,
+"wheat": 0
+},
+"tpl": "fireplace",
+"unreach_until": 0
+}],
+"stats": {
+"broken_boulders": 10,
+"division": false,
+"felled": 38,
+&"harvested": 7,
+"houses": 2,
+"pick_crafted": true,
+&"planted": 7,
+&"sheep_hunted": 6,
+"tools_broken": 1,
+"traveler_home": false
+},
+"tick": 31248,
+"trees": [{
+"alive": false,
+"cell": Vector2i(9, 16),
+"claim": 0,
+"des": false,
+"id": 1,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(10, 20),
+"claim": 0,
+"des": false,
+"id": 2,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(19, 9),
+"claim": 0,
+"des": false,
+"id": 3,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(9, 10),
+"claim": 0,
+"des": false,
+"id": 4,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(13, 19),
+"claim": 0,
+"des": false,
+"id": 5,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(22, 13),
+"claim": 0,
+"des": false,
+"id": 6,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(16, 22),
+"claim": 0,
+"des": false,
+"id": 7,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(22, 20),
+"claim": 0,
+"des": false,
+"id": 8,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(13, 9),
+"claim": 0,
+"des": false,
+"id": 9,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(23, 16),
+"claim": 0,
+"des": false,
+"id": 10,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(20, 23),
+"claim": 0,
+"des": false,
+"id": 11,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(8, 23),
+"claim": 0,
+"des": false,
+"id": 12,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(16, 9),
+"claim": 0,
+"des": false,
+"id": 13,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(11, 13),
+"claim": 0,
+"des": false,
+"id": 14,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(9, 2),
+"claim": 0,
+"des": false,
+"id": 15,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(26, 2),
+"claim": 0,
+"des": false,
+"id": 16,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(14, 3),
+"claim": 69,
+"des": true,
+"id": 17,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(17, 3),
+"claim": 0,
+"des": false,
+"id": 18,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(8, 5),
+"claim": 0,
+"des": false,
+"id": 19,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(11, 5),
+"claim": 0,
+"des": false,
+"id": 20,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(26, 7),
+"claim": 0,
+"des": false,
+"id": 21,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(29, 8),
+"claim": 0,
+"des": false,
+"id": 22,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(4, 10),
+"claim": 0,
+"des": true,
+"id": 23,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(26, 11),
+"claim": 0,
+"des": false,
+"id": 24,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(4, 16),
+"claim": 0,
+"des": false,
+"id": 25,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(27, 17),
+"claim": 0,
+"des": false,
+"id": 26,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(30, 17),
+"claim": 0,
+"des": false,
+"id": 27,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(5, 20),
+"claim": 0,
+"des": false,
+"id": 28,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(27, 21),
+"claim": 0,
+"des": false,
+"id": 29,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(30, 23),
+"claim": 0,
+"des": false,
+"id": 30,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(5, 25),
+"claim": 0,
+"des": false,
+"id": 31,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(26, 25),
+"claim": 0,
+"des": false,
+"id": 32,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(11, 27),
+"claim": 0,
+"des": false,
+"id": 33,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(14, 27),
+"claim": 0,
+"des": false,
+"id": 34,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(30, 27),
+"claim": 0,
+"des": false,
+"id": 35,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(22, 28),
+"claim": 0,
+"des": false,
+"id": 36,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(19, 29),
+"claim": 0,
+"des": false,
+"id": 37,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(5, 30),
+"claim": 0,
+"des": false,
+"id": 38,
+"kind": "tree",
+"logs": 5,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(10, 30),
+"claim": 0,
+"des": false,
+"id": 39,
+"kind": "tree",
+"logs": 6,
+"unreach_until": 0
+}, {
+"alive": false,
+"cell": Vector2i(13, 30),
+"claim": 0,
+"des": false,
+"id": 40,
+"kind": "tree",
+"logs": 4,
+"unreach_until": 0
+}],
+"w": 32,
+"zone": {
+Vector2i(17, 14): true,
+Vector2i(17, 15): true,
+Vector2i(18, 14): true,
+Vector2i(18, 15): true,
+Vector2i(19, 14): true,
+Vector2i(19, 15): true,
+Vector2i(20, 14): true,
+Vector2i(20, 15): true
+}
+},
+"summary": "Next: Welcome a traveler",
+"tick": 31248,
+&"v": 9
+}

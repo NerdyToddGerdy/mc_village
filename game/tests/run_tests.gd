@@ -21,6 +21,8 @@ func _init() -> void:
 		"test_hunger_and_eating",
 		"test_farm_plant_grow_harvest",
 		"test_farm_plots_need_open_grass",
+		"test_fireplace_reserves_a_kitchen_plot",
+		"test_fireplace_cooks_and_keeps_meals_stocked",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -220,8 +222,8 @@ func test_save_and_load_mid_game() -> void:
 	var h := loaded.place_site("house", at(11, 0))
 	for i in 8:
 		loaded.queue_add(b2, "planks")
-	run(loaded, 600)
-	check(h.done, "loaded game can still build a house")
+	run(loaded, 900)
+	check(h.done, "loaded game can still build a house (stage %d; %s)" % [h.stage, stuck_text(loaded)])
 
 
 func test_tool_breaks_and_resident_reports() -> void:
@@ -258,8 +260,13 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
 		else:
 			check(sim.residents[0].orders == [], "v%d: residents get an empty order list" % v)
+		var fires: Array = sim.sites.filter(func(s): return s.tpl == "fireplace")
+		if v >= 9:
+			check(fires.size() == 1 and fires[0].plot is Rect2i, "v%d: the fireplace and its reserved plot survive" % v)
+		else:
+			check(sim.sites.all(func(s): return s.plot == null), "v%d: older buildings reserve no plot" % v)
 		if v >= 8:
-			check(not sim.farm.is_empty() and sim.farm.values().any(func(c): return c.grow >= 0.0), "v%d: farm plots and growing wheat survive" % v)
+			check(not sim.farm.is_empty() and sim.farm.values().any(func(c): return c.grow >= 0.0 or sim.items.has(c.cell)), "v%d: farm plots and their wheat survive" % v)
 		else:
 			check(sim.farm.is_empty(), "v%d: older saves start with no farms" % v)
 		run(sim, 60)
@@ -605,7 +612,13 @@ func test_farm_plant_grow_harvest() -> void:
 	check(labels.has("Harvesting wheat"), "Ada harvests ripe wheat (%s)" % [labels])
 	check(sim.stats.get("harvested", 0) == 6, "all six cells harvested (%d)" % sim.stats.get("harvested", 0))
 	check(count(sim, "wheat") == 6 * Tuning.WHEAT_YIELD, "each harvest gives %d wheat (%d)" % [Tuning.WHEAT_YIELD, count(sim, "wheat")])
-	check(sim.stats.get("planted", 0) == 12, "the empty plots are planted again")
+	# The harvest is collected before a plot is replanted: with no stockpile, it waits and says why.
+	check(sim.stats.get("planted", 0) == 6, "plots with wheat lying on them aren't replanted")
+	check(stuck_text(sim).contains("Harvested wheat needs a stockpile"), "and the stuck list says why: " + stuck_text(sim))
+	sim.paint_zone(open_rect(sim, Vector2i(2, 1)))
+	run(sim, 60)
+	check(sim.farm.keys().all(func(k): return not sim.items.has(k)), "once there's a stockpile, the wheat is hauled off the plots")
+	check(sim.stats.get("planted", 0) == 12, "and the empty plots are planted again (%d)" % sim.stats.get("planted", 0))
 	# Ripe wheat waits: with nobody to harvest it, it stays ripe and doesn't spoil.
 	var sim2 := Sim.new_game()
 	sim2.residents[0].hunger = 100.0
@@ -642,7 +655,103 @@ func test_farm_plots_need_open_grass() -> void:
 	check(not sim.zone.has(plot.position), "and a stockpile can't be painted over a farm")
 	# A building placed over a farm clears it, like a stockpile.
 	sim.cancel_site(house)
-	sim.place_site("bench", plot.position)
-	check(not sim.farm.has(plot.position) and sim.farm.has(plot.position + Vector2i(1, 0)), "a building placed on a plot clears just that cell")
+	sim.place_site("house", plot.position)
+	check(sim.farm.is_empty(), "a building placed on plots clears them")
+	sim.cancel_site(sim.sites[-1])
+	sim.paint_farm(plot)
 	sim.clear_farm(Rect2i(plot.position, Vector2i(2, 1)))
 	check(sim.farm.is_empty(), "plots can be removed")
+
+
+## A finished fireplace, skipping its construction.
+func lit_fireplace(sim: Sim, origin: Vector2i) -> Dictionary:
+	var f := sim.place_site("fireplace", origin)
+	f.stage = 1
+	f.done = true
+	sim.rev += 1
+	return f
+
+
+func test_fireplace_reserves_a_kitchen_plot() -> void:
+	var sim := Sim.new_game()
+	var spot := open_rect(sim, Vector2i(3, 3))
+	var o := spot.position + Vector2i(1, 0)  # the fireplace sits in the middle of the plot's back wall
+	check(sim.placement_check("fireplace", o) == "", "a fireplace fits on open grass")
+	var zone_cell := o + Vector2i(0, 2)
+	sim.paint_zone(Rect2i(zone_cell, Vector2i.ONE))
+	var f := sim.place_site("fireplace", o)
+	check(f.plot == Rect2i(o + Vector2i(-1, 0), Vector2i(3, 3)), "it reserves the 3×3 kitchen plot (%s)" % [f.plot])
+	check(not sim.zone.has(zone_cell), "stockpile cells on the new plot are cleared")
+	var inside := o + Vector2i(1, 1)
+	check(sim.placement_check("bench", inside) == "Overlaps a reserved plot", "nothing can be built on the plot")
+	check(sim.placement_check("house", o + Vector2i(-5, 1)) == "Overlaps a reserved plot", "not even partly")
+	sim.paint_zone(f.plot)
+	check(not sim.zone.has(inside), "nothing can be stockpiled on it")
+	check(sim.farm_blocked(inside) == "a reserved plot" and sim.paint_farm(f.plot) == 0, "nor farmed")
+	check(sim.walkable(inside), "residents can still walk across it")
+	# Its own plot needs room: not off the map, not over a building or another plot.
+	check(sim.placement_check("fireplace", Vector2i(0, 5)) == "Not enough room to grow into a kitchen", "a plot can't run off the map edge")
+	check(sim.placement_check("bench", Vector2i(0, 5)) == "Not enough room to grow into a workshop", "benches placed now reserve a workshop plot too")
+	check(sim.placement_check("fireplace", o + Vector2i(0, -2)) == "Not enough room to grow into a kitchen", "or overlap another plot")
+	check(sim.placement_check("fireplace", o + Vector2i(0, -1), 2) == "", "turned to face away, a fireplace fits right behind it")
+	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
+	check(bench.plot != null, "a newly placed bench reserves a plot")
+	# Trees on a plot are left alone until the upgrade needs the space.
+	var t2: Dictionary = {}
+	for t in sim.trees:
+		var fo: Vector2i = t.cell - Vector2i(0, 1)
+		if sim.placement_check("fireplace", fo) == "" and sim.site_at(fo) == null and sim.walkable(fo):
+			t2 = t
+			sim.place_site("fireplace", fo)
+			break
+	check(not t2.is_empty() and not t2.des, "a tree on the reserved plot isn't marked for mining")
+	# Plots and the standing order survive a save.
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	var lf: Dictionary = loaded.site(f.id)
+	check(lf.plot == f.plot and lf.keep_meals, "the plot and standing order survive a save")
+
+
+func test_fireplace_cooks_and_keeps_meals_stocked() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var spot := open_rect(sim, Vector2i(3, 3))
+	var f := lit_fireplace(sim, spot.position + Vector2i(1, 0))
+	var near := spot.position + Vector2i(1, 3)
+	sim.drop_items(near, "wheat", 6)
+	sim.drop_items(near + Vector2i(1, 0), "mutton", 1)
+	sim.drop_items(near + Vector2i(-1, 0), "log", 2)
+	var labels: Array = []
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		if ada.job != null and not labels.has(ada.job.label):
+			labels.append(ada.job.label)
+	check(labels.has("Baking bread") and labels.has("Cooking mutton"), "the standing order bakes and cooks (%s)" % [labels])
+	check(count(sim, "bread") == 2 and count(sim, "wheat") == 0, "3 wheat makes each bread (%d bread)" % count(sim, "bread"))
+	check(count(sim, "cooked_mutton") == 1 and count(sim, "mutton") == 0, "raw mutton is cooked")
+	check(count(sim, "log") == 1, "cooking burns one log as fuel (%d left)" % count(sim, "log"))
+	check(f.queue.is_empty(), "with no inputs left, nothing more is queued")
+	check(not stuck_text(sim).contains("Fireplace"), "the standing order never leaves the fireplace stuck")
+	# It stops at 6 meals.
+	sim.drop_items(near, "wheat", 16)
+	sim.drop_items(near + Vector2i(1, 0), "wheat", 14)
+	run(sim, 150)
+	var meals := count(sim, "bread") + count(sim, "cooked_mutton")
+	check(meals == Tuning.MEAL_STOCK, "it keeps %d meals in stock, no more (%d)" % [Tuning.MEAL_STOCK, meals])
+	# Off: nothing is queued automatically. A manual order that can't be made says why.
+	for it in sim.items.values().filter(func(x): return x.type == "bread"):
+		sim.items.erase(it.cell)
+	sim.set_keep_meals(f, false)
+	for it in sim.items.values().filter(func(x): return x.type == "wheat"):
+		sim.items.erase(it.cell)
+	run(sim, 5)
+	check(f.queue.is_empty(), "with the standing order off, nothing is queued")
+	sim.queue_add(f, "bread")
+	run(sim, 1)
+	check(stuck_text(sim).contains("Fireplace: Bread needs 3 more wheat"), "a blocked bread order says what's missing: " + stuck_text(sim))
+	# Raw mutton is eaten only in a pinch: with berries about, it's kept for cooking.
+	var sim2 := Sim.new_game()
+	var a2: Dictionary = sim2.residents[0]
+	sim2.drop_items(Sim.rcell(a2) + Vector2i(1, 0), "mutton", 1)
+	a2.hunger = 35.0
+	run(sim2, 20)
+	check(count(sim2, "mutton") == 1 and a2.hunger > 50.0, "a hungry resident eats berries and leaves raw mutton for cooking")

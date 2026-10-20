@@ -28,11 +28,22 @@ const RECIPES := [
 	{"id": "wood_pick", "name": "Wooden pickaxe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_pick": 1}},
 	{"id": "stone_axe", "name": "Stone axe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_axe": 1}},
 	{"id": "stone_pick", "name": "Stone pickaxe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_pick": 1}},
+	# Fireplace recipes (issue #46). "at" says which job building makes a recipe; the default is the bench.
+	{"id": "bread", "name": "Bread", "inp": {"wheat": 3}, "out": {"bread": 1}, "at": "fireplace", "doing": "Baking bread"},
+	{"id": "cooked_mutton", "name": "Cooked mutton", "inp": {"mutton": 1, "log": 1}, "out": {"cooked_mutton": 1}, "at": "fireplace", "doing": "Cooking mutton"},
 ]
 
+## Meals the fireplace's standing order keeps in stock.
+const MEALS := ["bread", "cooked_mutton"]
+
+## Job buildings ("station") have a crafting queue. Those with a "plot" reserve the 3×3 they'll need
+## to grow into it later (slice-2-spec.md §8).
 const TEMPLATES := {
-	"bench": {"name": "Crafting bench", "size": Vector2i(1, 1), "stages": [
+	"bench": {"name": "Crafting bench", "size": Vector2i(1, 1), "station": true, "plot": "workshop", "stages": [
 		{"name": "Bench", "verb": "needs", "cost": {"log": 4}},
+	]},
+	"fireplace": {"name": "Fireplace", "size": Vector2i(1, 1), "station": true, "plot": "kitchen", "stages": [
+		{"name": "Fireplace", "verb": "needs", "cost": {"cobble": 6}},
 	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},
@@ -50,9 +61,14 @@ static func recipe(id: String) -> Dictionary:
 	return {}
 
 
-## The first recipe that outputs this item, used to fill in missing ingredients.
-static func producer(item: String) -> Dictionary:
-	for r in RECIPES:
+## The recipes a job building makes.
+static func recipes_at(tpl: String) -> Array:
+	return RECIPES.filter(func(r): return r.get("at", "bench") == tpl)
+
+
+## The first recipe at this job building that outputs this item, used to fill in missing ingredients.
+static func producer(item: String, tpl := "bench") -> Dictionary:
+	for r in recipes_at(tpl):
 		if r.out.has(item):
 			return r
 	return {}

@@ -85,7 +85,8 @@ Slice 2 is done when, from a fresh start, a player can:
 - When ripe, a farmer **harvests** it (2 seconds) for 2 wheat, and the cell goes back to empty.
 - Ripe wheat that isn't harvested waits; it doesn't spoil.
 - Harvested wheat drops on the cell and is hauled to a stockpile like anything else. The stock bar counts it.
-- **Where plots go:** only open grass. Trees, boulders, berry bushes, buildings and stockpile cells are skipped when painting. A stockpile can't be painted over a farm either. Placing a building over plots clears them, as it does stockpile cells. From #46, plots also can't go on a reserved plot.
+- **A plot is replanted only once its harvest has been collected** (decided with the owner). With no stockpile to take it to, the wheat waits on the plot and the stuck list says "Harvested wheat needs a stockpile before replanting".
+- **Where plots go:** only open grass. Trees, boulders, berry bushes, buildings and stockpile cells are skipped when painting. A stockpile can't be painted over a farm either. Placing a building over plots clears them, as it does stockpile cells. Plots can't go on a reserved plot (§8).
 - **Selecting a plot** shows its state (empty, growing with a percentage, ripe) and who is working it, with **Remove this plot**.
 - **Until job toggles exist (#47)** every resident farms. Farm work comes after building and delivering to sites, and before mining. Ripe cells are harvested before empty ones are planted.
 
@@ -97,6 +98,11 @@ Slice 2 is done when, from a fresh start, a player can:
 | Cooked mutton | 1 raw mutton, 1 log (fuel) | 1 cooked mutton |
 
 The fireplace gets the same queue rules as the bench (skipping blocked recipes, Queue 5). It also gets a standing order: **"Keep 6 meals in stock"**, on by default. When stored bread and cooked mutton total fewer than 6, cooks queue whichever recipe their inputs allow.
+- The standing order queues **one meal at a time**, bread first, and only when its inputs exist somewhere. So it never leaves the fireplace stuck. A recipe you queue yourself can be blocked, and then the stuck list says so ("Fireplace: Bread needs 3 more wheat").
+- Turning the standing order off removes the meals it queued. The switch sits in the fireplace's panel.
+- Selecting a finished fireplace opens its panel on the right, as the bench does. The toolbar's **Craft** button and its **Next** button step through every finished bench and fireplace.
+- Hungry residents leave raw mutton for the fireplace. They eat it only when there's no other food.
+- **Until job toggles exist (#47)** every resident cooks, and fireplace work ranks with bench work.
 
 ## 5. Jobs, priorities and skills
 
@@ -160,7 +166,9 @@ Once a crafting bench is finished, a **Craft** button appears in the orders tool
 ## 8. Buildings and orders added
 
 **Job buildings start simple and evolve in place.** Each job building starts as its simplest form and reserves the plot its next form needs.
-- **Reserved plot:** shown as a faint dashed outline. It stays clear: nothing can be built or stockpiled on it. Trees and boulders already there are left alone until the upgrade needs the space.
+- **Reserved plot:** shown as a faint dashed outline, and while placing, next to the blueprint. It stays clear: nothing can be built, stockpiled or farmed on it, though residents walk across it. Placing the building clears stockpile cells and farm plots from it. Trees and boulders already there are left alone until the upgrade needs the space.
+- **Turning:** R turns which side the plot opens toward. The building sits in the middle of the plot's back wall, and the fireplace's mouth faces the plot.
+- **Room to grow:** a job building's own plot must stay on the map and clear of other buildings and plots, or placement says "Not enough room to grow into a kitchen" (or a workshop).
 - **The upgrade itself** is later work (§14). It keeps the building's queue and adds capacity or recipes.
 
 | Starts as | Grows into (later) | Reserved plot |
@@ -197,6 +205,7 @@ Taken together, the upgrade steps:
 - Gives existing residents full hunger, all jobs on at priority 2, and level 1 everywhere.
 - Adds a finished bed to every finished house (so old saves keep their residents housed).
 - Adds no farm plots (v7→v8, #45).
+- Gives existing buildings no reserved plot, so Slice 1 benches reserve nothing (v8→v9, #46).
 - Adds no sheep to the clearing (old saves are past the opening).
 - Gives the meadow its starting 8 sheep.
 

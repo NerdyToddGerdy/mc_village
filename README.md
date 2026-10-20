@@ -57,7 +57,7 @@ All keys can be changed on the menu's **Controls** page. Esc and the mouse can't
 |---|---|
 | X / Z / B | Mine, Stockpile, Build |
 | G / P | Hunt sheep, paint a farm plot |
-| T / H | Place a crafting bench, place a house (R turns the house door) |
+| T / H / K | Place a crafting bench, a house or a fireplace (R turns the house door, or the plot a bench or fireplace reserves to grow into) |
 | Shift-drag / Alt-drag with Mine | Mark trees only, or boulders only (Alt is Option on a Mac) |
 | Click | Select a resident, tree, boulder or building |
 | Shift-drag | Select several residents |
