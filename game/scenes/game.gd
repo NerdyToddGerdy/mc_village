@@ -551,6 +551,11 @@ func close_menu() -> void:
 	_menu.first = false
 
 
+## Quits the game (the menu's Quit, after it confirms).
+func quit_game() -> void:
+	get_tree().quit()
+
+
 func restart() -> void:
 	_use_sim(Sim.new_game())
 	_look_at_first_resident()
@@ -808,7 +813,8 @@ static func area(x: int, y: int, w: int, h: int) -> Rect2i:
 # ---------------------------------------------------------------- screenshot mode
 
 func _screenshot_menu() -> void:
-	open_menu("keys" if "--keys" in OS.get_cmdline_user_args() else "save")
+	var args := OS.get_cmdline_user_args()
+	open_menu("keys" if "--keys" in args else ("main" if "--main" in args else "save"))
 	for i in 20:
 		await get_tree().process_frame
 	var img := get_viewport().get_texture().get_image()

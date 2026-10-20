@@ -27,7 +27,7 @@ $GODOT --headless --path . -s res://tests/playtest.gd        # bot plays the who
 $GODOT --headless --path . -s res://tests/playtest_village.gd  # Slice 2 bot: founding (by command), then the village through input
 $GODOT --headless --path . --import                          # refresh the class cache after adding a class_name script
 $GODOT --path . --resolution 1280x720 -- --screenshot        # scripted opening, saves user://screenshot.png, quits
-$GODOT --path . --resolution 1280x720 -- --screenshot-menu   # Save game menu, saves user://screenshot_menu.png
+$GODOT --path . --resolution 1280x720 -- --screenshot-menu   # Save game menu (--main or --keys for those pages), saves user://screenshot_menu.png
 ```
 
 Screenshots and saves (`saves/slot_N.save`) live in `~/Library/Application Support/Godot/app_userdata/Block Village/`. `game_test.gd` and the playtests write to `test_saves/` and `playtest_saves/` there instead, so they never touch real saves. The playtests push input with `push_input(event, true)` (local coordinates) because the window is stretched. Their shared input helpers live in `tests/playtest_base.gd`. It's the quickest way to check view changes without clicking through the game.
