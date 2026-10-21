@@ -8,6 +8,8 @@ extends SceneTree
 
 func _initialize() -> void:
 	var sim := Sim.new_game()
+	if SaveFormat.VERSION >= 15:
+		sim.residents[0].jobs.toolsmith.on = true  # Toolsmith starts off since #91; the player switches it on
 	sim.designate_mine(area(0, 0, 10, 18))
 	if SaveFormat.VERSION >= 6:
 		sim.designate_hunt(Rect2i(0, 0, sim.w, sim.h))  # wool for the beds
@@ -63,9 +65,24 @@ func _initialize() -> void:
 		printerr("Tomas isn't walking in; the fixture would miss that case.")
 		quit(1)
 		return
+	var camera := {"target": Vector3(9, 0, 9), "size": 17.0}
+	if SaveFormat.VERSION >= 15:  # Mira at the old mine, mining, with the mine in view (issues #100-#102)
+		var mine := sim.get_map(OldMine.ID)
+		mine.known = true
+		mine.visited = true
+		var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], Vector2i(0, 0))
+		mira.pick = {"type": "stone_pick", "tier": 2, "dur": 20}
+		sim.move_to_map(mira, OldMine.ID, mine.entrance)
+		sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, mine.w, mine.h)))
+		sim.use_map(OldMine.ID)
+		for i in 40 * Tuning.TPS:  # only the mine moves on, so Tomas is still mid-walk in the village
+			sim.tick += 1
+			sim._step_map()
+		sim.use_map("village")
+		camera = {"map": OldMine.ID, "maps": {"village": camera, OldMine.ID: {"target": Vector3(6, 0, 8), "size": 14.0}}}
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
-		"state": sim.save_state(), "camera": {"target": Vector3(9, 0, 9), "size": 17.0}, "speed": 1}
+		"state": sim.save_state(), "camera": camera, "speed": 1}
 	if SaveFormat.write(ProjectSettings.globalize_path(path), data):
 		print("wrote ", path, " at tick ", sim.tick)
 		quit(0)

@@ -12,12 +12,36 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 14
+const VERSION := 15
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15}
+
+
+## v15: more than one map (issues #100, #101, #102). The village's trees, items, buildings and the
+## rest move into `maps.village`, and everyone and every building is on the village map. The old
+## mine isn't in older saves: it's added, unvisited, when the save loads. The camera remembers a
+## position for each map, and which map was in view.
+static func _v14_to_v15(d: Dictionary) -> Dictionary:
+	var st: Dictionary = d.state
+	if not st.has("maps"):
+		var village := {"id": "village", "kind": "village", "name": "Village"}
+		for k in ["w", "h", "trees", "boulders", "sheep", "bushes", "items", "zone", "farm", "sites"]:
+			village[k] = st[k]
+			st.erase(k)
+		st.maps = {"village": village}
+	for r in st.residents:
+		if not r.has("map"):
+			r.map = "village"
+	for s in st.maps.village.sites:
+		if not s.has("map"):
+			s.map = "village"
+	var cam: Dictionary = d.get("camera", {})
+	if cam.has("target") and not cam.has("maps"):
+		d.camera = {"map": "village", "maps": {"village": {"target": cam.target, "size": cam.size}}}
+	return d
 
 
 ## v14: brighter tunics that read on grass and under a canopy (issue #79). Residents in older saves

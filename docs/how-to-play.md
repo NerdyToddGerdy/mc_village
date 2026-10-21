@@ -32,6 +32,8 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 - **Bottom left:** whatever you've selected: a resident, a building, a tree, a farm plot.
 - **Bottom right:** the **orders toolbar**, and the Craft panel when it's open.
 
+**Other maps.** Expeditions (coming in Slice 3) go to places off the map, such as an old mine. Once the village knows of one, a switcher in the top bar shows **Village** and **Old mine** (Tab switches), and a dim line under it says what a party there is doing. Each map keeps its own view. Stockpiles, farms and buildings stay in the village.
+
 Marks drawn on the world show what's been ordered. Chalk-white means selected, red means mine or hunt, green hatching is a stockpile, wheat rows are a farm, a blue dashed outline is a blueprint, and a yellow flag means something is stuck.
 
 ## The founding, step by step
@@ -206,6 +208,7 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | Shift + right-click | Queue an order after their current one |
 | J | Village jobs board |
 | F / N | Next resident, next stuck item |
+| Tab | Switch between the village and the old mine, once it's known |
 | Drag, W A S D, arrow keys | Pan |
 | Mouse wheel, + / − | Zoom |
 | Space / ~ | Pause or resume, pause |

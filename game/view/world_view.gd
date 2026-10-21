@@ -5,8 +5,12 @@ extends Node3D
 ## Grid cell (x, y) maps to world (x, height, y); ground tops sit at height 0.
 
 var sim: Sim
+## The map being drawn (issue #101). The view switches the sim to it while drawing and picking, then
+## back to the village.
+var map_id := "village"
 
 var _built_rev := -1
+var _built_map := ""
 var _stuck_sig := ""
 var _solid: MultiMeshInstance3D
 var _ghost: MultiMeshInstance3D
@@ -127,12 +131,19 @@ func _process(delta: float) -> void:
 	_frame_delta = delta
 	if sim == null:
 		return
-	if sim.rev != _built_rev:
+	sim.use_map(map_id)
+	_draw_map()
+	sim.use_map("village")
+
+
+func _draw_map() -> void:
+	if sim.rev != _built_rev or map_id != _built_map:
 		_build_static()
 		_built_rev = sim.rev
-	var sig := ""
+		_built_map = map_id
+	var sig := map_id
 	for s in sim.stuck:
-		sig += "%s%s%s%s;" % [s.cell, s.height, s.why, s.waiting]
+		sig += "%s%s%s%s%s;" % [s.map, s.cell, s.height, s.why, s.waiting]
 	if sig != _stuck_sig:
 		_stuck_sig = sig
 		_build_flags()
@@ -149,19 +160,25 @@ func _build_static() -> void:
 	var ghost := Batch.new()
 	var dark := Batch.new()
 	var col := Batch.new()
-	for x in sim.w:
-		for y in sim.h:
-			var v := 0.96 + _hash(x, y) * 0.08
-			solid.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT)
-			solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), Palette.GRASS * Color(v, v, v))
+	if sim.m.kind == "site":
+		_add_site_ground(solid)
+	else:
+		for x in sim.w:
+			for y in sim.h:
+				var v := 0.96 + _hash(x, y) * 0.08
+				solid.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT)
+				solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), Palette.GRASS * Color(v, v, v))
 	for b in sim.boulders:
-		if b.alive:
+		if b.alive and not b.get("hidden", false):
 			var c: Vector2i = b.cell
 			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), Palette.STONE)
 			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.STONE.lightened(0.06))
+			if b.has("ore"):  # flecks of ore on its faces and top (issue #103)
+				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[Defs.ORES[b.ore].item])
 	for bush in sim.bushes:
 		_add_bush(solid, bush)
-	_add_signpost(solid, sim.meadow_sign())
+	if sim.m.kind == "village":
+		_add_signpost(solid, sim.meadow_sign())
 	for k in sim.farm:
 		_add_crop(solid, sim.farm[k])
 	for k in sim.items:
@@ -179,6 +196,46 @@ func _build_static() -> void:
 	col.apply(_over_col)
 	_build_marks()
 	_build_hatch()
+
+
+static var MINE_FLOOR := Color("#5B5650")
+static var MINE_ROCK := Color("#6E6A63")
+static var TORCH_FLAME := Color("#F2A640")
+static var DARK_TINT := Color("#2C3445")
+
+
+## A site map's ground (issue #102): a stone floor, rock walls a block high, torches on the walls,
+## and the tunnels no torch reaches drawn darker, so the dark parts read at a glance.
+func _add_site_ground(b: Batch) -> void:
+	var mp := sim.m
+	for x in mp.w:
+		for y in mp.h:
+			var c := Vector2i(x, y)
+			var v := 0.94 + _hash(x, y) * 0.1
+			if mp.rock.has(c) or (sim.boulders.any(func(o): return o.alive and o.get("hidden", false) and o.cell == c)):
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.7, y + 1), MINE_ROCK * Color(v, v, v))
+				continue
+			var floor_col := MINE_FLOOR * Color(v, v, v)
+			if mp.is_dark(c):  # unlit: darker and a little cold, but still read as floor, not a hole
+				floor_col = floor_col.darkened(0.38).lerp(DARK_TINT, 0.25)
+			b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0, y + 1), floor_col)
+	for t in mp.torches:
+		var x: float = t.x + 0.5
+		var z: float = t.y + 0.5
+		b.box(Vector3(x - 0.06, 0.7, z - 0.06), Vector3(x + 0.06, 1.1, z + 0.06), Palette.LOG)
+		b.box(Vector3(x - 0.1, 1.1, z - 0.1), Vector3(x + 0.1, 1.3, z + 0.1), TORCH_FLAME)
+	# The way back to the village: a timber frame over the entrance.
+	var e := mp.entrance
+	b.box(Vector3(e.x, 0, e.y - 0.05), Vector3(e.x + 0.15, 1.4, e.y + 0.1), Palette.LOG)
+	b.box(Vector3(e.x, 0, e.y + 0.9), Vector3(e.x + 0.15, 1.4, e.y + 1.05), Palette.LOG)
+	b.box(Vector3(e.x - 0.05, 1.4, e.y - 0.1), Vector3(e.x + 0.2, 1.6, e.y + 1.1), Palette.LOG)
+
+
+func _add_ore_flecks(b: Batch, c: Vector2i, col: Color) -> void:
+	for p in [Vector3(0.25, 0.3, 0.92), Vector3(0.62, 0.45, 0.92), Vector3(0.92, 0.25, 0.4), Vector3(0.92, 0.48, 0.7)]:
+		var lo := Vector3(c.x + p.x - 0.09, p.y - 0.07, c.y + p.z - 0.09)
+		b.box(lo, lo + Vector3(0.18, 0.14, 0.18), col)
+	b.box(Vector3(c.x + 0.35, 0.95, c.y + 0.3), Vector3(c.x + 0.55, 0.98, c.y + 0.5), col)
 
 
 static var BUSH_GREEN := Color("#3F6B33")
@@ -242,6 +299,16 @@ func _add_item(b: Batch, s: Dictionary) -> void:
 		b.box(Vector3(cx + 0.12, 0, cz - 0.16), Vector3(cx + 0.3, 0.14, cz + 0.16), color)
 		return
 	var levels: int = mini(4, ceili(s.n / 4.0))
+	if s.type == "iron_ingot":  # ingots lie as bars, two to a layer, crossing each layer (issue #103)
+		for i in levels:
+			var y := i * 0.12
+			for k in 2:
+				var off := -0.14 + k * 0.28
+				if i % 2 == 0:
+					b.box(Vector3(cx - 0.28, y, cz + off - 0.1), Vector3(cx + 0.28, y + 0.12, cz + off + 0.1), color)
+				else:
+					b.box(Vector3(cx + off - 0.1, y, cz - 0.28), Vector3(cx + off + 0.1, y + 0.12, cz + 0.28), color.darkened(0.08))
+		return
 	for i in levels:
 		b.box(Vector3(cx - 0.26, i * 0.2, cz - 0.26), Vector3(cx + 0.26, i * 0.2 + 0.2, cz + 0.26), color)
 
@@ -448,7 +515,7 @@ func _build_flags() -> void:
 	for ch in _flags.get_children():
 		ch.queue_free()
 	for s in sim.stuck:
-		if s.waiting:
+		if s.waiting or s.map != map_id:
 			continue  # a standing order short of materials is advice, not a blocker (issue #77)
 		var sp := _sprite(MarkTextures.flag(), Vector3(s.cell.x, s.height + 0.45, s.cell.y), 0.9, _flags)
 		sp.render_priority = 15
@@ -614,7 +681,7 @@ func _update_people() -> void:
 		if not _people.has(r.id):
 			_people[r.id] = _make_person(r)
 		var n: Node3D = _people[r.id]
-		n.visible = not r.away  # off the map on a meadow trip
+		n.visible = not r.away and r.map == map_id  # off the map on a meadow trip, or on another map
 		var at := drawn_pos(r)
 		n.position = Vector3(at.x + 0.5, 0, at.y + 0.5)
 		(n.get_node("Body") as Node3D).position.y = _hop(r.id, at)
@@ -658,7 +725,9 @@ func _make_sheep() -> Node3D:
 ## Sheep move every tick, so they're drawn like residents rather than as static blocks. A marked
 ## sheep carries a red crosshair that follows it.
 func _update_sheep() -> void:
+	var here := {}
 	for sh in sim.sheep:
+		here[sh.id] = true
 		if not sh.alive:
 			if _sheep_nodes.has(sh.id):
 				_sheep_nodes[sh.id].queue_free()
@@ -667,12 +736,16 @@ func _update_sheep() -> void:
 		if not _sheep_nodes.has(sh.id):
 			_sheep_nodes[sh.id] = _make_sheep()
 		var n: Node3D = _sheep_nodes[sh.id]
+		n.visible = true
 		n.position = Vector3(sh.pos.x + 0.5, 0, sh.pos.y + 0.5)
 		if sh.dest != null:
 			var d: Vector2 = Vector2(sh.dest) - sh.pos
 			if d.length() > 0.01:
 				(n.get_node("Body") as Node3D).rotation.y = atan2(-d.y, d.x)
 		(n.get_node("Mark") as Node3D).visible = sh.des
+	for id in _sheep_nodes:  # sheep on a map that isn't in view
+		if not here.has(id):
+			_sheep_nodes[id].visible = false
 
 
 const HOP_STRIDE := 0.5    ## Cells walked per hop.
@@ -733,6 +806,8 @@ func _build_live() -> void:
 
 ## The ground cell under a camera ray, or null when the ray misses the map.
 func ground_cell(origin: Vector3, dir: Vector3):
+	if sim.map_id != map_id:
+		return sim.on_map(map_id, ground_cell.bind(origin, dir))
 	if absf(dir.y) < 1e-5:
 		return null
 	var t := -origin.y / dir.y
@@ -751,12 +826,14 @@ func ground_cell(origin: Vector3, dir: Vector3):
 ##    swallow clicks meant for what's behind them.
 ## The resident under a ray from the camera, or null.
 func pick_resident(origin: Vector3, dir: Vector3):
-	return _nearest_hit(origin, dir, sim.residents.filter(func(r): return not r.away).map(func(r):
+	return _nearest_hit(origin, dir, sim.residents.filter(func(r): return not r.away and r.map == map_id).map(func(r):
 		var p := Vector3(r.pos.x + 0.5, 0, r.pos.y + 0.5)
 		return [r, AABB(p - Vector3(0.25, 0, 0.25), Vector3(0.5, 1.15, 0.5))]))
 
 
 func pick(origin: Vector3, dir: Vector3, residents := true):
+	if sim.map_id != map_id:
+		return sim.on_map(map_id, pick.bind(origin, dir, residents))
 	if residents:
 		var r = pick_resident(origin, dir)
 		if r != null:
@@ -766,7 +843,7 @@ func pick(origin: Vector3, dir: Vector3, residents := true):
 		if t.alive:
 			solid.append([t, AABB(Vector3(t.cell.x + 0.1, 0, t.cell.y + 0.1), Vector3(0.8, 3, 0.8))])
 	for b in sim.boulders:
-		if b.alive:
+		if b.alive and not b.get("hidden", false):
 			solid.append([b, AABB(Vector3(b.cell.x, 0, b.cell.y), Vector3(1, 0.95, 1))])
 	for sh in sim.sheep:
 		if sh.alive:
@@ -775,8 +852,9 @@ func pick(origin: Vector3, dir: Vector3, residents := true):
 		solid.append([bush, AABB(Vector3(bush.cell.x + 0.14, 0, bush.cell.y + 0.14), Vector3(0.72, 0.52, 0.72))])
 	for s in sim.sites:
 		solid.append([s, AABB(Vector3(s.origin.x, 0, s.origin.y), Vector3(s.size.x, maxf(sim.site_height(s), 0.3), s.size.y))])
-	var sign := sim.meadow_sign()
-	solid.append([{"kind": "meadow", "id": 0, "cell": sign}, AABB(Vector3(sign.x - 0.4, 0, sign.y + 0.3), Vector3(1.1, 1.8, 0.4))])
+	if sim.m.kind == "village":
+		var sign := sim.meadow_sign()
+		solid.append([{"kind": "meadow", "id": 0, "cell": sign}, AABB(Vector3(sign.x - 0.4, 0, sign.y + 0.3), Vector3(1.1, 1.8, 0.4))])
 	for k in sim.farm:
 		var crop: Dictionary = sim.farm[k]
 		solid.append([crop, AABB(Vector3(crop.cell.x, 0, crop.cell.y), Vector3(1, 0.1 + 0.15 * Sim.crop_stage(crop), 1))])

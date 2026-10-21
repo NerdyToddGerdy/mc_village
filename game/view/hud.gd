@@ -13,6 +13,9 @@ var _root := Control.new()
 var _tallies := HBoxContainer.new()
 var _tools_btn: Button
 var _jobs_btn: Button               ## Opens the Village jobs board (issue #78).
+var _maps := HBoxContainer.new()    ## The map switcher (issue #101): Village, and each known site.
+var _party := Button.new()          ## "Party at the old mine: mining", when residents work on another map.
+var _party_panel: PanelContainer
 var _board_panel: PanelContainer
 var _board := VBoxContainer.new()
 var _tools_drop: PanelContainer
@@ -80,8 +83,20 @@ func _ready() -> void:
 	_jobs_btn.toggle_mode = true
 	_jobs_btn.custom_minimum_size = Vector2(0, 36)
 	tally_row.add_child(_jobs_btn)
+	_maps.add_theme_constant_override("separation", 2)
+	tally_row.add_child(_maps)
 	_tally_panel = _panel(tally_row, Vector2(0, 0))
 	tl.add_child(_tally_panel)
+	_party.flat = true
+	_party.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_party.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	for state in ["font_color", "font_focus_color"]:
+		_party.add_theme_color_override(state, Palette.CHALK_DIM)
+	_party.pressed.connect(func(): game.switch_map(_party.get_meta("map", "village")))
+	_party_panel = _panel(_party, Vector2.ZERO, 4)
+	_party_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_party_panel.visible = false
+	tl.add_child(_party_panel)
 	_tools_list.add_theme_constant_override("separation", 10)
 	_tools_drop = _panel(_tools_list, Vector2(290, 0))
 	_tools_drop.visible = false
@@ -402,7 +417,11 @@ func _refresh_key_labels() -> void:
 func _refresh_toolbar(sim: Sim) -> void:
 	var k: KeyBindings = game.keys
 	var on_menu := OrderMenus.menu_of(game.tool)
-	var sig := "%s|%s|%s|%s" % [game.tool, game.menu_open, _keys_sig, OrderMenus.entries("gather", sim).size()]
+	var gather: Array = sim.on_map(game.view_map, OrderMenus.entries.bind("gather", sim))
+	var village: bool = game.view_map == "village"
+	_tool_btns.paint.visible = village  # stockpiles, farms and buildings are for the village
+	_tool_btns.build.visible = village
+	var sig := "%s|%s|%s|%s" % [game.tool, game.menu_open, _keys_sig, gather.size()]
 	if sig != _toolbar_sig:
 		_toolbar_sig = sig
 		for t in _tool_btns:
@@ -424,7 +443,7 @@ func _refresh_toolbar(sim: Sim) -> void:
 		_menu_panels[m].visible = game.menu_open == m
 		if game.menu_open != m:
 			continue
-		var list: Array = OrderMenus.entries(m, sim)
+		var list: Array = sim.on_map(game.view_map, OrderMenus.entries.bind(m, sim))
 		_rebuild(_menus[m], "%s%s%s" % [list.map(func(e): return e.id), _keys_sig, game.tool], func(c: Container) -> void:
 			for i in list.size():
 				c.add_child(_menu_row(m, i, list[i])))
@@ -581,6 +600,7 @@ func _rebuild(c: Container, sig: String, fill: Callable) -> void:
 func refresh(sim: Sim) -> void:
 	_refresh_key_labels()
 	_refresh_tallies(sim)
+	_refresh_maps(sim)
 	_refresh_goals(sim)
 	for v in _speed_btns:
 		_speed_btns[v].set_pressed_no_signal(game.speed == v)
@@ -649,6 +669,53 @@ func _refresh_tallies(sim: Sim) -> void:
 			c.add_child(_divider()))
 	_tools_btn.text = "Tools  %d  ▾" % tools
 	_refresh_tools(sim)
+
+
+## The map switcher (issue #101), shown once a site map is known, and a dim line for residents at
+## work on a map that isn't in view, which switches to it on a click.
+func _refresh_maps(sim: Sim) -> void:
+	var known: Array = game.known_maps()
+	_maps.visible = known.size() > 1
+	var key: String = game.keys.first("map")
+	_rebuild(_maps, "%s%s%s" % [known, game.view_map, key], func(c: Container) -> void:
+		c.add_child(_divider())
+		for id in known:
+			var b := _button(sim.get_map(id).name, func(): game.switch_map(id))
+			b.toggle_mode = true
+			b.set_pressed_no_signal(id == game.view_map)
+			b.custom_minimum_size = Vector2(0, 36)
+			b.tooltip_text = "Show the %s." % sim.get_map(id).name.to_lower() + (" %s switches maps." % key if key != "" else "")
+			c.add_child(b))
+	var line := ""
+	for id in sim.maps:
+		if id == game.view_map or id == "village":
+			continue
+		var party: Array = sim.residents.filter(func(r): return r.map == id)
+		if party.is_empty():
+			continue
+		line = "Party at the %s: %s" % [sim.get_map(id).name.to_lower(), _party_doing(party)]
+		_party.set_meta("map", id)
+		break
+	_party_panel.visible = line != ""
+	_party.text = line
+	_party.tooltip_text = "Show the %s" % line.get_slice(":", 0).trim_prefix("Party at the ") if line != "" else ""
+
+
+## What a party is mostly doing, in a word: "mining", "hauling", "idle".
+static func _party_doing(party: Array) -> String:
+	var doing := {}
+	for r in party:
+		var w: String = "idle"
+		if r.job != null:
+			w = {"mine": "mining", "haul": "hauling", "build": "building", "hunt": "hunting", "farm": "farming"}.get(r.job.work, "")
+			if w == "":
+				w = "eating" if r.job.kind == "eat" else "walking"
+		doing[w] = doing.get(w, 0) + 1
+	var best := "idle"
+	for w in doing:
+		if doing[w] > doing.get(best, 0):
+			best = w
+	return best
 
 
 ## One tally: a dim name, a bold count, and how many lie outside stockpiles.
@@ -896,7 +963,7 @@ func _refresh_stuck(sim: Sim) -> void:
 ## One stuck-list entry; clicking it moves the camera there. A resident's entry carries their
 ## tunic swatch (issue #79), a blocker a yellow flag, a waiting order nothing and dim text.
 func _stuck_entry(sim: Sim, s: Dictionary, waiting: bool) -> Button:
-	var b := _button("%s\n%s" % [s.who, s.why], func(): game.focus_on(s.focus_kind, s.focus_id))
+	var b := _button("%s\n%s" % [s.who, s.why], func(): game.focus_on(s.focus_kind, s.focus_id, s.map))
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.custom_minimum_size = Vector2(0, 44)
 	b.add_theme_constant_override("icon_max_width", 14)
@@ -1078,7 +1145,10 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 				c.add_child(_label("%s is hunting it." % sim.resident(target.claim).get("name", "Someone"), false, Palette.CHALK_DIM))
 			c.add_child(_button("Cancel hunt" if target.des else "Hunt", func(): game.toggle_hunt(target), "Secondary" if target.des else "Primary"))
 		"boulder":
-			c.add_child(_head("Boulder", "Drops %d cobblestone" % Tuning.BOULDER_COBBLE))
+			var drops := Defs.words("cobble", Tuning.BOULDER_COBBLE)
+			if target.has("ore"):
+				drops = Defs.words(Defs.ORES[target.ore].item, Tuning.ORE_YIELD[target.ore])
+			c.add_child(_head(Sim.block_name(target), "Drops " + drops))
 			if target.des and sim.stuck.any(func(s): return s.focus_kind == "boulder"):
 				c.add_child(_reason("Needs a pickaxe"))
 			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target), "Secondary" if target.des else "Primary"))

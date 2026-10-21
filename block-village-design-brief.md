@@ -115,11 +115,19 @@ Supply, equipment, and cargo compete for carrying capacity. Longer provisioned m
 
 Proposed specialties include scout, miner, guard, builder, porter, and trader. These are skills rather than mandatory rigid classes. A party does not need every specialty.
 
+#### Core decisions (Slice 3)
+
+- **Party size:** 1–3 residents, and the PC is eligible. All numbers are provisional.
+- **One expedition out at a time.**
+- Party members are absent from village labor while they're away.
+
 ### Decisions and outcomes
 
 A party might discover a sealed entrance while gathering stone. The player can continue its original task, spend time and tools investigating, or mark the discovery and return later.
 
 Routine actions resolve automatically. Important choices expose known costs and risks. Scouting improves available information.
+
+**Core decision (Slice 3):** the game pauses for the player at two moments only: **at a discovery**, and **when someone is seriously hurt** (retreat or press on). Everything else follows the party's return policy.
 
 ## 6. Routes and Minecarts
 
@@ -216,6 +224,16 @@ Trading rules and encounter behavior should be explained before commitment rathe
 | Cargo capacity | Limits recovered supplies. |
 
 Avoid a generic danger meter that merely duplicates these constraints. Environmental hazards and encounters affect these systems through specific events.
+
+#### Core decisions: injuries (Slice 3)
+
+These apply to every expedition, not only the Nether.
+
+- **Hazards cause injuries:** cave-ins, falls and darkness. Slice 3 has no mobs and no combat.
+- **An injured resident** walks and works slower, and can't mine.
+- **A serious injury** triggers the retreat return policy.
+- **Injuries heal over time** in the resident's own bed at home.
+- **The PC is protected:** they can be hurt, but never seriously, and the party always gets them home. Death stays open (§14).
 
 ### Return policies
 
@@ -409,7 +427,10 @@ Add job designation, simple food production, a toolsmith job that keeps resident
 
 ### Slice 3 — The first expedition
 
-One nearby destination, a small party, provisions, carrying limits, one meaningful discovery, and a visible return/unloading sequence.
+One nearby destination, a small party, provisions, carrying limits, one meaningful discovery, and a visible return/unloading sequence. Implementation detail: `slice-3-spec.md`.
+- **Destination:** an old mine a short walk off the map, with stone and coal. It's a small second block map with its own view, and travel to it is a timed walk, like the meadow trip.
+- **Discovery:** iron. Iron ore smelted at the fireplace with coal gives iron ingots, which make iron tools at the bench.
+- **Danger:** hazards that injure (§8). No mobs or combat.
 
 ### Slice 4 — Route investment
 
@@ -426,15 +447,15 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 ## 14. Open Decisions
 
 - Final title, and target platforms beyond desktop. (Resolved: Godot 4 engine; 3D blocks with an orthographic isometric camera.)
-- Whether PC incapacitation or death has special consequences.
+- Whether PC incapacitation or death has special consequences. (Resolved for Slice 3, #17: the PC can be hurt but never seriously, and the party always gets them home. Death stays open under "Death, rescue, and difficulty settings".)
 - Rest, happiness, and other needs beyond food: depth and pacing. (Resolved for Slice 2, #18: food only.)
 - Combat presentation and degree of player control.
 - Death, rescue, and difficulty settings.
 - Terrain modification, building customization beyond fixed templates, verticality, and camera rotation.
-- Resource regeneration and deposit depletion rules. (Partly resolved, #22: hunting grounds such as the sheep meadow regain their animals over time. Tree regrowth and deposit depletion are still open.)
-- Exact party sizes, costs, durations, capacities, and balance values.
+- Resource regeneration and deposit depletion rules. (Partly resolved, #22: hunting grounds such as the sheep meadow regain their animals over time, and the old mine's ore doesn't come back once mined. Tree regrowth, and depletion elsewhere, are still open.)
+- Exact party sizes, costs, durations, capacities, and balance values. (Resolved for Slice 3, #23: parties of 1–3, PC eligible. Every number stays provisional.)
 - Recruitment beyond free beds, such as requests or an inn. (Resolved for Slice 2, #24: a traveler arrives for each free bed.)
-- How often expeditions require intervention and how many can run simultaneously.
+- How often expeditions require intervention and how many can run simultaneously. (Resolved for Slice 3, #25: one expedition at a time, and the game stops for the player only at a discovery and at a serious injury.)
 - Outpost staffing and ongoing supply costs.
 - Detailed End and Sift systems.
 - Enchantment discovery and resource costs.

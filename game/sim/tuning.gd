@@ -40,6 +40,11 @@ const MEADOW_TRIP := 90.0               ## Seconds a resident is away on a trip.
 const MEADOW_TAKE := 2                  ## Sheep's worth each resident brings back (wool and raw mutton each).
 const MEADOW_REGROW := 240.0            ## Seconds for the meadow to regain one sheep.
 
+# Site maps (Slice 3, issues #102, #103).
+const MINE_TRIP := 60.0                 ## Seconds to walk between the village and the old mine.
+const ORE_YIELD := {"coal": 2, "iron": 2}  ## Items an ore block drops (coal; iron ore).
+const TORCH_LIGHT := 3.0                ## Cells a torch lights; open cells further from every torch are dark.
+
 # Skills (issue #47/#48, slice-2-spec.md §5).
 const SKILL_LEVELS := [8, 25, 50, 90]   ## Experience for levels 2, 3, 4 and 5; one point per finished task.
 const SKILL_SPEED := 0.15               ## Work speed added per level above 1.

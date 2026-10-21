@@ -450,6 +450,24 @@ func _initialize() -> void:
 	await key(KEY_EQUAL)
 	check(game._cam.size < size_before, "+ zooms in")
 
+	# Maps (issue #101): once the old mine is known, Tab and the switcher change maps, and a toast
+	# about someone at the mine goes there.
+	sim = game.sim
+	sim.get_map(OldMine.ID).known = true
+	await key(KEY_TAB)
+	check(game.view_map == OldMine.ID, "Tab switches to the old mine")
+	check(await click_button("Village"), "click Village in the switcher")
+	check(game.view_map == "village", "the switcher goes back to the village")
+	check(await click_button("Old mine"), "click Old mine in the switcher")
+	check(game.view_map == OldMine.ID, "and to the old mine")
+	await key(KEY_TAB)
+	check(game.view_map == "village", "Tab goes back to the village")
+	var miner := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(sim.residents[0]) + Vector2i(1, 0))
+	sim.move_to_map(miner, OldMine.ID, sim.get_map(OldMine.ID).entrance)
+	game._hud.add_toast({"text": "Tomas found something.", "res_id": miner.id, "site_id": 0, "map": OldMine.ID})
+	check(await click_button("Go to them", "", true), "click Go to them on the newest toast, about Tomas")
+	check(game.view_map == OldMine.ID and game.selection.get("ids", []) == [miner.id], "the toast switches to the mine and selects him")
+
 	for n in range(1, 6):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(game._slot_path(n)))
 	print("\n%s" % ("PLAYTEST PASSED" if _failures == 0 else "%d FAILED" % _failures))

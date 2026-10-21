@@ -10,7 +10,7 @@ The game is built in slices, each a playable step:
 |---|---|---|
 | 1. The founding moment | One founder, bare hands, a crafting bench, tools, stockpiles, two houses, the first traveler | **Done** |
 | 2. A functioning village | Jobs and skills, food, sheep and beds, a toolsmith, more residents | **Done** |
-| 3. The first expedition | A small party, provisions, a trip and a return | Next |
+| 3. The first expedition | A small party, provisions, a trip to an old mine, and iron | In progress |
 | 4. Route investment | Minecart tracks that speed up repeated trips | Planned |
 | 5. Nether foothold | A portal, scouting, trading, an outpost | Planned |
 | 6. Specialization and automation | Enchantments and a redstone supply chain | Planned |

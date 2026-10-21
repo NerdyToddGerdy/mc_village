@@ -6,13 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Block Village** (working title) is an isometric settlement simulation inspired by Minecraft. The repo holds:
 - `block-village-design-brief.md`: the vision and decisions document.
-- `slice-2-spec.md`: the Slice 2 spec (done). It only describes what's new or changed since Slice 1. The current slice is Slice 3 (#12); its rules are in its issues until `slice-3-spec.md` is written (#99).
+- `slice-3-spec.md`: the Slice 3 spec, the current slice (#12). It only describes what's new or changed since Slice 2. Issues not built yet carry their own rules; each adds its section to the spec when it's built.
+- `slice-2-spec.md`: the Slice 2 spec (done). It only describes what's new or changed since Slice 1.
 - `slice-1-spec.md`: the Slice 1 spec, still the reference for everything Slice 2 doesn't change. It covers architecture, the job system, recipes, construction, controls, saving, the tuning table, and the "carpenter's chalk" UI language.
 - `prototype/founding.html`: a playable, single-file browser prototype of Slice 1.
   - It's opened directly in a browser, with no build step or dependencies beyond Google Fonts.
   - It covers **Slice 1 only** and stays frozen there. From Slice 2 on, rules live in the specs and the Godot game, which have their own tests and bot playtest. Update the prototype only for Slice 1 rule changes.
   - Its live copy is published as a claude.ai artifact.
-- `game/`: the Godot 4.7 project, now through Slice 2.
+- `game/`: the Godot 4.7 project, through Slice 2 and into Slice 3.
 - `docs/how-to-play.md`: the player's guide. Update it when a change alters what the player sees or does.
 
 ## Commands
@@ -40,6 +41,7 @@ There's no single-test runner. To focus on one test, temporarily trim the `tests
 - `game/sim/`: all game rules, as `RefCounted` classes with no Nodes.
   - `sim.gd` holds the state and does the work: ticking, claiming jobs, interpreting job steps, computing stuck reasons, commands, and save/load.
   - Entities are plain Dictionaries (cells are `Vector2i`). Compare them with `is_same()`, never `==`, because GDScript compares Dictionaries by content.
+  - **Maps** (`sim_map.gd`): the village plus site maps such as the old mine (`old_mine.gd`). The sim works on one map at a time: `trees`, `items`, `sites` and the rest are the current map's, switched with `use_map` / `on_map`. At rest it's always on the village, so the HUD, goals and tallies read the village. Residents and buildings carry their `map`, and a command about one switches to its map itself. The view switches the sim to the map in view (`game.view_map`) only while it draws or handles input.
   - `job.gd` is a job's step list plus its "holds", the reservations it keeps. A step that uses up a hold removes it, and whatever's left is undone when the job ends. Jobs aren't saved.
   - `tuning.gd` holds every number. `defs.gd` holds items, recipes and building templates. `goals.gd` holds the founding checklist.
 - `game/view/`: drawing only.

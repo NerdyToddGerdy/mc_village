@@ -9,35 +9,109 @@ extends RefCounted
 
 const DIRS := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 
-var w := Tuning.MAP_W
-var h := Tuning.MAP_H
+## Every map (issue #100): "village", plus site maps such as the old mine. Each map ticks every tick.
+var maps := {}               ## id -> SimMap
+## The map the per-map fields below read and write. It's the village except while the sim works on
+## another map; `on_map` and `use_map` switch it. Commands work on the map that's current, and a
+## command about a resident or a building switches to theirs first.
+var map_id := "village"
+var m: SimMap
+
+# The current map's state (see SimMap for each field).
+var w: int:
+	get: return m.w
+var h: int:
+	get: return m.h
+var trees: Array:
+	get: return m.trees
+	set(v): m.trees = v
+var boulders: Array:
+	get: return m.boulders
+	set(v): m.boulders = v
+var sheep: Array:
+	get: return m.sheep
+	set(v): m.sheep = v
+var bushes: Array:
+	get: return m.bushes
+	set(v): m.bushes = v
+var items: Dictionary:
+	get: return m.items
+	set(v): m.items = v
+var zone: Dictionary:
+	get: return m.zone
+	set(v): m.zone = v
+var zone_res: Dictionary:
+	get: return m.zone_res
+var farm: Dictionary:
+	get: return m.farm
+	set(v): m.farm = v
+var sites: Array:
+	get: return m.sites
+	set(v): m.sites = v
+var _occ_dirty: bool:
+	get: return m.occ_dirty
+	set(v): m.occ_dirty = v
+
 var tick := 0
 var next_id := 1
-var trees: Array = []        ## {id, kind:"tree", cell, logs, alive, des, claim, unreach_until}
-var boulders: Array = []     ## {id, kind:"boulder", cell, alive, des, claim, unreach_until}
-var sheep: Array = []        ## {id, kind:"sheep", pos, cell, dest, wait, alive, des, claim, unreach_until}
-var bushes: Array = []       ## {id, kind:"bush", cell, berries, regrow}: berry bushes (issue #44)
 var meadow_sheep := Tuning.MEADOW_SHEEP  ## Sheep left in the meadow off the map (issue #50).
 var meadow_regrow := 0.0     ## Seconds toward the meadow's next sheep.
 var rng := RandomNumberGenerator.new()  ## Seeded and saved, so a game replays exactly.
-var items := {}              ## Vector2i -> {cell, type, n, res}
-var zone := {}               ## Vector2i -> true: stockpile cells
-var zone_res := {}           ## Vector2i -> resident id hauling into that cell
-var farm := {}               ## Vector2i -> {id, kind:"crop", cell, grow, claim, unreach_until}: farm plots (issue #45)
-var sites: Array = []        ## Construction sites and finished buildings.
-var residents: Array = []
+var residents: Array = []    ## Everyone, on every map; each has the `map` they're on.
 var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafted": false,
 	"houses": 0, "traveler_home": false, "division": false}
 var arrival_at := -1
 var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
-var stuck: Array = []        ## {who, why, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
+var stuck: Array = []        ## {who, why, map, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
 var _stuck_since := {}       ## A stuck entry's key -> the tick it first showed, to order the list (issue #77). Not saved.
-var events: Array = []       ## {type: "toast", text, res_id, site_id}
+var events: Array = []       ## {type: "toast", text, res_id, site_id, map}
 var rev := 0
 
-var _occ := PackedByteArray()
-var _occ_dirty := true
+
+func _init() -> void:
+	maps = {"village": SimMap.new()}
+	use_map("village")
+
+
+# ---------------------------------------------------------------- maps (issue #100)
+
+## Makes `id` the current map. Returns the map that was current, to put back afterwards.
+func use_map(id: String) -> String:
+	var prev := map_id
+	map_id = id
+	m = maps[id]
+	return prev
+
+
+## Runs `f` with `id` as the current map, then puts the current map back. Returns what `f` returns.
+func on_map(id: String, f: Callable):
+	var prev := use_map(id)
+	var out = f.call()
+	use_map(prev)
+	return out
+
+
+func get_map(id: String) -> SimMap:
+	return maps[id]
+
+
+## Residents on the current map, not counting anyone away on a meadow trip.
+func here() -> Array:
+	return residents.filter(func(r): return r.map == map_id and not r.away)
+
+
+## Moves a resident onto another map, at `cell`. This is the one way between maps, used by travel
+## (#108): nothing walks from one grid to another. Their job ends first, on the map they leave.
+func move_to_map(r: Dictionary, id: String, cell: Vector2i) -> void:
+	if r.job != null:
+		fail_job(r)
+	r.direct = null
+	r.orders.clear()
+	r.map = id
+	r.pos = Vector2(cell)
+	r.path = []
+	rev += 1
 
 
 # ---------------------------------------------------------------- setup
@@ -61,7 +135,6 @@ const START_BUSHES := [[5, 10], [12, 6], [4, 14], [13, 14], [8, 13], [16, 12]]
 
 static func new_game() -> Sim:
 	var s := Sim.new()
-	s._occ.resize(s.w * s.h)
 	var o := Tuning.OPENING_OFFSET
 	var spots: Array = OPENING_TREES.map(func(p): return Vector2i(p[0], p[1]) + o) + RING_TREES.map(func(p): return Vector2i(p[0], p[1]))
 	for i in spots.size():
@@ -77,19 +150,26 @@ static func new_game() -> Sim:
 	for p in START_SHEEP:
 		s.add_sheep(Vector2i(p[0], p[1]))
 	s.add_resident("Ada", ADA_TUNIC, OPENING_START + o)
+	s._add_site_maps()
 	return s
+
+
+## Adds any site map the sim doesn't have yet: a new game's, or one newer than a loaded save.
+func _add_site_maps() -> void:
+	if not maps.has(OldMine.ID):
+		maps[OldMine.ID] = OldMine.build(self)
 
 
 func add_bush(cell: Vector2i) -> Dictionary:
 	var b := {"id": _id(), "kind": "bush", "cell": cell, "berries": Tuning.BUSH_MAX, "regrow": 0.0}
-	bushes.append(b)
+	m.bushes.append(b)
 	return b
 
 
 func add_sheep(cell: Vector2i) -> Dictionary:
 	var sh := {"id": _id(), "kind": "sheep", "pos": Vector2(cell), "cell": cell, "dest": null, "wait": rng.randf_range(Tuning.SHEEP_PAUSE[0], Tuning.SHEEP_PAUSE[1]),
 		"alive": true, "des": false, "claim": 0, "unreach_until": 0}
-	sheep.append(sh)
+	m.sheep.append(sh)
 	return sh
 
 
@@ -103,7 +183,7 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null,
 		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false,
 		"orders": [], "hunger": 100.0, "jobs": default_jobs(), "kept": {"axe": false, "pick": false},
-		"away": false, "back_at": 0}
+		"away": false, "back_at": 0, "map": map_id}
 	residents.append(r)
 	return r
 
@@ -194,40 +274,46 @@ func resident(id: int) -> Dictionary:
 	return {}
 
 
+## A building on any map (each has the `map` it's on).
 func site(id: int) -> Dictionary:
-	for s in sites:
-		if s.id == id:
-			return s
+	for mp in maps.values():
+		for s in mp.sites:
+			if s.id == id:
+				return s
 	return {}
 
 
 # ---------------------------------------------------------------- grid and paths
 
 func in_bounds(c: Vector2i) -> bool:
-	return c.x >= 0 and c.y >= 0 and c.x < w and c.y < h
+	return m.in_bounds(c)
 
 
 func _recompute_occ() -> void:
-	_occ.fill(0)
-	for t in trees:
+	var occ := m.occ
+	occ.fill(0)
+	for c in m.rock:
+		occ[c.y * m.w + c.x] = 1
+	for t in m.trees:
 		if t.alive:
-			_occ[t.cell.y * w + t.cell.x] = 1
-	for b in boulders:
+			occ[t.cell.y * m.w + t.cell.x] = 1
+	for b in m.boulders:
 		if b.alive:
-			_occ[b.cell.y * w + b.cell.x] = 1
-	for s in sites:
+			occ[b.cell.y * m.w + b.cell.x] = 1
+	for s in m.sites:
 		if site_blocks(s):
 			for c in site_cells(s):
-				_occ[c.y * w + c.x] = 1
-	_occ_dirty = false
+				occ[c.y * m.w + c.x] = 1
+	m.occ = occ
+	m.occ_dirty = false
 
 
 func walkable(c: Vector2i) -> bool:
-	if not in_bounds(c):
+	if not m.in_bounds(c):
 		return false
-	if _occ_dirty:
+	if m.occ_dirty:
 		_recompute_occ()
-	return _occ[c.y * w + c.x] == 0
+	return m.occ[c.y * m.w + c.x] == 0
 
 
 ## Breadth-first path from `start` to the nearest cell in `goals` (a set: Vector2i -> true).
@@ -336,13 +422,13 @@ func drop_items(c: Vector2i, type: String, n: int, uses := -1) -> void:
 		var cur: Vector2i = queue[qi]
 		qi += 1
 		if walkable(cur):
-			var s = items.get(cur)
+			var s = m.items.get(cur)
 			if s == null:
-				var m := mini(n, cap)
-				items[cur] = {"cell": cur, "type": type, "n": m, "res": 0}
+				var put := mini(n, cap)
+				m.items[cur] = {"cell": cur, "type": type, "n": put, "res": 0}
 				if cap == 1:
-					items[cur].dur = full_uses(type) if uses < 0 else uses
-				n -= m
+					m.items[cur].dur = full_uses(type) if uses < 0 else uses
+				n -= put
 			elif s.type == type and s.n < cap:
 				var a := mini(n, cap - s.n)
 				s.n += a
@@ -357,9 +443,9 @@ func drop_items(c: Vector2i, type: String, n: int, uses := -1) -> void:
 
 func stacks_where(pred: Callable) -> Array:
 	var out: Array = []
-	for k in items:
-		if pred.call(items[k]):
-			out.append(items[k])
+	for k in m.items:
+		if pred.call(m.items[k]):
+			out.append(m.items[k])
 	return out
 
 
@@ -370,8 +456,8 @@ static func avail(s: Dictionary) -> int:
 ## Unreserved items of a type anywhere on the map.
 func free_count(type: String) -> int:
 	var n := 0
-	for k in items:
-		var s: Dictionary = items[k]
+	for k in m.items:
+		var s: Dictionary = m.items[k]
 		if s.type == type:
 			n += avail(s)
 	return n
@@ -382,7 +468,7 @@ func tool_items(kind: String, min_tier: int) -> Array:
 
 
 func in_zone(c: Vector2i) -> bool:
-	return zone.has(c)
+	return m.zone.has(c)
 
 
 # ---------------------------------------------------------------- sites
@@ -400,7 +486,7 @@ func site_blocks(s: Dictionary) -> bool:
 
 
 func site_at(c: Vector2i):
-	for s in sites:
+	for s in m.sites:
 		if Rect2i(s.origin, s.size).has_point(c):
 			return s
 	return null
@@ -425,7 +511,7 @@ static func plot_rect(tpl: String, origin: Vector2i, rot: int):
 
 ## The site whose reserved plot covers `c` (not counting its own footprint), or null.
 func reserved_at(c: Vector2i):
-	for s in sites:
+	for s in m.sites:
 		var p = s.get("plot")
 		if p != null and p.has_point(c) and not Rect2i(s.origin, s.size).has_point(c):
 			return s
@@ -446,10 +532,10 @@ func door_cell(origin: Vector2i, rot: int) -> Vector2i:
 
 func obstacles_in(rect: Rect2i) -> Dictionary:
 	var out := {"trees": [], "boulders": []}
-	for t in trees:
+	for t in m.trees:
 		if t.alive and rect.has_point(t.cell):
 			out.trees.append(t)
-	for b in boulders:
+	for b in m.boulders:
 		if b.alive and rect.has_point(b.cell):
 			out.boulders.append(b)
 	return out
@@ -557,12 +643,12 @@ func _clear_footprint(s: Dictionary) -> void:
 	_recompute_occ()
 	var exit: Vector2i = s.origin + Vector2i(s.size.x / 2, s.size.y)
 	for c in site_cells(s):
-		zone.erase(c)
-		if items.has(c):
-			var it: Dictionary = items[c]
-			items.erase(c)
+		m.zone.erase(c)
+		if m.items.has(c):
+			var it: Dictionary = m.items[c]
+			m.items.erase(c)
 			drop_items(exit, it.type, it.n, it.get("dur", -1))
-	bushes = bushes.filter(func(b): return not Rect2i(s.origin, s.size).has_point(b.cell))
+	m.bushes = m.bushes.filter(func(b): return not Rect2i(s.origin, s.size).has_point(b.cell))
 	for r in residents + sheep:
 		var c := rcell(r)
 		if Rect2i(s.origin, s.size).has_point(c):
@@ -586,7 +672,7 @@ func _on_site_done(s: Dictionary) -> void:
 	stats.houses += 1
 	var ada: Dictionary = residents[0]
 	var ada_home := false
-	for o in sites:
+	for o in m.sites:
 		if o.owner == ada.id:
 			ada_home = true
 	if not ada_home:
@@ -602,6 +688,9 @@ func _on_site_done(s: Dictionary) -> void:
 # ---------------------------------------------------------------- bench queue
 
 func queue_add(b: Dictionary, recipe_id: String, auto := false, at := -1) -> void:
+	if b.map != map_id:
+		on_map(b.map, queue_add.bind(b, recipe_id, auto, at))
+		return
 	var i: int = b.queue.size() if at < 0 else at
 	b.queue.insert(i, recipe_id)
 	b.autoq.insert(i, auto)
@@ -610,6 +699,9 @@ func queue_add(b: Dictionary, recipe_id: String, auto := false, at := -1) -> voi
 
 
 func queue_remove(b: Dictionary, i: int) -> void:
+	if b.map != map_id:
+		on_map(b.map, queue_remove.bind(b, i))
+		return
 	if i < 0 or i >= b.queue.size():
 		return
 	b.queue.remove_at(i)
@@ -627,7 +719,7 @@ func queue_remove(b: Dictionary, i: int) -> void:
 ## Once unlocked, a queued recipe short of a bench-made ingredient gets that recipe queued ahead
 ## of it, repeatedly, so a pickaxe expands into sticks and the sticks into planks (spec §6).
 func expand_queues() -> void:
-	for b in sites:
+	for b in m.sites:
 		if not (b.done and is_station(b)) or b.queue.is_empty():
 			continue
 		for _guard in 12:
@@ -666,7 +758,7 @@ func has_toolsmith() -> bool:
 
 ## Whether a "(toolsmith)" entry for this tool kind is queued at any bench.
 func _spare_queued(kind: String) -> bool:
-	for b in sites:
+	for b in m.sites:
 		if b.done and b.tpl == "bench":
 			for i in b.queue.size():
 				if str(b.autoq[i]) == "toolsmith" and Defs.ITEMS[Defs.recipe(b.queue[i]).out.keys()[0]].tool == kind:
@@ -681,7 +773,7 @@ func keep_tools_stocked() -> void:
 	if not has_toolsmith():
 		return
 	var bench = null
-	for b in sites:
+	for b in m.sites:
 		if b.done and b.tpl == "bench":
 			bench = b
 			break
@@ -692,7 +784,7 @@ func keep_tools_stocked() -> void:
 		if not used or not tool_items(kind, 0).is_empty() or _spare_queued(kind):
 			continue
 		var cobble: int = free_count("cobble")
-		for b in sites:
+		for b in m.sites:
 			cobble += b.store.get("cobble", 0) if b.done and b.tpl == "bench" else 0
 		var id: String = ("stone_" if cobble >= Defs.recipe("stone_" + kind).inp.cobble else "wood_") + kind
 		bench.queue.append(id)
@@ -705,9 +797,9 @@ func keep_tools_stocked() -> void:
 ## one meal whose inputs exist, bread first. One at a time, so it never queues what it can't make.
 func keep_meals_stocked() -> void:
 	var meals := 0
-	for m in Defs.MEALS:
-		meals += free_count(m)
-	for f in sites:
+	for meal in Defs.MEALS:
+		meals += free_count(meal)
+	for f in m.sites:
 		if not (f.done and f.tpl == "fireplace" and f.get("keep_meals", true)):
 			continue
 		if f.autoq.has(true):
@@ -715,7 +807,7 @@ func keep_meals_stocked() -> void:
 			continue
 		if meals >= Tuning.MEAL_STOCK:
 			continue
-		for id in Defs.MEALS.map(func(m): return Defs.producer(m, "fireplace").id):
+		for id in Defs.MEALS.map(func(meal): return Defs.producer(meal, "fireplace").id):
 			var inp: Dictionary = Defs.recipe(id).inp
 			var ok := true
 			for k in inp:
@@ -758,8 +850,8 @@ func _nearest_food(c: Vector2i) -> Dictionary:
 	var best := {}
 	var bd := 1 << 30
 	var raw := {}
-	for k in items:
-		var s: Dictionary = items[k]
+	for k in m.items:
+		var s: Dictionary = m.items[k]
 		if not Tuning.FOOD_VALUE.has(s.type) or avail(s) <= 0:
 			continue
 		if s.type == "mutton":  # raw mutton is for the fireplace; eaten only in a pinch
@@ -769,7 +861,7 @@ func _nearest_food(c: Vector2i) -> Dictionary:
 		if manhattan(s.cell, c) < bd:
 			bd = manhattan(s.cell, c)
 			best = {"kind": "stack", "stack": s}
-	for b in bushes:
+	for b in m.bushes:
 		if b.berries > 0 and manhattan(b.cell, c) < bd:
 			bd = manhattan(b.cell, c)
 			best = {"kind": "bush", "bush": b}
@@ -819,13 +911,13 @@ func _farm_job(r: Dictionary, crop: Dictionary) -> Job:
 func _farm_work(c: Vector2i):
 	var ripe: Array = []
 	var empty: Array = []
-	for k in farm:
-		var crop: Dictionary = farm[k]
+	for k in m.farm:
+		var crop: Dictionary = m.farm[k]
 		if crop.claim != 0 or _cooling(crop) or not walkable(crop.cell):
 			continue
 		if crop_ripe(crop):
 			ripe.append(crop)
-		elif crop.grow < 0.0 and not items.has(crop.cell):  # the last harvest is collected first
+		elif crop.grow < 0.0 and not m.items.has(crop.cell):  # the last harvest is collected first
 			empty.append(crop)
 	if not ripe.is_empty():
 		return nearest(ripe, c)
@@ -915,7 +1007,7 @@ func _craft_job(r: Dictionary, b: Dictionary, rec: Dictionary) -> Job:
 func _haul_job(r: Dictionary, stack: Dictionary, dest: Vector2i, n: int) -> Job:
 	var j := Job.new("haul", "Hauling %s to the stockpile" % Defs.ITEMS[stack.type].many, "the stockpile")
 	stack.res += n
-	zone_res[dest] = r.id
+	m.zone_res[dest] = r.id
 	var sh := j.hold({"t": "stack", "stack": stack, "n": n})
 	var zh := j.hold({"t": "zone", "cell": dest})
 	j.step(_goto([stack.cell], false))
@@ -935,8 +1027,8 @@ func _release(r: Dictionary, j: Job) -> void:
 			"stack": hd.stack.res -= hd.n
 			"incoming": hd.site.incoming[hd.type] -= hd.n
 			"zone":
-				if zone_res.get(hd.cell, 0) == r.id:
-					zone_res.erase(hd.cell)
+				if m.zone_res.get(hd.cell, 0) == r.id:
+					m.zone_res.erase(hd.cell)
 			"claim":
 				if hd.ent.claim == r.id:
 					hd.ent.claim = 0
@@ -952,6 +1044,9 @@ func _release(r: Dictionary, j: Job) -> void:
 
 
 func fail_job(r: Dictionary, why := "") -> void:
+	if r.map != map_id:
+		on_map(r.map, fail_job.bind(r, why))
+		return
 	var j = r.job
 	if j == null:
 		return
@@ -1042,28 +1137,28 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			r.pos += to / dist * step_len
 			return false
 		"pickup":
-			var s = items.get(st.stack.cell)
+			var s = m.items.get(st.stack.cell)
 			if not is_same(s, st.stack) or s.n < st.n:
 				return "gone"
 			s.n -= st.n
 			s.res -= st.n
 			j.holds.erase(st.hold)
 			if s.n <= 0:
-				items.erase(s.cell)
+				m.items.erase(s.cell)
 			r.carry = {"type": s.type, "n": st.n}
 			if s.has("dur"):
 				r.carry.dur = s.dur
 			rev += 1
 			return true
 		"pickup_tool":
-			var s = items.get(st.stack.cell)
+			var s = m.items.get(st.stack.cell)
 			if not is_same(s, st.stack) or s.n < 1:
 				return "gone"
 			s.n -= 1
 			s.res -= 1
 			j.holds.erase(st.hold)
 			if s.n <= 0:
-				items.erase(s.cell)
+				m.items.erase(s.cell)
 			var it: Dictionary = Defs.ITEMS[s.type]
 			var old = r[it.tool]
 			if old != null:
@@ -1081,7 +1176,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			r.carry = null
 			return true
 		"haul_drop":
-			zone_res.erase(st.cell)
+			m.zone_res.erase(st.cell)
 			j.holds.erase(st.hold)
 			drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
 			r.carry = null
@@ -1157,6 +1252,9 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			if t.kind == "tree":
 				drop_items(t.cell, "log", t.logs + skill_bonus(r, "mine"))
 				stats.felled += 1
+			elif t.has("ore"):  # an ore block (issue #103); it never comes back (issue #102)
+				drop_items(t.cell, Defs.ORES[t.ore].item, Tuning.ORE_YIELD[t.ore] + skill_bonus(r, "mine"))
+				stats.ore_mined = stats.get("ore_mined", 0) + 1
 			else:
 				drop_items(t.cell, "cobble", Tuning.BOULDER_COBBLE + skill_bonus(r, "mine"))
 				stats.broken_boulders += 1
@@ -1168,7 +1266,7 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			r.carry = null
 		"graze":
 			var bush: Dictionary = st.target
-			if bush.berries <= 0 or not bushes.has(bush):
+			if bush.berries <= 0 or not m.bushes.has(bush):
 				return true
 			bush.berries -= 1
 			r.hunger = minf(100.0, r.hunger + Tuning.FOOD_VALUE.berries)
@@ -1188,14 +1286,14 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			rev += 1
 		"plant":
 			var crop: Dictionary = st.target
-			if not is_same(farm.get(crop.cell), crop) or crop.grow >= 0.0 or items.has(crop.cell):
+			if not is_same(m.farm.get(crop.cell), crop) or crop.grow >= 0.0 or m.items.has(crop.cell):
 				return "gone"
 			crop.grow = 0.0
 			stats.planted = stats.get("planted", 0) + 1
 			rev += 1
 		"harvest":
 			var crop: Dictionary = st.target
-			if not is_same(farm.get(crop.cell), crop) or not crop_ripe(crop):
+			if not is_same(m.farm.get(crop.cell), crop) or not crop_ripe(crop):
 				return "gone"
 			crop.grow = -1.0
 			drop_items(crop.cell, "wheat", Tuning.WHEAT_YIELD + skill_bonus(r, "farm"))
@@ -1282,21 +1380,21 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			var st_jobs: Array = jobs.filter(func(jb): return jb in ["craft", "toolsmith", "cook"])
 			if st_jobs.is_empty():
 				return null
-			var benches := sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty() and s.crafter == 0 and not bench_craftable(s, st_jobs).is_empty() and not _cooling(s))
+			var benches := m.sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty() and s.crafter == 0 and not bench_craftable(s, st_jobs).is_empty() and not _cooling(s))
 			if not benches.is_empty():
 				var b: Dictionary = _nearest_site(benches, c)
 				var rec := bench_craftable(b, st_jobs)
 				return _tagged(_craft_job(r, b, rec), recipe_job(rec))
-			var dj = _try_deliver(r, c, sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty()), st_jobs)
+			var dj = _try_deliver(r, c, m.sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty()), st_jobs)
 			if dj != null:
 				return _tagged(dj, recipe_job(Defs.recipe(dj.target.queue[bench_active(dj.target, st_jobs)])))
 		"build":
 			if not jobs.has("build"):
 				return null
-			var ready := sites.filter(func(s): return not s.done and s.builder == 0 and has_all(s.store, current_stage(s).cost) and not _cooling(s) and footprint_clear(s))
+			var ready := m.sites.filter(func(s): return not s.done and s.builder == 0 and has_all(s.store, current_stage(s).cost) and not _cooling(s) and footprint_clear(s))
 			if not ready.is_empty():
 				return _tagged(_build_job(r, _nearest_site(ready, c)), "build")
-			var dj = _try_deliver(r, c, sites.filter(func(s): return not s.done and footprint_clear(s)))
+			var dj = _try_deliver(r, c, m.sites.filter(func(s): return not s.done and footprint_clear(s)))
 			if dj != null:
 				return _tagged(dj, "build")
 		"farm":
@@ -1309,22 +1407,22 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			var targets: Array = []
 			if jobs.has("mine"):
 				if not r.broken.axe or not tool_items("axe", 0).is_empty():
-					for t in trees:
+					for t in m.trees:
 						if t.alive and t.des and t.claim == 0 and not _cooling(t):
 							targets.append(t)
 				if r.pick != null or not tool_items("pick", 0).is_empty():
-					for b in boulders:
+					for b in m.boulders:
 						if b.alive and b.des and b.claim == 0 and not _cooling(b):
 							targets.append(b)
 			if jobs.has("hunt"):
-				for sh in sheep:
+				for sh in m.sheep:
 					if sh.alive and sh.des and sh.claim == 0 and not _cooling(sh):
 						targets.append(sh)
 			if not targets.is_empty():
 				var t: Dictionary = nearest(targets, c)
 				return _tagged(_hunt_job(r, t), "hunt") if t.kind == "sheep" else _tagged(_gather_job(r, t), "mine")
 		"haul":
-			if not jobs.has("haul") or zone.is_empty():
+			if not jobs.has("haul") or m.zone.is_empty():
 				return null
 			var hs = _haul_source(c, carry_cap(r))
 			if hs != null:
@@ -1346,7 +1444,7 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 		if dest == null:
 			continue
 		var cap := 1 if Defs.is_tool_item(ls.type) else Tuning.STACK
-		var here = items.get(dest)
+		var here = m.items.get(dest)
 		var room: int = cap - (here.n if here != null else 0)
 		return {"stack": ls, "dest": dest, "n": mini(mini(avail(ls), carry), room)}
 	return null
@@ -1388,10 +1486,10 @@ func _cooling(e: Dictionary) -> bool:
 func zone_dest(type: String):
 	var cap := 1 if Defs.is_tool_item(type) else Tuning.STACK
 	var empty = null
-	for c in zone:
-		if zone_res.has(c) or not walkable(c):
+	for c in m.zone:
+		if m.zone_res.has(c) or not walkable(c):
 			continue
-		var it = items.get(c)
+		var it = m.items.get(c)
 		if it != null and it.type == type and it.n < cap:
 			return c
 		if it == null and empty == null:
@@ -1403,39 +1501,22 @@ func zone_dest(type: String):
 
 func step() -> void:
 	tick += 1
-	for b in bushes:
-		if b.berries < Tuning.BUSH_MAX:
-			b.regrow += Tuning.DT
-			if b.regrow >= Tuning.BUSH_REGROW:
-				b.regrow = 0.0
-				b.berries += 1
-				rev += 1
-	for k in farm:
-		var crop: Dictionary = farm[k]
-		if crop.grow >= 0.0 and crop.grow < Tuning.WHEAT_GROW:
-			var before := crop_stage(crop)
-			crop.grow = minf(Tuning.WHEAT_GROW, crop.grow + Tuning.DT)
-			if crop_stage(crop) != before:
-				rev += 1
 	var hunger_drop := 100.0 / Tuning.HUNGER_EMPTY_TIME * Tuning.DT
 	for r in residents:
 		if not r.get("away", false):
 			r.hunger = maxf(0.0, r.hunger - hunger_drop)
-	for sh in sheep:
-		if sh.alive:
-			_step_sheep(sh)
 	if meadow_sheep < Tuning.MEADOW_SHEEP:
 		meadow_regrow += Tuning.DT
 		if meadow_regrow >= Tuning.MEADOW_REGROW:
 			meadow_regrow = 0.0
 			meadow_sheep += 1
-	for r in residents:
-		if r.away:
-			if tick >= r.back_at:
-				_return_from_meadow(r)
-			continue
-		_step_resident(r)
+	var prev := map_id
+	for id in maps:  # every map ticks, whether or not anyone is looking at it
+		use_map(id)
+		_step_map()
+	use_map("village")
 	_step_arrivals()
+	use_map(prev)
 	var kinds := {}
 	var working := 0
 	for r in residents:
@@ -1444,17 +1525,46 @@ func step() -> void:
 			working += 1
 	if working >= 2 and kinds.size() >= 2:
 		stats.division = true
+	if tick % 5 == 0:
+		compute_stuck()
+
+
+## One tick of the current map: what grows, the sheep, and the residents on it.
+func _step_map() -> void:
+	for b in m.bushes:
+		if b.berries < Tuning.BUSH_MAX:
+			b.regrow += Tuning.DT
+			if b.regrow >= Tuning.BUSH_REGROW:
+				b.regrow = 0.0
+				b.berries += 1
+				rev += 1
+	for k in m.farm:
+		var crop: Dictionary = m.farm[k]
+		if crop.grow >= 0.0 and crop.grow < Tuning.WHEAT_GROW:
+			var before := crop_stage(crop)
+			crop.grow = minf(Tuning.WHEAT_GROW, crop.grow + Tuning.DT)
+			if crop_stage(crop) != before:
+				rev += 1
+	for sh in m.sheep:
+		if sh.alive:
+			_step_sheep(sh)
+	for r in residents:
+		if r.map != map_id:
+			continue
+		if r.away:
+			if tick >= r.back_at:
+				_return_from_meadow(r)
+			continue
+		_step_resident(r)
 	if auto_craft and tick % 10 == 0:
 		expand_queues()
 	if tick % 10 == 0:
 		keep_meals_stocked()
 		keep_tools_stocked()
 	if tick % 10 == 0:
-		for s in sites:
+		for s in m.sites:
 			if not s.done:
 				_mark_obstacles(s)
-	if tick % 5 == 0:
-		compute_stuck()
 
 
 ## Sheep wander one cell at a time with pauses, staying on walkable ground. A sheep being hunted
@@ -1533,6 +1643,9 @@ func meadow_sign() -> Vector2i:
 
 ## Sends a resident to the meadow: they walk to the signpost, then are away for the trip.
 func send_to_meadow(r: Dictionary) -> void:
+	if r.map != map_id:
+		on_map(r.map, send_to_meadow.bind(r))
+		return
 	if r.arriving or r.away:
 		return
 	if r.job != null:
@@ -1578,7 +1691,7 @@ const TRAVELERS := [["Tomas", "A8457A"], ["Mira", "D9792B"], ["Jonas", "3C5DB0"]
 
 ## A finished house whose bed nobody sleeps in yet, or null.
 func free_house():
-	for s in sites:
+	for s in m.sites:
 		if s.tpl == "house" and s.done and s.owner == 0:
 			return s
 	return null
@@ -1615,7 +1728,7 @@ func _arrive() -> void:
 
 func walk_in(t: Dictionary) -> void:
 	t.arriving = false
-	for s in sites:
+	for s in m.sites:
 		if s.tpl == "house" and s.done and s.owner == 0:
 			t.arriving = true
 			var j := Job.new("arrive", "Walking to the new house", "the new house")
@@ -1627,7 +1740,7 @@ func walk_in(t: Dictionary) -> void:
 
 
 func _toast(text: String, res_id := 0, site_id := 0) -> void:
-	events.append({"type": "toast", "text": text, "res_id": res_id, "site_id": site_id})
+	events.append({"type": "toast", "text": text, "res_id": res_id, "site_id": site_id, "map": map_id})
 
 
 # ---------------------------------------------------------------- stuck reasons
@@ -1636,28 +1749,42 @@ func _toast(text: String, res_id := 0, site_id := 0) -> void:
 ## gets no flag and sits in the stuck list's dim Waiting tier.
 func _add_stuck(who: String, why: String, at: Vector2, height: float, fk: String, fid: int, hidden := false, waiting := false) -> void:
 	# The same problem keeps its age while its count changes ("4 more planks" -> "3 more planks").
-	var key := "%s|%d|%s|%s" % [fk, fid, who, _DIGITS.sub(why, "#", true)]
+	var key := "%s|%s|%d|%s|%s" % [map_id, fk, fid, who, _DIGITS.sub(why, "#", true)]
 	if not _stuck_since.has(key):
 		_stuck_since[key] = tick
-	stuck.append({"who": who, "why": why, "cell": at, "height": height, "focus_kind": fk, "focus_id": fid, "hidden": hidden,
+	stuck.append({"who": who, "why": why, "map": map_id, "cell": at, "height": height, "focus_kind": fk, "focus_id": fid, "hidden": hidden,
 		"waiting": waiting, "key": key, "since": _stuck_since[key]})
 
 
 static var _DIGITS := RegEx.create_from_string("\\d+")
 
 
+## Works out every map's stuck reasons. Each carries its map, so focusing it can switch the view.
 func compute_stuck() -> void:
 	stuck = []
+	var prev := map_id
+	for id in maps:
+		use_map(id)
+		_stuck_on_map()
+	use_map(prev)
+	var now := {}
+	for s in stuck:
+		now[s.key] = _stuck_since[s.key]
+	_stuck_since = now
+
+
+func _stuck_on_map() -> void:
+	var on_here := here()
 	var any_pick := not tool_items("pick", 0).is_empty()
-	for r in residents:
+	for r in on_here:
 		if r.pick != null:
 			any_pick = true
 	var first := true
-	for b in boulders:
+	for b in m.boulders:
 		if b.alive and b.des and not any_pick:
-			_add_stuck("Boulder", "Needs a pickaxe", Vector2(b.cell) + Vector2(0.5, 0.5), 1.1, "boulder", b.id, not first)
+			_add_stuck(block_name(b), "Needs a pickaxe", Vector2(b.cell) + Vector2(0.5, 0.5), 1.1, "boulder", b.id, not first)
 			first = false
-	for s in sites:
+	for s in m.sites:
 		var tpl: Dictionary = Defs.TEMPLATES[s.tpl]
 		var mid := Vector2(s.origin) + Vector2(s.size) / 2.0
 		if not s.done and not footprint_clear(s):
@@ -1703,14 +1830,12 @@ func compute_stuck() -> void:
 				mid, site_height(s) + 0.4, "site", s.id, false, standing)
 	_stuck_unstaffed()
 	if meadow_sheep == 0:
-		for r in residents:
-			if not r.away and r.job != null and r.job.kind == "trip":
+		for r in on_here:
+			if r.job != null and r.job.kind == "trip":
 				_add_stuck("Meadow", "Meadow has no sheep left", Vector2(meadow_sign()) + Vector2(0.5, 0.5), 1.4, "res", r.id)
 				break
 	var has_food := food_available()
-	for r in residents:
-		if r.away:
-			continue
+	for r in on_here:
 		var at: Vector2 = r.pos + Vector2(0.5, 0.5)
 		if r.hunger <= 0.0 and not has_food:
 			_add_stuck(r.name, "Starving: no food stored", at, 1.6, "res", r.id)
@@ -1727,12 +1852,12 @@ func compute_stuck() -> void:
 					_add_stuck(r.name, "%s broke. Needs a new %s" % [tname, tname.to_lower()], at, 1.6, "res", r.id)
 		if r.note != null and r.note.until > tick:
 			_add_stuck(r.name, r.note.text, at, 1.6, "res", r.id)
-	if zone.is_empty():
-		for k in farm:
-			if farm[k].grow < 0.0 and items.has(k):
-				_add_stuck("Farm", "Harvested wheat needs a stockpile before replanting", Vector2(k) + Vector2(0.5, 0.5), 0.6, "crop", farm[k].id)
+	if m.zone.is_empty():
+		for k in m.farm:
+			if m.farm[k].grow < 0.0 and m.items.has(k):
+				_add_stuck("Farm", "Harvested wheat needs a stockpile before replanting", Vector2(k) + Vector2(0.5, 0.5), 0.6, "crop", m.farm[k].id)
 				break
-	if not zone.is_empty():
+	if not m.zone.is_empty():
 		var loose := stacks_where(func(s): return avail(s) > 0 and not in_zone(s.cell))
 		var full := not loose.is_empty()
 		for s in loose:
@@ -1740,16 +1865,12 @@ func compute_stuck() -> void:
 				full = false
 				break
 		if full:
-			_add_stuck("Stockpile", "Stockpile is full", Vector2(zone.keys()[0]) + Vector2(0.5, 0.5), 0.6, "", 0)
-	var now := {}
-	for s in stuck:
-		now[s.key] = _stuck_since[s.key]
-	_stuck_since = now
+			_add_stuck("Stockpile", "Stockpile is full", Vector2(m.zone.keys()[0]) + Vector2(0.5, 0.5), 0.6, "", 0)
 
 
 ## "No one does Farm" (spec §9): there's work of a job and every resident has that job off.
 func _stuck_unstaffed() -> void:
-	if residents.is_empty():
+	if here().is_empty():
 		return
 	for jb in Defs.JOBS:
 		if residents.any(func(r): return r.jobs[jb].on):
@@ -1763,11 +1884,11 @@ func _stuck_unstaffed() -> void:
 func _work_at(jb: String):
 	match jb:
 		"mine":
-			for o in trees + boulders:
+			for o in m.trees + boulders:
 				if o.alive and o.des:
 					return o.cell
 		"hunt":
-			for sh in sheep:
+			for sh in m.sheep:
 				if sh.alive and sh.des:
 					return sh.cell
 		"farm":
@@ -1775,16 +1896,16 @@ func _work_at(jb: String):
 			if crop != null:
 				return crop.cell
 		"build":
-			for st in sites:
+			for st in m.sites:
 				if not st.done:
 					return st.origin
 		"haul":
-			if not zone.is_empty():
+			if not m.zone.is_empty():
 				var hs = _haul_source(Vector2i.ZERO)
 				if hs != null:
 					return hs.stack.cell
 		_:
-			for st in sites:
+			for st in m.sites:
 				if st.done and is_station(st) and st.queue.any(func(id): return recipe_job(Defs.recipe(id)) == jb):
 					return st.origin
 	return null
@@ -1807,9 +1928,9 @@ func designate_mine(rect: Rect2i, single = null, kinds := ["tree", "boulder"]) -
 	if single != null:
 		hit = [single]
 	else:
-		var pool: Array = (trees if kinds.has("tree") else []) + (boulders if kinds.has("boulder") else [])
+		var pool: Array = (m.trees if kinds.has("tree") else []) + (m.boulders if kinds.has("boulder") else [])
 		for o in pool:
-			if o.alive and rect.has_point(o.cell):
+			if o.alive and not o.get("hidden", false) and rect.has_point(o.cell):
 				hit.append(o)
 	var all_on := not hit.is_empty() and hit.all(func(o): return o.des)
 	for o in hit:
@@ -1825,7 +1946,7 @@ func designate_mine(rect: Rect2i, single = null, kinds := ["tree", "boulder"]) -
 ## Marks sheep in `rect` to be hunted (Hunt order, issue #42). A single click on an already-marked
 ## sheep (pass it as `single`) unmarks it instead.
 func designate_hunt(rect: Rect2i, single = null) -> void:
-	var hit: Array = [single] if single != null else sheep.filter(func(sh): return sh.alive and rect.has_point(sh.cell))
+	var hit: Array = [single] if single != null else m.sheep.filter(func(sh): return sh.alive and rect.has_point(sh.cell))
 	var all_on := not hit.is_empty() and hit.all(func(o): return o.des)
 	for o in hit:
 		o.des = not (single != null and all_on)
@@ -1838,11 +1959,13 @@ func designate_hunt(rect: Rect2i, single = null) -> void:
 
 
 func paint_zone(rect: Rect2i) -> void:
+	if m.kind != "village":
+		return  # an expedition packs what it gathers instead (#109)
 	for x in range(rect.position.x, rect.end.x):
 		for y in range(rect.position.y, rect.end.y):
 			var c := Vector2i(x, y)
-			if walkable(c) and site_at(c) == null and not farm.has(c) and reserved_at(c) == null and c != meadow_sign():
-				zone[c] = true
+			if walkable(c) and site_at(c) == null and not m.farm.has(c) and reserved_at(c) == null and c != meadow_sign():
+				m.zone[c] = true
 	rev += 1
 
 
@@ -1854,12 +1977,12 @@ func erase_zone(rect: Rect2i) -> int:
 	for x in range(rect.position.x, rect.end.x):
 		for y in range(rect.position.y, rect.end.y):
 			var c := Vector2i(x, y)
-			if not zone.has(c):
+			if not m.zone.has(c):
 				continue
-			zone.erase(c)
+			m.zone.erase(c)
 			n += 1
-			var rid: int = zone_res.get(c, 0)
-			zone_res.erase(c)
+			var rid: int = m.zone_res.get(c, 0)
+			m.zone_res.erase(c)
 			if rid != 0:
 				_retarget_haul(resident(rid), c)
 	rev += 1
@@ -1882,7 +2005,7 @@ func _retarget_haul(r: Dictionary, old: Vector2i) -> void:
 		fail_job(r)  # nowhere left to put it: whatever's carried is set down here, loose
 		return
 	j.steps[at].cell = dest
-	zone_res[dest] = r.id
+	m.zone_res[dest] = r.id
 	for hd in j.holds:
 		if hd.t == "zone" and hd.cell == old:
 			hd.cell = dest
@@ -1896,19 +2019,21 @@ func _retarget_haul(r: Dictionary, old: Vector2i) -> void:
 
 ## Why a cell can't be a farm plot, or "" when it can: farms go on open grass only (issue #45).
 func farm_blocked(c: Vector2i) -> String:
+	if m.kind != "village":
+		return "the " + m.name.to_lower()
 	if not walkable(c):
 		return "not open ground"
 	if site_at(c) != null:
 		return "a building"
-	if farm.has(c):
+	if m.farm.has(c):
 		return "a farm plot"
 	if c == meadow_sign():
 		return "the signpost"
-	if zone.has(c):
+	if m.zone.has(c):
 		return "a stockpile"
 	if reserved_at(c) != null:
 		return "a reserved plot"
-	for b in bushes:
+	for b in m.bushes:
 		if b.cell == c:
 			return "a bush"
 	return ""
@@ -1923,7 +2048,7 @@ func paint_farm(rect: Rect2i) -> int:
 			var c := Vector2i(x, y)
 			if farm_blocked(c) != "":
 				continue
-			farm[c] = {"id": _id(), "kind": "crop", "cell": c, "grow": -1.0, "claim": 0, "unreach_until": 0}
+			m.farm[c] = {"id": _id(), "kind": "crop", "cell": c, "grow": -1.0, "claim": 0, "unreach_until": 0}
 			n += 1
 	rev += 1
 	return n
@@ -1938,30 +2063,32 @@ func clear_farm(rect: Rect2i) -> void:
 
 
 func _drop_crop(c: Vector2i) -> void:
-	var crop = farm.get(c)
+	var crop = m.farm.get(c)
 	if crop == null:
 		return
 	if crop.claim != 0:
 		var r := resident(crop.claim)
 		if not r.is_empty() and r.job != null and is_same(r.job.target, crop):
 			fail_job(r)
-	farm.erase(c)
+	m.farm.erase(c)
 
 
 ## Why a blueprint can't go here, or "" when it can. Trees, boulders, stockpile cells and farm plots
 ## don't block placement: the blueprint clears them (spec §8). Reserved plots do, and a job
 ## building's own plot needs room too (Slice 2 spec §8).
 func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
+	if m.kind != "village":
+		return "Buildings go in the village"
 	var size: Vector2i = Defs.TEMPLATES[tpl].size
 	var foot := Rect2i(origin, size)
 	if origin.x < 0 or origin.y < 0 or origin.x + size.x > w or origin.y + size.y > h:
 		return "Too close to the edge"
 	if foot.has_point(meadow_sign()):
 		return "The meadow signpost is in the way"
-	for s in sites:
+	for s in m.sites:
 		if Rect2i(s.origin, s.size).intersects(foot):
 			return "Overlaps another building"
-	for s in sites:
+	for s in m.sites:
 		if s.get("plot") != null and s.plot.intersects(foot):
 			return "Overlaps a reserved plot"
 	var plot = plot_rect(tpl, origin, rot)
@@ -1969,7 +2096,7 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 		var no_room := "Not enough room to grow into a %s" % Defs.TEMPLATES[tpl].plot
 		if not Rect2i(0, 0, w, h).encloses(plot):
 			return no_room
-		for s in sites:
+		for s in m.sites:
 			if Rect2i(s.origin, s.size).intersects(plot) or (s.get("plot") != null and s.plot.intersects(plot)):
 				return no_room
 	return ""
@@ -1979,18 +2106,18 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 	var s := {"id": _id(), "kind": "site", "tpl": tpl, "origin": origin, "size": Defs.TEMPLATES[tpl].size,
 		"rot": rot, "stage": 0, "store": {}, "incoming": {}, "builder": 0, "crafter": 0, "crafting": "",
 		"done": false, "owner": 0, "queue": [], "autoq": [], "unreach_until": 0,
-		"plot": plot_rect(tpl, origin, rot)}
+		"plot": plot_rect(tpl, origin, rot), "map": map_id}
 	if tpl == "fireplace":
 		s.keep_meals = true
-	sites.append(s)
+	m.sites.append(s)
 	_occ_dirty = true
 	for c in site_cells(s):
-		zone.erase(c)
+		m.zone.erase(c)
 		_drop_crop(c)
 	if s.plot != null:  # the reserved plot is kept clear of stockpiles and farms
 		for x in range(s.plot.position.x, s.plot.end.x):
 			for y in range(s.plot.position.y, s.plot.end.y):
-				zone.erase(Vector2i(x, y))
+				m.zone.erase(Vector2i(x, y))
 				_drop_crop(Vector2i(x, y))
 	_mark_obstacles(s)
 	rev += 1
@@ -1999,6 +2126,9 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 
 ## Switches a job on or off for a resident (spec §5). Switching off the job they're doing stops it.
 func set_job_on(r: Dictionary, job: String, on: bool) -> void:
+	if r.map != map_id:
+		on_map(r.map, set_job_on.bind(r, job, on))
+		return
 	r.jobs[job].on = on
 	if not on and r.job != null and r.job.work == job and not r.job.ordered:
 		fail_job(r)
@@ -2013,6 +2143,9 @@ func set_job_priority(r: Dictionary, job: String, pri: int) -> void:
 
 ## Turns the fireplace's "Keep meals in stock" standing order on or off.
 func set_keep_meals(f: Dictionary, on: bool) -> void:
+	if f.map != map_id:
+		on_map(f.map, set_keep_meals.bind(f, on))
+		return
 	f.keep_meals = on
 	if not on:
 		for i in range(f.queue.size() - 1, -1, -1):
@@ -2022,13 +2155,16 @@ func set_keep_meals(f: Dictionary, on: bool) -> void:
 
 
 func cancel_site(s: Dictionary) -> void:
+	if s.map != map_id:
+		on_map(s.map, cancel_site.bind(s))
+		return
 	for r in residents:
 		if r.job != null and is_same(r.job.target, s):
 			fail_job(r)
 	for k in s.store:
 		if s.store[k] > 0:
 			drop_items(s.origin + Vector2i(0, s.size.y), k, s.store[k])
-	sites.erase(s)
+	m.sites.erase(s)
 	_occ_dirty = true
 	rev += 1
 
@@ -2036,6 +2172,9 @@ func cancel_site(s: Dictionary) -> void:
 ## Right-click order for one resident: mine a tree or boulder, or walk to a cell. It replaces
 ## whatever they're doing and any queued orders.
 func direct_order(r: Dictionary, target = null, cell = null) -> void:
+	if r.map != map_id:
+		on_map(r.map, direct_order.bind(r, target, cell))
+		return
 	if r.arriving or r.away:
 		return
 	if r.job != null:
@@ -2073,6 +2212,9 @@ func direct_order(r: Dictionary, target = null, cell = null) -> void:
 ## Shift + right-click: adds an order to the end of the resident's list. Orders run one after
 ## another once their current work is done, then the resident goes back to claiming jobs.
 func queue_order(r: Dictionary, target = null, cell = null) -> void:
+	if r.map != map_id:
+		on_map(r.map, queue_order.bind(r, target, cell))
+		return
 	if r.arriving or r.away:
 		return
 	if target != null and (target.kind == "tree" or target.kind == "boulder"):
@@ -2092,6 +2234,9 @@ func queue_order(r: Dictionary, target = null, cell = null) -> void:
 ## Equip order (resident panel): go and pick up this tool, dropping the one in hand where it lay.
 ## A tool chosen this way is kept until it breaks, instead of being swapped for a better one.
 func equip_order(r: Dictionary, stack: Dictionary) -> void:
+	if r.map != map_id:
+		on_map(r.map, equip_order.bind(r, stack))
+		return
 	if r.arriving or r.away or avail(stack) < 1 or not Defs.is_tool_item(stack.type):
 		return
 	if r.job != null:
@@ -2132,11 +2277,11 @@ func _order_job(r: Dictionary, o: Dictionary):
 	if o.kind == "move":
 		return _move_job(o.cell) if walkable(o.cell) else null
 	if o.kind == "hunt":
-		for sh in sheep:
+		for sh in m.sheep:
 			if sh.id == o.id:
 				return _hunt_job(r, sh) if sh.alive and (sh.claim == 0 or sh.claim == r.id) else null
 		return null
-	var list := trees if o.target_kind == "tree" else boulders
+	var list := m.trees if o.target_kind == "tree" else m.boulders
 	for t in list:
 		if t.id != o.id:
 			continue
@@ -2147,6 +2292,58 @@ func _order_job(r: Dictionary, o: Dictionary):
 			return null
 		return _gather_job(r, t)
 	return null
+
+
+# ---------------------------------------------------------------- site maps (issue #102)
+
+## "Boulder", "Coal ore" or "Iron ore".
+static func block_name(b: Dictionary) -> String:
+	return Defs.ORES[b.ore].name if b.has("ore") else "Boulder"
+
+
+## Ore blocks of this kind left on a site map, counting hidden ones only once they're found.
+func ore_left(id: String, ore: String) -> int:
+	var mp: SimMap = maps[id]
+	return mp.boulders.filter(func(b): return b.alive and b.get("ore", "") == ore and (mp.discovered or not b.get("hidden", false))).size()
+
+
+## The site report (brief §8) the expedition board shows before departure:
+##   {name, told, visited, travel (seconds), resources: [{item, name, reserve}], hazards, access}
+## A reserve is the estimated items still to be mined, or -1 for "?". Before anyone has been there,
+## the report has only what the village has been told: names, no estimates and no known hazards.
+## The iron shows as "?" until it's discovered.
+func site_report(id: String) -> Dictionary:
+	var mp: SimMap = maps[id]
+	var stone := mp.boulders.filter(func(b): return b.alive and not b.has("ore")).size()
+	var res: Array = [
+		{"item": "cobble", "name": "Stone", "reserve": stone * Tuning.BOULDER_COBBLE if mp.visited else -1},
+		{"item": "coal", "name": "Coal", "reserve": ore_left(id, "coal") * Tuning.ORE_YIELD.coal if mp.visited else -1},
+	]
+	if mp.discovered:
+		res.append({"item": "iron_ore", "name": "Iron", "reserve": ore_left(id, "iron") * Tuning.ORE_YIELD.iron})
+	elif mp.visited:
+		res.append({"item": "iron_ore", "name": "?", "reserve": -1})
+	var hazards: Array = []
+	if mp.visited:
+		var dark := 0
+		for x in mp.w:
+			for y in mp.h:
+				if mp.is_dark(Vector2i(x, y)):
+					dark += 1
+		if dark > 0:
+			hazards.append("Dark tunnels past the torches")
+	return {"name": mp.name, "told": OldMine.TOLD, "visited": mp.visited, "travel": Tuning.MINE_TRIP,
+		"resources": res, "hazards": hazards, "access": OldMine.ACCESS.duplicate() if mp.visited else []}
+
+
+## Reveals a site's hidden find: the old mine's iron vein becomes ore that can be mined (#111 decides
+## when and how the party finds it).
+func discover(id: String) -> void:
+	var mp: SimMap = maps[id]
+	mp.discovered = true
+	for b in mp.boulders:
+		b.erase("hidden")
+	rev += 1
 
 
 # ---------------------------------------------------------------- saving
@@ -2160,45 +2357,28 @@ func save_state() -> Dictionary:
 		for k in ["job", "direct", "path", "progress", "note"]:
 			c.erase(k)
 		res_out.append(c)
-	var items_out := {}
-	for k in items:
-		var it: Dictionary = items[k].duplicate()
-		it.res = 0
-		items_out[k] = it
-	var sites_out: Array = []
-	for s in sites:
-		var c: Dictionary = s.duplicate(true)
-		c.incoming = {}
-		c.builder = 0
-		c.crafter = 0
-		c.crafting = ""
-		sites_out.append(c)
-	return {"w": w, "h": h, "tick": tick, "next_id": next_id, "trees": trees.duplicate(true), "boulders": boulders.duplicate(true),
-		"items": items_out, "zone": zone.duplicate(), "sites": sites_out, "residents": res_out,
+	var maps_out := {}
+	for id in maps:
+		maps_out[id] = maps[id].save()
+	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
 		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
-		"sheep": sheep.duplicate(true), "rng_state": rng.state, "bushes": bushes.duplicate(true),
-		"farm": farm.duplicate(true), "meadow_sheep": meadow_sheep, "meadow_regrow": meadow_regrow}
+		"rng_state": rng.state, "meadow_sheep": meadow_sheep, "meadow_regrow": meadow_regrow}
 
 
 static func from_state(d: Dictionary) -> Sim:
 	var s := Sim.new()
-	s.w = d.w
-	s.h = d.h
-	s._occ.resize(s.w * s.h)
 	s.tick = d.tick
 	s.next_id = d.next_id
-	s.trees = d.trees.duplicate(true)
-	s.boulders = d.boulders.duplicate(true)
-	s.items = d.items.duplicate(true)
-	s.zone = d.zone.duplicate()
-	s.sites = d.sites.duplicate(true)
+	s.maps = {}
+	for id in ["village"] + d.maps.keys().filter(func(k): return k != "village"):  # the village ticks first
+		s.maps[id] = SimMap.from_save(d.maps[id])
+	s.use_map("village")
 	s.stats = d.stats.duplicate()
 	s.arrival_at = d.arrival_at
 	s.arrived = d.arrived
 	s.auto_craft = d.auto_craft
-	s.sheep = d.sheep.duplicate(true)
 	# Bushes added to older saves (v7) may sit where something now stands; drop those.
-	s.bushes = d.bushes.duplicate(true).filter(func(b):
+	s.bushes = s.bushes.filter(func(b):
 		for o in s.trees + s.boulders:
 			if o.alive and o.cell == b.cell:
 				return false
@@ -2207,12 +2387,9 @@ static func from_state(d: Dictionary) -> Sim:
 				return false
 		return true)
 	s.rng.state = d.rng_state
-	s.farm = d.farm.duplicate(true)
 	s.meadow_sheep = d.meadow_sheep
 	s.meadow_regrow = d.meadow_regrow
-	for o in s.trees + s.boulders + s.sheep + s.farm.values():
-		o.claim = 0
-		o.unreach_until = 0
+	s._add_site_maps()
 	for rd in d.residents:
 		var r: Dictionary = rd.duplicate(true)
 		r.job = null
@@ -2223,10 +2400,12 @@ static func from_state(d: Dictionary) -> Sim:
 		r.pos = Vector2(rcell(r))
 		s.residents.append(r)
 	for r in s.residents:
+		s.use_map(r.map)
 		if r.carry != null:
 			s.drop_items(rcell(r), r.carry.type, r.carry.n, r.carry.get("dur", -1))
 			r.carry = null
 		if r.arriving:
 			s.walk_in(r)
+	s.use_map("village")
 	s.compute_stuck()
 	return s

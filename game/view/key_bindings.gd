@@ -24,6 +24,7 @@ const ACTIONS := [
 	["next_res", "Residents", "Select the next resident", [KEY_F]],
 	["jobs", "Residents", "Open the village jobs board", [KEY_J]],
 	["next_stuck", "Residents", "Go to the next stuck item", [KEY_N]],
+	["map", "Time and camera", "Switch between the village and a site", [KEY_TAB]],
 	["pause", "Time and camera", "Pause", [KEY_QUOTELEFT, KEY_ASCIITILDE]],
 	["toggle_pause", "Time and camera", "Pause or resume", [KEY_SPACE]],
 	["speed1", "Time and camera", "Speed 1×", [KEY_1]],
@@ -138,6 +139,7 @@ static func key_text(code: int) -> String:
 		KEY_ASCIITILDE: return "~"
 		KEY_EQUAL: return "="
 		KEY_MINUS: return "−"
+		KEY_TAB: return "Tab"
 		KEY_SLASH | KEY_MASK_SHIFT: return "?"
 	return OS.get_keycode_string(code)
 

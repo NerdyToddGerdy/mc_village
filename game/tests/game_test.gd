@@ -954,6 +954,85 @@ func _test_type_and_ui_scale(game: Game) -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(game._ui_settings_path()))
 
 
+## Issue #101: switching between the village and the old mine, with a camera for each map that
+## survives saving and loading; orders go to the map in view, and other-map reasons switch to it.
+func _test_maps(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var hud: Hud = game._hud
+	var mine := sim.get_map(OldMine.ID)
+	hud.refresh(sim)
+	check(not hud._maps.visible and game.known_maps() == ["village"], "no switcher until a site is known")
+	_key(game, KEY_TAB)
+	check(game.view_map == "village", "Tab does nothing with only the village known")
+	mine.known = true
+	hud.refresh(sim)
+	await _frames()
+	var names: Array = hud._maps.get_children().filter(func(b): return b is Button and not b.is_queued_for_deletion()).map(func(b): return b.text)
+	check(hud._maps.visible and names == ["Village", "Old mine"], "the switcher shows Village and Old mine (%s)" % [names])
+	var village_cam: Vector3 = game._target
+	game.selection = {"kind": "res", "ids": [sim.residents[0].id]}
+	_key(game, KEY_TAB)
+	check(game.view_map == OldMine.ID and game._world.map_id == OldMine.ID, "Tab switches to the old mine")
+	check(game.selection.is_empty(), "switching clears the selection")
+	check(Vector2(game._target.x, game._target.z).distance_to(Vector2(mine.entrance)) < 8.0, "the mine opens near its entrance")
+	await _frames()
+	hud.refresh(sim)
+	check(game._world._built_map == OldMine.ID, "the world view draws the mine")
+	check(not hud._tool_btns.paint.visible and not hud._tool_btns.build.visible and hud._tool_btns.gather.visible, "on the mine, the toolbar offers Gather but not Paint or Build")
+	game.set_tool("stock")
+	check(game.tool == "", "stockpile painting is for the village")
+	game._target = Vector3(9, 0, 9)
+	game._place_camera()
+	var mine_cam: Vector3 = game._target
+	_key(game, KEY_TAB)
+	check(game.view_map == "village" and game._target == village_cam, "back in the village, its camera is where it was left")
+	_key(game, KEY_TAB)
+	check(game.view_map == OldMine.ID and game._target == mine_cam, "and the mine's camera is where it was left")
+	# Orders given on the mine's view go to the mine.
+	game.set_tool("mine")
+	var a: Vector2 = game._cam.unproject_position(Vector3(4, 0, 6))
+	var b: Vector2 = game._cam.unproject_position(Vector3(9, 0, 10))
+	_mouse(game, "move", a)
+	_mouse(game, "down", a)
+	_mouse(game, "move", b)
+	_mouse(game, "up", b)
+	game.set_tool("")
+	check(mine.boulders.any(func(o): return o.des) and sim.maps.village.boulders.all(func(o): return not o.des) and sim.map_id == "village", "a Mine drag on the mine's view marks the mine, not the village")
+	# Save on the mine; each camera comes back.
+	check(game.save_slot(1) == "", "saved with the mine in view")
+	game.switch_map("village")
+	game._target = Vector3(20, 0, 20)
+	check(game.load_slot(1) == "", "and loaded")
+	check(game.view_map == OldMine.ID and game._target == mine_cam, "loading brings back the mine's view and camera")
+	game.switch_map("village")
+	check(game._target == village_cam, "and the village's camera")
+	# A party on the other map: the dim line, and reasons and toasts that jump there.
+	sim = game.sim
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(sim.residents[0]) + Vector2i(1, 0))
+	sim.move_to_map(tomas, OldMine.ID, sim.get_map(OldMine.ID).entrance)
+	hud.refresh(sim)
+	check(hud._party_panel.visible and hud._party.text.begins_with("Party at the old mine: "), "a dim line says the party is at the old mine (%s)" % hud._party.text)
+	hud._party.pressed.emit()
+	check(game.view_map == OldMine.ID, "clicking it switches to the mine")
+	game.switch_map("village")
+	game.focus_on("res", tomas.id)
+	check(game.view_map == OldMine.ID and game.selection.get("ids", []) == [tomas.id], "going to a resident on the mine switches there first")
+	game.switch_map("village")
+	tomas.note = {"text": "Can’t reach this boulder", "until": sim.tick + 200}
+	sim.compute_stuck()
+	hud.refresh(sim)
+	await _frames()
+	var entry: Array = _stuck_buttons(hud).filter(func(x): return "Tomas" in x.text)
+	check(not entry.is_empty(), "Tomas's reason is in the stuck list")
+	if not entry.is_empty():
+		entry[0].pressed.emit()
+		check(game.view_map == OldMine.ID, "clicking it switches to the mine")
+	game.switch_map("village")
+	sim.move_to_map(tomas, "village", Sim.rcell(sim.residents[0]) + Vector2i(1, 0))
+	tomas.note = null
+
+
 func _walk(n: Node) -> Array:
 	var out: Array = [n]
 	for ch in n.get_children():
@@ -1034,6 +1113,7 @@ func _initialize() -> void:
 	await _test_resident_marks(game)
 	await _test_after_the_founding(game)
 	await _test_type_and_ui_scale(game)
+	await _test_maps(game)
 	for n in range(1, 6):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(game._slot_path(n)))
 	print("%s" % ("ALL PASSED" if _failures == 0 else "%d FAILED" % _failures))

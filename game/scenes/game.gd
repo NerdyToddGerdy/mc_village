@@ -20,6 +20,10 @@ var craft_menu_open := false            ## The Craft panel above the toolbar (is
 var craft_bench_i := 0                  ## Which finished bench the Craft panel shows.
 var jobs_board_open := false            ## The Village jobs board (issue #78).
 var selection := {}                     ## {} | {kind:"res", ids:[...]} | {kind:"tree"/"boulder"/"site", id}
+## The map in view (issue #101): "village" or a site map. The sim stays on the village between
+## frames; input and drawing switch it to this map while they work, then back.
+var view_map := "village"
+var _cams := {}                         ## Map id -> {target, size}: where each map's camera was left.
 
 var _acc := 0.0
 var _hud_t := 0.0
@@ -131,8 +135,9 @@ func _look_at_first_resident() -> void:
 
 
 func _place_camera() -> void:
-	_target.x = clampf(_target.x, -2, sim.w + 2)
-	_target.z = clampf(_target.z, -2, sim.h + 2)
+	var mp := sim.get_map(view_map)
+	_target.x = clampf(_target.x, -2, mp.w + 2)
+	_target.z = clampf(_target.z, -2, mp.h + 2)
 	_cam.position = _target + ISO_DIR.normalized() * 60.0
 	_cam.look_at(_target, Vector3.UP)
 
@@ -155,7 +160,7 @@ func _process(delta: float) -> void:
 		if ev.type == "toast":
 			_hud.add_toast(ev)
 	sim.events.clear()
-	_update_live_overlays()
+	_in_view(_update_live_overlays)
 	_world.selected_ids = selection.get("ids", [])
 	var ray := _ray(_mouse)
 	var under = null if get_viewport().gui_get_hovered_control() != null else _world.pick_resident(ray[0], ray[1])
@@ -347,6 +352,8 @@ func _cell_at(screen: Vector2):
 
 
 func selected_entity():
+	if sim.map_id != view_map:
+		return _in_view(selected_entity)
 	match selection.get("kind", ""):
 		"tree":
 			for t in sim.trees:
@@ -365,7 +372,8 @@ func selected_entity():
 				if b.id == selection.id:
 					return b
 		"meadow":
-			return {"kind": "meadow", "id": 0, "cell": sim.meadow_sign()}
+			if view_map == "village":
+				return {"kind": "meadow", "id": 0, "cell": sim.meadow_sign()}
 		"crop":
 			for c in sim.farm.values():
 				if c.id == selection.id:
@@ -401,6 +409,26 @@ func open_craft_menu(bench: Dictionary) -> void:
 # ---------------------------------------------------------------- input
 
 func _unhandled_input(event: InputEvent) -> void:
+	_in_view(_handle_input.bind(event))
+
+
+## The map key is taken before the HUD sees it: its default, Tab, would otherwise move keyboard
+## focus between buttons once one has been clicked.
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and not _menu.visible and keys.action_for(event) == "map":
+		next_map()
+		get_viewport().set_input_as_handled()
+
+
+## Runs `f` with the sim on the map in view, then puts it back on the village.
+func _in_view(f: Callable):
+	sim.use_map(view_map)
+	var out = f.call()
+	sim.use_map("village")
+	return out
+
+
+func _handle_input(event: InputEvent) -> void:
 	if event is InputEventWithModifiers:
 		_mods.shift = event.shift_pressed
 		_mods.alt = event.alt_pressed
@@ -532,7 +560,7 @@ func _left_up(e: InputEventMouseButton) -> void:
 				return
 			var r := Rect2(d.start, Vector2.ZERO).expand(e.position)
 			var ids: Array = []
-			for res in sim.residents:
+			for res in sim.here():
 				if r.has_point(_cam.unproject_position(Vector3(res.pos.x + 0.5, 0.5, res.pos.y + 0.5))):
 					ids.append(res.id)
 			selection = {"kind": "res", "ids": ids} if not ids.is_empty() else {}
@@ -601,6 +629,7 @@ func _key(e: InputEventKey) -> void:
 				rot = (rot + 1) % 4
 		"next_res": _next_resident()
 		"next_stuck": _next_stuck()
+		"map": next_map()
 		"zoom_in": zoom(1 / 1.15)
 		"zoom_out": zoom(1.15)
 		_: return
@@ -631,6 +660,9 @@ func quit_game() -> void:
 
 func restart() -> void:
 	_use_sim(Sim.new_game())
+	_cams = {}
+	view_map = "village"
+	_world.map_id = view_map
 	_look_at_first_resident()
 	_cam.size = 17.0
 	_place_camera()
@@ -678,7 +710,7 @@ func save_slot(n: int) -> String:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(save_dir))
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick,
 		"saved_at": int(Time.get_unix_time_from_system()), "state": sim.save_state(),
-		"camera": {"target": _target, "size": _cam.size}, "speed": _menu_prev_speed}
+		"camera": _camera_state(), "speed": _menu_prev_speed}
 	if not SaveFormat.write(_slot_path(n), data):
 		return "Couldn’t save to slot %d. Check that the disk isn’t full, then try again." % n
 	return ""
@@ -691,8 +723,15 @@ func load_slot(n: int) -> String:
 		return "Slot %d couldn’t be loaded. %s" % [n, r.error]
 	var data: Dictionary = r.data
 	_use_sim(Sim.from_state(data.state))
-	_target = data.camera.target
-	_cam.size = data.camera.size
+	var cam: Dictionary = data.get("camera", {})
+	_cams = cam.get("maps", {}).duplicate(true)
+	view_map = cam.get("map", "village")
+	if not sim.maps.has(view_map) or not _cams.has(view_map):
+		view_map = "village"
+	_world.map_id = view_map
+	if _cams.has(view_map):
+		_target = _cams[view_map].target
+		_cam.size = _cams[view_map].size
 	_place_camera()
 	_menu_prev_speed = maxi(1, data.get("speed", 1))
 	close_menu()
@@ -738,7 +777,13 @@ func show_craft_bench(i: int) -> void:
 	craft_bench_i = i
 
 
+## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
+const VILLAGE_ONLY := ["paint", "stock", "farm", "build", "bench", "house", "fireplace"]
+
+
 func set_tool(t: String) -> void:
+	if view_map != "village" and t in VILLAGE_ONLY:
+		return
 	if t == "craft":
 		toggle_craft_menu()
 		return
@@ -775,6 +820,8 @@ func pick_order(menu: String, id: String) -> void:
 
 
 func start_placing(tpl: String) -> void:
+	if view_map != "village":
+		return
 	tool = "build"
 	placing = tpl
 	menu_open = ""
@@ -789,11 +836,11 @@ func clear_orders(r: Dictionary) -> void:
 
 
 func toggle_hunt(target: Dictionary) -> void:
-	sim.designate_hunt(Rect2i(target.cell, Vector2i.ONE), target)
+	_in_view(func(): sim.designate_hunt(Rect2i(target.cell, Vector2i.ONE), target))
 
 
 func remove_farm_plot(crop: Dictionary) -> void:
-	sim.clear_farm(Rect2i(crop.cell, Vector2i.ONE))
+	_in_view(func(): sim.clear_farm(Rect2i(crop.cell, Vector2i.ONE)))
 	selection = {}
 
 
@@ -841,7 +888,7 @@ func set_keep_meals(f: Dictionary, on: bool) -> void:
 
 
 func toggle_mine(target: Dictionary) -> void:
-	sim.designate_mine(Rect2i(target.cell, Vector2i.ONE), target)
+	_in_view(func(): sim.designate_mine(Rect2i(target.cell, Vector2i.ONE), target))
 
 
 func cancel_site(s: Dictionary) -> void:
@@ -858,7 +905,18 @@ func unqueue_craft(s: Dictionary, i: int) -> void:
 	sim.queue_remove(s, i)
 
 
-func focus_on(kind: String, id: int) -> void:
+## Moves the camera to a resident, building or boulder, switching to its map first (issue #101).
+## `map` names the map for things that don't carry one (a boulder); residents and buildings do.
+func focus_on(kind: String, id: int, map := "") -> void:
+	match kind:
+		"res": map = sim.resident(id).get("map", map)
+		"site": map = sim.site(id).get("map", map)
+	if map != "" and map != view_map and sim.maps.has(map):
+		switch_map(map)
+	_in_view(_focus_here.bind(kind, id))
+
+
+func _focus_here(kind: String, id: int) -> void:
 	var at := Vector3.ZERO
 	match kind:
 		"res":
@@ -902,7 +960,54 @@ func _next_stuck() -> void:
 		_hud.add_toast({"text": "Nothing is stuck.", "res_id": 0, "site_id": 0})
 		return
 	_stuck_i = (_stuck_i + 1) % list.size()
-	focus_on(list[_stuck_i].focus_kind, list[_stuck_i].focus_id)
+	focus_on(list[_stuck_i].focus_kind, list[_stuck_i].focus_id, list[_stuck_i].map)
+
+
+# ---------------------------------------------------------------- maps (issue #101)
+
+## The maps the switcher offers: the village, and each site map once it's known.
+func known_maps() -> Array:
+	return sim.maps.keys().filter(func(id): return sim.maps[id].known)
+
+
+## Shows another map. Each map keeps its own camera position and zoom; a map seen for the first
+## time opens on its entrance. The selection clears, since it belongs to the map left behind.
+func switch_map(id: String) -> void:
+	if id == view_map or not sim.maps.has(id):
+		return
+	_cams[view_map] = {"target": _target, "size": _cam.size}
+	view_map = id
+	_world.map_id = id
+	if _cams.has(id):
+		_target = _cams[id].target
+		_cam.size = _cams[id].size
+	else:
+		var mp := sim.get_map(id)
+		var at := Vector2(mp.w / 2.0, mp.h / 2.0) if mp.kind == "village" else Vector2(mp.entrance) + Vector2(mp.w / 3.0, 0)
+		_target = Vector3(at.x, 0, at.y)
+	_place_camera()
+	selection = {}
+	_drag = {}
+	_hover = null
+	if tool == "build" or tool in ["stock", "farm"]:
+		set_tool("")  # paint and build orders are for the village
+	if menu_open in ["paint", "build"]:
+		menu_open = ""
+
+
+## The next known map after the one in view (Tab).
+func next_map() -> void:
+	var list := known_maps()
+	if list.size() < 2:
+		return
+	switch_map(list[(list.find(view_map) + 1) % list.size()])
+
+
+## The camera of every map, for saving.
+func _camera_state() -> Dictionary:
+	var cams := _cams.duplicate(true)
+	cams[view_map] = {"target": _target, "size": _cam.size}
+	return {"map": view_map, "maps": cams}
 
 
 
@@ -1065,6 +1170,24 @@ func _screenshot_scene() -> void:
 		sim.residents[0].jobs.mine.xp = 30
 		sim.residents[0].jobs.toolsmith.on = true
 		jobs_board_open = true
+	if "--mine" in OS.get_cmdline_user_args():  # Ada at work in the old mine, seen from there (issues #101, #102)
+		var mine := sim.get_map(OldMine.ID)
+		mine.known = true
+		mine.visited = true
+		var ada: Dictionary = sim.residents[0]
+		if ada.pick == null:
+			ada.pick = {"type": "stone_pick", "tier": 2, "dur": 25}
+		sim.move_to_map(ada, OldMine.ID, mine.entrance)
+		sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, mine.w, mine.h)))
+		for i in 25 * Tuning.TPS:
+			sim.step()
+		sim.events.clear()
+		switch_map(OldMine.ID)
+		_cam.size = 14.0
+		_target = Vector3(mine.w / 2.0, 0, mine.h / 2.0)
+		_place_camera()
+		if "--village-view" in OS.get_cmdline_user_args():  # back home, with the party line showing
+			switch_map("village")
 	if "--toast" in OS.get_cmdline_user_args():  # a short toast and one long enough to wrap (issue #71)
 		_hud.add_toast({"text": "Tomas is now level 2 at Mine.", "res_id": 0, "site_id": 0})
 		_hud.add_toast({"text": "A traveler, Mira, has arrived. She claims the new house and needs tools from the bench before she can mine.", "res_id": sim.residents[0].id, "site_id": 0})
