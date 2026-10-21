@@ -43,6 +43,11 @@ func _init() -> void:
 		"test_standing_orders_wait_rather_than_block",
 		"test_craft_patterns_match_their_recipes",
 		"test_toolsmith_is_employed_by_switching_it_on",
+		"test_residents_only_work_on_their_own_map",
+		"test_save_and_load_two_maps",
+		"test_old_mine_layout_and_ore",
+		"test_site_report_and_depletion",
+		"test_mine_items_are_hauled_and_counted",
 	]
 	for t in tests:
 		_current = t
@@ -273,7 +278,17 @@ func test_every_save_fixture_still_loads() -> void:
 		check(sim.tick == r.data.tick, "v%d: tick restored" % v)
 		var size := Vector2i(sim.w, sim.h)
 		check(size == (Vector2i(18, 18) if v < 4 else Vector2i(Tuning.MAP_W, Tuning.MAP_H)), "v%d: map size is %s" % [v, size])
-		check(sim.residents.size() == 2 and sim.residents[1].arriving, "v%d: Tomas is walking in again after loading" % v)
+		check(sim.residents.size() == (3 if v >= 15 else 2) and sim.residents[1].arriving, "v%d: Tomas is walking in again after loading" % v)
+		var mine := sim.get_map(OldMine.ID)
+		if v >= 15:  # issues #100-#102: Mira at the old mine, with coal she's mined
+			var mira: Dictionary = sim.residents[2]
+			check(mira.map == OldMine.ID and mine.visited and mine.known, "v%d: Mira is still at the old mine" % v)
+			check(sim.on_map(OldMine.ID, count.bind(sim, "coal")) > 0 and count(sim, "coal") == 0, "v%d: the mine's coal stays at the mine" % v)
+			check(OldMine.LAYOUT.size() == mine.h and sim.ore_left(OldMine.ID, "coal") < 6, "v%d: the mine's mined-out coal stays mined" % v)
+		else:  # issue #100: an older save is all village, and gets an unvisited old mine
+			check(sim.residents.all(func(r): return r.map == "village") and sim.sites.all(func(s): return s.map == "village"), "v%d: everyone and everything is on the village map" % v)
+			check(not mine.known and not mine.visited and sim.ore_left(OldMine.ID, "coal") == 6, "v%d: an unvisited old mine is added" % v)
+			check(mine.boulders.all(func(b): return sim.maps.village.boulders.all(func(o): return o.id != b.id) and b.id < sim.next_id), "v%d: the mine's ids don't clash with the village's" % v)
 		check(sim.sites.any(func(s): return s.tpl == "bench" and s.done and s.queue.has("stone_axe")), "v%d: the bench and its queue survive" % v)
 		if v >= 3:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
@@ -316,7 +331,7 @@ func test_v1_tools_get_full_uses_when_upgraded() -> void:
 	var raw = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v1.save"))
 	var had_tools: bool = raw.state.items.values().any(func(it): return Defs.is_tool_item(it.type))
 	var r := SaveFormat.read("res://tests/fixtures/save_v1.save")
-	var tools: Array = r.data.state.items.values().filter(func(it): return Defs.is_tool_item(it.type))
+	var tools: Array = r.data.state.maps.village.items.values().filter(func(it): return Defs.is_tool_item(it.type))
 	check(tools.all(func(it): return it.get("dur", -1) == Sim.full_uses(it.type)), "loose tools from a v1 save get full uses (%d tools; v1 had tools: %s)" % [tools.size(), had_tools])
 
 
@@ -677,7 +692,7 @@ func test_beds_and_free_bed_arrivals() -> void:
 	# An older save: finished houses had three stages and get a finished bed.
 	var raw = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v5.save"))
 	var up := SaveFormat.upgrade(raw)
-	check(up.data.state.sites.filter(func(x): return x.tpl == "house" and x.done).all(func(x): return x.stage == 4), "older saves' finished houses get a finished bed")
+	check(up.data.state.maps.village.sites.filter(func(x): return x.tpl == "house" and x.done).all(func(x): return x.stage == 4), "older saves' finished houses get a finished bed")
 
 
 ## Issue #44: hunger drops, residents eat before they starve, and starving ones stop and recover.
@@ -1273,3 +1288,183 @@ func test_meadow_trips() -> void:
 	run(sim, Tuning.MEADOW_REGROW + 1)
 	check(sim.meadow_sheep == 8, "and never more than 8")
 	check(sim.placement_check("bench", sim.meadow_sign()) == "The meadow signpost is in the way", "nothing can be built on the signpost")
+
+
+# ---------------------------------------------------------------- Slice 3: maps (issues #100-#103)
+
+## A resident with a stone pickaxe, moved onto the old mine at its entrance.
+func send_to_mine(sim: Sim, r: Dictionary) -> void:
+	r.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
+	sim.get_map(OldMine.ID).visited = true
+	sim.move_to_map(r, OldMine.ID, sim.get_map(OldMine.ID).entrance)
+
+
+## Issue #100: a resident only claims work on the map they're on, every map ticks, and the village's
+## tallies leave out what lies on another map.
+func test_residents_only_work_on_their_own_map() -> void:
+	var sim := Sim.new_game()
+	check(sim.maps.keys() == ["village", OldMine.ID] and sim.map_id == "village", "a new game has the village and the old mine, with the village current")
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	check(ada.map == "village" and tomas.map == "village", "residents start on the village map")
+	send_to_mine(sim, tomas)
+	check(tomas.map == OldMine.ID and sim.here().has(ada) and not sim.here().has(tomas), "travel moves Tomas onto the old mine")
+	sim.designate_mine(whole_map())  # village trees and boulders: Ada's work, never Tomas's
+	sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16)))
+	var village_ids := {}
+	for o in sim.trees + sim.boulders:
+		village_ids[o.id] = true
+	var crossed := false
+	var mined_here := false
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		if tomas.job != null and tomas.job.target != null and village_ids.has(tomas.job.target.id):
+			crossed = true
+		if ada.job != null and ada.job.target != null and not village_ids.has(ada.job.target.id) and ada.job.target.get("kind", "") in ["tree", "boulder"]:
+			crossed = true
+		mined_here = mined_here or (tomas.job != null and tomas.job.work == "mine")
+	check(sim.map_id == "village", "the sim is back on the village after ticking")
+	check(not crossed, "nobody claims a job on another map")
+	check(mined_here and sim.on_map(OldMine.ID, func(): return count(sim, "cobble") + count(sim, "coal")) > 0, "Tomas mines the old mine while nobody looks at it")
+	check(sim.stats.felled > 0, "and Ada works the village meanwhile")
+	# The village's counts leave out the mine's items.
+	sim.on_map(OldMine.ID, func(): sim.drop_items(sim.get_map(OldMine.ID).entrance + Vector2i(1, 0), "coal", 5))
+	check(sim.free_count("coal") == 0 and count(sim, "coal") == 0, "coal at the mine isn't in the village's counts")
+	check(sim.on_map(OldMine.ID, sim.free_count.bind("coal")) >= 5, "it's counted at the mine")
+	check(not Goals.village_text(sim).is_empty() and sim.map_id == "village", "the village's summary reads the village")
+	# Commands about a resident act on the resident's map, whatever map is current.
+	sim.fail_job(tomas)
+	sim.direct_order(tomas, null, sim.get_map(OldMine.ID).entrance + Vector2i(2, 0))
+	sim.step()
+	check(tomas.job != null and tomas.job.kind == "move", "an order to walk is given on Tomas's own map")
+	tomas.carry = {"type": "coal", "n": 2}
+	var before: int = sim.on_map(OldMine.ID, func(): return count(sim, "coal"))
+	sim.fail_job(tomas)
+	check(sim.on_map(OldMine.ID, func(): return count(sim, "coal")) == before + 2 and count(sim, "coal") == 0, "what Tomas carried is set down at the mine, not in the village")
+	# Stuck reasons carry their map.
+	tomas.note = {"text": "Can’t reach this boulder", "until": sim.tick + 100}
+	sim.compute_stuck()
+	var entry = sim.stuck.filter(func(x): return x.focus_id == tomas.id)
+	check(not entry.is_empty() and entry[0].map == OldMine.ID, "a stuck reason on the old mine says so")
+
+
+## Issue #100: saving and loading keeps both maps and who is on which.
+func test_save_and_load_two_maps() -> void:
+	var sim := Sim.new_game()
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(sim.residents[0]) + Vector2i(1, 0))
+	send_to_mine(sim, tomas)
+	sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16)))
+	run(sim, 40)
+	var mine_items: int = sim.get_map(OldMine.ID).items.size()
+	var coal_left := sim.ore_left(OldMine.ID, "coal")
+	var path := "user://test_two_maps.save"
+	check(SaveFormat.write(path, {"summary": "x", "tick": sim.tick, "saved_at": 0, "state": sim.save_state(), "camera": {}, "speed": 1}), "saved")
+	var r := SaveFormat.read(path)
+	var loaded := Sim.from_state(r.data.state)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var mine := loaded.get_map(OldMine.ID)
+	check(loaded.residents[1].map == OldMine.ID and loaded.residents[0].map == "village", "who is on which map survives")
+	check(mine.items.size() >= mine_items and loaded.ore_left(OldMine.ID, "coal") == coal_left, "the mine's items and mined-out ore survive")
+	check(mine.visited and mine.rock.size() == sim.get_map(OldMine.ID).rock.size() and mine.entrance == sim.get_map(OldMine.ID).entrance, "the mine's layout survives")
+	check(loaded.maps.keys() == sim.maps.keys() and loaded.map_id == "village", "both maps load, with the village current")
+	run(loaded, 20)
+	check(loaded.residents[1].map == OldMine.ID, "Tomas keeps working at the mine after loading")
+
+
+## Issue #102: the hand-laid old mine, with coal, stone and a hidden iron vein.
+func test_old_mine_layout_and_ore() -> void:
+	var sim := Sim.new_game()
+	var mine := sim.get_map(OldMine.ID)
+	check(OldMine.LAYOUT.all(func(row): return row.length() == 16) and mine.w == 16 and mine.h == 16, "the old mine is 16×16")
+	check(mine.kind == "site" and not mine.known and not mine.visited and not mine.discovered, "it starts unknown and unvisited")
+	check(mine.entrance == Vector2i(0, 8) and sim.on_map(OldMine.ID, sim.walkable.bind(mine.entrance)), "the party arrives at the entrance on the west edge")
+	var ores := {}
+	for b in mine.boulders:
+		ores[b.get("ore", "stone")] = ores.get(b.get("ore", "stone"), 0) + 1
+	check(ores == {"stone": 5, "coal": 6, "iron": 4}, "5 boulders, 6 coal ore and a 4-block iron vein (%s)" % ores)
+	check(mine.boulders.filter(func(b): return b.get("ore", "") == "iron").all(func(b): return b.hidden), "the iron vein is hidden")
+	check(not mine.is_dark(mine.entrance + Vector2i(1, 0)) and mine.is_dark(Vector2i(13, 13)), "torches light the entrance; the deep tunnel is dark")
+	check(not sim.maps.village.is_dark(Vector2i(5, 5)), "nothing in the village is dark")
+	# Every open cell is reachable from the entrance once the boulders and ore are mined.
+	var open := 0
+	for y in 16:
+		for x in 16:
+			if OldMine.LAYOUT[y][x] in [".", "o", "c", "E"]:
+				open += 1
+	var reach := {mine.entrance: true}
+	var queue: Array = [mine.entrance]
+	while not queue.is_empty():
+		var c: Vector2i = queue.pop_front()
+		for d in Sim.DIRS:
+			var n: Vector2i = c + d
+			if mine.in_bounds(n) and not reach.has(n) and OldMine.LAYOUT[n.y][n.x] in [".", "o", "c", "E"]:
+				reach[n] = true
+				queue.append(n)
+	check(reach.size() == open, "every tunnel connects to the entrance (%d of %d)" % [reach.size(), open])
+	# The hidden vein can't be marked or walked through; mining coal drops coal (issue #103).
+	sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16)))
+	check(mine.boulders.all(func(b): return b.des != b.get("hidden", false)), "Mine marks everything but the hidden vein")
+	check(not sim.on_map(OldMine.ID, sim.walkable.bind(Vector2i(14, 13))), "the hidden vein is solid rock")
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Vector2i(16, 16))
+	send_to_mine(sim, tomas)
+	tomas.jobs.haul.on = false
+	run(sim, 120)
+	check(sim.stats.get("ore_mined", 0) > 0 and sim.on_map(OldMine.ID, func(): return count(sim, "coal")) >= Tuning.ORE_YIELD.coal, "mining coal ore drops coal")
+	check(sim.on_map(OldMine.ID, func(): return count(sim, "iron_ore")) == 0, "no iron before the vein is found")
+	sim.discover(OldMine.ID)
+	check(mine.discovered and mine.boulders.all(func(b): return not b.has("hidden")), "discovering the vein reveals it")
+	check(sim.on_map(OldMine.ID, sim.walkable.bind(Vector2i(14, 13))) == false, "the revealed vein is ore, still solid until mined")
+
+
+## Issue #102: the site report, before and after a visit, and reserves that only go down.
+func test_site_report_and_depletion() -> void:
+	var sim := Sim.new_game()
+	var rep := sim.site_report(OldMine.ID)
+	check(rep.told == OldMine.TOLD and not rep.visited and rep.travel == Tuning.MINE_TRIP, "before a visit: what the village was told, and the travel time")
+	check(rep.resources.map(func(x): return x.name) == ["Stone", "Coal"] and rep.resources.all(func(x): return x.reserve == -1), "stone and coal, no estimates yet")
+	check(rep.hazards.is_empty() and rep.access.is_empty(), "no hazards or access notes known yet")
+	sim.get_map(OldMine.ID).visited = true
+	rep = sim.site_report(OldMine.ID)
+	check(rep.resources[0].reserve == 5 * Tuning.BOULDER_COBBLE and rep.resources[1].reserve == 6 * Tuning.ORE_YIELD.coal, "after a visit: estimated reserves (%s)" % [rep.resources])
+	check(rep.resources.size() == 3 and rep.resources[2].name == "?" and rep.resources[2].reserve == -1, "iron shows as ? until it's found")
+	check(rep.hazards.has("Dark tunnels past the torches") and rep.access == OldMine.ACCESS, "the dark tunnels and narrow access are reported")
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Vector2i(16, 16))
+	send_to_mine(sim, tomas)
+	sim.on_map(OldMine.ID, func():
+		var coal: Dictionary = Sim.nearest(sim.boulders.filter(func(b): return b.get("ore", "") == "coal"), sim.m.entrance)
+		sim.designate_mine(Rect2i(coal.cell, Vector2i.ONE)))
+	var lowest: int = rep.resources[1].reserve
+	var rose := false
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if i % 20 == 0:
+			var now: int = sim.site_report(OldMine.ID).resources[1].reserve
+			rose = rose or now > lowest
+			lowest = mini(lowest, now)
+	check(lowest == 5 * Tuning.ORE_YIELD.coal and not rose, "mining a coal block lowers the coal estimate, and it never grows back")
+	sim.discover(OldMine.ID)
+	rep = sim.site_report(OldMine.ID)
+	check(rep.resources[2].name == "Iron" and rep.resources[2].reserve == 4 * Tuning.ORE_YIELD.iron, "once found, the iron's reserve shows")
+
+
+## Issue #103: coal, iron ore and iron ingots are hauled and counted like any other item.
+func test_mine_items_are_hauled_and_counted() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	for t in ["coal", "iron_ore", "iron_ingot"]:
+		check(Defs.ITEMS.has(t) and Defs.MATERIALS.has(t) and Palette.ITEM_COLORS.has(t), "%s has a definition, a tally and a colour" % t)
+		check(ItemIcons.icon(t).get_width() == 64, "%s has an icon" % t)
+	var cols := ["coal", "iron_ore", "iron_ingot"].map(func(t): return Palette.ITEM_COLORS[t])
+	for c in cols:
+		check(c.to_html() != Palette.ITEM_COLORS.cobble.to_html() and c.to_html() != Palette.ITEM_COLORS.log.to_html(), "its colour is distinct from cobblestone and logs")
+	sim.paint_zone(Rect2i(Sim.rcell(ada) + Vector2i(2, -1), Vector2i(3, 2)))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "coal", 6)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 2), "iron_ore", 3)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-3, 2), "iron_ingot", 2)
+	run(sim, 60)
+	for t in {"coal": 6, "iron_ore": 3, "iron_ingot": 2}:
+		var stored := sim.stacks_where(func(s): return s.type == t and sim.in_zone(s.cell))
+		var n := 0
+		for st in stored:
+			n += st.n
+		check(n == {"coal": 6, "iron_ore": 3, "iron_ingot": 2}[t] and sim.free_count(t) == n, "%d %s hauled to the stockpile and counted" % [n, t])

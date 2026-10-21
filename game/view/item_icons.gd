@@ -37,6 +37,21 @@ static func _draw(img: Image, type: String) -> void:
 				_disc(img, p, 12, dark)
 			for p in [Vector2(22, 26), Vector2(41, 24), Vector2(30, 42), Vector2(46, 41)]:
 				_disc(img, p, 9, c.lightened(0.1 if p.x > 35 else 0.0))
+		"coal":  # dark lumps, edged in chalk so they read on the slate
+			for p in [Vector2(24, 36), Vector2(40, 30), Vector2(34, 46)]:
+				_disc(img, p, 13, Palette.CHALK_DIM)
+			for p in [Vector2(24, 36), Vector2(40, 30), Vector2(34, 46)]:
+				_disc(img, p, 10, c)
+			_disc(img, Vector2(37, 27), 3, c.lightened(0.35))
+		"iron_ore":  # a chunk of stone with rusty flecks
+			_disc(img, Vector2(32, 34), 23, dark)
+			_disc(img, Vector2(32, 34), 20, Palette.STONE)
+			for p in [Vector2(24, 28), Vector2(38, 26), Vector2(30, 42), Vector2(42, 40)]:
+				_disc(img, p, 5, c)
+		"iron_ingot":  # a bar seen from above at a slant, its top face lighter
+			_box(img, Rect2i(8, 22, 48, 26), dark)
+			_box(img, Rect2i(11, 25, 42, 20), c.darkened(0.2))
+			_box(img, Rect2i(15, 25, 34, 10), c)
 		"wheat":  # three stalks with heads
 			for x in [22.0, 32.0, 42.0]:
 				_line(img, Vector2(x, 54), Vector2(x, 26), 6, dark)

@@ -13,6 +13,10 @@ const ITEMS := {
 	"berries": {"one": "berry", "many": "berries", "label": "Berries"},
 	"bread": {"one": "bread", "many": "bread", "label": "Bread"},
 	"cooked_mutton": {"one": "cooked mutton", "many": "cooked mutton", "label": "Cooked mutton"},
+	# From the old mine (issue #103). Coal is smelting fuel; iron ore is smelted into ingots (#104).
+	"coal": {"one": "coal", "many": "coal", "label": "Coal"},
+	"iron_ore": {"one": "iron ore", "many": "iron ore", "label": "Iron ore"},
+	"iron_ingot": {"one": "iron ingot", "many": "iron ingots", "label": "Iron"},
 	"wood_axe": {"one": "wooden axe", "many": "wooden axes", "tool": "axe", "tier": 1},
 	"wood_pick": {"one": "wooden pickaxe", "many": "wooden pickaxes", "tool": "pick", "tier": 1},
 	"stone_axe": {"one": "stone axe", "many": "stone axes", "tool": "axe", "tier": 2},
@@ -20,7 +24,10 @@ const ITEMS := {
 }
 
 ## The tally bar's Materials group, in order (issue #73). Raw mutton is counted under Food instead.
-const MATERIALS := ["log", "plank", "stick", "cobble", "wheat", "wool"]
+const MATERIALS := ["log", "plank", "stick", "cobble", "coal", "iron_ore", "iron_ingot", "wheat", "wool"]
+
+## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.
+const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}}
 
 ## `pattern` (bench) and `fuel` (fireplace) are display only, for the Craft panel's crafting grid and
 ## furnace (issue #95); they never change what a recipe costs. A pattern is three rows of three, each

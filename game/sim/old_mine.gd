@@ -1,0 +1,72 @@
+class_name OldMine
+extends RefCounted
+## The old mine (issue #102): Slice 3's one nearby destination, a small hand-laid site map a short
+## walk east of the village. Stone and coal near the entrance, and an iron vein, hidden behind rubble
+## at the end of a dark tunnel, that nobody knows about until it's found (#111).
+
+const ID := "old_mine"
+const NAME := "Old mine"
+
+## One row per line, west to east. The party arrives at E, on the west edge.
+##   # rock wall (can't be mined)   t rock with a torch on it   . open floor   E the entrance
+##   o boulder (cobblestone)        c coal ore                   i iron ore, hidden until discovered
+const LAYOUT := [
+	"################",
+	"#####c...c######",
+	"#####t.o...t####",
+	"#######...######",
+	"########.#######",
+	"###c.###.###c.##",
+	"###..t##.##t..##",
+	"####..##..#..###",
+	"E.....o.....o.##",
+	"#t.....##.o..###",
+	"####.c###...####",
+	"####..#####.####",
+	"#####.#####.o###",
+	"#####c######..i#",
+	"############iii#",
+	"################",
+]
+
+## What the village has been told about it, before anyone has been (issue #102).
+const TOLD := "An old mine a short walk east. Stone and coal, they say."
+## Access notes for the site report.
+const ACCESS := ["Narrow tunnels: 1 resident per tunnel"]
+
+
+## Builds the old mine as it is before anyone has been there. Ids come from the sim, so they're
+## unique across every map.
+static func build(s: Sim) -> SimMap:
+	var m := SimMap.new(LAYOUT[0].length(), LAYOUT.size())
+	m.id = ID
+	m.kind = "site"
+	m.name = NAME
+	m.known = false
+	for y in LAYOUT.size():
+		for x in LAYOUT[y].length():
+			var c := Vector2i(x, y)
+			match LAYOUT[y][x]:
+				"#":
+					m.rock[c] = true
+				"t":
+					m.rock[c] = true
+					m.torches.append(c)
+				"E":
+					m.entrance = c
+				"o":
+					m.boulders.append(_block(s, c, ""))
+				"c":
+					m.boulders.append(_block(s, c, "coal"))
+				"i":
+					var b := _block(s, c, "iron")
+					b.hidden = true
+					m.boulders.append(b)
+	return m
+
+
+static func _block(s: Sim, c: Vector2i, ore: String) -> Dictionary:
+	var b := {"id": s._id(), "kind": "boulder", "cell": c, "alive": true, "des": false, "claim": 0, "unreach_until": 0}
+	if ore != "":
+		b.ore = ore
+	return b
