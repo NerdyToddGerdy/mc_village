@@ -165,17 +165,20 @@ func _initialize() -> void:
 	check(sim.stats.get("sheep_hunted", 0) >= 6, "the clearing's sheep were hunted for wool and mutton (%d)" % sim.stats.get("sheep_hunted", 0))
 	check(not tomas.is_empty() and seen("a skilled"), "Tomas arrived skilled in a job")
 
-	# ---- A bigger stockpile, by drag (Z)
+	# ---- A bigger stockpile, by drag: Z opens the Paint menu, 1 picks Stockpile (issue #93)
 	await look_at(at(9, 9))
 	await key(KEY_Z)
+	await key(KEY_1)
+	check(game.tool == "stock", "Z then 1 picks Stockpile")
 	var zr := open_rect_on_screen(at(9, 9), 4, 3, func(p): return sim.walkable(p) and sim.site_at(p) == null and sim.reserved_at(p) == null and not sim.in_zone(p) and not sim.items.has(p) and p != sim.meadow_sign())
 	if zr.position.x >= 0:
 		await drag(screen(zr.position), screen(zr.end - Vector2i.ONE))
 	check(sim.zone.size() >= 16, "Z: a bigger stockpile is painted (%d cells)" % sim.zone.size())
 	await key(KEY_ESCAPE)
 
-	# ---- Farm: paint plots (P); wheat is planted, grows and is harvested
-	await key(KEY_P)
+	# ---- Farm: paint plots, picked in the Paint menu; wheat is planted, grows and is harvested
+	check(await click_button("Paint") and await click_button("Farm plot"), "pick Farm plot in the Paint menu")
+	check(game.tool == "farm" and game._hud._tool_btns.paint.text == "Paint: Farm plot", "Farm plot is on, and the Paint button says so")
 	var fr := open_rect_on_screen(at(9, 9), 3, 2, func(p): return sim.farm_blocked(p) == "")
 	check(fr.position.x >= 0, "open grass on screen for a farm")
 	await drag(screen(fr.position), screen(fr.end - Vector2i.ONE))

@@ -83,7 +83,7 @@ func screen(cell: Vector2i, h := 0.0) -> Vector2:
 func find_button(text: String, near := "", last := false) -> Button:
 	var found: Button = null
 	for n in _all(root):
-		if n is Button and n.is_visible_in_tree() and not n.disabled and text in n.text:
+		if n is Button and n.is_visible_in_tree() and not n.disabled and text in str(n.get_meta("label", n.text)):
 			if near == "" or _row_has(n, near):
 				if not last:
 					return n

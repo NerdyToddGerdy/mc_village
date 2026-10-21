@@ -7,9 +7,13 @@ extends RefCounted
 
 const ACTIONS := [
 	# [id, group, label, default keys]
+	["gather", "Orders", "Open the gather menu", [KEY_E]],
 	["mine", "Orders", "Mine trees and boulders", [KEY_X]],
-	["stock", "Orders", "Paint a stockpile", [KEY_Z]],
+	["chop", "Orders", "Chop trees only", []],
+	["break", "Orders", "Break boulders only", []],
 	["hunt", "Orders", "Hunt sheep", [KEY_G]],
+	["paint", "Orders", "Open the paint menu", [KEY_Z]],
+	["stock", "Orders", "Paint a stockpile", []],
 	["farm", "Orders", "Paint a farm plot", [KEY_P]],
 	["build", "Orders", "Open the build menu", [KEY_B]],
 	["craft", "Orders", "Open the craft menu", [KEY_C]],
@@ -57,10 +61,19 @@ func load_file() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(path) != OK:
 		return
+	var fresh: Array = []  # actions newer than the file, which keep their default keys
 	for a in ACTIONS:
 		var v = cfg.get_value("keys", a[0], null)
 		if v is Array:
 			keys[a[0]] = v.filter(func(k): return k is int)
+		else:
+			fresh.append(a[0])
+	# Issue #93 moved Z from Stockpile to the Paint menu. A file from before then that still has
+	# Stockpile on Z hands it over; any other default key the player already uses stays theirs.
+	if fresh.has("paint") and keys.stock == [KEY_Z]:
+		keys.stock = []
+	for id in fresh:
+		keys[id] = keys[id].filter(func(k): return not keys.keys().any(func(o): return o != id and not fresh.has(o) and keys[o].has(k)))
 
 
 func save_file() -> bool:

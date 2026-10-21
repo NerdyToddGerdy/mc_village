@@ -183,14 +183,14 @@ The Slice 1 subset of brief §12.
 | Left-click | Select resident, site, bench, tree, or boulder |
 | Left-drag on the map | Pan the camera (with no order active) |
 | Shift + drag | Select multiple residents |
-| Right-click with selection | Contextual order (mine, hunt, move); cursor previews it. It never fails silently: placing a building, it cancels the placement; with Mine, Hunt or Stockpile on, it still orders the selected residents and leaves the tool on; with nobody selected, or a starving resident, a message says why |
+| Right-click with selection | Contextual order (mine, hunt, move); cursor previews it. It never fails silently: placing a building, it cancels the placement; with Mine, Hunt or Stockpile on (in Slice 2, any Gather or Paint order), it still orders the selected residents and leaves the tool on; with nobody selected, or a starving resident, a message says why |
 | Shift + right-click | Queue a mine or move order after the current one |
 | Toolbar → drag | Paint mine or stockpile; place a blueprint |
 | R (while placing) | Rotate blueprint |
 | Click empty ground | Clear selection |
 | Esc | Cancel the active order; with none, open the menu |
 | M | Open or close the menu |
-| X / Z | Mine / Stockpile order |
+| X / Z | Mine / Stockpile order (Slice 2: Z opens the Paint menu; see slice-2-spec.md §11) |
 | Shift-drag / Alt-drag (with Mine) | Mark trees only / boulders only (Alt is Option on a Mac); a plain drag marks both |
 | B | Build menu |
 | T / H | Place crafting bench (table) / house |
@@ -283,7 +283,7 @@ World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`,
 - Panel headers put a title and its status side by side, at least 16 px apart. A status too long for that moves to its own dimmed line under the title (#72).
 - Toasts (and the paused notice) sit just below the tally bar, centred in the gap between the goals panel and the stuck list, so they never cover either. A toast too wide for the gap wraps (#71).
 - Bottom left: selection panel (resident, site, or bench, where crafts are queued).
-- Bottom right: orders toolbar — Mine, Hunt, Stockpile, Farm, Build ▸ (Crafting bench, House, Fireplace), then Craft past a thin rule, since it opens a panel instead of choosing an order. Each label is chalk, with an icon on the left drawn like the order's mark in the world (red slash, red crosshair, green hatch, wheat rows, blue dashed square, a bench for Craft) and the key as a small keycap on the right, hidden when unbound (#74). Mine is one order for both trees and boulders: a drag marks every tree and boulder in it, and clicking a marked one unmarks it.
+- Bottom right: orders toolbar (Slice 2 regroups it as Gather ▸ · Paint ▸ · Build ▸ · Craft; see slice-2-spec.md §11) — Mine, Hunt, Stockpile, Farm, Build ▸ (Crafting bench, House, Fireplace), then Craft past a thin rule, since it opens a panel instead of choosing an order. Each label is chalk, with an icon on the left drawn like the order's mark in the world (red slash, red crosshair, green hatch, wheat rows, blue dashed square, a bench for Craft) and the key as a small keycap on the right, hidden when unbound (#74). Mine is one order for both trees and boulders: a drag marks every tree and boulder in it, and clicking a marked one unmarks it.
 
 **World marks.** Shape always differs, so colour is never the only signal.
 

@@ -267,12 +267,28 @@ Taken together, the upgrade steps:
 
 | Key | Action |
 |---|---|
-| G | Hunt order |
-| P | Farm order |
+| E | Open the Gather menu (#94) |
+| X | Mine order, directly |
+| G | Hunt order, directly |
+| Z | Open the Paint menu (#93); Z then 1 is Stockpile |
+| P | Farm plot order, directly |
+| B | Open the Build menu |
+| 1–9, while a toolbar menu is open | Pick that row (B then 2 places a house) |
 | K | Place a fireplace |
-| Z, then drag from a stockpile cell | Erase stockpile cells (#63) |
+| A drag that starts on a painted cell | Erase that zone: stockpile cells (#63) or farm plots (#93) |
 
-All are rebindable (Slice 1, §10).
+All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees, Break boulders and Stockpile have actions with no default key. Settings files from before #93 hand Z from Stockpile to the Paint menu. A new default key the player has already given to something else is left with them, and the new action starts with no key.
+
+**Orders toolbar (#93, #94).** The toolbar is **Gather ▸ · Paint ▸ · Build ▸ · Craft**. This replaces Slice 1's Mine, Hunt, Stockpile and Farm buttons (slice-1-spec.md §10, §12).
+- **Menus:** Gather, Paint and Build each open a small menu above the toolbar, all built from one control and one data table, so a later order is a new row rather than a new button. Each row shows the order's mark, its name, a line about it, its number in the menu, and its direct key if it has one.
+- **Picking a row** switches that order on (or starts placing that building) and closes the menu. Unlike the direct keys, picking the order that's already on leaves it on.
+- **Gather:** Mine (trees and boulders), Chop trees (trees only), Break boulders (boulders only; the stuck list still says "Needs a pickaxe"), and Hunt, which shows while there are live sheep. Shift-drag and Alt-drag still limit Mine to trees or boulders.
+- **Paint:** Stockpile and Farm plot. Farming is available from the start, so Farm plot always shows.
+- **What's on:** while one of its orders is on, the Gather or Paint button names it, as in "Gather: Hunt" or "Paint: Farm plot", and shows that order's mark. Otherwise the button reads "Gather ▸" or "Paint ▸".
+- **Right-click** with residents selected still orders them while any Gather or Paint order is on, and leaves the order on. With a menu open, right-click closes it.
+- **Erasing farm plots:** with Farm plot on, a drag that starts on a plot erases the plots in its rectangle, previewed in red like stockpile cells. Anything growing on them is lost, as with the plot panel's Remove plot.
+
+**Tools dropdown (#90).** A click pins the list open, and a second click unpins it. A click anywhere outside the button and the list, or Esc, closes it. Only keyboard focus (tabbing to the button) holds it open, not the focus a click leaves behind. Hovering the gap between the button and the list counts as hovering, but the rest of their bounding box doesn't, and the mouse leaving the window ends hovering.
 
 **Erasing stockpile cells (#63).** With the Stockpile order on, a drag that starts on a stockpile cell erases every stockpile cell in its rectangle instead of painting, and a click on one cell erases just that cell, as clicking a marked tree unmarks it under Mine.
 - **Preview:** while erasing, the rectangle is outlined in cut red and each cell that will go is filled red, with the hint "Release to erase these stockpile cells".
