@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Block Village** (working title) is an isometric settlement simulation inspired by Minecraft. The repo holds:
 - `block-village-design-brief.md`: the vision and decisions document.
-- `slice-2-spec.md`: the spec for the current slice (Slice 2). It only describes what's new or changed since Slice 1.
+- `slice-2-spec.md`: the Slice 2 spec (done). It only describes what's new or changed since Slice 1. The current slice is Slice 3 (#12); its rules are in its issues until `slice-3-spec.md` is written (#99).
 - `slice-1-spec.md`: the Slice 1 spec, still the reference for everything Slice 2 doesn't change. It covers architecture, the job system, recipes, construction, controls, saving, the tuning table, and the "carpenter's chalk" UI language.
 - `prototype/founding.html`: a playable, single-file browser prototype of Slice 1.
   - It's opened directly in a browser, with no build step or dependencies beyond Google Fonts.
