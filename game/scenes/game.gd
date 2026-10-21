@@ -660,8 +660,9 @@ func toggle_craft_menu() -> void:
 			placing = ""
 
 
-func next_craft_bench() -> void:
-	craft_bench_i += 1
+## Shows the i-th station in the Craft panel (its tab, issue #76).
+func show_craft_bench(i: int) -> void:
+	craft_bench_i = i
 
 
 func set_tool(t: String) -> void:

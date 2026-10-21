@@ -103,10 +103,10 @@ Slice 2 is done when, from a fresh start, a player can:
 | Bread | 3 wheat | 1 bread |
 | Cooked mutton | 1 raw mutton, 1 log (fuel) | 1 cooked mutton |
 
-The fireplace gets the same queue rules as the bench (skipping blocked recipes, Queue 5). It also gets a standing order: **"Keep 6 meals in stock"**, on by default. When stored bread and cooked mutton total fewer than 6, cooks queue whichever recipe their inputs allow.
+The fireplace gets the same queue rules as the bench (skipping blocked recipes, queuing several at once). It also gets a standing order: **"Keep 6 meals in stock"**, on by default. When stored bread and cooked mutton total fewer than 6, cooks queue whichever recipe their inputs allow.
 - The standing order queues **one meal at a time**, bread first, and only when its inputs exist somewhere. So it never leaves the fireplace stuck. A recipe you queue yourself can be blocked, and then the stuck list says so ("Fireplace: Bread needs 3 more wheat").
 - Turning the standing order off removes the meals it queued. The switch sits in the fireplace's panel.
-- Selecting a finished fireplace opens its panel on the right, as the bench does. The toolbar's **Craft** button and its **Next** button step through every finished bench and fireplace.
+- Selecting a finished fireplace opens its panel on the right, as the bench does. The toolbar's **Craft** button opens the panel, with a tab for every finished bench and fireplace (#76).
 - Hungry residents leave raw mutton for the fireplace. They eat it only when there's no other food.
 - Fireplace work is the **Cook** job (§5) and ranks with bench work.
 
@@ -198,9 +198,14 @@ A resident with **Toolsmith** switched on keeps the village in spare tools:
 Once a crafting bench is finished, a **Craft** button appears in the orders toolbar (default key C, rebindable).
 - It opens the bench panel above the toolbar, so crafting doesn't need the bench in view.
 - **The recipes and queue appear only there, on the right.** Selecting the bench in the world, or its entry in the stuck list, opens the Craft panel at that bench. The selection panel on the left shows just a summary: the bench's status, any stuck reason, and an "Open the craft menu" button when the panel is closed.
-- With more than one bench, the panel says "Bench 1 of 2" and has **Next bench**.
 - Esc closes it.
-- **Steady layout:** the bench panel lists its recipes first, at a fixed size, and keeps the status, stuck reasons and queue in a fixed-height area below. The Queue buttons never move under the cursor.
+
+**Layout (#76).**
+- **Tabs:** with more than one station, a row of tabs at the top, one per bench and fireplace ("Bench", "Fireplace", "Bench 2"). A station with a blocker has a yellow flag on its tab.
+- **Queue first:** what the station is doing, its stuck reasons and its queue come first, in a fixed-height area that scrolls. Each queued item is a chip; clicking one removes it.
+- **Recipe rows:** below a rule, each recipe shows its name, then each input as a colour swatch and count, then what it makes. An input is yellow when there isn't enough on hand for one: in the station, on the way, or lying about. One control queues a recipe: **− Queue n +**. The count stays per recipe, from 1 to 20.
+- **Steady layout:** the queue area doesn't change height, so the Queue buttons never move under the cursor while the queue changes.
+- **Fit:** the panel stays between the stuck list (or the speed buttons) and the toolbar, and its recipe list scrolls rather than covering them. Folding the stuck list (§9) gives it more room.
 
 ## 8. Buildings and orders added
 

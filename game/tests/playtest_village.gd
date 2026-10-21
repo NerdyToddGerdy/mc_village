@@ -110,7 +110,7 @@ func open_bench_panel() -> bool:
 		var bench = game.craft_bench()
 		if bench != null and bench.tpl == "bench":
 			return true
-		await click_button("Next")
+		await click_button("Bench")
 	return false
 
 
@@ -236,7 +236,7 @@ func _initialize() -> void:
 	check(await open_bench_panel(), "open the Craft panel on the bench")
 	await key(KEY_QUOTELEFT)
 	for i in 3:
-		await click_button("Queue 5", "Planks")
+		await queue_recipe("Planks", 5)
 	await key(KEY_ESCAPE)
 
 	# ---- Skills: levels rise with work
@@ -250,7 +250,7 @@ func _initialize() -> void:
 
 	# ---- Toolsmith: an axe is made, a spare is kept, and a broken axe is replaced from it
 	check(await open_bench_panel(), "open the bench's Craft panel again")
-	check(await click_button("Queue", "Wooden axe"), "queue a wooden axe")
+	check(await queue_recipe("Wooden axe"), "queue a wooden axe")
 	await key(KEY_ESCAPE)
 	await look_at(at(9, 9))
 	await key(KEY_X)
@@ -288,7 +288,7 @@ func _initialize() -> void:
 			break
 		if await open_bench_panel():
 			await key(KEY_QUOTELEFT)
-			await click_button("Queue 5", "Planks")
+			await queue_recipe("Planks", 5)
 			await key(KEY_ESCAPE)
 		await play_until(300, func(): return h3 != null and h3.done)
 	check(h3 != null and h3.done and h3.stage == 4, "the third house is finished, bed and all")

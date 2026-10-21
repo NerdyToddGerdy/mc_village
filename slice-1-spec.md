@@ -103,7 +103,7 @@ Each job has: target, required tool (if any), required items (if any), priority,
 
 ## 6. Crafting
 
-The crafting bench is a 1-block structure built from logs. Selecting it opens its panel, where the player queues recipes, one at a time with **Queue** or five at a time with **Queue 5**. A house's 28 planks take two Queue 5 clicks. A resident claims a `craft` job, fetches inputs, works for `craft_time`, and drops outputs at the bench (to be hauled).
+The crafting bench is a 1-block structure built from logs. Selecting it opens its panel, where the player queues recipes, one at a time with **Queue** or five at a time with **Queue 5**. A house's 28 planks take two Queue 5 clicks. (Slice 2 replaces the two buttons with one counted Queue control; see slice-2-spec.md §7a.) A resident claims a `craft` job, fetches inputs, works for `craft_time`, and drops outputs at the bench (to be hauled).
 
 **Queue order.** The queue isn't strictly first-in-first-out:
 - Residents feed and craft the first queued recipe whose inputs exist somewhere: already at the bench, on the way, or lying loose or in a stockpile. Blocked recipes are skipped, not waited on. So "Wooden axe, Planks, Sticks" makes the planks and sticks first, then the axe.
@@ -278,7 +278,7 @@ World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`,
 - Right edge: stuck list, shown only when something is stuck; clicking an entry focuses the camera. Slice 2 splits it into stuck and waiting tiers and lets it fold (slice-2-spec.md §9).
 - Buttons come in three styles, set as theme type variations (#75):
   - **Primary** (chalk outline): a panel's main action, such as Send to the meadow, Queue, Mine, Hunt, Save here or Load.
-  - **Secondary** (dim text in a faint outline): inline actions such as Equip, Close, Next, Queue 5, Use the best, Back and Cancel, and the tools in the Equip list.
+  - **Secondary** (dim text in a faint outline): inline actions such as Equip, Close, a station tab, the − and + of a Queue count, Use the best, Back and Cancel, and the tools in the Equip list.
   - **Destructive** (cut red outline): actions that throw work away (Remove this plot, Cancel blueprint, Clear orders). The first click only arms the button, which then reads "Click again to …" for 3 seconds. A second click in that time acts.
 - Panel headers put a title and its status side by side, at least 16 px apart. A status too long for that moves to its own dimmed line under the title (#72).
 - Toasts (and the paused notice) sit just below the tally bar, centred in the gap between the goals panel and the stuck list, so they never cover either. A toast too wide for the gap wraps (#71).

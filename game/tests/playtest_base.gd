@@ -92,6 +92,8 @@ func find_button(text: String, near := "", last := false) -> Button:
 
 
 func _row_has(b: Button, text: String) -> bool:
+	if b.get_parent().get_meta("recipe", "") == text:  # a Craft panel recipe row (issue #76)
+		return true
 	for sib in b.get_parent().get_children():
 		if sib is Label and sib.text.begins_with(text + "\n"):
 			return true
@@ -117,6 +119,23 @@ func click_button(text: String, near := "", last := false) -> bool:
 		print("     click \"%s\" -> button \"%s\" at %s (parent %s)" % [text, b.text.replace("\n", " / "), b.get_global_rect(), b.get_parent().get_parent().name])
 	await click(b.get_global_rect().get_center())
 	return true
+
+
+## Queues `n` of a recipe in the Craft panel: sets its count with − and +, then clicks Queue.
+func queue_recipe(recipe: String, n := 1) -> bool:
+	for i in 40:
+		await frames(1)
+		game._hud.refresh(game.sim)
+		await frames(1)
+		var q := find_button("Queue", recipe)
+		if q == null:
+			printerr("     (no Queue button for %s)" % recipe)
+			return false
+		var cur := int(q.text.get_slice(" ", 1))
+		if cur == n:
+			return await click_button("Queue", recipe)
+		await click_button("+" if cur < n else "−", recipe)
+	return false
 
 
 func visible_label(text: String) -> bool:
