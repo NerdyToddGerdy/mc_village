@@ -80,6 +80,26 @@ func _initialize() -> void:
 			sim._step_map()
 		sim.use_map("village")
 		camera = {"map": OldMine.ID, "maps": {"village": camera, OldMine.ID: {"target": Vector3(6, 0, 8), "size": 14.0}}}
+	if SaveFormat.VERSION >= 16:  # Ada packing to leave for the old mine, part-packed (issues #105-#107)
+		var board := {}
+		for c in [at(14, 9), at(4, 12), at(2, 1), at(15, 2), at(16, 12), at(1, 14)]:
+			if sim.placement_check("board", c) == "":
+				board = sim.place_site("board", c)
+				break
+		board.stage = 1
+		board.done = true
+		var plan := sim.new_plan()
+		plan.party = [sim.residents[0].id]
+		plan.target = {"item": "coal", "n": 6}
+		plan.meals = 2
+		plan.picks = 1
+		var err := sim.plan_expedition(plan)
+		if err != "":
+			printerr("The expedition couldn't be planned: ", err)
+			quit(1)
+			return
+		board.store = {"bread": 1, "stone_pick": 1}
+		board.tools = [{"type": "stone_pick", "dur": 7}]
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

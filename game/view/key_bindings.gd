@@ -20,6 +20,7 @@ const ACTIONS := [
 	["bench", "Orders", "Place a crafting bench", [KEY_T]],
 	["house", "Orders", "Place a house", [KEY_H]],
 	["fireplace", "Orders", "Place a fireplace", [KEY_K]],
+	["board", "Orders", "Place an expedition board", []],
 	["rotate", "Orders", "Turn a building while placing", [KEY_R]],
 	["next_res", "Residents", "Select the next resident", [KEY_F]],
 	["jobs", "Residents", "Open the village jobs board", [KEY_J]],

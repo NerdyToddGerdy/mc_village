@@ -48,6 +48,10 @@ func _init() -> void:
 		"test_old_mine_layout_and_ore",
 		"test_site_report_and_depletion",
 		"test_mine_items_are_hauled_and_counted",
+		"test_smelting_and_iron_tools",
+		"test_expedition_board",
+		"test_planning_an_expedition",
+		"test_staging_and_departure",
 	]
 	for t in tests:
 		_current = t
@@ -285,10 +289,18 @@ func test_every_save_fixture_still_loads() -> void:
 			check(mira.map == OldMine.ID and mine.visited and mine.known, "v%d: Mira is still at the old mine" % v)
 			check(sim.on_map(OldMine.ID, count.bind(sim, "coal")) > 0 and count(sim, "coal") == 0, "v%d: the mine's coal stays at the mine" % v)
 			check(OldMine.LAYOUT.size() == mine.h and sim.ore_left(OldMine.ID, "coal") < 6, "v%d: the mine's mined-out coal stays mined" % v)
+			if v >= 16:  # issues #105-#107: Ada packing at the board, part-packed
+				var bd := sim.expedition_board()
+				check(sim.expedition.get("state", "") == "staging" and sim.expedition.party == [sim.residents[0].id], "v%d: the expedition is still packing, with Ada" % v)
+				check(bd.store.get("bread", 0) == 1 and bd.tools.size() == 1 and bd.tools[0].dur == 7, "v%d: what's packed stays packed, a tool with its wear" % v)
+			else:
+				check(sim.expedition.is_empty(), "v%d: no expedition in an older save" % v)
 		else:  # issue #100: an older save is all village, and gets an unvisited old mine
 			check(sim.residents.all(func(r): return r.map == "village") and sim.sites.all(func(s): return s.map == "village"), "v%d: everyone and everything is on the village map" % v)
 			check(not mine.known and not mine.visited and sim.ore_left(OldMine.ID, "coal") == 6, "v%d: an unvisited old mine is added" % v)
 			check(mine.boulders.all(func(b): return sim.maps.village.boulders.all(func(o): return o.id != b.id) and b.id < sim.next_id), "v%d: the mine's ids don't clash with the village's" % v)
+		if v < 16:
+			check(sim.residents.all(func(r): return r.trip == ("meadow" if r.away else "")), "v%d: anyone away is at the meadow" % v)
 		check(sim.sites.any(func(s): return s.tpl == "bench" and s.done and s.queue.has("stone_axe")), "v%d: the bench and its queue survive" % v)
 		if v >= 3:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
@@ -1468,3 +1480,212 @@ func test_mine_items_are_hauled_and_counted() -> void:
 		for st in stored:
 			n += st.n
 		check(n == {"coal": 6, "iron_ore": 3, "iron_ingot": 2}[t] and sim.free_count(t) == n, "%d %s hauled to the stockpile and counted" % [n, t])
+
+
+# ---------------------------------------------------------------- Slice 3: expeditions (issues #104-#107)
+
+## Issue #104: the fireplace smelts iron ore with coal, iron tools are the best, and the toolsmith
+## makes iron spares once there are ingots.
+func test_smelting_and_iron_tools() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var spot := open_rect(sim, Vector2i(3, 3))
+	var f := lit_fireplace(sim, spot.position + Vector2i(1, 0))
+	sim.set_keep_meals(f, false)
+	var near := spot.position + Vector2i(1, 3)
+	sim.drop_items(near, "iron_ore", 2)
+	sim.drop_items(near + Vector2i(1, 0), "coal", 3)
+	sim.queue_add(f, "smelt_iron")
+	sim.queue_add(f, "smelt_iron")
+	var labels: Array = []
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if ada.job != null and not labels.has(ada.job.label):
+			labels.append(ada.job.label)
+	check(labels.has("Smelting iron"), "Ada smelts at the fireplace (%s)" % [labels])
+	check(count(sim, "iron_ingot") == 2 and count(sim, "iron_ore") == 0 and count(sim, "coal") == 1, "1 ore and 1 coal make each ingot (%d ingots, %d coal left)" % [count(sim, "iron_ingot"), count(sim, "coal")])
+	check(Sim.recipe_job(Defs.recipe("smelt_iron")) == "cook" and Defs.recipe("smelt_iron").fuel == "coal", "smelting is Cook work, with coal as the fuel")
+	# Iron tools: more uses and faster than stone.
+	for kind in ["axe", "pick"]:
+		var it: Dictionary = Defs.ITEMS["iron_" + kind]
+		check(it.tool == kind and it.tier == 3 and Sim.full_uses("iron_" + kind) > Sim.full_uses("stone_" + kind), "an iron %s lasts longer than stone" % kind)
+	check(Tuning.CHOP_TIME[3] < Tuning.CHOP_TIME[2] and Tuning.BREAK_TIME[3] < Tuning.BREAK_TIME[2], "and works faster")
+	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	sim.residents[0].jobs.toolsmith.on = true
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 1), "iron_ingot", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "stick", 2)
+	sim.queue_add(bench, "iron_pick")
+	run(sim, 30)
+	check(sim.tool_items("pick", 2).any(func(st): return st.type == "iron_pick" and st.dur == Sim.full_uses("iron_pick")), "3 ingots and 2 sticks make an iron pickaxe")
+	check(ada.pick == null or ada.pick.type == "iron_pick", "a resident who picks up a pickaxe takes the iron one")
+	# The toolsmith's spare is iron when there are ingots, before stone and wood.
+	var sim2 := Sim.new_game()
+	var a2: Dictionary = sim2.residents[0]
+	a2.jobs.toolsmith.on = true
+	var b2 := sim2.place_site("bench", open_rect(sim2, Vector2i(3, 3)).position + Vector2i(1, 0))
+	b2.stage = 1
+	b2.done = true
+	a2.pick = {"type": "stone_pick", "tier": 2, "dur": 5}
+	sim2.drop_items(Sim.rcell(a2) + Vector2i(1, 0), "cobble", 3)
+	sim2.drop_items(Sim.rcell(a2) + Vector2i(-1, 0), "iron_ingot", 3)
+	run(sim2, 1)
+	check(b2.queue.has("iron_pick") and not b2.queue.has("stone_pick"), "with ingots about, the spare is an iron pickaxe (%s)" % [b2.queue])
+
+
+## A finished expedition board in an open spot, skipping its construction.
+func built_board(sim: Sim) -> Dictionary:
+	var spot := open_rect(sim, Vector2i(3, 3))
+	var b := sim.place_site("board", spot.position + Vector2i(1, 0))
+	b.stage = 1
+	b.done = true
+	sim._on_site_done(b)
+	sim.rev += 1
+	return b
+
+
+## Issue #105: the expedition board is built like the bench, reserves its map room plot, and tells
+## the village about the old mine.
+func test_expedition_board() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	check(not sim.get_map(OldMine.ID).known, "nobody knows of the old mine before there's a board")
+	var spot := open_rect(sim, Vector2i(3, 3))
+	var o := spot.position + Vector2i(1, 0)
+	check(sim.placement_check("board", o) == "", "a board fits on open grass")
+	var b := sim.place_site("board", o)
+	check(b.plot == Rect2i(o + Vector2i(-1, 0), Vector2i(3, 3)), "it reserves the 3×3 plot for a map room")
+	check(sim.placement_check("bench", o + Vector2i(1, 1)) == "Overlaps a reserved plot", "nothing can be built on its plot")
+	check(sim.placement_check("board", Vector2i(0, 5)) == "Not enough room to grow into a map room", "its plot needs room too")
+	check(Sim.staging_cells(b).all(func(c): return b.plot.has_point(c) and c != o), "the party gathers on the plot in front of it")
+	run(sim, 1)
+	check(stuck_text(sim).contains("Expedition board: Expedition board needs 6 more planks"), "it says what it needs: " + stuck_text(sim))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "plank", 6)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 0), "stick", 4)
+	var toast := false
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		for e in sim.events:
+			toast = toast or e.text.contains("expedition board is up")
+		sim.events.clear()
+		if b.done:
+			break
+	check(b.done and toast, "it's built from 6 planks and 4 sticks, and says so")
+	check(sim.get_map(OldMine.ID).known and not sim.get_map(OldMine.ID).visited, "the old mine is known now, though nobody has been")
+	check(sim.expedition_board() == b and not sim.walkable(o), "the finished board stands in its cell")
+
+
+## Issue #106: planning a party, its provisions and cargo, which share the packs.
+func test_planning_an_expedition() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	var plan := sim.new_plan()
+	check(plan.party == [ada.id] and plan.dest == OldMine.ID, "a new plan starts with Ada, for the old mine")
+	check(sim.plan_problems(plan).has("Build an expedition board first"), "it needs a board")
+	built_board(sim)
+	check(sim.plan_targets(OldMine.ID).map(func(x): return x.item) == ["cobble", "coal"], "before a visit, the party can be sent for stone or coal")
+	# Supplies and cargo share the packs: PACK_CAPACITY per member.
+	plan.meals = 3
+	plan.picks = 1
+	check(Sim.pack_capacity(plan) == Tuning.PACK_CAPACITY and Sim.cargo_room(plan) == Tuning.PACK_CAPACITY - 4, "one member's packs: 4 supplies leave %d for cargo" % Sim.cargo_room(plan))
+	plan.target.n = Sim.cargo_room(plan) + 1
+	check(sim.plan_problems(plan).has("The packs only have room for %s" % Defs.words("coal", Sim.cargo_room(plan))), "a target bigger than the packs says so: %s" % [sim.plan_problems(plan)])
+	plan.meals += 2
+	check(Sim.cargo_room(plan) == Tuning.PACK_CAPACITY - 6, "more provisions leave less room for cargo")
+	plan.party.append(tomas.id)
+	check(Sim.pack_capacity(plan) == 2 * Tuning.PACK_CAPACITY, "each member adds to the packs")
+	# The return food is kept unless the plan says it may be spent.
+	plan.meals = 1
+	check(sim.plan_problems(plan).has("Pack at least 2 meals for the walk home"), "two need a meal each for the walk home")
+	plan.meals = 4
+	var kept := Sim.site_minutes(plan)
+	plan.spend_return = true
+	check(Sim.site_minutes(plan) > kept and kept > 0.0, "spending the return food stretches the time on site (%.1f → %.1f min)" % [kept, Sim.site_minutes(plan)])
+	plan.spend_return = false
+	plan.target.n = 6
+	for k in plan.policy:
+		plan.policy[k] = false
+	check(sim.plan_problems(plan).has("Choose when the party comes home"), "a plan needs a return policy")
+	plan.policy.full = true
+	check(sim.plan_problems(plan).is_empty(), "a full plan has no problems: %s" % [sim.plan_problems(plan)])
+	# Away and arriving residents can't be picked, and the list says why.
+	sim.send_to_meadow(tomas)
+	until_away(sim, tomas)
+	check(sim.cant_join(tomas) == "Away at the meadow" and sim.plan_problems(plan).has("Tomas can’t go: away at the meadow"), "a resident at the meadow can't go")
+	run(sim, Tuning.MEADOW_TRIP + 1)
+	check(sim.cant_join(tomas) == "", "back from the meadow, he can")
+	plan.party.append(sim.add_resident("Mira", Sim.TRAVELERS[1][1], Sim.rcell(ada)).id)
+	plan.party.append(sim.add_resident("Jonas", Sim.TRAVELERS[2][1], Sim.rcell(ada)).id)
+	check(sim.plan_problems(plan).has("At most 3 can go"), "at most 3 go")
+	plan.party.resize(2)
+	# Confirming starts packing; it doesn't send anyone. One expedition at a time.
+	check(sim.plan_expedition(plan) == "" and sim.expedition.state == "staging", "confirming the plan starts packing")
+	check(ada.map == "village" and not ada.away, "nobody leaves yet")
+	check(sim.plan_expedition(sim.new_plan()) == "One expedition at a time", "a second plan can't be made while one is under way")
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.expedition.state == "staging" and loaded.expedition.party == plan.party and loaded.expedition.meals == 4, "the plan is saved")
+
+
+## Issue #107: supplies are packed at the board by haulers, the party gathers there, and Depart
+## sends them off, out of village labor. Cancelling unpacks everything back to the stockpile.
+func test_staging_and_departure() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	var b := built_board(sim)
+	var zone := open_rect(sim, Vector2i(3, 2))
+	sim.paint_zone(zone)
+	var plan := sim.new_plan()
+	plan.party = [ada.id]
+	plan.meals = 2
+	plan.picks = 1
+	plan.target.n = 6
+	check(sim.plan_expedition(plan) == "", "planned")
+	run(sim, 1)
+	check(stuck_text(sim).contains("Expedition: No meals to pack. Cooks make them at the fireplace, or plan fewer"), "with no meals, it says so and how to fix it: " + stuck_text(sim))
+	check(stuck_text(sim).contains("Expedition: No spare pickaxes to pack"), "and the same for pickaxes")
+	check(sim.depart() != "" and ada.map == "village" and not ada.away, "Depart does nothing until everything is packed")
+	sim.drop_items(zone.position, "bread", 3)
+	sim.drop_items(zone.position + Vector2i(1, 0), "stone_pick", 1, 9)
+	var tomas_packed := false
+	var ada_village_work := false
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if tomas.job != null and tomas.job.kind == "deliver" and is_same(tomas.job.target, b):
+			tomas_packed = true
+		if ada.job != null and not (ada.job.kind in ["deliver", "stage", "eat"]):
+			ada_village_work = true
+		if i == 2 * Tuning.TPS:
+			check(stuck_text(sim).contains("Expedition: Waiting for"), "while packing, the wait shows: " + stuck_text(sim))
+	check(tomas_packed, "village residents pack the supplies (Haul)")
+	check(not ada_village_work, "the party only packs and waits; it takes no other village work")
+	check(sim.packed() == {"meals": 2, "picks": 1} and b.tools.size() == 1 and b.tools[0].dur == 9, "2 meals and the spare pickaxe are packed, with its wear (%s)" % [sim.packed()])
+	check(count(sim, "bread") == 1, "packed meals leave the stockpile")
+	check(sim.at_board(ada) and Sim.staging_cells(b).has(Sim.rcell(ada)), "Ada waits at the board")
+	check(sim.depart_blocker() == "", "everything is ready: %s" % sim.depart_blocker())
+	# Saving while packed keeps it packed.
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.packed() == {"meals": 2, "picks": 1} and loaded.site(b.id).tools[0].dur == 9, "what's packed survives a save")
+	run(loaded, 10)
+	check(loaded.at_board(loaded.residents[0]), "and Ada goes back to the board after loading")
+	# Cancelling on the copy: the supplies go back through haul jobs.
+	loaded.cancel_expedition()
+	check(loaded.expedition.is_empty() and loaded.packed() == {"meals": 0, "picks": 0}, "cancelling unpacks the board")
+	run(loaded, 40)
+	var stored := loaded.stacks_where(func(st): return st.type in ["bread", "stone_pick"] and loaded.in_zone(st.cell))
+	check(stored.map(func(st): return st.type).count("stone_pick") == 1 and count(loaded, "bread") == 3, "the meals and the pickaxe are hauled back to the stockpile")
+	check(loaded.residents[0].job == null or loaded.residents[0].job.kind != "stage", "and Ada goes back to work")
+	# Depart: the party leaves with the packed supplies and is out of village labor.
+	check(sim.depart() == "", "Depart sends the party off")
+	check(ada.away and ada.trip == OldMine.ID and ada.job == null and not sim.here().has(ada), "Ada is on the road, not in the village's labor")
+	check(sim.expedition.state == "out" and sim.expedition.packed == {"bread": 2} and sim.expedition.tools.size() == 1, "the expedition carries what was packed")
+	check(b.store.is_empty() and sim.cant_join(ada) == "On the road", "the board is empty again")
+	var road := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(road.residents[0].away and road.residents[0].trip == OldMine.ID and road.residents[0].back_at == ada.back_at, "saving on the road keeps her on the road")
+	run(sim, Tuning.MINE_TRIP + 1)
+	var mine := sim.get_map(OldMine.ID)
+	check(ada.map == OldMine.ID and not ada.away and mine.visited and mine.known, "after the walk, Ada is at the old mine")
+	check(sim.on_map(OldMine.ID, func(): return count(sim, "bread")) == 2 and sim.on_map(OldMine.ID, func(): return sim.tool_items("pick", 0).size()) == 1, "with the supplies set down at the entrance")
+	check(tomas.map == "village", "Tomas keeps the village going")

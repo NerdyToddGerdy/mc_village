@@ -32,7 +32,7 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 - **Bottom left:** whatever you've selected: a resident, a building, a tree, a farm plot.
 - **Bottom right:** the **orders toolbar**, and the Craft panel when it's open.
 
-**Other maps.** Expeditions (coming in Slice 3) go to places off the map, such as an old mine. Once the village knows of one, a switcher in the top bar shows **Village** and **Old mine** (Tab switches), and a dim line under it says what a party there is doing. Each map keeps its own view. Stockpiles, farms and buildings stay in the village.
+**Other maps.** Expeditions go to places off the map, such as an old mine. Once the village knows of one, a switcher in the top bar shows **Village** and **Old mine** (Tab switches), and a dim line under it says what a party there is doing, or how long until it gets there. Each map keeps its own view. Stockpiles, farms and buildings stay in the village.
 
 Marks drawn on the world show what's been ordered. Chalk-white means selected, red means mine or hunt, green hatching is a stockpile, wheat rows are a farm, a blue dashed outline is a blueprint, and a yellow flag means something is stuck.
 
@@ -133,11 +133,12 @@ The panel is laid out like a crafting table:
 | Sticks | 2 planks | 4 sticks |
 | Wooden axe or pickaxe | 3 planks, 2 sticks | 1 tool, 10 uses |
 | Stone axe or pickaxe | 3 cobblestone, 2 sticks | 1 tool, 25 uses |
+| Iron axe or pickaxe | 3 iron ingots, 2 sticks | 1 tool, 60 uses |
 
 Once Ada's house is finished, a bench queues the planks and sticks a recipe needs on its own.
 
-**Tools.** Bare hands chop slowly and can't break stone. A wooden tool is faster, and a stone one faster again. Each use wears a tool down, and it breaks when it runs out.
-- **With a toolsmith** (anyone with Toolsmith on), the bench keeps one spare of each tool someone uses, made from the best material on hand. A resident whose tool breaks walks over and picks up the spare.
+**Tools.** Bare hands chop slowly and can't break stone. A wooden tool is faster, a stone one faster again, and an iron one fastest. Each use wears a tool down, and it breaks when it runs out.
+- **With a toolsmith** (anyone with Toolsmith on), the bench keeps one spare of each tool someone uses, made from the best material on hand: iron, then stone, then wood. A resident whose tool breaks walks over and picks up the spare.
 - **Without one,** a resident whose tool breaks stops and says so, and nothing makes a new one until you switch Toolsmith on for someone. Tools you queue by hand also need a toolsmith.
 - **Equip** in the resident panel lists the tools lying about. Choose one, and the resident goes to fetch it and keeps it until it breaks.
 
@@ -150,10 +151,11 @@ Place a blueprint from the **Build** menu, and residents with **Build** on bring
 | Crafting bench | 4 logs |
 | House (5×5) | Foundation: 8 cobblestone. Walls: 16 planks and 4 logs. Roof: 12 planks. Bed: 3 wool and 3 planks |
 | Fireplace | 6 cobblestone |
+| Expedition board | 6 planks, 4 sticks. In the Build menu once the founding is done |
 
 **R** turns a house's door while you're placing it. Trees, boulders, stockpile cells and farm plots in the way are cleared first.
 
-The bench and the fireplace will grow into a workshop and a kitchen in a later version. Each one keeps a 3×3 plot around itself clear for that, shown as a faint dashed outline. You can't build, farm or stockpile on the plot, though residents walk across it. **R** turns which side of the building the plot sits on.
+The bench, the fireplace and the expedition board will grow into a workshop, a kitchen and a map room in a later version. Each one keeps a 3×3 plot around itself clear for that, shown as a faint dashed outline. You can't build, farm or stockpile on the plot, though residents walk across it. **R** turns which side of the building the plot sits on.
 
 ## Food
 
@@ -171,12 +173,29 @@ Residents get hungry. A full resident empties in about 6 minutes of game time.
 
 **Farming.** Paint farm plots over open grass. Residents with **Farm** on plant each cell, the wheat ripens in 2 minutes, and a harvest gives 2 wheat. A plot is replanted only after its wheat has been carried away, so a farm needs a stockpile.
 
-**The fireplace** cooks whatever you queue. It also has a standing order, **Keep 6 meals in stock**, which is on by default: while fewer than 6 bread and cooked mutton are stored, cooks make whatever the wheat, mutton and logs allow.
+**The fireplace** cooks whatever you queue. It also smelts: **Smelt iron** turns 1 iron ore and 1 coal into an iron ingot, for iron tools. It also has a standing order, **Keep 6 meals in stock**, which is on by default: while fewer than 6 bread and cooked mutton are stored, cooks make whatever the wheat, mutton and logs allow.
 
 **Sheep.** Six sheep roam the clearing at the start, enough wool for the first two beds. After that, there are more at the **sheep meadow**, off the map past the signpost on the left edge.
 - Select one or two residents and choose **Send to the meadow**. They're away for 90 seconds, then come back with 2 wool and 2 raw mutton each.
 - The meadow starts with 8 sheep and regains one every 4 minutes. Click the signpost to see how many are left.
 - While residents are away, they don't work in the village and don't get hungry.
+
+## Expeditions
+
+The **expedition board** is where expeditions are planned. Once it's built, the village has word of an **old mine** a short walk east, with stone and coal. Select the board to open the planner.
+
+**The site report** (left) says what the village knows about the old mine: what it has been told, the walk there, and what can be mined. Until someone has been, there are no estimates and no known hazards.
+
+**Planning:**
+- **Party:** choose 1 to 3 residents. Each shows their Mine level, pickaxe and hunger. Anyone who can't go, such as someone at the meadow, says why.
+- **Bring back:** what to gather and how much.
+- **Meals to take** and **spare pickaxes.** One meal each is kept for the walk home, unless you choose **Spend it**.
+- **Packs:** each member carries 10 items. Supplies (yellow) and cargo (blue) share that room, so more food leaves less room for what they bring back.
+- **Come home when:** the target is reached, the packs are full, or food runs low. Choose one or more. A serious injury always brings them home.
+
+**Packing.** **Start packing** doesn't send anyone yet. Residents with Haul on carry the meals and spare pickaxes to the board, where they stack up as crates. The party finishes what they're doing and waits at the board. The planner shows what's packed and who's there, and the stuck list says what it's waiting for.
+
+**Depart** sends them off once everything is packed and everyone is at the board. From then on they're out of village work. The board can plan only one expedition at a time. **Call off the expedition** before departure unpacks everything, and the supplies are hauled back to the stockpile.
 
 ## New residents
 
@@ -187,7 +206,7 @@ A traveler arrives about 45 seconds after a house with a free bed is finished, o
 Anything that can't go on gets a **yellow flag** on the map and an entry in the **stuck list** at the top right, with the reason in plain words, such as "Walls need 4 more planks", "Needs a pickaxe", "No one does Build" or "Starving: no food stored".
 - Click an entry, or press **N**, to go to it.
 - The entry that's been stuck longest is at the top.
-- A standing order that's only short of materials, like the toolsmith's spare, goes in a dim **standing orders waiting** line instead, without a flag. It's advice, not a blocker.
+- A standing order that's only short of materials, like the toolsmith's spare, goes in a dim **waiting** line instead, without a flag. So does an expedition that's still packing. It's advice, not a blocker.
 - Click the **Stuck** header to fold the list into a small chip. It opens again when something new gets stuck.
 
 ## Controls
@@ -199,7 +218,7 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | E / Z / B / C | Gather menu, Paint menu, Build menu, Craft panel |
 | 1 to 9, with a menu open | Pick that row |
 | X / G / P | Mine, Hunt, Farm plot, directly |
-| T / H / K | Place a crafting bench, a house or a fireplace |
+| T / H / K | Place a crafting bench, a house or a fireplace (the expedition board has no key, but you can set one) |
 | R | Turn a building while placing it |
 | Shift-drag / Alt-drag with Mine | Mark trees only, or boulders only |
 | Click | Select a resident or anything else |

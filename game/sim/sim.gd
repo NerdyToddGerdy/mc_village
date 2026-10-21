@@ -63,6 +63,11 @@ var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafte
 var arrival_at := -1
 var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
+## The planned expedition (issues #106, #107), or {} when there's none. One at a time (#25):
+##   {dest, board (site id), party: [resident ids], target: {item, n}, meals, picks,
+##    policy: {target, full, low}, spend_return, state: "staging" or "out", packed: {item: n}, tools: [{type, dur}]}
+## `packed` and `tools` are filled when the party departs, from what was packed at the board.
+var expedition := {}
 var stuck: Array = []        ## {who, why, map, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
 var _stuck_since := {}       ## A stuck entry's key -> the tick it first showed, to order the list (issue #77). Not saved.
 var events: Array = []       ## {type: "toast", text, res_id, site_id, map}
@@ -183,7 +188,7 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null,
 		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false,
 		"orders": [], "hunger": 100.0, "jobs": default_jobs(), "kept": {"axe": false, "pick": false},
-		"away": false, "back_at": 0, "map": map_id}
+		"away": false, "back_at": 0, "trip": "", "map": map_id}
 	residents.append(r)
 	return r
 
@@ -669,6 +674,10 @@ func _on_site_done(s: Dictionary) -> void:
 	if s.tpl == "fireplace":
 		_toast("The fireplace is lit. It keeps %d meals in stock when there's wheat or mutton." % Tuning.MEAL_STOCK, 0, s.id)
 		return
+	if s.tpl == "board":  # it has word of the old mine, which the map switcher now shows (issue #105)
+		maps[OldMine.ID].known = true
+		_toast("The expedition board is up, with word of an old mine to the east. Select it to plan an expedition.", 0, s.id)
+		return
 	stats.houses += 1
 	var ada: Dictionary = residents[0]
 	var ada_home := false
@@ -767,7 +776,8 @@ func _spare_queued(kind: String) -> bool:
 
 
 ## The toolsmith's standing order (spec §6): while anyone has Toolsmith on, keep one spare of each
-## tool kind someone uses, of the best tier the bench can make from what's on hand. Queued as
+## tool kind someone uses, of the best tier the bench can make from what's on hand: iron, then stone,
+## then wood. Queued as
 ## "(toolsmith)" entries at the first finished bench, one per kind at a time.
 func keep_tools_stocked() -> void:
 	if not has_toolsmith():
@@ -783,10 +793,16 @@ func keep_tools_stocked() -> void:
 		var used := residents.any(func(r): return r[kind] != null or r.broken[kind])
 		if not used or not tool_items(kind, 0).is_empty() or _spare_queued(kind):
 			continue
-		var cobble: int = free_count("cobble")
-		for b in m.sites:
-			cobble += b.store.get("cobble", 0) if b.done and b.tpl == "bench" else 0
-		var id: String = ("stone_" if cobble >= Defs.recipe("stone_" + kind).inp.cobble else "wood_") + kind
+		var id: String = "wood_" + kind
+		for tier in ["iron_", "stone_"]:  # the best tier there's material for (issue #104)
+			var rec := Defs.recipe(tier + kind)
+			var mat: String = rec.inp.keys()[0]
+			var have: int = free_count(mat)
+			for b in m.sites:
+				have += b.store.get(mat, 0) if b.done and b.tpl == "bench" else 0
+			if have >= rec.inp[mat]:
+				id = rec.id
+				break
 		bench.queue.append(id)
 		bench.autoq.append("toolsmith")
 		if auto_craft:
@@ -986,6 +1002,8 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
+	elif s.tpl == "board":
+		label = "Building the expedition board"
 	j.step(_goto(site_cells(s), true))
 	j.step({"op": "work", "what": "build", "site": s, "label": label})
 	return j
@@ -1172,8 +1190,11 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			var dest: Dictionary = st.site
 			dest.incoming[st.type] -= st.n
 			dest.store[st.type] = dest.store.get(st.type, 0) + st.n
+			if r.carry.has("dur"):  # a spare tool packed at the expedition board keeps its wear
+				dest.tools = dest.get("tools", []) + [{"type": st.type, "dur": r.carry.dur}]
 			j.holds.erase(st.hold)
 			r.carry = null
+			rev += 1
 			return true
 		"haul_drop":
 			m.zone_res.erase(st.cell)
@@ -1183,11 +1204,20 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			return true
 		"depart":
 			r.away = true
+			r.trip = "meadow"
 			r.back_at = tick + int(Tuning.MEADOW_TRIP * Tuning.TPS)
 			r.path = []
 			r.progress = -1.0
 			rev += 1
 			return true
+		"wait_board":  # waits at the board until the party departs (issue #107)
+			if expedition.get("state", "") != "staging" or not expedition.party.has(r.id):
+				return true
+			if r.hunger < Tuning.EAT_BELOW and food_available():
+				return true  # goes to eat, then comes back
+			j.label = "Waiting at the expedition board"
+			r.pos = Vector2(rcell(r))
+			return false
 		"move_in":
 			st.site.owner = r.id
 			r.arriving = false
@@ -1237,6 +1267,7 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			match st.get("recipe", {}).get("id", ""):
 				"bread": return Tuning.BAKE_TIME
 				"cooked_mutton": return Tuning.COOK_TIME
+				"smelt_iron": return Tuning.SMELT_TIME
 			return Tuning.CRAFT_TIME
 
 
@@ -1353,6 +1384,10 @@ func _claim(r: Dictionary) -> void:
 			r.job = ej
 			return
 	var c := rcell(r)
+	if in_staging_party(r):  # the party packs, then gathers at the board (issue #107)
+		var pj = _pack_job(r, c)
+		r.job = pj if pj != null else _stage_job()
+		return
 	if auto_craft:
 		expand_queues()
 	keep_meals_stocked()
@@ -1422,7 +1457,12 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 				var t: Dictionary = nearest(targets, c)
 				return _tagged(_hunt_job(r, t), "hunt") if t.kind == "sheep" else _tagged(_gather_job(r, t), "mine")
 		"haul":
-			if not jobs.has("haul") or m.zone.is_empty():
+			if not jobs.has("haul"):
+				return null
+			var pj = _pack_job(r, c)  # packing for an expedition comes before the stockpile
+			if pj != null:
+				return _tagged(pj, "haul")
+			if m.zone.is_empty():
 				return null
 			var hs = _haul_source(c, carry_cap(r))
 			if hs != null:
@@ -1520,7 +1560,7 @@ func step() -> void:
 	var kinds := {}
 	var working := 0
 	for r in residents:
-		if r.job != null and r.job.kind != "move" and r.job.kind != "arrive":
+		if r.job != null and not (r.job.kind in ["move", "arrive", "stage"]):
 			kinds[r.job.kind] = true
 			working += 1
 	if working >= 2 and kinds.size() >= 2:
@@ -1553,7 +1593,10 @@ func _step_map() -> void:
 			continue
 		if r.away:
 			if tick >= r.back_at:
-				_return_from_meadow(r)
+				if r.get("trip", "meadow") in ["", "meadow"]:
+					_return_from_meadow(r)
+				else:
+					_arrive_at_site(r)
 			continue
 		_step_resident(r)
 	if auto_craft and tick % 10 == 0:
@@ -1829,6 +1872,7 @@ func _stuck_on_map() -> void:
 			_add_stuck(tpl.name, why,
 				mid, site_height(s) + 0.4, "site", s.id, false, standing)
 	_stuck_unstaffed()
+	_stuck_expedition()
 	if meadow_sheep == 0:
 		for r in on_here:
 			if r.job != null and r.job.kind == "trip":
@@ -1916,6 +1960,8 @@ func site_height(s: Dictionary) -> float:
 		return 0.75 if s.done else 0.2
 	if s.tpl == "fireplace":
 		return 0.7 if s.done else 0.2
+	if s.tpl == "board":
+		return 1.5 if s.done else 0.2
 	return [0.2, 0.5, 2.5, 4.0, 4.0][mini(s.stage, 4)]
 
 
@@ -2158,6 +2204,8 @@ func cancel_site(s: Dictionary) -> void:
 	if s.map != map_id:
 		on_map(s.map, cancel_site.bind(s))
 		return
+	if expedition.get("board", 0) == s.id and expedition.state == "staging":
+		cancel_expedition()
 	for r in residents:
 		if r.job != null and is_same(r.job.target, s):
 			fail_job(r)
@@ -2294,6 +2342,325 @@ func _order_job(r: Dictionary, o: Dictionary):
 	return null
 
 
+# ---------------------------------------------------------------- expeditions (issues #105-#107)
+
+## The village's finished expedition board, or {}.
+func expedition_board() -> Dictionary:
+	for s in maps.village.sites:
+		if s.tpl == "board" and s.done:
+			return s
+	return {}
+
+
+## The cells in front of a board, where the party gathers to leave (issue #105): the row of its
+## reserved plot next to it. Supplies are packed into crates on the row beyond.
+static func staging_cells(b: Dictionary) -> Array:
+	var front: Vector2i = [Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, 0)][int(b.rot) % 4]
+	var side := Vector2i(front.y, front.x)
+	return [b.origin + front - side, b.origin + front, b.origin + front + side]
+
+
+## Whether a resident is in the party that's packing to leave.
+func in_staging_party(r: Dictionary) -> bool:
+	return expedition.get("state", "") == "staging" and expedition.party.has(r.id) and r.map == "village"
+
+
+## Why a resident can't join a party, or "" when they can (issue #106).
+func cant_join(r: Dictionary) -> String:
+	if r.arriving:
+		return "Still walking in"
+	if r.away:
+		return "Away at the meadow" if r.get("trip", "meadow") in ["", "meadow"] else "On the road"
+	if r.map != "village":
+		return "At the " + maps[r.map].name.to_lower()
+	return ""
+
+
+## A new plan: the first resident who can go, a load of coal, and supplies for the trip.
+func new_plan(dest := OldMine.ID) -> Dictionary:
+	var party: Array = []
+	for r in residents:
+		if cant_join(r) == "":
+			party.append(r.id)
+			break
+	return {"dest": dest, "party": party, "target": {"item": "coal", "n": 8}, "meals": 3, "picks": 1,
+		"policy": {"target": true, "full": true, "low": true}, "spend_return": false}
+
+
+## The party's packs: each member carries PACK_CAPACITY items, shared by supplies and cargo.
+static func pack_capacity(plan: Dictionary) -> int:
+	return plan.party.size() * Tuning.PACK_CAPACITY
+
+
+## Room the supplies take: a meal or a spare pickaxe is one item each.
+static func plan_supplies(plan: Dictionary) -> int:
+	return plan.meals + plan.picks
+
+
+## Room left in the packs for what the party brings back.
+static func cargo_room(plan: Dictionary) -> int:
+	return pack_capacity(plan) - plan_supplies(plan)
+
+
+## Meals kept for the walk home (brief §8): one each, unless the plan says they may be spent.
+static func return_meals(plan: Dictionary) -> int:
+	return plan.party.size() * Tuning.RETURN_MEALS
+
+
+## About how many minutes the provisions feed the party at the site, leaving the return food alone
+## unless the plan lets them spend it.
+static func site_minutes(plan: Dictionary) -> float:
+	var n: int = plan.party.size()
+	if n == 0:
+		return 0.0
+	var meals: int = plan.meals - (0 if plan.spend_return else return_meals(plan))
+	return maxf(0.0, meals * Tuning.MEAL_FOOD / (n * 100.0 / Tuning.HUNGER_EMPTY_TIME)) / 60.0
+
+
+## What a party can be sent to bring back: the resources the village knows the site has.
+func plan_targets(dest: String) -> Array:
+	return site_report(dest).resources.filter(func(x): return x.name != "?")
+
+
+## What stops a plan being confirmed, in the player's words; empty when it can be.
+func plan_problems(plan: Dictionary) -> Array:
+	var out: Array = []
+	if not expedition.is_empty():
+		out.append("One expedition at a time")
+	if expedition_board().is_empty():
+		out.append("Build an expedition board first")
+	if plan.party.is_empty():
+		out.append("Choose who goes")
+	elif plan.party.size() > Tuning.PARTY_MAX:
+		out.append("At most %d can go" % Tuning.PARTY_MAX)
+	for id in plan.party:
+		var r := resident(id)
+		var why := "Gone" if r.is_empty() else cant_join(r)
+		if why != "":
+			out.append("%s can’t go: %s" % [r.get("name", "Someone"), why.to_lower()])
+	if not plan.party.is_empty():
+		if plan.meals < return_meals(plan):
+			out.append("Pack at least %d %s for the walk home" % [return_meals(plan), "meal" if return_meals(plan) == 1 else "meals"])
+		var room := cargo_room(plan)
+		if room < 1:
+			out.append("The supplies fill the packs. Take fewer, or more people")
+		elif plan.target.n > room:
+			out.append("The packs only have room for %s" % Defs.words(plan.target.item, room))
+	if not plan.policy.values().has(true):
+		out.append("Choose when the party comes home")
+	return out
+
+
+## Confirms a plan (issue #106): packing starts at the board. Nobody leaves until Depart.
+## Returns why it can't, or "".
+func plan_expedition(plan: Dictionary) -> String:
+	var problems := plan_problems(plan)
+	if not problems.is_empty():
+		return problems[0]
+	expedition = plan.duplicate(true)
+	expedition.board = expedition_board().id
+	expedition.state = "staging"
+	expedition.packed = {}
+	expedition.tools = []
+	rev += 1
+	_toast("Packing for the %s has started. The party gathers at the board." % maps[plan.dest].name.to_lower(), 0, expedition.board)
+	return ""
+
+
+## Meals and spare pickaxes at the board so far, plus those on their way there when `incoming`.
+func packed(incoming := false) -> Dictionary:
+	var out := {"meals": 0, "picks": 0}
+	var b := site(expedition.get("board", 0))
+	if b.is_empty():
+		return out
+	for src in ([b.store, b.incoming] if incoming else [b.store]):
+		for k in src:
+			if Defs.MEALS.has(k):
+				out.meals += src[k]
+			elif Defs.ITEMS[k].get("tool", "") == "pick":
+				out.picks += src[k]
+	return out
+
+
+## What's still to be packed, less what's on its way: {meals, picks}.
+func pack_needs() -> Dictionary:
+	if expedition.get("state", "") != "staging":
+		return {"meals": 0, "picks": 0}
+	var p := packed(true)
+	return {"meals": maxi(0, expedition.meals - p.meals), "picks": maxi(0, expedition.picks - p.picks)}
+
+
+## A delivery of supplies to the board (issue #107): meals first, then spare pickaxes, the best first.
+func _pack_job(r: Dictionary, c: Vector2i):
+	if expedition.get("state", "") != "staging" or map_id != "village":
+		return null
+	var b := site(expedition.board)
+	if b.is_empty() or _cooling(b):
+		return null
+	var need := pack_needs()
+	if need.meals > 0:
+		var src := stacks_where(func(st): return Defs.MEALS.has(st.type) and avail(st) > 0)
+		if not src.is_empty():
+			var st: Dictionary = nearest(src, c)
+			return _deliver_job(b, st.type, mini(mini(need.meals, carry_cap(r)), avail(st)), st)
+	if need.picks > 0:
+		var picks := tool_items("pick", 0)
+		if not picks.is_empty():
+			picks.sort_custom(func(a, x): return Defs.ITEMS[a.type].tier > Defs.ITEMS[x.type].tier or (a.type == x.type and a.dur > x.dur))
+			return _deliver_job(b, picks[0].type, 1, picks[0])
+	return null
+
+
+## A party member walks to the board and waits there to leave.
+func _stage_job() -> Job:
+	var b := site(expedition.board)
+	var j := Job.new("stage", "Going to the expedition board", "the expedition board")
+	j.step(_goto(staging_cells(b), false))
+	j.step({"op": "wait_board"})
+	return j
+
+
+## Whether a party member is waiting at the board.
+func at_board(r: Dictionary) -> bool:
+	return not r.is_empty() and r.job != null and r.job.kind == "stage" and r.job.i >= 1
+
+
+## Why the party can't leave yet, or "" when Depart can go ahead (issue #107).
+func depart_blocker() -> String:
+	if expedition.get("state", "") != "staging":
+		return "Nothing is being packed"
+	var p := packed()
+	var meals: int = expedition.meals - p.meals
+	if meals > 0:
+		return "Waiting for %d %s to pack" % [meals, "meal" if meals == 1 else "meals"]
+	var picks: int = expedition.picks - p.picks
+	if picks > 0:
+		return "Waiting for %d spare %s to pack" % [picks, "pickaxe" if picks == 1 else "pickaxes"]
+	for id in expedition.party:
+		var r := resident(id)
+		if not at_board(r):
+			return "Waiting for %s" % r.get("name", "someone")
+	return ""
+
+
+## Depart (issue #107): the party leaves with what was packed, and is out of village labor from now on.
+## Departure is always the player's call. Returns why it can't go, or "".
+func depart() -> String:
+	var why := depart_blocker()
+	if why != "":
+		return why
+	var b := site(expedition.board)
+	for k in b.store:
+		if b.store[k] > 0 and not Defs.is_tool_item(k):
+			expedition.packed[k] = b.store[k]
+	expedition.tools = b.get("tools", []).duplicate(true)
+	b.store = {}
+	b.tools = []
+	expedition.state = "out"
+	var names: Array = []
+	for id in expedition.party:
+		var r := resident(id)
+		fail_job(r)
+		r.direct = null
+		r.orders.clear()
+		r.note = null
+		r.away = true
+		r.trip = expedition.dest
+		r.back_at = tick + int(Tuning.MINE_TRIP * Tuning.TPS)
+		r.path = []
+		names.append(r.name)
+	rev += 1
+	_toast("%s set off for the %s." % [names_text(names), maps[expedition.dest].name.to_lower()], 0, b.id)
+	return ""
+
+
+## "Ada", "Ada and Tomas", "Ada, Tomas and Mira".
+static func names_text(names: Array) -> String:
+	if names.size() < 2:
+		return "".join(names)
+	return ", ".join(names.slice(0, -1)) + " and " + names[-1]
+
+
+## A party member at the end of the road: they appear at the site's entrance. The first to arrive
+## sets the supplies down there. (#108 adds the signpost, time on the road and the way home; #109
+## packs supplies and cargo instead of setting them down.)
+func _arrive_at_site(r: Dictionary) -> void:
+	var id: String = r.trip
+	var mp: SimMap = maps[id]
+	r.away = false
+	r.trip = ""
+	move_to_map(r, id, mp.entrance)
+	mp.known = true
+	mp.visited = true
+	if expedition.get("dest", "") != id or expedition.get("unpacked", false):
+		return
+	expedition.unpacked = true
+	var prev := use_map(id)
+	var spot := mp.entrance + Vector2i(1, 0)
+	for k in expedition.packed:
+		drop_items(spot, k, expedition.packed[k])
+	for t in expedition.tools:
+		drop_items(spot, t.type, 1, t.dur)
+	_toast("The party reached the %s." % mp.name.to_lower(), r.id)
+	use_map(prev)
+
+
+## Calls off an expedition that hasn't left (issue #107). What was packed is set down by the board,
+## loose, and hauled back to the stockpile.
+func cancel_expedition() -> void:
+	if expedition.get("state", "") != "staging":
+		return
+	if map_id != "village":
+		on_map("village", cancel_expedition)
+		return
+	var b := site(expedition.board)
+	var party: Array = expedition.party
+	expedition = {}
+	for r in residents:
+		if r.job != null and ((r.job.kind == "stage" and party.has(r.id)) or (r.job.kind == "deliver" and is_same(r.job.target, b))):
+			fail_job(r)
+	if not b.is_empty():
+		var spot: Vector2i = staging_cells(b)[1]
+		for k in b.store:
+			if b.store[k] > 0 and not Defs.is_tool_item(k):
+				drop_items(spot, k, b.store[k])
+		for t in b.get("tools", []):
+			drop_items(spot, t.type, 1, t.dur)
+		b.store = {}
+		b.tools = []
+	rev += 1
+	_toast("The expedition is called off. What was packed goes back to the stockpile.", 0, b.get("id", 0))
+
+
+## The board's stuck reasons while packing (issue #107). Progress waits in the dim tier; nothing to
+## pack is a blocker, with the fix.
+func _stuck_expedition() -> void:
+	if expedition.get("state", "") != "staging":
+		return
+	var b := site(expedition.board)
+	if b.is_empty() or b.map != map_id:
+		return
+	var at := Vector2(b.origin) + Vector2(0.5, 0.5)
+	var p := packed()
+	var need := pack_needs()
+	var meals: int = expedition.meals - p.meals
+	if meals > 0:
+		if need.meals > 0 and stacks_where(func(st): return Defs.MEALS.has(st.type) and avail(st) > 0).is_empty():
+			_add_stuck("Expedition", "No meals to pack. Cooks make them at the fireplace, or plan fewer", at, 1.9, "site", b.id)
+		else:
+			_add_stuck("Expedition", "Waiting for %d %s to pack" % [meals, "meal" if meals == 1 else "meals"], at, 1.9, "site", b.id, false, true)
+	var picks: int = expedition.picks - p.picks
+	if picks > 0:
+		if need.picks > 0 and tool_items("pick", 0).is_empty():
+			_add_stuck("Expedition", "No spare pickaxes to pack. Craft one at the bench, or plan fewer", at, 1.9, "site", b.id)
+		else:
+			_add_stuck("Expedition", "Waiting for %d spare %s to pack" % [picks, "pickaxe" if picks == 1 else "pickaxes"], at, 1.9, "site", b.id, false, true)
+	for id in expedition.party:
+		var r := resident(id)
+		if not r.is_empty() and not at_board(r):
+			_add_stuck("Expedition", "Waiting for %s" % r.name, at, 1.9, "res", r.id, false, true)
+
+
 # ---------------------------------------------------------------- site maps (issue #102)
 
 ## "Boulder", "Coal ore" or "Iron ore".
@@ -2362,7 +2729,8 @@ func save_state() -> Dictionary:
 		maps_out[id] = maps[id].save()
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
 		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
-		"rng_state": rng.state, "meadow_sheep": meadow_sheep, "meadow_regrow": meadow_regrow}
+		"rng_state": rng.state, "meadow_sheep": meadow_sheep, "meadow_regrow": meadow_regrow,
+		"expedition": expedition.duplicate(true)}
 
 
 static func from_state(d: Dictionary) -> Sim:
@@ -2389,6 +2757,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.rng.state = d.rng_state
 	s.meadow_sheep = d.meadow_sheep
 	s.meadow_regrow = d.meadow_regrow
+	s.expedition = d.get("expedition", {}).duplicate(true)
 	s._add_site_maps()
 	for rd in d.residents:
 		var r: Dictionary = rd.duplicate(true)

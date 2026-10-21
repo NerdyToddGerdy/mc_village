@@ -323,6 +323,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "fireplace":
 		_add_fireplace(solid if s.done else ghost, s)
 		return
+	if s.tpl == "board":
+		_add_board(solid if s.done else ghost, s)
+		return
 	var stage: int = s.stage
 	var gcol := Color(Palette.BLUE, 0.4)
 	for x in range(o.x, o.x + 5):
@@ -372,6 +375,48 @@ func _add_fireplace(b: Batch, s: Dictionary) -> void:
 	if done:
 		var m := c - back * 0.3
 		b.box(Vector3(m.x - 0.2, 0.06, m.y - 0.2), Vector3(m.x + 0.2, 0.3, m.y + 0.2), EMBER)
+
+
+static var MAP_SHEET := Color("#E6DCC0")
+static var CRATE := Color("#A97E4E")
+
+
+## The expedition board (issue #105): a plank board on two posts with a map of the way to the old
+## mine pinned to its face, which looks out over its plot. What's packed for an expedition stacks up
+## as crates on the plot in front of it, past where the party waits (issue #107).
+func _add_board(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var front: Vector2 = [Vector2(0, 1), Vector2(-1, 0), Vector2(0, -1), Vector2(1, 0)][int(s.get("rot", 0)) % 4]
+	var side := Vector2(absf(front.y), absf(front.x))
+	var depth := Vector2(absf(front.x), absf(front.y))
+	var c := Vector2(o.x + 0.5, o.y + 0.5)
+	if not s.done:
+		b.box(Vector3(o.x + 0.1, 0, o.y + 0.1), Vector3(o.x + 0.9, 0.2, o.y + 0.9), Color(Palette.BLUE, 0.45))
+		return
+	for k in [-1.0, 1.0]:
+		var p: Vector2 = c + side * 0.38 * k
+		b.box(Vector3(p.x - 0.06, 0, p.y - 0.06), Vector3(p.x + 0.06, 1.55, p.y + 0.06), Palette.LOG)
+	var half := side * 0.46 + depth * 0.04
+	b.box(Vector3(c.x - half.x, 0.7, c.y - half.y), Vector3(c.x + half.x, 1.45, c.y + half.y), Palette.PLANK)
+	var mc := c + front * 0.05
+	var sheet := side * 0.32 + depth * 0.01
+	b.box(Vector3(mc.x - sheet.x, 0.8, mc.y - sheet.y), Vector3(mc.x + sheet.x, 1.35, mc.y + sheet.y), MAP_SHEET)
+	# The route drawn on the map, and the red pin on the old mine at its end.
+	var route := c + front * 0.06
+	var line := side * 0.2 + depth * 0.012
+	b.box(Vector3(route.x - line.x, 1.0, route.y - line.y), Vector3(route.x + line.x, 1.04, route.y + line.y), Palette.LOG)
+	var pin := route + side * 0.2
+	b.box(Vector3(pin.x - 0.045, 0.98, pin.y - 0.045), Vector3(pin.x + 0.045, 1.08, pin.y + 0.045), Palette.RED)
+	var n := 0
+	for k in s.store:
+		n += s.store[k]
+	var crates := mini(6, ceili(n / 2.0))
+	var at := c + front * 2.0
+	for i in crates:
+		var p: Vector2 = at + side * (float(i % 3) - 1.0) * 0.3
+		var y := float(i / 3) * 0.26
+		b.box(Vector3(p.x - 0.13, y, p.y - 0.13), Vector3(p.x + 0.13, y + 0.26, p.y + 0.13), CRATE)
+		b.box(Vector3(p.x - 0.135, y + 0.1, p.y - 0.135), Vector3(p.x + 0.135, y + 0.14, p.y + 0.135), Palette.LOG)
 
 
 static var BED_BLANKET := Color("#B83A3A")

@@ -77,11 +77,11 @@ static func _draw(img: Image, type: String) -> void:
 			for p in [Vector2(24, 36), Vector2(40, 36), Vector2(32, 24)]:
 				_disc(img, p, 10, dark)
 				_disc(img, p, 7, c)
-		"wood_axe", "stone_axe":
+		"wood_axe", "stone_axe", "iron_axe":
 			_handle(img)
 			_box(img, Rect2i(30, 8, 22, 22), dark)
 			_box(img, Rect2i(33, 11, 16, 16), c)
-		"wood_pick", "stone_pick":
+		"wood_pick", "stone_pick", "iron_pick":
 			_handle(img)
 			_line(img, Vector2(14, 22), Vector2(50, 14), 11, dark)
 			_line(img, Vector2(14, 22), Vector2(50, 14), 6, c)

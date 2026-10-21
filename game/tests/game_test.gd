@@ -792,7 +792,7 @@ func _test_stuck_list(game: Game) -> void:
 	hud.refresh(sim)
 	await _frames()
 	var texts: Array = _stuck_buttons(hud).map(func(b): return b.text)
-	check(hud._stuck_panel.visible and texts.any(func(t): return "1 standing order waiting" in t), "a short standing order shows as one waiting line: %s" % [texts])
+	check(hud._stuck_panel.visible and texts.any(func(t): return t.begins_with("1 waiting")), "a short standing order shows as one waiting line: %s" % [texts])
 	check(not texts.any(func(t): return "Stuck" in t or "for a spare" in t), "with nothing blocked there's no Stuck header, and the waiting tier starts closed")
 	check(world._flags.get_child_count() == 0, "a waiting order raises no flag on the map")
 	_stuck_buttons(hud).filter(func(b): return "waiting" in b.text)[0].pressed.emit()

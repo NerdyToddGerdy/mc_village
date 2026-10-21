@@ -12,12 +12,23 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 15
+const VERSION := 16
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16}
+
+
+## v16: expeditions (issues #106, #107). Older saves have none planned, and a resident who's away is
+## at the meadow, the only trip there was.
+static func _v15_to_v16(d: Dictionary) -> Dictionary:
+	if not d.state.has("expedition"):
+		d.state.expedition = {}
+	for r in d.state.residents:
+		if not r.has("trip"):
+			r.trip = "meadow" if r.get("away", false) else ""
+	return d
 
 
 ## v15: more than one map (issues #100, #101, #102). The village's trees, items, buildings and the
