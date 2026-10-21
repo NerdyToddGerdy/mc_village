@@ -6,14 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Block Village** (working title) is an isometric settlement simulation inspired by Minecraft. The repo holds:
 - `block-village-design-brief.md`: the vision and decisions document.
-- `slice-3-spec.md`: the Slice 3 spec, the current slice (#12). It only describes what's new or changed since Slice 2. Issues not built yet carry their own rules; each adds its section to the spec when it's built.
+- `slice-4-spec.md`: the Slice 4 spec, the current slice (#13). It only describes what's new or changed since Slice 3. Issues not built yet carry their own rules; each adds its section to the spec when it's built.
+- `slice-3-spec.md`: the Slice 3 spec (done). It only describes what's new or changed since Slice 2.
 - `slice-2-spec.md`: the Slice 2 spec (done). It only describes what's new or changed since Slice 1.
 - `slice-1-spec.md`: the Slice 1 spec, still the reference for everything Slice 2 doesn't change. It covers architecture, the job system, recipes, construction, controls, saving, the tuning table, and the "carpenter's chalk" UI language.
 - `prototype/founding.html`: a playable, single-file browser prototype of Slice 1.
   - It's opened directly in a browser, with no build step or dependencies beyond Google Fonts.
   - It covers **Slice 1 only** and stays frozen there. From Slice 2 on, rules live in the specs and the Godot game, which have their own tests and bot playtest. Update the prototype only for Slice 1 rule changes.
   - Its live copy is published as a claude.ai artifact.
-- `game/`: the Godot 4.7 project, through Slice 2 and into Slice 3.
+- `game/`: the Godot 4.7 project, through Slice 3 and into Slice 4.
 - `docs/how-to-play.md`: the player's guide. Update it when a change alters what the player sees or does.
 
 ## Commands

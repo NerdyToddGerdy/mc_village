@@ -147,6 +147,14 @@ The player plans the route, reviews costs and obstacles, and assigns constructio
 
 Initial scope: point-to-point lines without complex signaling or timetable simulation.
 
+#### Core decisions (Slice 4)
+
+- **The route is a map of its own:** a long, narrow **route strip map** between the village and the destination, in segments. Parties walk it visibly, and track is laid on it section by section.
+- **Iron pays for the line:** rails are made from iron ingots and sticks, and carts from iron.
+- **Simple stations at each end.** Carts load and unload faster there, and a cart's capacity adds to the party's carrying capacity. Each station reserves the plot for a later loading-station upgrade.
+- **The party and its cargo ride together.** There's no unmanned freight; automation waits for Slice 6.
+- **One point-to-point line**, with no switches, branches, signals or timetables.
+
 ## 7. Dimensions and Progression
 
 These are proposed roles for our game, not exact Minecraft mechanics.
@@ -434,7 +442,10 @@ One nearby destination, a small party, provisions, carrying limits, one meaningf
 
 ### Slice 4 — Route investment
 
-Build a minecart connection and demonstrate faster repeated travel without increasing extraction speed.
+Build a minecart connection and demonstrate faster repeated travel without increasing extraction speed. Implementation detail: `slice-4-spec.md`.
+- **The connection:** the village–old mine line, the slice's one connection. The road between them becomes a route strip map with a stream to bridge and a rocky cut to clear.
+- **Materials:** the old mine's iron makes the rails and the minecart.
+- **Stations** at both ends. The party and its cargo ride the cart together. Mining at the mine is no faster.
 
 ### Slice 5 — Nether foothold
 
@@ -459,7 +470,7 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 - Outpost staffing and ongoing supply costs.
 - Detailed End and Sift systems.
 - Enchantment discovery and resource costs.
-- How far custom redstone circuits and railway management should extend.
+- How far custom redstone circuits and railway management should extend. (Partly resolved for Slice 4, #29: railways start as one point-to-point line, village to old mine, with no switches, branches, signals or timetables, and no unmanned freight. Custom redstone and wider network management stay open.)
 - Scope of original terminology, assets, and worldbuilding versus direct Minecraft references.
 
 ## 15. Core Experience to Preserve
