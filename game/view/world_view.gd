@@ -179,6 +179,7 @@ func _build_static() -> void:
 		_add_bush(solid, bush)
 	if sim.m.kind == "village":
 		_add_signpost(solid, sim.meadow_sign())
+		_add_route_sign(solid, sim.route_sign())
 	for k in sim.farm:
 		_add_crop(solid, sim.farm[k])
 	for k in sim.items:
@@ -262,6 +263,18 @@ func _add_signpost(b: Batch, c: Vector2i) -> void:
 	b.box(Vector3(x - 0.85, 1.25, z - 0.05), Vector3(x - 0.7, 1.5, z + 0.05), Palette.PLANK)
 	b.box(Vector3(x - 0.45, 1.27, z - 0.08), Vector3(x - 0.12, 1.48, z + 0.08), SHEEP_WOOL)
 	b.box(Vector3(x - 0.55, 1.33, z - 0.08), Vector3(x - 0.45, 1.44, z + 0.08), SHEEP_FACE)
+
+
+## The signpost to the old mine (issue #108): a board pointing off the east edge, with a grey block of
+## stone and a fleck of coal painted on it.
+func _add_route_sign(b: Batch, c: Vector2i) -> void:
+	var x := c.x + 0.5
+	var z := c.y + 0.5
+	b.box(Vector3(x - 0.09, 0, z - 0.09), Vector3(x + 0.09, 1.8, z + 0.09), Palette.LOG)
+	b.box(Vector3(x - 0.15, 1.15, z - 0.06), Vector3(x + 0.7, 1.6, z + 0.06), Palette.PLANK)
+	b.box(Vector3(x + 0.7, 1.25, z - 0.05), Vector3(x + 0.85, 1.5, z + 0.05), Palette.PLANK)
+	b.box(Vector3(x + 0.12, 1.24, z - 0.08), Vector3(x + 0.45, 1.5, z + 0.08), Palette.STONE)
+	b.box(Vector3(x + 0.26, 1.33, z - 0.09), Vector3(x + 0.36, 1.42, z + 0.09), Palette.ITEM_COLORS.coal)
 
 
 static var SOIL := Color("#5E4430")
@@ -667,6 +680,9 @@ func _make_person(r: Dictionary) -> Node3D:
 	_part(body, Vector3(0.24, 0.32, 0.24), 0.78, Palette.SKIN, tunic)
 	var carry := _part(body, Vector3(0.28, 0.24, 0.28), 1.14, Palette.PLANK, tunic)
 	carry.name = "Carry"
+	var pack := _part(body, Vector3(0.3, 0.34, 0.14), 0.38, CRATE, tunic)  # an expedition's packs (issue #108)
+	pack.name = "Pack"
+	pack.position += Vector3(0.24, 0, -0.04)
 	# The selection ring: a chalk band on a dark under-stroke, drawn over everything like the
 	# other marks so light grass and trees can't swallow it (issue #79).
 	var ring := Node3D.new()
@@ -732,6 +748,7 @@ func _update_people() -> void:
 		(n.get_node("Body") as Node3D).position.y = _hop(r.id, at)
 		var carry: MeshInstance3D = n.get_node("Body/Carry")
 		carry.visible = r.carry != null
+		(n.get_node("Body/Pack") as Node3D).visible = sim.carrying_packs(r)
 		if r.carry != null:
 			carry.material_override = _person_mat(Palette.ITEM_COLORS[r.carry.type], Color("#" + r.shirt))
 		(n.get_node("Ring") as Node3D).visible = selected_ids.has(r.id)
@@ -900,6 +917,8 @@ func pick(origin: Vector3, dir: Vector3, residents := true):
 	if sim.m.kind == "village":
 		var sign := sim.meadow_sign()
 		solid.append([{"kind": "meadow", "id": 0, "cell": sign}, AABB(Vector3(sign.x - 0.4, 0, sign.y + 0.3), Vector3(1.1, 1.8, 0.4))])
+		var road := sim.route_sign()
+		solid.append([{"kind": "route", "id": 0, "cell": road}, AABB(Vector3(road.x + 0.3, 0, road.y + 0.3), Vector3(1.1, 1.8, 0.4))])
 	for k in sim.farm:
 		var crop: Dictionary = sim.farm[k]
 		solid.append([crop, AABB(Vector3(crop.cell.x, 0, crop.cell.y), Vector3(1, 0.1 + 0.15 * Sim.crop_stage(crop), 1))])

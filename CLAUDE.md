@@ -42,7 +42,7 @@ There's no single-test runner. To focus on one test, temporarily trim the `tests
   - `sim.gd` holds the state and does the work: ticking, claiming jobs, interpreting job steps, computing stuck reasons, commands, and save/load.
   - Entities are plain Dictionaries (cells are `Vector2i`). Compare them with `is_same()`, never `==`, because GDScript compares Dictionaries by content.
   - **Maps** (`sim_map.gd`): the village plus site maps such as the old mine (`old_mine.gd`). The sim works on one map at a time: `trees`, `items`, `sites` and the rest are the current map's, switched with `use_map` / `on_map`. At rest it's always on the village, so the HUD, goals and tallies read the village. Residents and buildings carry their `map`, and a command about one switches to its map itself. The view switches the sim to the map in view (`game.view_map`) only while it draws or handles input.
-  - **Expeditions:** `sim.expedition` is the one expedition, planned at the expedition board, packed there, then sent off with Depart. A resident on the road is `away`, with `trip` naming where they're going ("meadow" for the sheep meadow).
+  - **Expeditions:** `sim.expedition` is the one expedition, planned at the expedition board, packed there, then sent off with Depart. A resident on the road is `away`, with `trip` naming where they're going: "meadow", a site such as "old_mine", or "village" on the way home.
   - `job.gd` is a job's step list plus its "holds", the reservations it keeps. A step that uses up a hold removes it, and whatever's left is undone when the job ends. Jobs aren't saved.
   - `tuning.gd` holds every number. `defs.gd` holds items, recipes and building templates. `goals.gd` holds the founding checklist.
 - `game/view/`: drawing only.

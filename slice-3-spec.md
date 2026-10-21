@@ -1,6 +1,6 @@
 # Slice 3 Spec — The First Expedition
 
-Companion to `block-village-design-brief.md`, `slice-1-spec.md` and `slice-2-spec.md`. Slice 3 builds on everything in Slices 1 and 2; this spec only describes what's new or changed. Numbers are **provisional** and collected in the tuning table (§11).
+Companion to `block-village-design-brief.md`, `slice-1-spec.md` and `slice-2-spec.md`. Slice 3 builds on everything in Slices 1 and 2; this spec only describes what's new or changed. Numbers are **provisional** and collected in the tuning table (§13).
 
 Tracking issue: #12. Decisions settled with the owner (2026-10-20), and recorded in the brief (§5, §8, §13, §14):
 
@@ -62,7 +62,7 @@ Slice 3 is done when, from a Slice 2 village, a player can:
 
 **Mining** works as in the village: the Mine and Break orders mark boulders and ore, and residents with a pickaxe break them. Ore blocks drop their ore (§4).
 
-**Light.** Torches on the walls light the tunnels near them. Floor further than the torch light (§11) from every torch is **dark**, drawn darker so the dark tunnels read at a glance. Darkness is a hazard (#110).
+**Light.** Torches on the walls light the tunnels near them. Floor further than the torch light (§13) from every torch is **dark**, drawn darker so the dark tunnels read at a glance. Darkness is a hazard (#110).
 
 **The hidden vein** stands as plain rock wall until it's discovered (#111): it can't be marked, mined or walked through, and the site report doesn't show it.
 
@@ -94,7 +94,7 @@ Each has its own colour, distinct from cobblestone and logs, an icon for the Cra
 | Iron axe | 3 iron ingots, 2 sticks | 1 iron axe |
 | Iron pickaxe | 3 iron ingots, 2 sticks | 1 iron pickaxe |
 
-They last longer and work faster than stone (the tier rows in §11). Residents already prefer the best tool about, so an iron one is picked up over stone.
+They last longer and work faster than stone (the tier rows in §13). Residents already prefer the best tool about, so an iron one is picked up over stone.
 
 **The toolsmith's spare** is the best tier there's material for: iron when there are 3 ingots, then stone, then wood.
 
@@ -143,38 +143,64 @@ The planner draws up one plan:
 - "Expedition: Waiting for 2 meals to pack", "Waiting for 1 spare pickaxe to pack" and "Waiting for Tomas" sit in the stuck list's dim waiting tier. They're progress, not blockers.
 - "Expedition: No meals to pack. Cooks make them at the fireplace, or plan fewer" is a blocker, with a flag over the board. The same goes for spare pickaxes ("Craft one at the bench, or plan fewer").
 
-**Depart** is the player's call (brief §10). The button is enabled once everything is packed and the whole party is at the board, and otherwise says what it's waiting for. From then on, party members are out of village labor: their jobs end, nobody can give them orders, and they don't get hungry on the road. The packed supplies go with them, and the board is empty again.
-
-**On the road.** Each member is away for `MINE_TRIP`, and their panel says "On the road to the old mine, N s". The line under the tally bar says the same and switches to the old mine when clicked. When they get there, they appear at the site's entrance, the site counts as visited, and the first to arrive sets the supplies down there. (Until #108, #109 and #112, that's where a trip ends. Travel's signpost and the way home, packs on site, and the return are still to come.)
+**Depart** is the player's call (brief §10). The button is enabled once everything is packed and the whole party is at the board, and otherwise says what it's waiting for. From then on, party members are out of village labor: their jobs end and they set off for the signpost (§9). The packed supplies go with them, and the board is empty again.
 
 **Calling it off.** Before departure, **Call off the expedition** (a destructive button) unpacks everything. The supplies are set down by the board, loose, and hauled back to the stockpile, and the party goes back to work.
 
 **Saving.** Save format **v16** saves the expedition (the plan, its state, and what was packed and carried), and each resident's `trip`. What's packed at the board is saved with the board, tools with their wear. Older saves have no expedition, and anyone away is at the meadow.
 
-## 9. Still to build
+## 9. Travel (#108)
+
+**The route signpost** stands on the village's east edge, halfway down, pointing off the map toward the old mine. Like the meadow's, it can't be built on, farmed or stockpiled. Selecting it shows the walk (`MINE_TRIP` each way) and who's on the road or carrying the packs to it.
+
+**Outbound.** After Depart, each party member walks to the signpost carrying the packs, drawn as a crate on their side. There they step off the map and are **on the road** for `MINE_TRIP`, then appear at the site's entrance. On the way, they take no village work.
+
+**On the road**, residents aren't drawn on either map, don't work and don't get hungry. Their panel, the signpost and the line under the tally bar say "On the road to the old mine, N s" or "On the road home, N s". The line switches to the place they're headed when clicked.
+
+**Arriving.** At the entrance, the site counts as visited, and the first to arrive sets the supplies down there. (#109 replaces this with packs the party works from.)
+
+**Calling the party home.** Until #109's return policy does it by itself, the player calls the party home with **Call the party home**: beside the party line while the site is in view ("The party is here: mining"), on the board's planner, or on a party member's panel. It's enabled once the whole party is at the site. Each member walks to the entrance and steps onto the road home. When the last one leaves, the party takes its **cargo**, as far as the packs go (`PACK_CAPACITY` each): leftover meals and spare pickaxes first, then the objective's resource, then anything else mined. Whatever doesn't fit stays at the site. (#109 replaces this with packing cargo as they mine.)
+
+**The way home** takes the same `MINE_TRIP`, until Slice 4's minecarts shorten it. They appear at the village signpost.
+
+**The meadow** trip is unchanged. Both trips use the same "away on the road" code: a resident who's away has a `trip` saying where to ("meadow", a site, or "village" for home) and a time they're due.
+
+**Saving.** No format change: the expedition's `leg` (out or home), its cargo and its count of broken pickaxes are new keys in the saved expedition, and travel is the residents' `away`, `trip` and due time, as in v16.
+
+## 10. Return and unloading (#112)
+
+**Unloading.** When the last party member is back at the signpost, the cargo and leftover meals and tools are set down there as stacks. They're hauled to the stockpile by anyone with Haul on, the party included, before other loose items. With no stockpile room, the usual "Stockpile is full" applies.
+
+**The report** is a toast, and stays on the board's planner under "Last expedition":
+- "Back from the old mine: 9 coal, 6 cobblestone" (or "with nothing mined");
+- "3 meals eaten, 1 pickaxe broken". Meals eaten are the packed meals that didn't come back.
+
+(#110 adds who was hurt.)
+
+**Recovery.** The party rejoins village labor straight away. (#110 sends anyone hurt to bed.) The expedition is over, so the board can plan the next one.
+
+## 11. Still to build
 
 These issues carry their own rules until they're built; each one adds its section here.
 
-- #108 Travel to and from the old mine.
 - #109 The party works the site.
 - #110 Hazards and injuries.
 - #111 The iron discovery.
-- #112 Return and unloading.
 - #113 The Slice 3 bot playtest and hand playtest.
 
-## 10. Controls
+## 12. Controls
 
 | Action | Default key |
 |---|---|
 | Switch between the village and a site | Tab |
 | Place an expedition board | None (rebindable). It's in the Build menu |
 
-## 11. Tuning table (provisional)
+## 13. Tuning table (provisional)
 
 | Name | Value | Meaning |
 |---|---|---|
 | Old mine size | 16×16 | Cells (its layout is hand-laid in `game/sim/old_mine.gd`). |
-| `MINE_TRIP` | 60 s | Walking time between the village and the old mine, each way (#108). |
+| `MINE_TRIP` | 60 s | Time on the road between the village signpost and the old mine, each way. |
 | `ORE_YIELD` coal | 2 | Coal dropped by a coal ore block. |
 | `ORE_YIELD` iron | 2 | Iron ore dropped by an iron ore block. |
 | `TORCH_LIGHT` | 3 cells | How far a torch lights; open floor beyond every torch's light is dark. |

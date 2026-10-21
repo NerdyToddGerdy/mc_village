@@ -197,6 +197,10 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 
 **Depart** sends them off once everything is packed and everyone is at the board. From then on they're out of village work. The board can plan only one expedition at a time. **Call off the expedition** before departure unpacks everything, and the supplies are hauled back to the stockpile.
 
+**The road.** The party carries the packs to the signpost on the east edge of the village, then spends 60 seconds on the road to the old mine. On the road, they aren't drawn, don't work and don't get hungry. Click the signpost to see who's on the road. At the mine, their supplies are set down at the entrance.
+
+**Coming home.** When you're ready, choose **Call the party home**: it's in the bar under the tallies while you're looking at the mine, and on the board and each party member's panel. They walk to the mine's entrance with what they've mined, as much as the packs hold, and take the road home. Back at the signpost, they set the cargo down and it's hauled to the stockpile before anything else. A report says what came back and what it cost, and the board shows it until the next expedition.
+
 ## New residents
 
 A traveler arrives about 45 seconds after a house with a free bed is finished, one per free bed. A house is only free once its bed is built, so wool is what lets the village grow. After Tomas come Mira, Jonas, Elsa, Bram, Ines, Otto and Lena.
