@@ -127,7 +127,7 @@ A party might discover a sealed entrance while gathering stone. The player can c
 
 Routine actions resolve automatically. Important choices expose known costs and risks. Scouting improves available information.
 
-**Core decision (Slice 3):** the game pauses for the player at two moments only: **at a discovery**, and **when someone is seriously hurt** (retreat or press on). Everything else follows the party's return policy.
+**Core decision (Slice 3):** the game pauses for the player at two moments: **at a discovery**, and **when someone is seriously hurt** (retreat or press on). Everything else follows the party's return policy. Deeper mine levels (#130) add a third: **reaching a door down**.
 
 ## 6. Routes and Minecarts
 
@@ -208,6 +208,8 @@ Each site reports:
 - Space and terrain suitability for camps or loading stations.
 
 Deposits can become depleted. Existing shelters and stations can remain useful as network junctions and staging points.
+
+**Core decision (#130): a mine stays useful by going deeper.** Each level of a mine depletes, but the mine as a whole doesn't. Every level has a door at its far end, opposite the way in, leading down to the next. Reaching it is one of the moments the game stops for the player: go down now, mark it for later, or keep mining here. Every floor has a different pattern: the first is hand-laid, and deeper ones are generated, each from a pattern family the mine hasn't used yet. Deeper levels hold more ore, and are darker and more dangerous. Levels are reached on foot; a rail line ends at the mine's entrance.
 
 ### Missions
 
@@ -437,6 +439,7 @@ Add job designation, simple food production, a toolsmith job that keeps resident
 
 One nearby destination, a small party, provisions, carrying limits, one meaningful discovery, and a visible return/unloading sequence. Implementation detail: `slice-3-spec.md`.
 - **Destination:** an old mine a short walk off the map, with stone and coal. It's a small second block map with its own view, and travel to it is a timed walk, like the meadow trip.
+- **Depth:** the old mine stays reusable through deeper levels, each its own map, reached through a door at the far end of the level above (#130, built in #132).
 - **Discovery:** iron. Iron ore smelted at the fireplace with coal gives iron ingots, which make iron tools at the bench.
 - **Danger:** hazards that injure (§8). No mobs or combat.
 
@@ -463,10 +466,10 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 - Combat presentation and degree of player control.
 - Death, rescue, and difficulty settings.
 - Terrain modification, building customization beyond fixed templates, verticality, and camera rotation.
-- Resource regeneration and deposit depletion rules. (Partly resolved, #22: hunting grounds such as the sheep meadow regain their animals over time, and the old mine's ore doesn't come back once mined. Tree regrowth, and depletion elsewhere, are still open.)
+- Resource regeneration and deposit depletion rules. (Partly resolved, #22: hunting grounds such as the sheep meadow regain their animals over time, and a mine level's ore doesn't come back once mined, while deeper levels keep the old mine useful (#130). Tree regrowth, and depletion elsewhere, are still open.)
 - Exact party sizes, costs, durations, capacities, and balance values. (Resolved for Slice 3, #23: parties of 1–3, PC eligible. Every number stays provisional.)
 - Recruitment beyond free beds, such as requests or an inn. (Resolved for Slice 2, #24: a traveler arrives for each free bed.)
-- How often expeditions require intervention and how many can run simultaneously. (Resolved for Slice 3, #25: one expedition at a time, and the game stops for the player only at a discovery and at a serious injury.)
+- How often expeditions require intervention and how many can run simultaneously. (Resolved for Slice 3, #25: one expedition at a time, and the game stops for the player only at a discovery and at a serious injury, plus a door down once mines have deeper levels, #130.)
 - Outpost staffing and ongoing supply costs.
 - Detailed End and Sift systems.
 - Enchantment discovery and resource costs.
