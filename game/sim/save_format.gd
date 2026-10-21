@@ -12,12 +12,41 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 17
+const VERSION := 18
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18}
+
+
+## The walk between the village and the old mine in v17 and earlier, a timer off the map.
+const OLD_MINE_TRIP := 60.0
+
+
+## v18: the road to the mine (issues #118-#121). The road is a map of its own now, added when the save
+## loads (known if the old mine is). A party member saved on the road, away and due at a time, is
+## placed at the matching point along it, still heading the same way.
+static func _v17_to_v18(d: Dictionary) -> Dictionary:
+	var st: Dictionary = d.state
+	var span: int = Road.MINE_END.x - Road.VILLAGE_END.x
+	var blocked: Array = []
+	for y in Road.LAYOUT.size():
+		for x in Road.LAYOUT[y].length():
+			if Road.LAYOUT[y][x] != ".":
+				blocked.append(Vector2i(x, y))
+	for r in st.residents:
+		if not r.get("away", false) or r.get("trip", "") in ["", "meadow"]:
+			continue
+		var left := clampf(float(r.back_at - st.tick) / Tuning.TPS / OLD_MINE_TRIP, 0.0, 1.0)
+		var x: int = Road.MINE_END.x - roundi(left * span) if r.trip != "village" else Road.VILLAGE_END.x + roundi(left * span)
+		var c := Vector2i(x, Road.LINE_ROW)
+		while c in blocked:  # not on a boulder or in the stream
+			c.x += 1 if r.trip != "village" else -1
+		r.away = false
+		r.map = Road.ID
+		r.pos = Vector2(c)
+	return d
 
 
 ## v17: the party works the site, hazards and injuries, and the iron discovery (issues #109-#111).

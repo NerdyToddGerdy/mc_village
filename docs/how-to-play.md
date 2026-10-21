@@ -197,7 +197,7 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 
 **Depart** sends them off once everything is packed and everyone is at the board. From then on they're out of village work. The board can plan only one expedition at a time. **Call off the expedition** before departure unpacks everything, and the supplies are hauled back to the stockpile.
 
-**The road.** The party carries the packs to the signpost on the east edge of the village, then spends 60 seconds on the road to the old mine. On the road, they aren't drawn, don't work and don't get hungry. Click the signpost to see who's on the road. At the mine, their supplies are set down at the entrance.
+**The road.** The party carries the packs to the signpost on the east edge of the village, then walks the **road to the mine**, a long strip of a map of its own (see below). Switch to it to watch them, or click the signpost to see who's on it and how long they have left. They don't work on the way, and they can eat from the packs if they get hungry. At the far end they go into the mine.
 
 **At the mine** the party works by itself. It marks the blocks of what it was sent for, nearest first, mines them, and carries what it mines into its packs by the entrance. It eats from the packs, leaving the food for the walk home unless you chose Spend it. A broken pickaxe is swapped for a spare from the packs. You can mark more blocks with Gather while you're looking at the mine. The panel under the party line shows each member, the packs, the meals and how close they are to the target.
 
@@ -211,6 +211,22 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 **Injuries.** An injured resident wears a white bandage, walks and works slower, and can't mine. Someone **seriously hurt** can't work, and the game stops for you to choose: **Retreat** (everyone heads home now) or **Press on** (they wait at the entrance while the rest keep working). Ada can be hurt, but never seriously. At home, the hurt rest in their own bed until they've healed: 2 minutes for an injury, 5 for a serious one, and slower without a bed of their own.
 
 **The discovery.** There's something else in the old mine. When the party finds it, the game stops with three choices, each with its cost: **Keep mining**, **Investigate** (someone spends time and pickaxe uses surveying it, and you can send parties for it from then on), or **Mark it and return later** (the party heads home now). The find is remembered either way.
+
+## The road to the mine
+
+The road between the village and the old mine is a map of its own: **Road to the mine** in the map switcher, once the expedition board has word of the mine. It's split into six segments, from the village edge to the slope below the mine.
+
+**Surveying.** At first, only the segment by the village is known, and the rest is fog. The first party to walk the road reveals it as they go. After that, the **signpost** (in the village, or at either end of the road) shows the route: each segment with its length, its terrain and anything in the way, and how long the walk takes. The expedition planner uses that estimate too.
+
+**Obstacles:**
+- **The stream.** People wade across, slowly. **Build the bridge**, on the signpost's panel, places a plank bridge (12 planks). Residents with Build on carry the planks out from the village and build it. After that there's no more wading, and track can cross.
+- **The rocky cut.** Three boulders stand on the line. **Clear the cut** marks them, and residents with Mine on walk out with their pickaxes to break them. You can also mark them yourself with Gather while looking at the road.
+
+Residents who go out to work on the road walk back to the village when they're done, or when they get hungry.
+
+**Rails and minecarts** are made at the bench from the old mine's iron: 6 iron ingots and a stick make 16 rails, and 5 iron ingots make a minecart. Both are Craft work.
+
+**Planning the line.** Once the road has been walked, **Plan the line** on the signpost's panel shows what it would cost: the rails it takes (2 a segment), how many are on hand, the iron to craft the rest, and about how much time a round trip would save by cart. **Lay track** puts a track blueprint along every segment. Track is laid from the village end outward: residents with Build on carry rails out and lay each segment in turn. The stream's segment waits for the bridge, and the cut's for its boulders to be cleared, and the stuck list says so. Riding the line comes later.
 
 ## New residents
 
@@ -242,7 +258,7 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | Shift + right-click | Queue an order after their current one |
 | J | Village jobs board |
 | F / N | Next resident, next stuck item |
-| Tab | Switch between the village and the old mine, once it's known |
+| Tab | Switch between the village, the old mine and the road to it, once they're known |
 | Drag, W A S D, arrow keys | Pan |
 | Mouse wheel, + / − | Zoom |
 | Space / ~ | Pause or resume, pause |

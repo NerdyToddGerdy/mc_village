@@ -6,6 +6,8 @@ extends SceneTree
 var _failures := 0
 var _checks := 0
 var _current := ""
+## Seconds to allow for walking the road to the mine, one way (issue #118).
+const ROAD := 30.0
 
 
 func _init() -> void:
@@ -58,6 +60,10 @@ func _init() -> void:
 		"test_hazards_and_injuries",
 		"test_iron_discovery",
 		"test_slice2_fixture_loads",
+		"test_road_to_the_mine",
+		"test_survey_and_obstacles",
+		"test_rails_and_minecarts",
+		"test_plan_the_line",
 	]
 	for t in tests:
 		_current = t
@@ -312,6 +318,12 @@ func test_every_save_fixture_still_loads() -> void:
 			check(mine.boulders.all(func(b): return sim.maps.village.boulders.all(func(o): return o.id != b.id) and b.id < sim.next_id), "v%d: the mine's ids don't clash with the village's" % v)
 		if v < 16:
 			check(sim.residents.all(func(r): return r.trip == ("meadow" if r.away else "")), "v%d: anyone away is at the meadow" % v)
+		var rd := sim.road()
+		if v >= 18:  # issues #118-#121: the road walked, the bridge part-supplied, the line planned with one segment laid
+			check(rd.known and sim.route_surveyed() and sim.bridge().store == {"plank": 4} and not sim.bridge().done, "v%d: the survey and the part-supplied bridge survive" % v)
+			check(sim.track_state(0) == "built" and range(1, 6).all(func(i): return sim.track_state(i) == "planned"), "v%d: the planned line survives" % v)
+		else:  # an older save gets the road, unwalked, known if the old mine is
+			check(rd.known == mine.known and rd.seen == 1 and rd.sites.is_empty(), "v%d: the road to the mine is added, unwalked" % v)
 		if v < 17:  # issues #109-#111: nobody hurt, no choice waiting, and the mine gets its hazards
 			check(sim.residents.all(func(r): return r.hurt == 0) and sim.pending.is_empty(), "v%d: nobody is hurt and no choice waits" % v)
 			check(mine.ledges == OldMine.LEDGES and mine.boulders.filter(func(b): return b.get("loose", false)).size() == OldMine.LOOSE.size(), "v%d: the old mine gets its loose ceilings and ledge" % v)
@@ -1329,7 +1341,7 @@ func send_to_mine(sim: Sim, r: Dictionary) -> void:
 ## tallies leave out what lies on another map.
 func test_residents_only_work_on_their_own_map() -> void:
 	var sim := Sim.new_game()
-	check(sim.maps.keys() == ["village", OldMine.ID] and sim.map_id == "village", "a new game has the village and the old mine, with the village current")
+	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID] and sim.map_id == "village", "a new game has the village, the old mine and the road between them, with the village current")
 	var ada: Dictionary = sim.residents[0]
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
 	check(ada.map == "village" and tomas.map == "village", "residents start on the village map")
@@ -1446,7 +1458,7 @@ func test_old_mine_layout_and_ore() -> void:
 func test_site_report_and_depletion() -> void:
 	var sim := Sim.new_game()
 	var rep := sim.site_report(OldMine.ID)
-	check(rep.told == OldMine.TOLD and not rep.visited and rep.travel == Tuning.MINE_TRIP, "before a visit: what the village was told, and the travel time")
+	check(rep.told == OldMine.TOLD and not rep.visited and rep.travel == -1.0, "before a visit: what the village was told, and no journey estimate until the road is walked")
 	check(rep.resources.map(func(x): return x.name) == ["Stone", "Coal"] and rep.resources.all(func(x): return x.reserve == -1), "stone and coal, no estimates yet")
 	check(rep.hazards.is_empty() and rep.access.is_empty(), "no hazards or access notes known yet")
 	sim.get_map(OldMine.ID).visited = true
@@ -1697,11 +1709,12 @@ func test_staging_and_departure() -> void:
 	check(b.store.is_empty() and sim.cant_join(ada) == "Out with the party", "the board is empty again")
 	run(sim, 0.5)
 	check(ada.job != null and ada.job.kind == "road" and sim.carrying_packs(ada), "Ada carries the packs to the signpost")
-	until_away(sim, ada)
-	check(ada.away and ada.trip == OldMine.ID and ada.job == null and not sim.here().has(ada), "then she's on the road, not in the village's labor")
+	until_on_road(sim, ada)
+	check(sim.on_road(ada) and ada.trip == OldMine.ID and not ada.away and not sim.here().has(ada), "then she's on the road, not in the village's labor")
 	var road := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
-	check(road.residents[0].away and road.residents[0].trip == OldMine.ID and road.residents[0].back_at == ada.back_at, "saving on the road keeps her on the road")
-	run(sim, Tuning.MINE_TRIP + 1)
+	check(road.residents[0].map == Road.ID and road.residents[0].trip == OldMine.ID, "saving on the road keeps her on the road")
+	until_at_site(sim, [ada])
+	run(sim, 2)
 	var mine := sim.get_map(OldMine.ID)
 	check(ada.map == OldMine.ID and not ada.away and mine.visited and mine.known, "after the walk, Ada is at the old mine")
 	check(sim.expedition.provisions == {"bread": 2} and sim.on_map(OldMine.ID, func(): return sim.items.is_empty()), "with the supplies in the packs (%s)" % [sim.expedition.provisions])
@@ -1735,8 +1748,8 @@ func send_party(sim: Sim) -> Dictionary:
 	return {"ada": ada, "tomas": tomas, "board": b}
 
 
-## Issue #108: the party walks to the signpost on the east edge, is on the road for MINE_TRIP each
-## way, and arrives on the right map; a trip survives saving in either direction.
+## Issues #108, #118: the party walks to the signpost on the east edge, onto the road map, along it
+## and into the mine at its far end, and back the same way; a trip survives saving in either direction.
 func test_travel_to_the_mine_and_back() -> void:
 	var sim := Sim.new_game()
 	var sign := sim.route_sign()
@@ -1746,38 +1759,44 @@ func test_travel_to_the_mine_and_back() -> void:
 	var ada: Dictionary = p.ada
 	var tomas: Dictionary = p.tomas
 	check(sim.call_home() != "", "the party can't be called home before it gets there")
-	until_away(sim, ada, 60)
-	check(absf(sim.back_in(ada) - Tuning.MINE_TRIP) < 0.1, "the road takes MINE_TRIP (%.1f s)" % sim.back_in(ada))
-	until_away(sim, tomas, 60)
-	check(ada.away and tomas.away and Sim.manhattan(Sim.rcell(ada), sign) <= 1, "they leave from the signpost")
-	var due: int = ada.back_at
+	until_on_road(sim, ada, 60)
+	var left_at := sim.tick
+	check(Sim.rcell(ada) == Road.VILLAGE_END and ada.trip == OldMine.ID and not ada.away, "Ada steps onto the road at its village end")
+	check(sim.road().known and (ada.job == null or ada.job.kind == "road"), "and walks it")
 	var arrived := -1
 	var arrived_at := Vector2i(-9, -9)
-	for i in int((Tuning.MINE_TRIP + 2) * Tuning.TPS):
+	for i in int(ROAD * Tuning.TPS):
 		sim.step()
 		if arrived < 0 and ada.map == OldMine.ID:
 			arrived = sim.tick
 			arrived_at = Sim.rcell(ada)
-	check(arrived == due, "Ada arrives after exactly %d s on the road" % int(Tuning.MINE_TRIP))
+	var walked := float(arrived - left_at) / Tuning.TPS
+	check(arrived > 0 and absf(walked - sim.route_walk_time()) < 3.0, "the walk takes about the road's estimate (%.1f s, estimated %.1f s)" % [walked, sim.route_walk_time()])
 	check(ada.map == OldMine.ID and tomas.map == OldMine.ID and arrived_at == sim.get_map(OldMine.ID).entrance, "at the mine's entrance")
 	run(sim, 5)
-	# The way home: the party walks to the entrance, then the same time on the road.
+	# The way home: the party walks to the entrance, then back along the road.
 	check(sim.call_home() == "" and sim.expedition.leg == "home", "Call the party home")
 	check(sim.call_home() == "The party is already heading home", "only once")
-	until_away(sim, ada, 30)
-	until_away(sim, tomas, 30)
-	check(ada.away and ada.trip == "village" and ada.map == OldMine.ID, "they leave from the mine's entrance, on the road home")
+	until_on_road(sim, ada, 30)
+	check(sim.on_road(ada) and ada.trip == "village" and Sim.rcell(ada) == Road.MINE_END, "they step onto the road at the mine end, heading home")
+	run(sim, 3)
 	var mid := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
-	var home_at: int = maxi(ada.back_at, tomas.back_at)
-	check(mid.residents[0].trip == "village" and mid.residents[0].back_at == ada.back_at and mid.expedition.leg == "home", "saving on the road home keeps the time left")
-	run(sim, float(home_at - sim.tick) / Tuning.TPS + 0.1)
+	check(mid.residents[0].map == Road.ID and mid.residents[0].trip == "village" and mid.expedition.leg == "home", "saving on the road home keeps them on it")
+	run(sim, ROAD)
 	check(ada.map == "village" and not ada.away and Sim.manhattan(Sim.rcell(ada), sim.route_sign()) <= 1, "they come back at the village signpost")
-	run(mid, float(home_at - mid.tick) / Tuning.TPS + 0.1)
+	run(mid, ROAD)
 	check(mid.residents[0].map == "village" and mid.expedition.is_empty(), "and the loaded game's party gets home too")
 	# The meadow trip still works as before.
 	sim.send_to_meadow(tomas)
 	until_away(sim, tomas)
 	check(tomas.trip == "meadow" and absf(sim.back_in(tomas) - Tuning.MEADOW_TRIP) < 0.1, "a meadow trip is unchanged")
+
+
+func until_on_road(sim: Sim, r: Dictionary, seconds := 30.0) -> void:
+	for i in int(seconds * Tuning.TPS):
+		sim.step()
+		if r.map == Road.ID:
+			return
 
 
 ## Issue #112: back at the signpost, the cargo and leftover meals are set down as stacks and hauled
@@ -1790,13 +1809,13 @@ func test_return_and_unloading() -> void:
 	var ada: Dictionary = p.ada
 	var tomas: Dictionary = p.tomas
 	check(sim.plan_problems(sim.new_plan()).has("One expedition at a time"), "the board is locked while the party is out")
-	for i in int((Tuning.MINE_TRIP + 40) * Tuning.TPS):
+	for i in int((ROAD + 40) * Tuning.TPS):
 		sim.step()
 		if sim.at_site(ada) and sim.at_site(tomas):
 			break
 	ada.hunger = 30.0  # she eats a meal from the packs
 	tomas.pick.dur = 1  # his pickaxe breaks, and he takes the spare from the packs
-	for i in int((Tuning.MINE_TRIP + 240) * Tuning.TPS):
+	for i in int((ROAD + 240) * Tuning.TPS):
 		sim.step()
 		if sim.expedition.is_empty():
 			break
@@ -1819,7 +1838,7 @@ func test_return_and_unloading() -> void:
 
 
 ## Steps until a party member is at the site, working it.
-func until_at_site(sim: Sim, rs: Array, seconds := Tuning.MINE_TRIP + 40) -> void:
+func until_at_site(sim: Sim, rs: Array, seconds := ROAD + 40) -> void:
 	for i in int(seconds * Tuning.TPS):
 		if rs.all(func(r): return sim.at_site(r)):
 			return
@@ -1945,7 +1964,7 @@ func test_hazards_and_injuries() -> void:
 	check(pressed.expedition.leg == "out" and lt.job != null and lt.job.kind == "hurt" and Sim.manhattan(Sim.rcell(lt), pressed.get_map(OldMine.ID).entrance) <= 1, "Press on: Tomas waits at the entrance while the rest work")
 	sim.choose("retreat")
 	check(sim.pending.is_empty() and sim.expedition.leg == "home" and sim.expedition.home_why.begins_with("retreat"), "Retreat: the party heads home (%s)" % sim.expedition.home_why)
-	for i in int((Tuning.MINE_TRIP + 180) * Tuning.TPS):
+	for i in int((ROAD + 180) * Tuning.TPS):
 		sim.step()
 		if sim.expedition.is_empty():
 			break
@@ -2024,3 +2043,161 @@ func test_slice2_fixture_loads() -> void:
 	var sim := Sim.from_state(r.data.state)
 	check(sim.residents.size() == 3 and Goals.current(sim) < 0, "three residents, and the founding done")
 	check(sim.sites.any(func(s): return s.tpl == "fireplace" and s.done) and sim.free_count("bread") >= 6 and sim.free_count("plank") >= 6, "a fireplace, meals and planks to start Slice 3 with")
+
+
+## Issue #118: the road between the village and the old mine is a map of its own, known with the mine,
+## and an old save's party on the road is placed at the matching point along it.
+func test_road_to_the_mine() -> void:
+	var sim := Sim.new_game()
+	var rd := sim.road()
+	check(rd.kind == "route" and rd.w == 48 and rd.h == 7 and rd.name == "Road to the mine", "the road is a 48×7 map of its own")
+	check(not rd.known, "nobody knows it before the expedition board")
+	var p := send_party(sim)
+	check(rd.known and sim.get_map(OldMine.ID).known, "the board brings word of the mine and the road to it")
+	check(Road.segment_count() == 6 and range(6).all(func(i): return Road.seg_len(i) == 8), "6 segments of 8 cells")
+	var through: bool = sim.on_map(Road.ID, func(): return sim.find_path(Road.VILLAGE_END, sim.cell_set([Road.MINE_END])) != null)
+	check(through, "the road can be walked end to end, around the cut's boulders")
+	var walk := sim.route_walk_time()
+	check(walk > 12.0 and walk < 25.0, "walking it takes about %.0f s" % walk)
+	# A party saved on the road by an older version is placed along it, still heading the same way.
+	until_on_road(sim, p.ada)
+	var d := {"v": 17, "state": str_to_var(var_to_str(sim.save_state()))}
+	d.state.maps.erase(Road.ID)
+	var old: Dictionary = d.state.residents[0]
+	old.map = "village"
+	old.away = true
+	old.trip = OldMine.ID
+	old.back_at = d.state.tick + 15 * Tuning.TPS  # a quarter of the old 60 s walk left
+	SaveFormat._v17_to_v18(d)
+	var up := Sim.from_state(d.state)
+	var ua: Dictionary = up.residents[0]
+	check(ua.map == Road.ID and not ua.away and Sim.rcell(ua) == Vector2i(35, Road.LINE_ROW), "a v17 party three quarters of the way there is placed three quarters along the road (%s)" % Sim.rcell(ua))
+	check(up.road().known, "and the road is known")
+	run(up, ROAD)
+	check(ua.map == OldMine.ID, "and walks on to the mine")
+
+
+## Issue #119: the first trip reveals the road's segments; the stream is forded slowly until a plank
+## bridge is built; the cut's boulders are mined to clear it; the report and estimates follow.
+func test_survey_and_obstacles() -> void:
+	var sim := Sim.new_game()
+	var p := send_party(sim)
+	var rd := sim.road()
+	check(rd.seen == 1 and not sim.route_surveyed(), "only the first segment is known before anyone walks the road")
+	var rep := sim.route_report()
+	check(rep.segments[0].known and not rep.segments[1].known and rep.segments[1].name == "Not walked yet", "the report shows the rest as not walked")
+	check(sim.plan_bridge() != "" and sim.clear_cut() != "", "nothing to bridge or clear before anyone has seen it")
+	until_at_site(sim, [p.ada, p.tomas])
+	check(sim.route_surveyed() and rd.seen == 6, "the first trip reveals every segment")
+	rep = sim.route_report()
+	check(rep.segments[2].obstacle.begins_with("A stream") and rep.segments[4].obstacle.begins_with("A rocky cut: 3 boulders"), "the report names the stream and the cut: %s, %s" % [rep.segments[2].obstacle, rep.segments[4].obstacle])
+	check(rep.cart < rep.walk and rep.segments.all(func(x): return x.len == 8), "with each segment's length, and a cart estimate quicker than walking")
+	# Wading is slower than walking.
+	var on_grass := walk_ticks(Vector2i(2, 1), Vector2i(10, 1))
+	var wading := walk_ticks(Vector2i(17, 1), Vector2i(25, 1))
+	check(wading > on_grass + Tuning.TPS / 2, "crossing the stream is slower than grass (%d ticks, against %d)" % [wading, on_grass])
+	# The bridge: planks from the village, carried out and built by a village resident.
+	var walk_before := sim.route_walk_time()
+	check(sim.plan_bridge() == "" and sim.plan_bridge() != "", "Build the bridge places one blueprint")
+	var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], sim.route_sign() + Vector2i(-3, 0))
+	mira.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
+	sim.drop_items(sim.route_sign() + Vector2i(-4, 2), "plank", 12)
+	var labels: Array = []
+	for i in 150 * Tuning.TPS:
+		sim.step()
+		if mira.job != null and not labels.has(mira.job.label):
+			labels.append(mira.job.label)
+		if sim.bridge().done:
+			break
+	check(sim.bridge().done and labels.has("Hauling planks to the bridge") and labels.has("Building the bridge"), "Mira carries the planks out and builds the bridge (%s)" % [labels])
+	sim.use_map(Road.ID)
+	check(sim.ground_speed(Vector2i(20, 3)) == 1.0 and sim.walkable(Vector2i(20, 3)), "the bridge takes away the wading, and is walked over")
+	sim.use_map("village")
+	check(sim.route_walk_time() < walk_before and rep.segments[2].obstacle != sim.route_report().segments[2].obstacle, "the walk is quicker, and the report says it's bridged")
+	# The cut: its boulders on the line are marked, then mined from the village.
+	check(sim.clear_cut() == "" and sim.cut_boulders().all(func(b): return b.des), "Clear the cut marks its boulders")
+	for i in 150 * Tuning.TPS:
+		sim.step()
+		if sim.cut_boulders().is_empty():
+			break
+	check(sim.cut_boulders().is_empty() and sim.route_report().segments[4].obstacle == "Cleared", "Mira walks out and mines them")
+	run(sim, 20)
+	check(mira.map == "village", "then walks back to the village")
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.route_surveyed() and loaded.bridge().done and loaded.cut_boulders().is_empty(), "the survey, the bridge and the cleared cut are saved")
+
+
+## Ticks a lone resident takes to walk between two road cells.
+func walk_ticks(from: Vector2i, to: Vector2i) -> int:
+	var sim := Sim.new_game()
+	var r: Dictionary = sim.residents[0]
+	sim.move_to_map(r, Road.ID, from)
+	r.direct = sim._move_job(to)
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if Sim.rcell(r) == to and r.pos == Vector2(to):
+			return i
+	return 9999
+
+
+## Issue #120: rails and minecarts are crafted at the bench from iron, and hauled and counted.
+func test_rails_and_minecarts() -> void:
+	var rails := Defs.recipe("rails")
+	var cart := Defs.recipe("minecart")
+	check(rails.inp == {"iron_ingot": 6, "stick": 1} and rails.out == {"rail": 16}, "6 iron ingots and a stick make 16 rails")
+	check(cart.inp == {"iron_ingot": 5} and cart.out == {"minecart": 1}, "5 iron ingots make a minecart")
+	check(Sim.recipe_job(rails) == "craft" and Sim.recipe_job(cart) == "craft", "both are Craft work: nobody carries them as tools")
+	check(Defs.MATERIALS.has("rail") and Defs.MATERIALS.has("minecart") and Defs.stack_cap("rail") == Tuning.STACK and Defs.stack_cap("minecart") == 1, "they're counted as materials; rails stack, a minecart has a cell to itself")
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 1), "iron_ingot", 11)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "stick", 1)
+	sim.queue_add(bench, "rails")
+	sim.queue_add(bench, "minecart")
+	run(sim, 60)
+	check(count(sim, "rail") == 16 and count(sim, "minecart") == 1 and count(sim, "iron_ingot") == 0, "Ada crafts 16 rails and a minecart (%d rails, %d carts)" % [count(sim, "rail"), count(sim, "minecart")])
+	sim.paint_zone(open_rect(sim, Vector2i(3, 3)))
+	run(sim, 60)
+	var stored := sim.stacks_where(func(st): return st.type in ["rail", "minecart"] and sim.in_zone(st.cell))
+	check(stored.size() == 2 and stored.any(func(st): return st.type == "rail" and st.n == 16) and stored.any(func(st): return st.type == "minecart" and st.n == 1), "both are hauled to the stockpile (%s)" % [stored.map(func(st): return "%d %s" % [st.n, st.type])])
+
+
+## Issue #121: planning the line puts a track blueprint on each segment, shows its cost and the time it
+## saves, waits on the bridge and the cut, is laid from the village end, and cancels cleanly.
+func test_plan_the_line() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	built_board(sim)
+	check(sim.plan_line_blocker().begins_with("Walk the road first") and sim.plan_line() != "", "the line can't be planned before the road is walked")
+	sim.road().seen = Road.segment_count()
+	var before := sim.line_cost()
+	check(before.rails == 12 and before.ingots == 6 and before.saved > 10.0, "the preview: 12 rails, the 6 iron ingots to craft them, and %.0f s saved a round trip" % before.saved)
+	check(sim.plan_line() == "", "once surveyed, the line can be planned")
+	var tracks: Array = sim.road().sites.filter(func(st): return st.tpl == "track")
+	check(tracks.size() == 6 and range(6).all(func(i): return tracks[i].seg == i and tracks[i].origin == Vector2i(Road.SEGMENTS[i].x, Road.LINE_ROW) and tracks[i].size == Vector2i(8, 1)), "one track blueprint per segment, along the line")
+	check(sim.plan_line() == "The whole line is planned", "one line, planned once")
+	check(sim.on_map(Road.ID, sim.walkable.bind(Vector2i(5, Road.LINE_ROW))), "blueprints don't block the road")
+	check(sim.next_track() == 0 and sim.track_blocker(2) == "Needs the bridge" and sim.track_blocker(4) == "Needs the cut cleared" and sim.track_blocker(0) == "", "the stream and the cut block their segments")
+	# Rails in the village are carried out and laid from the village end, up to the stream.
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "rail", 6)
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.track_state(1) == "built":
+			break
+	check(sim.track_state(0) == "built" and sim.track_state(1) == "built", "Ada lays the first two segments")
+	run(sim, 20)
+	check(sim.track_state(2) == "planned" and tracks[2].store.is_empty(), "the stream's segment waits for the bridge")
+	sim.compute_stuck()
+	check(sim.stuck.any(func(x): return x.why == "Track: needs the bridge first" and x.focus_id == tracks[2].id), "and says so: %s" % stuck_text(sim))
+	check(sim.line_cost().rails == 8, "the preview counts only what's still to lay (%d)" % sim.line_cost().rails)
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.track_state(1) == "built" and loaded.track_state(2) == "planned" and loaded.track_site(3).seg == 3, "the planned line is saved")
+	# Cancelling a segment sets down the rails delivered to it.
+	tracks[3].store = {"rail": 1}
+	sim.cancel_site(tracks[3])
+	var back: int = sim.on_map(Road.ID, func(): return sim.items.values().filter(func(st): return st.type == "rail").reduce(func(a, st): return a + st.n, 0))
+	check(sim.track_state(3) == "none" and back >= 1, "cancelling a segment returns its rails as a stack (%d)" % back)
+	check(sim.plan_line() == "" and sim.track_state(3) == "planned", "and planning again fills the gap")

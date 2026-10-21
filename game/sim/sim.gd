@@ -170,6 +170,9 @@ static func new_game() -> Sim:
 func _add_site_maps() -> void:
 	if not maps.has(OldMine.ID):
 		maps[OldMine.ID] = OldMine.build(self)
+	if not maps.has(Road.ID):  # the road becomes known with the mine (issue #118)
+		maps[Road.ID] = Road.build(self)
+		road().known = maps[OldMine.ID].known
 
 
 func add_bush(cell: Vector2i) -> Dictionary:
@@ -426,7 +429,7 @@ static func full_uses(type: String) -> int:
 func drop_items(c: Vector2i, type: String, n: int, uses := -1) -> void:
 	if _occ_dirty:
 		_recompute_occ()
-	var cap := 1 if Defs.is_tool_item(type) else Tuning.STACK
+	var cap := Defs.stack_cap(type)
 	var seen := {c: true}
 	var queue: Array = [c]
 	var qi := 0
@@ -438,7 +441,7 @@ func drop_items(c: Vector2i, type: String, n: int, uses := -1) -> void:
 			if s == null:
 				var put := mini(n, cap)
 				m.items[cur] = {"cell": cur, "type": type, "n": put, "res": 0}
-				if cap == 1:
+				if Defs.is_tool_item(type):
 					m.items[cur].dur = full_uses(type) if uses < 0 else uses
 				n -= put
 			elif s.type == type and s.n < cap:
@@ -494,6 +497,8 @@ func site_cells(s: Dictionary) -> Array:
 
 
 func site_blocks(s: Dictionary) -> bool:
+	if Defs.TEMPLATES[s.tpl].get("walk", false):  # the bridge and track are walked over
+		return false
 	return s.done or (s.tpl == "house" and s.stage >= 1)
 
 
@@ -681,8 +686,18 @@ func _on_site_done(s: Dictionary) -> void:
 	if s.tpl == "fireplace":
 		_toast("The fireplace is lit. It keeps %d meals in stock when there's wheat or mutton." % Tuning.MEAL_STOCK, 0, s.id)
 		return
+	if s.tpl == "bridge":
+		_toast("The bridge over the stream is built: no more wading, and track can cross.", 0, s.id)
+		return
+	if s.tpl == "track":
+		if line_complete():
+			_toast("The line to the mine is complete.", 0, s.id)
+		else:
+			_toast("Track is laid along %s." % Road.SEGMENTS[s.seg].name.to_lower(), 0, s.id)
+		return
 	if s.tpl == "board":  # it has word of the old mine, which the map switcher now shows (issue #105)
 		maps[OldMine.ID].known = true
+		road().known = true
 		_toast("The expedition board is up, with word of an old mine to the east. Select it to plan an expedition.", 0, s.id)
 		return
 	stats.houses += 1
@@ -898,7 +913,7 @@ func food_available() -> bool:
 ## Go and eat (issue #44): pick up the nearest food and eat it, or eat berries off a bush until
 ## nearly full or the bush is bare.
 func _eat_job(r: Dictionary):
-	if at_site(r):
+	if at_site(r) or on_road(r):
 		return _ration_job(r)
 	var f := _nearest_food(rcell(r))
 	if f.is_empty():
@@ -1013,6 +1028,10 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the fireplace"
 	elif s.tpl == "board":
 		label = "Building the expedition board"
+	elif s.tpl == "bridge":
+		label = "Building the bridge"
+	elif s.tpl == "track":
+		label = "Laying track"
 	j.step(_goto(site_cells(s), true))
 	j.step({"op": "work", "what": "build", "site": s, "label": label})
 	return j
@@ -1131,7 +1150,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			var nxt: Vector2i = r.path[0]
 			var to: Vector2 = Vector2(nxt) - r.pos
 			var dist: float = to.length()
-			var step_len := Tuning.WALK * Tuning.DT * hurt_speed(r)
+			var step_len := Tuning.WALK * Tuning.DT * hurt_speed(r) * ground_speed(rcell(r))
 			if dist <= step_len:
 				r.pos = Vector2(nxt)
 				r.path.pop_front()
@@ -1158,10 +1177,12 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				return false
 			var to: Vector2 = Vector2(nxt) - r.pos
 			var dist: float = to.length()
-			var step_len := Tuning.WALK * Tuning.DT * hurt_speed(r)
+			var step_len := Tuning.WALK * Tuning.DT * hurt_speed(r) * ground_speed(rcell(r))
 			if dist <= step_len:
 				r.pos = Vector2(nxt)
 				r.path.pop_front()
+				if m.kind == "route":
+					_reveal(nxt)
 				if m.kind == "site":
 					_ledge_step(r, nxt)
 					if r.job != j:
@@ -1217,14 +1238,35 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
 			r.carry = null
 			return true
-		"depart":  # off the edge of the map, onto the road (the meadow, issue #50, or a site, #108)
+		"depart":  # off the edge of the map: to the meadow (issue #50), or onto the road map (#118)
 			var to: String = st.get("to", "meadow")
+			if to != "meadow":
+				_onto_road(r, to)
+				return true
 			r.away = true
 			r.trip = to
 			r.back_at = tick + int(trip_time(to) * Tuning.TPS)
 			r.path = []
 			r.progress = -1.0
 			rev += 1
+			return true
+		"road_end":  # the far end of the road: into the site, or home (issue #118)
+			if r.trip == "village":
+				_arrive_home(r)
+			else:
+				_arrive_at_site(r)
+			return true
+		"cross":  # between the village and the road, for work out there (issues #119, #121)
+			r.map = st.to
+			var at = Road.VILLAGE_END
+			if st.to == "village":
+				at = on_map("village", nearest_walkable.bind(route_sign()))
+				at = at if at != null else route_sign()
+			r.pos = Vector2(at)
+			r.path = []
+			rev += 1
+			if st.to == Road.ID:
+				_reveal(at)
 			return true
 		"ration":  # a meal out of the packs (issue #109)
 			if spendable_meals() <= 0:
@@ -1485,6 +1527,12 @@ func _claim(r: Dictionary) -> void:
 	if on_the_way(r):  # out of village labor: off to the signpost, or home from the site (issue #108)
 		r.job = _road_job()
 		return
+	if on_road(r):  # walking the road map (issue #118)
+		r.job = _road_walk_job(r)
+		return
+	if map_id == Road.ID:  # out on the road for work there (issues #119, #121)
+		r.job = _claim_on_road(r)
+		return
 	if at_site(r):  # the party works the site by its orders (issue #109)
 		r.job = _site_job(r)
 		return
@@ -1529,12 +1577,13 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 		"build":
 			if not jobs.has("build"):
 				return null
-			var ready := m.sites.filter(func(s): return not s.done and s.builder == 0 and has_all(s.store, current_stage(s).cost) and not _cooling(s) and footprint_clear(s))
+			var ready := m.sites.filter(func(s): return not s.done and s.builder == 0 and site_open(s) and has_all(s.store, current_stage(s).cost) and not _cooling(s) and footprint_clear(s))
 			if not ready.is_empty():
 				return _tagged(_build_job(r, _nearest_site(ready, c)), "build")
-			var dj = _try_deliver(r, c, m.sites.filter(func(s): return not s.done and footprint_clear(s)))
+			var dj = _try_deliver(r, c, m.sites.filter(func(s): return not s.done and site_open(s) and footprint_clear(s)))
 			if dj != null:
 				return _tagged(dj, "build")
+			return _road_claim(r, "build", jobs)
 		"farm":
 			if not jobs.has("farm"):
 				return null
@@ -1559,6 +1608,9 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			if not targets.is_empty():
 				var t: Dictionary = nearest(targets, c)
 				return _tagged(_hunt_job(r, t), "hunt") if t.kind == "sheep" else _tagged(_gather_job(r, t), "mine")
+			var rj = _road_claim(r, "gather", jobs)
+			if rj != null:
+				return _tagged(rj, "mine")
 		"haul":
 			if not jobs.has("haul"):
 				return null
@@ -1587,7 +1639,7 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 		var dest = zone_dest(ls.type)
 		if dest == null:
 			continue
-		var cap := 1 if Defs.is_tool_item(ls.type) else Tuning.STACK
+		var cap := Defs.stack_cap(ls.type)
 		var here = m.items.get(dest)
 		var room: int = cap - (here.n if here != null else 0)
 		return {"stack": ls, "dest": dest, "n": mini(mini(avail(ls), carry), room)}
@@ -1628,7 +1680,7 @@ func _cooling(e: Dictionary) -> bool:
 
 
 func zone_dest(type: String):
-	var cap := 1 if Defs.is_tool_item(type) else Tuning.STACK
+	var cap := Defs.stack_cap(type)
 	var empty = null
 	for c in m.zone:
 		if m.zone_res.has(c) or not walkable(c):
@@ -1664,7 +1716,7 @@ func step() -> void:
 	var kinds := {}
 	var working := 0
 	for r in residents:
-		if r.job != null and not (r.job.kind in ["move", "arrive", "stage", "road", "rest", "hurt"]):
+		if r.job != null and not (r.job.kind in ["move", "arrive", "stage", "road", "rest", "hurt", "commute"]):
 			kinds[r.job.kind] = true
 			working += 1
 	if working >= 2 and kinds.size() >= 2:
@@ -1713,7 +1765,7 @@ func _step_map() -> void:
 		keep_tools_stocked()
 	if tick % 10 == 0:
 		for s in m.sites:
-			if not s.done:
+			if not s.done and s.tpl != "track":  # the cut is cleared by the player's order (issue #119)
 				_mark_obstacles(s)
 
 
@@ -1937,6 +1989,13 @@ func _stuck_on_map() -> void:
 	for s in m.sites:
 		var tpl: Dictionary = Defs.TEMPLATES[s.tpl]
 		var mid := Vector2(s.origin) + Vector2(s.size) / 2.0
+		if s.tpl == "track":  # only the segment being laid speaks up; the rest wait their turn (issue #121)
+			if s.done or s.seg != next_track():
+				continue
+			var bl := track_blocker(s.seg)
+			if bl != "":
+				_add_stuck(tpl.name, "Track: %s first" % bl.to_lower(), mid, 0.4, "site", s.id)
+				continue
 		if not s.done and not footprint_clear(s):
 			var ob := site_obstacles(s)
 			var nb: int = ob.boulders.size()
@@ -1965,6 +2024,8 @@ func _stuck_on_map() -> void:
 		var worst_n := 0
 		for k in cost:
 			var short: int = cost[k] - s.store.get(k, 0) - s.incoming.get(k, 0) - free_count(k)
+			if m.kind == "route":  # the road is supplied from the village (issue #119)
+				short -= on_map("village", free_count.bind(k))
 			if short > worst_n:
 				worst = k
 				worst_n = short
@@ -1986,7 +2047,7 @@ func _stuck_on_map() -> void:
 			if r.job != null and r.job.kind == "trip":
 				_add_stuck("Meadow", "Meadow has no sheep left", Vector2(meadow_sign()) + Vector2(0.5, 0.5), 1.4, "res", r.id)
 				break
-	var has_food := food_available()
+	var has_food: bool = food_available() if m.kind != "route" else on_map("village", food_available)  # the road eats from home
 	for r in on_here:
 		var at: Vector2 = r.pos + Vector2(0.5, 0.5)
 		if r.hunger <= 0.0 and not has_food:
@@ -2076,6 +2137,8 @@ func site_height(s: Dictionary) -> float:
 		return 0.7 if s.done else 0.2
 	if s.tpl == "board":
 		return 1.5 if s.done else 0.2
+	if s.tpl in ["bridge", "track"]:
+		return 0.2
 	return [0.2, 0.5, 2.5, 4.0, 4.0][mini(s.stage, 4)]
 
 
@@ -2788,8 +2851,8 @@ func route_sign() -> Vector2i:
 
 
 ## Seconds on the road to `to`, and back: the meadow's trip, or the walk to and from a site.
-static func trip_time(to: String) -> float:
-	return Tuning.MEADOW_TRIP if to in ["", "meadow"] else Tuning.MINE_TRIP
+func trip_time(to: String) -> float:
+	return Tuning.MEADOW_TRIP if to in ["", "meadow"] else route_walk_time()
 
 
 ## Whether a party member is on their way: walking to the signpost to leave the village, or to the
@@ -2804,7 +2867,7 @@ func on_the_way(r: Dictionary) -> bool:
 
 ## Whether a party member is carrying the packs through the village, on the way out (drawn as packs).
 func carrying_packs(r: Dictionary) -> bool:
-	return on_the_way(r) and r.map == "village"
+	return (on_the_way(r) and r.map == "village") or on_road(r)
 
 
 ## The walk to where the road starts: the village signpost, or the site's entrance on the way home.
@@ -2917,6 +2980,340 @@ func expedition_report(ex: Dictionary) -> Array:
 	return lines
 
 
+# ---------------------------------------------------------------- the road to the mine (issues #118-#121)
+
+func road() -> SimMap:
+	return maps[Road.ID]
+
+
+## Whether a party member is walking the road map (issue #118), out or home. One who's already home
+## and out there for other work isn't.
+func on_road(r: Dictionary) -> bool:
+	return expedition.get("state", "") == "out" and expedition.party.has(r.id) and r.map == Road.ID and r.trip != ""
+
+
+## Onto the road map at the end they're leaving from, heading for `to` (a site, or "village").
+func _onto_road(r: Dictionary, to: String) -> void:
+	move_to_map(r, Road.ID, Road.VILLAGE_END if to != "village" else Road.MINE_END)
+	r.trip = to
+	road().known = true
+	_reveal(rcell(r))
+
+
+## A party member's walk along the road, to the far end, where they step off it.
+func _road_walk_job(r: Dictionary) -> Job:
+	var home: bool = r.trip == "village"
+	var j := Job.new("road", "On the road home" if home else "On the road to the %s" % maps[expedition.dest].name.to_lower(), "the end of the road")
+	j.step(_goto([Road.VILLAGE_END if home else Road.MINE_END], false))
+	j.step({"op": "road_end"})
+	return j
+
+
+## About how many seconds a party member has left on the road.
+func road_eta(r: Dictionary) -> float:
+	var end := Road.VILLAGE_END if r.trip == "village" else Road.MINE_END
+	return absf(r.pos.x - end.x) / (Tuning.WALK * hurt_speed(r))
+
+
+## Walking speed on a cell, as a share of WALK: wading the stream is slow until it's bridged.
+func ground_speed(c: Vector2i) -> float:
+	return Tuning.FORD_SPEED if m.water.has(c) and not bridged(c) else 1.0
+
+
+func bridged(c: Vector2i) -> bool:
+	return m.sites.any(func(s): return s.tpl == "bridge" and s.done and Rect2i(s.origin, s.size).has_point(c))
+
+
+## Someone on the road reaches a new segment: the fog lifts off it (issue #119).
+func _reveal(c: Vector2i) -> void:
+	var rd := road()
+	var seg := Road.segment_at(c.x)
+	if seg < rd.seen:
+		return
+	rd.seen = seg + 1
+	rev += 1
+	if rd.seen >= Road.segment_count():
+		var prev := use_map(Road.ID)
+		_toast("The road to the mine is surveyed: about %d s on foot. Select the signpost for the route." % roundi(route_walk_time()))
+		use_map(prev)
+
+
+func route_surveyed() -> bool:
+	return road().seen >= Road.segment_count()
+
+
+## The walk from end to end along the line, fording the stream until it's bridged.
+func route_walk_time() -> float:
+	var t := 0.0
+	var rd := road()
+	var prev := use_map(Road.ID)
+	for x in range(Road.VILLAGE_END.x, Road.MINE_END.x):
+		t += 1.0 / (Tuning.WALK * ground_speed(Vector2i(x, Road.LINE_ROW)))
+	use_map(prev)
+	return t
+
+
+## The ride from end to end once the line is complete.
+static func route_cart_time() -> float:
+	return float(Road.MINE_END.x - Road.VILLAGE_END.x) / Tuning.CART_SPEED
+
+
+## What stands in the way on a segment, in the player's words, or "".
+func obstacle_text(i: int) -> String:
+	match Road.SEGMENTS[i].obstacle:
+		"stream":
+			var b := bridge()
+			if not b.is_empty() and b.done:
+				return "Bridged"
+			if not b.is_empty():
+				return "A bridge is planned. Until it's built, people wade across slowly"
+			return "A stream: people wade across slowly. Track needs a plank bridge (%s)" % Defs.cost_text(Defs.TEMPLATES.bridge.stages[0].cost)
+		"cut":
+			var n := cut_boulders().size()
+			if n == 0:
+				return "Cleared"
+			return "A rocky cut: %d %s on the line to mine before track can go down" % [n, "boulder" if n == 1 else "boulders"]
+	return ""
+
+
+## The bridge over the stream, planned or built, or {}.
+func bridge() -> Dictionary:
+	for st in road().sites:
+		if st.tpl == "bridge":
+			return st
+	return {}
+
+
+## Boulders still standing on the line in the rocky cut.
+func cut_boulders() -> Array:
+	var line := {}
+	for i in Road.segment_count():
+		if Road.SEGMENTS[i].obstacle == "cut":
+			for c in Road.line_cells(i):
+				line[c] = true
+	return road().boulders.filter(func(b): return b.alive and line.has(b.cell))
+
+
+## The route report (issue #119), for the signpost and the expedition board: each segment, and the
+## journey on foot and by cart.
+func route_report() -> Dictionary:
+	var rd := road()
+	var segs: Array = []
+	for i in Road.segment_count():
+		var sg: Dictionary = Road.SEGMENTS[i]
+		if i >= rd.seen:
+			segs.append({"name": "Not walked yet", "known": false, "len": Road.seg_len(i)})
+			continue
+		segs.append({"name": sg.name, "known": true, "len": Road.seg_len(i), "terrain": sg.terrain,
+			"obstacle": obstacle_text(i), "track": track_state(i)})
+	return {"segments": segs, "surveyed": route_surveyed(), "walk": route_walk_time(), "cart": route_cart_time()}
+
+
+## Places the plank bridge over the stream (issue #119). Returns why it can't, or "".
+func plan_bridge() -> String:
+	if road().seen <= _seg_of("stream"):
+		return "Nobody has seen the stream yet"
+	if not bridge().is_empty():
+		return "The bridge is already planned"
+	var prev := use_map(Road.ID)
+	var b := place_site("bridge", Road.BRIDGE_AT)
+	use_map(prev)
+	b.plot = null
+	return ""
+
+
+## Marks the cut's boulders on the line to be mined (issue #119). Returns why it can't, or "".
+func clear_cut() -> String:
+	if road().seen <= _seg_of("cut"):
+		return "Nobody has seen the cut yet"
+	var left := cut_boulders()
+	if left.is_empty():
+		return "The cut is already clear"
+	for b in left:
+		b.des = true
+		b.unreach_until = 0
+	rev += 1
+	return ""
+
+
+static func _seg_of(obstacle: String) -> int:
+	for i in Road.segment_count():
+		if Road.SEGMENTS[i].obstacle == obstacle:
+			return i
+	return -1
+
+
+# The line (issue #121): one point-to-point line along the road, a track blueprint per segment.
+
+## A segment's track site, or {}.
+func track_site(i: int) -> Dictionary:
+	for st in road().sites:
+		if st.tpl == "track" and st.seg == i:
+			return st
+	return {}
+
+
+## "none", "planned" or "built".
+func track_state(i: int) -> String:
+	var t := track_site(i)
+	return "none" if t.is_empty() else ("built" if t.done else "planned")
+
+
+## What stops a segment's track going down, in the player's words, or "".
+func track_blocker(i: int) -> String:
+	match Road.SEGMENTS[i].obstacle:
+		"stream":
+			var b := bridge()
+			if b.is_empty() or not b.done:
+				return "Needs the bridge"
+		"cut":
+			if not cut_boulders().is_empty():
+				return "Needs the cut cleared"
+	return ""
+
+
+## The segment being laid now: the first unbuilt one from the village end, or -1.
+func next_track() -> int:
+	for i in Road.segment_count():
+		var t := track_site(i)
+		if not t.is_empty() and not t.done:
+			return i
+	return -1
+
+
+## Whether a site on the road can be worked now: track only on the next segment, once it's clear.
+func site_open(st: Dictionary) -> bool:
+	if st.tpl != "track":
+		return true
+	return st.seg == next_track() and track_blocker(st.seg) == ""
+
+
+func line_complete() -> bool:
+	return range(Road.segment_count()).all(func(i): return track_state(i) == "built")
+
+
+## What the line costs, for the preview (issue #121): the rails it needs that aren't laid or delivered,
+## the iron ingots to craft those beyond the rails on hand, and the seconds a round trip saves.
+func line_cost() -> Dictionary:
+	var rails := 0
+	for i in Road.segment_count():
+		var t := track_site(i)
+		if t.is_empty():
+			rails += Tuning.RAILS_PER_SEGMENT
+		elif not t.done:
+			rails += Tuning.RAILS_PER_SEGMENT - t.store.get("rail", 0)
+	var on_hand: int = on_map("village", free_count.bind("rail"))
+	var crafts := ceili(maxi(0, rails - on_hand) / 16.0)
+	var ingots: int = crafts * int(Defs.recipe("rails").inp.iron_ingot)
+	return {"rails": rails, "on_hand": on_hand, "ingots": ingots, "saved": 2.0 * (route_walk_time() - route_cart_time())}
+
+
+## Why the line can't be planned, or "".
+func plan_line_blocker() -> String:
+	if not route_surveyed():
+		return "Walk the road first: nobody knows the way past the fog"
+	if range(Road.segment_count()).all(func(i): return track_state(i) != "none"):
+		return "The whole line is planned"
+	return ""
+
+
+## Plans the line (issue #121): a track blueprint on every segment that has none, from the village end
+## to the mine. One point-to-point line, with no switches or branches (#29). Returns why it can't, or "".
+func plan_line() -> String:
+	var why := plan_line_blocker()
+	if why != "":
+		return why
+	var prev := use_map(Road.ID)
+	for i in Road.segment_count():
+		if track_state(i) != "none":
+			continue
+		var t := {"id": _id(), "kind": "site", "tpl": "track", "origin": Vector2i(Road.SEGMENTS[i].x, Road.LINE_ROW),
+			"size": Vector2i(Road.seg_len(i), 1), "rot": 0, "stage": 0, "store": {}, "incoming": {}, "builder": 0,
+			"crafter": 0, "crafting": "", "done": false, "owner": 0, "queue": [], "autoq": [], "unreach_until": 0,
+			"plot": null, "map": Road.ID, "seg": i}
+		m.sites.append(t)
+	_occ_dirty = true
+	rev += 1
+	use_map(prev)
+	return ""
+
+
+# Work on the road (issues #119, #121): village residents walk out to build, deliver and clear there.
+
+## Into the road from the village, before step `at` of a job made for the road.
+func _via_road(j: Job, at: int) -> Job:
+	j.steps.insert(at, _goto([route_sign()], true))
+	j.steps.insert(at + 1, {"op": "cross", "to": Road.ID})
+	return j
+
+
+## Back to the village from the road.
+func _back_job() -> Job:
+	var j := Job.new("commute", "Heading back to the village", "the village")
+	j.step(_goto([Road.VILLAGE_END], false))
+	j.step({"op": "cross", "to": "village"})
+	return j
+
+
+## Work of this kind out on the road, for a village resident with nothing of it to do at home: build
+## or supply the bridge and the line, or mine what's marked there. Null when there's none.
+func _road_claim(r: Dictionary, kind: String, jobs: Array):
+	if map_id != "village" or not maps.has(Road.ID) or not road().known:
+		return null
+	var c := rcell(r)
+	var has_pick: bool = r.pick != null or not tool_items("pick", 0).is_empty()
+	var prev := use_map(Road.ID)
+	var j = null
+	match kind:
+		"build":
+			if jobs.has("build"):
+				var ready := m.sites.filter(func(st): return not st.done and st.builder == 0 and site_open(st) and has_all(st.store, current_stage(st).cost) and not _cooling(st) and footprint_clear(st))
+				if not ready.is_empty():
+					j = _via_road(_tagged(_build_job(r, _nearest_site(ready, Road.VILLAGE_END)), "build"), 0)
+				else:
+					for st in m.sites:
+						if st.done or not site_open(st) or _cooling(st) or not footprint_clear(st):
+							continue
+						var need := stage_needs(st)
+						for t in need:
+							var src: Array = maps.village.items.values().filter(func(x): return x.type == t and avail(x) > 0)
+							if src.is_empty():
+								continue
+							var from: Dictionary = nearest(src, c)
+							j = _via_road(_tagged(_deliver_job(st, t, mini(mini(need[t], carry_cap(r)), avail(from)), from), "build"), 2)
+							break
+						if j != null:
+							break
+		"gather":
+			if jobs.has("mine") and r.get("hurt", 0) == 0:
+				var targets: Array = m.trees.filter(func(t): return t.alive and t.des and t.claim == 0 and not _cooling(t))
+				if has_pick:
+					targets += m.boulders.filter(func(b): return b.alive and b.des and b.claim == 0 and not _cooling(b))
+				if not targets.is_empty():
+					var t: Dictionary = nearest(targets, Road.VILLAGE_END)
+					use_map("village")
+					j = _gather_job(r, t)  # a better tool is fetched in the village first
+					use_map(Road.ID)
+					_via_road(j, j.steps.size() - 2)
+	use_map(prev)
+	return j
+
+
+## What someone out on the road does next: more work there, or back to the village to eat, fetch
+## materials or find other work.
+func _claim_on_road(r: Dictionary) -> Job:
+	if r.hunger < Tuning.EAT_BELOW:
+		return _back_job()
+	var c := rcell(r)
+	for p in [1, 2, 3]:
+		var jobs: Array = Defs.JOBS.filter(func(jb): return r.jobs[jb].on and r.jobs[jb].pri == p)
+		for kind in ["build", "gather"]:
+			var j = _claim_kind(r, c, kind, jobs)
+			if j != null:
+				return j
+	return _back_job()
+
+
 # ---------------------------------------------------------------- the party at the site (issue #109)
 
 ## Whether a party member is at the site, working it (not on their way home).
@@ -2979,7 +3376,8 @@ func _ration_job(r: Dictionary):
 	if spendable_meals() <= 0:
 		return null
 	var j := Job.new("eat", "Going to eat from the packs", "the packs")
-	j.step(_goto([m.entrance], false))
+	if not on_road(r):  # on the road, they carry the packs
+		j.step(_goto([m.entrance], false))
 	j.step({"op": "ration"})
 	j.step({"op": "work", "what": "eat", "label": "Eating from the packs"})
 	return j
@@ -3372,7 +3770,7 @@ func site_report(id: String) -> Dictionary:
 	var finds: Array = []
 	if mp.found and not mp.discovered:
 		finds.append("Iron vein found, not surveyed")
-	return {"name": mp.name, "told": OldMine.TOLD, "visited": mp.visited, "travel": Tuning.MINE_TRIP,
+	return {"name": mp.name, "told": OldMine.TOLD, "visited": mp.visited, "travel": route_walk_time() if route_surveyed() else -1.0,
 		"resources": res, "hazards": hazards, "access": OldMine.ACCESS.duplicate() if mp.visited else [], "finds": finds}
 
 

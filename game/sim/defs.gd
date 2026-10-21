@@ -17,6 +17,9 @@ const ITEMS := {
 	"coal": {"one": "coal", "many": "coal", "label": "Coal"},
 	"iron_ore": {"one": "iron ore", "many": "iron ore", "label": "Iron ore"},
 	"iron_ingot": {"one": "iron ingot", "many": "iron ingots", "label": "Iron"},
+	# The line to the mine (Slice 4, issue #120). A minecart is one big item: one to a cell, hauled like a tool.
+	"rail": {"one": "rail", "many": "rails", "label": "Rails"},
+	"minecart": {"one": "minecart", "many": "minecarts", "label": "Minecarts", "single": true},
 	"wood_axe": {"one": "wooden axe", "many": "wooden axes", "tool": "axe", "tier": 1},
 	"wood_pick": {"one": "wooden pickaxe", "many": "wooden pickaxes", "tool": "pick", "tier": 1},
 	"stone_axe": {"one": "stone axe", "many": "stone axes", "tool": "axe", "tier": 2},
@@ -29,7 +32,7 @@ const ITEMS := {
 const TIER_NAMES := ["Bare", "Wooden", "Stone", "Iron"]
 
 ## The tally bar's Materials group, in order (issue #73). Raw mutton is counted under Food instead.
-const MATERIALS := ["log", "plank", "stick", "cobble", "coal", "iron_ore", "iron_ingot", "wheat", "wool"]
+const MATERIALS := ["log", "plank", "stick", "cobble", "coal", "iron_ore", "iron_ingot", "rail", "minecart", "wheat", "wool"]
 
 ## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.
 const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}}
@@ -47,6 +50,9 @@ const RECIPES := [
 	# Iron tools (issue #104), from ingots smelted at the fireplace.
 	{"id": "iron_axe", "name": "Iron axe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_axe": 1}, "pattern": ["II ", "IS ", " S "]},
 	{"id": "iron_pick", "name": "Iron pickaxe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_pick": 1}, "pattern": ["III", " S ", " S "]},
+	# The line to the mine (issue #120): Craft work, not Toolsmith, since nobody carries them as tools.
+	{"id": "rails", "name": "Rails", "inp": {"iron_ingot": 6, "stick": 1}, "out": {"rail": 16}, "pattern": ["I I", "ISI", "I I"]},
+	{"id": "minecart", "name": "Minecart", "inp": {"iron_ingot": 5}, "out": {"minecart": 1}, "pattern": ["   ", "I I", "III"]},
 	# Fireplace recipes (issue #46). "at" says which job building makes a recipe; the default is the bench.
 	{"id": "bread", "name": "Bread", "inp": {"wheat": 3}, "out": {"bread": 1}, "at": "fireplace", "doing": "Baking bread"},
 	{"id": "cooked_mutton", "name": "Cooked mutton", "inp": {"mutton": 1, "log": 1}, "out": {"cooked_mutton": 1}, "at": "fireplace", "doing": "Cooking mutton", "fuel": "log"},
@@ -80,6 +86,13 @@ const TEMPLATES := {
 	"board": {"name": "Expedition board", "size": Vector2i(1, 1), "plot": "map room", "stages": [
 		{"name": "Expedition board", "verb": "needs", "cost": {"plank": 6, "stick": 4}},
 	]},
+	# On the road to the mine (issues #119, #121). Both are walked over, so neither blocks the way.
+	"bridge": {"name": "Bridge", "size": Vector2i(4, 3), "walk": true, "stages": [
+		{"name": "Bridge", "verb": "needs", "cost": {"plank": 12}},
+	]},
+	"track": {"name": "Track", "size": Vector2i(8, 1), "walk": true, "stages": [
+		{"name": "Track", "verb": "needs", "cost": {"rail": Tuning.RAILS_PER_SEGMENT}},
+	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},
 		{"name": "Walls", "verb": "need", "cost": {"plank": 16, "log": 4}},
@@ -111,6 +124,11 @@ static func producer(item: String, tpl := "bench") -> Dictionary:
 
 static func is_tool_item(item: String) -> bool:
 	return ITEMS[item].has("tool")
+
+
+## Items to a cell: one tool or minecart, or a stack of anything else.
+static func stack_cap(item: String) -> int:
+	return 1 if ITEMS[item].has("tool") or ITEMS[item].get("single", false) else Tuning.STACK
 
 
 static func words(item: String, n: int) -> String:

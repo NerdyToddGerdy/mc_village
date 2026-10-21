@@ -20,6 +20,7 @@ var craft_menu_open := false            ## The Craft panel above the toolbar (is
 var craft_bench_i := 0                  ## Which finished bench the Craft panel shows.
 var jobs_board_open := false            ## The Village jobs board (issue #78).
 var planner_open := false               ## The expedition planner above the toolbar (issue #106).
+var line_preview := false                ## The route panel shows the line's cost before it's planned (issue #121).
 var plan := {}                          ## The plan being drawn up in the planner; the sim's once confirmed.
 var selection := {}                     ## {} | {kind:"res", ids:[...]} | {kind:"tree"/"boulder"/"site", id}
 ## The map in view (issue #101): "village" or a site map. The sim stays on the village between
@@ -384,6 +385,8 @@ func selected_entity():
 		"route":
 			if view_map == "village":
 				return {"kind": "route", "id": 0, "cell": sim.route_sign()}
+			if view_map == Road.ID:  # either end's signpost on the road itself (issue #119)
+				return {"kind": "route", "id": 0, "cell": Road.VILLAGE_END}
 		"crop":
 			for c in sim.farm.values():
 				if c.id == selection.id:
@@ -982,6 +985,22 @@ func cancel_expedition() -> void:
 	plan = sim.new_plan()
 
 
+## The road's work (issues #119, #121): the bridge, the cut and the line. Each returns why it can't, or "".
+func plan_bridge() -> String:
+	return sim.plan_bridge()
+
+
+func clear_cut() -> String:
+	return sim.clear_cut()
+
+
+func plan_line() -> String:
+	var why := sim.plan_line()
+	if why == "":
+		line_preview = false
+	return why
+
+
 func toggle_mine(target: Dictionary) -> void:
 	_in_view(func(): sim.designate_mine(Rect2i(target.cell, Vector2i.ONE), target))
 
@@ -1304,8 +1323,35 @@ func _screenshot_scene() -> void:
 			var ada: Dictionary = sim.residents[0]
 			_target = Vector3(ada.pos.x + 3.0, 0, ada.pos.y)
 			_cam.size = 9.0
+			var args := OS.get_cmdline_user_args()
+			if "--walking" in args or "--line" in args:  # on the road to the mine, seen from there (issues #118-#121)
+				for i in 60 * Tuning.TPS:
+					sim.step()
+					if ada.map == Road.ID and ada.pos.x > (14.0 if "--walking" in args else 46.0):
+						break
+				if "--line" in args:  # after the first trip: the bridge built, two segments of the line laid
+					for i in 10 * Tuning.TPS:
+						sim.step()
+					sim.plan_bridge()
+					sim.bridge().stage = 1
+					sim.bridge().done = true
+					if "--preview" in args:
+						line_preview = true
+					else:
+						sim.plan_line()
+						for k in 2:
+							sim.track_site(k).stage = 1
+							sim.track_site(k).done = true
+					sim.rev += 1
+					sim.compute_stuck()
+				switch_map(Road.ID)
+				selection = {"kind": "route", "id": 0}
+				var at: Vector2 = ada.pos if "--walking" in args else Vector2(18, 3)
+				_target = Vector3(at.x + 2.0, 0, at.y)
+				_cam.size = 10.0 if "--walking" in args else 13.0
+				sim.events.clear()
 			if "--arrived" in OS.get_cmdline_user_args():  # the party at work in the old mine, seen from there
-				for i in int((Tuning.MINE_TRIP + 30) * Tuning.TPS):
+				for i in int((sim.route_walk_time() + 30) * Tuning.TPS):
 					sim.step()
 				sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16)))
 				for i in 10 * Tuning.TPS:

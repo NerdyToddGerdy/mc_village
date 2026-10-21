@@ -3,7 +3,9 @@ extends "res://tests/playtest_base.gd"
 ## game window, from a Slice 2 village (tests/fixtures/slice2_village.save) so the founding isn't
 ## replayed. It builds the expedition board, plans a trip for Ada and Tomas, packs and departs,
 ## works the old mine, answers the iron discovery with Investigate and a serious injury with Retreat,
-## watches the return and unloading, then smelts iron and crafts an iron pickaxe. It fails on any
+## watches the return and unloading, then smelts iron and crafts an iron pickaxe. On the way it walks
+## the road to the mine (Slice 4, #118), then builds the bridge, clears the cut and plans the line from
+## the signpost (#119, #121). It fails on any
 ## stuck reason the player couldn't act on. Uses its own save and settings folders. Run from game/:
 ##   godot --headless --path . -s res://tests/playtest_slice3.gd
 
@@ -11,7 +13,7 @@ extends "res://tests/playtest_base.gd"
 const ACTIONABLE := ["more ", "Needs a pickaxe", "No one does ", "Stockpile is full", "Starving", "Hungry",
 	" broke", "Can’t reach", "No meals to pack", "No spare pickaxes to pack", "No pickaxe left",
 	"Everyone is hurt", "Investigating the vein needs", "Harvested wheat needs a stockpile",
-	"Meadow has no sheep left", "Injured: can't mine"]
+	"Meadow has no sheep left", "Injured: can't mine", "Track: needs"]
 var _blockers := {}         ## Every blocker reason seen, so the run can check each one is actionable.
 
 
@@ -78,9 +80,19 @@ func _initialize() -> void:
 	await drag(screen(Vector2i(1, 1)), screen(Vector2i(sim.w - 2, sim.h - 2)), true)
 	await key(KEY_ESCAPE)
 	check(await click_button("Depart"), "click Depart")
-	check(await play_until(90, func(): return ada.away and tomas.away), "they carry the packs to the signpost and take the road")
+	check(await play_until(90, func(): return ada.map == Road.ID and tomas.map == Road.ID), "they carry the packs to the signpost and onto the road")
 	var mira: Dictionary = sim.residents[2]
-	check(await play_until(Tuning.MINE_TRIP + 30, func(): return sim.at_site(ada) and sim.at_site(tomas)), "they reach the old mine")
+	# ---- The road to the mine (issues #118, #119): watch them walk it, surveying as they go
+	check(await click_button("Road to the mine"), "the map switcher shows the road")
+	check(game.view_map == Road.ID and game._world._people[ada.id].visible, "the party is drawn walking the road")
+	await look_at(Sim.rcell(ada))
+	await click(screen(Sim.rcell(ada), 0.8))
+	game._hud.refresh(sim)
+	await frames(2)
+	check(game.selection.get("kind", "") == "res" and visible_label("On the road to the old mine"), "Ada can be selected on the road, and says where she's going")
+	check(await play_until(40, func(): return sim.at_site(ada) and sim.at_site(tomas)), "they reach the old mine")
+	check(sim.route_surveyed(), "walking it surveyed the road")
+	check(await click_button("Village"), "back to the village")
 	check(await play_until(30, func(): return mira.map == "village" and mira.job != null and mira.job.work != ""), "Mira keeps the village working (%s)" % (mira.job.label if mira.job != null else "idle"))
 
 	# ---- The party works the site (issue #109); the player marks the rubble at the tunnel's end
@@ -124,9 +136,11 @@ func _initialize() -> void:
 	check(sim.expedition.get("leg", "") == "home" and sim.expedition.home_why.begins_with("retreat"), "the party heads home")
 	await key(KEY_QUOTELEFT)
 	await key(KEY_TAB)
+	await key(KEY_TAB)
+	check(game.view_map == "village", "Tab, past the road, back to the village")
 
 	# ---- Return and unloading (issue #112)
-	check(await play_until(Tuning.MINE_TRIP + 90, func(): return sim.expedition.is_empty()), "the party gets home")
+	check(await play_until(120, func(): return sim.expedition.is_empty()), "the party gets home")
 	check(seen("Back from the old mine: ") and seen("Tomas seriously injured"), "the report says what came back and who was hurt")
 	check(await play_until(240, func(): return sim.stacks_where(func(st): return st.get("cargo", false)).is_empty() and count("iron_ore") >= 3), "the cargo is hauled to the stockpile")
 	check(tomas.hurt == 2 and tomas.job != null and tomas.job.kind == "rest", "Tomas rests in bed to heal")
@@ -143,6 +157,26 @@ func _initialize() -> void:
 	check(await open_bench_panel() and await queue_recipe("Iron pickaxe"), "queue an iron pickaxe")
 	await key(KEY_ESCAPE)
 	check(await play_until(200, func(): return sim.residents.any(func(r): return r.pick != null and r.pick.type == "iron_pick") or not sim.tool_items("pick", 2).is_empty()), "an iron pickaxe is made")
+	# ---- The road's work (issues #119, #121), from the signpost: the bridge, the cut, and the line
+	await look_at(sim.route_sign())
+	await click(screen(sim.route_sign(), 1.4))
+	game._hud.refresh(sim)
+	await frames(2)
+	check(game.selection.get("kind", "") == "route" and visible_label("A stream: people wade across slowly") and visible_label("A rocky cut: 3 boulders"), "the signpost's route report names the stream and the cut")
+	if count("plank") < 12:  # the bridge's planks: queued at the bench, as a player would
+		check(await open_bench_panel() and await queue_recipe("Planks", 3), "queue planks for the bridge")
+		await key(KEY_ESCAPE)
+		await look_at(sim.route_sign())
+		await click(screen(sim.route_sign(), 1.4))
+	check(await click_button("Build the bridge") and not sim.bridge().is_empty(), "click Build the bridge")
+	check(await click_button("Clear the cut") and sim.cut_boulders().all(func(b): return b.des), "click Clear the cut")
+	check(await play_until(400, func(): return sim.bridge().get("done", false) and sim.cut_boulders().is_empty()), "villagers carry planks out to build the bridge, and mine the cut (%s planks)" % count("plank"))
+	check(seen("The bridge over the stream is built"), "a toast says the bridge is built")
+	check(await click_button("Plan the line"), "click Plan the line")
+	game._hud.refresh(sim)
+	await frames(2)
+	check(visible_label("12 rails") and visible_label("Saves about"), "it shows the rails the line takes and the time it saves")
+	check(await click_button("Lay track") and range(Road.segment_count()).all(func(i): return sim.track_state(i) == "planned"), "Lay track plans a track blueprint on every segment")
 	check(await play_until(Tuning.HEAL_TIME[2] * 2 + 60, func(): return tomas.hurt == 0), "Tomas heals and goes back to work")
 
 	# ---- Every stall had a reason the player could act on
