@@ -31,7 +31,8 @@ var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafte
 var arrival_at := -1
 var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
-var stuck: Array = []        ## {who, why, cell (Vector2), height, focus_kind, focus_id, hidden}
+var stuck: Array = []        ## {who, why, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
+var _stuck_since := {}       ## A stuck entry's key -> the tick it first showed, to order the list (issue #77). Not saved.
 var events: Array = []       ## {type: "toast", text, res_id, site_id}
 var rev := 0
 
@@ -75,7 +76,7 @@ static func new_game() -> Sim:
 		s.add_bush(Vector2i(p[0], p[1]) + o)
 	for p in START_SHEEP:
 		s.add_sheep(Vector2i(p[0], p[1]))
-	s.add_resident("Ada", "3E6E7E", OPENING_START + o)
+	s.add_resident("Ada", ADA_TUNIC, OPENING_START + o)
 	return s
 
 
@@ -1567,8 +1568,11 @@ func back_in(r: Dictionary) -> float:
 
 
 ## Travelers, in the order they arrive. The first is always Tomas.
-const TRAVELERS := [["Tomas", "8C4F6B"], ["Mira", "6B7F3A"], ["Jonas", "8A6A2E"], ["Elsa", "4F6A8C"],
-	["Bram", "7A4A6E"], ["Ines", "3E7E6A"], ["Otto", "8C5A3E"], ["Lena", "5E5A8C"]]
+## Each traveler's name and tunic (issue #79): hues far apart from each other, from the grass and
+## from the chalk marks, so residents can be told apart on the map. A tenth resident repeats Tomas's.
+const ADA_TUNIC := "2E8C9E"
+const TRAVELERS := [["Tomas", "A8457A"], ["Mira", "D9792B"], ["Jonas", "3C5DB0"], ["Elsa", "7B52B8"],
+	["Bram", "8E2F3E"], ["Ines", "2A9A78"], ["Otto", "A9AEB8"], ["Lena", "E58AA8"]]
 
 
 ## A finished house whose bed nobody sleeps in yet, or null.
@@ -1626,8 +1630,18 @@ func _toast(text: String, res_id := 0, site_id := 0) -> void:
 
 # ---------------------------------------------------------------- stuck reasons
 
-func _add_stuck(who: String, why: String, at: Vector2, height: float, fk: String, fid: int, hidden := false) -> void:
-	stuck.append({"who": who, "why": why, "cell": at, "height": height, "focus_kind": fk, "focus_id": fid, "hidden": hidden})
+## `waiting` marks a standing order short of materials (issue #77): advice, not a blocker, so it
+## gets no flag and sits in the stuck list's dim Waiting tier.
+func _add_stuck(who: String, why: String, at: Vector2, height: float, fk: String, fid: int, hidden := false, waiting := false) -> void:
+	# The same problem keeps its age while its count changes ("4 more planks" -> "3 more planks").
+	var key := "%s|%d|%s|%s" % [fk, fid, who, _DIGITS.sub(why, "#", true)]
+	if not _stuck_since.has(key):
+		_stuck_since[key] = tick
+	stuck.append({"who": who, "why": why, "cell": at, "height": height, "focus_kind": fk, "focus_id": fid, "hidden": hidden,
+		"waiting": waiting, "key": key, "since": _stuck_since[key]})
+
+
+static var _DIGITS := RegEx.create_from_string("\\d+")
 
 
 func compute_stuck() -> void:
@@ -1653,6 +1667,7 @@ func compute_stuck() -> void:
 		var cost := {}
 		var label := ""
 		var verb := "needs"
+		var standing := false
 		if not s.done:
 			var st := current_stage(s)
 			cost = st.cost
@@ -1662,6 +1677,7 @@ func compute_stuck() -> void:
 			var rec := Defs.recipe(s.queue[0])
 			cost = rec.inp
 			label = rec.name
+			standing = str(s.autoq[0]) != "false"  # the toolsmith's spare or the fireplace's meals
 			if str(s.autoq[0]) == "toolsmith":
 				label = "Toolsmith"
 		else:
@@ -1682,7 +1698,7 @@ func compute_stuck() -> void:
 				var kind: String = Defs.ITEMS[Defs.recipe(s.queue[0]).out.keys()[0]].tool
 				why = "Toolsmith needs %d more %s for a spare %s" % [worst_n, it.one if worst_n == 1 else it.many, TOOL_NAMES[kind]]
 			_add_stuck(tpl.name, why,
-				mid, site_height(s) + 0.4, "site", s.id)
+				mid, site_height(s) + 0.4, "site", s.id, false, standing)
 	_stuck_unstaffed()
 	if meadow_sheep == 0:
 		for r in residents:
@@ -1721,6 +1737,10 @@ func compute_stuck() -> void:
 				break
 		if full:
 			_add_stuck("Stockpile", "Stockpile is full", Vector2(zone.keys()[0]) + Vector2(0.5, 0.5), 0.6, "", 0)
+	var now := {}
+	for s in stuck:
+		now[s.key] = _stuck_since[s.key]
+	_stuck_since = now
 
 
 ## "No one does Farm" (spec §9): there's work of a job and every resident has that job off.

@@ -185,6 +185,11 @@ A resident with **Toolsmith** switched on keeps the village in spare tools:
 
 - **A traveler arrives when a finished house has a free bed**, after a short delay (45 seconds). One arrives per free bed, one at a time.
 - They walk in from the map edge and claim the house. The first traveler is always Tomas; then Mira, Jonas, Elsa, Bram, Ines, Otto and Lena.
+- **Each resident has their own tunic colour (#79)**, so they can be told apart on the map. Ada's is teal, and each traveler's is fixed with their name: plum, orange, blue, violet, maroon, jade, pale grey and pink. The hues are far from the grass, from each other and from the chalk marks. A tenth resident repeats Tomas's colour, as their name does.
+  - Behind a tree or wall, a resident shows as a faint silhouette in their tunic colour rather than plain chalk.
+  - Hovering a resident, or selecting them, shows a chalk name tag above their head. Like the other marks, it's drawn over everything.
+  - The selection ring is a thick chalk band on a dark under-stroke, also drawn over everything.
+  - A swatch of the tunic colour sits beside the resident's name in the resident panel and the multi-select list, before a toast about them, and on their stuck-list entries.
 - **A finished house without a bed** shows "House needs a bed: 3 more wool" in the stuck list once wool runs short, since that's what's stopping arrivals.
 - Food doesn't gate arrivals, but newcomers do need feeding, so food production has to grow with the village.
 
@@ -230,9 +235,14 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 - "No one does Farm" (or Hunt, Cook, and so on), when there's work of that type and every resident has it switched off.
 - "Meadow has no sheep left", when a trip is planned.
 
+**Stuck and waiting (#77).** The stuck list has two tiers:
+- **Stuck:** work that can't go on. These entries get a yellow flag in the list and on the map, and the list puts the longest-stuck first. An entry keeps its age while only its count changes ("4 more planks" becoming "3 more planks").
+- **Waiting:** a standing order (the toolsmith's spare, the fireplace's meals) that's short of materials. It's advice rather than a blocker, so it has no flag. The tier is one dim line, "2 standing orders waiting", that opens on click to show the entries in dim text.
+- **Folding:** clicking the "Stuck (n)" header folds the list into a small chip under the speed buttons. A new blocker opens it again. With nothing stuck but something waiting, the list is just the waiting line.
+
 ## 10. Saving
 
-Slice 2 changes the save format one step per change, each with its own upgrade step and fixture, rather than in one jump. **v4 (#52) adds the map size.** Later steps add sheep, farm plots and wheat growth, the fireplace, its queue, standing order and reserved plot, reserved plots for new benches, residents' hunger, job toggles, priorities and skills, the meadow's remaining sheep, and residents away on trips.
+Slice 2 changes the save format one step per change, each with its own upgrade step and fixture, rather than in one jump. **v4 (#52) adds the map size.** Later steps add sheep, farm plots and wheat growth, the fireplace, its queue, standing order and reserved plot, reserved plots for new benches, residents' hunger, job toggles, priorities and skills, the meadow's remaining sheep, residents away on trips, and the new tunic colours.
 
 Taken together, the upgrade steps:
 - Record the map size as 18×18 for saves from before v4, so older saves keep their size (v3→v4).
@@ -243,6 +253,7 @@ Taken together, the upgrade steps:
 - Gives existing residents level 1 in every job (v10→v11, #48).
 - Marks no tools as chosen (v11→v12, equipping).
 - Gives older saves a full meadow with nobody away (v12→v13, #50).
+- Swaps each resident's old tunic for the new colour in the same place on the list (v13→v14, #79).
 - Gives existing buildings no reserved plot, so Slice 1 benches reserve nothing (v8→v9, #46).
 - Adds no sheep to the clearing (old saves are past the opening).
 - Gives the meadow its starting 8 sheep.

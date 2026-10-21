@@ -117,6 +117,9 @@ func _process(delta: float) -> void:
 	sim.events.clear()
 	_update_live_overlays()
 	_world.selected_ids = selection.get("ids", [])
+	var ray := _ray(_mouse)
+	var under = null if get_viewport().gui_get_hovered_control() != null else _world.pick_resident(ray[0], ray[1])
+	_world.hover_id = under.id if under != null else 0
 	_hud_t += delta
 	if _hud_t > 0.15:
 		_hud_t = 0.0
@@ -934,6 +937,20 @@ func _screenshot_scene() -> void:
 		sim.drop_items(z, "bread", 2)
 		sim.drop_items(z + Vector2i(1, 0), "mutton", 3)
 		sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(1, 1), "cooked_mutton", 1)
+	if "--village" in OS.get_cmdline_user_args():  # Tomas and Mira beside Ada, Tomas selected (issues #77, #79)
+		var ada: Dictionary = sim.residents[0]
+		for k in 2:
+			var who: Array = Sim.TRAVELERS[k]
+			var c: Vector2i = sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2 + k * 2, 1 - k))
+			sim.add_resident(who[0], who[1], c)
+		selection = {"kind": "res", "ids": [sim.residents[1].id]}
+		_target = Vector3(ada.pos.x + 2.0, 0, ada.pos.y + 0.5)
+		_place_camera()
+		_hud.waiting_open = true
+		if "--folded" in OS.get_cmdline_user_args():
+			sim.compute_stuck()
+			_hud.refresh(sim)  # what's stuck now counts as seen, so it stays folded
+			_hud.stuck_open = false
 	if "--toast" in OS.get_cmdline_user_args():  # a short toast and one long enough to wrap (issue #71)
 		_hud.add_toast({"text": "Tomas is now level 2 at Mine.", "res_id": 0, "site_id": 0})
 		_hud.add_toast({"text": "A traveler, Mira, has arrived. She claims the new house and needs tools from the bench before she can mine.", "res_id": sim.residents[0].id, "site_id": 0})

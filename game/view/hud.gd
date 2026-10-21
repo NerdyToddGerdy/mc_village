@@ -24,6 +24,9 @@ var _goals := VBoxContainer.new()
 var _speed_btns := {}
 var _stuck_panel: PanelContainer
 var _stuck := VBoxContainer.new()
+var stuck_open := true          ## The stuck list shows its entries; false folds it to a chip (issue #77).
+var waiting_open := false       ## The Waiting tier's entries are shown.
+var _stuck_keys := {}           ## Blockers shown last refresh, to open the list when a new one appears.
 var _toasts := VBoxContainer.new()
 var _sel_panel: PanelContainer
 var _sel := VBoxContainer.new()
@@ -387,9 +390,16 @@ const HEAD_FIT := 306.0
 
 ## A panel's title with its status on the right. When the two won't fit side by side, the status
 ## moves to its own dimmed line below the title, so they never run together (issue #72).
-func _head(title: String, status: String, bold := false, size := 15) -> Control:
-	var t := _label(title, bold, Palette.CHALK, size)
+func _head(title: String, status: String, bold := false, size := 15, swatch := "") -> Control:
+	var t: Control = _label(title, bold, Palette.CHALK, size)
 	var title_w := (_bold if bold else _font).get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	if swatch != "":  # a resident's tunic colour before their name (issue #79)
+		var named := HBoxContainer.new()
+		named.add_theme_constant_override("separation", 8)
+		named.add_child(_swatch(swatch))
+		named.add_child(t)
+		t = named
+		title_w += 22
 	var status_w := _font.get_string_size(status, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 	if title_w + 16 + status_w <= HEAD_FIT:
 		var h := HBoxContainer.new()
@@ -550,6 +560,36 @@ func _divider() -> Control:
 	return d
 
 
+## A thin level rule between a panel's sections.
+func _rule() -> Control:
+	var d := ColorRect.new()
+	d.color = Palette.SLATE_DEEP
+	d.custom_minimum_size = Vector2(0, 2)
+	return d
+
+
+var _swatches := {}
+
+
+## A resident's tunic colour as a small chalk-edged square (issue #79), for icons.
+func _swatch_tex(hex: String) -> ImageTexture:
+	if not _swatches.has(hex):
+		var img := Image.create(14, 14, false, Image.FORMAT_RGBA8)
+		img.fill(Palette.CHALK)
+		img.fill_rect(Rect2i(2, 2, 10, 10), Color("#" + hex))
+		_swatches[hex] = ImageTexture.create_from_image(img)
+	return _swatches[hex]
+
+
+## The swatch as a control, set beside a resident's name.
+func _swatch(hex: String) -> TextureRect:
+	var t := TextureRect.new()
+	t.texture = _swatch_tex(hex)
+	t.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	t.custom_minimum_size = Vector2(14, 14)
+	return t
+
+
 ## The Tools dropdown (spec §12): each resident's tools with uses left, broken tools, and spares.
 func _refresh_tools(sim: Sim) -> void:
 	var sig := ""
@@ -651,19 +691,75 @@ func _refresh_goals(sim: Sim) -> void:
 		c.add_child(_label(Goals.LIST[cur].h, false, Palette.CHALK_DIM, 13, true)))
 
 
+## The stuck list (issue #77) has two tiers. Blockers, work that can't go on, get a yellow flag,
+## oldest first. Standing orders short of materials only wait: one dim line that opens on click.
+## The player can fold the blockers into a "Stuck n" chip; a new blocker opens it again.
 func _refresh_stuck(sim: Sim) -> void:
 	var vis := sim.stuck.filter(func(s): return not s.hidden)
+	var block := vis.filter(func(s): return not s.waiting)
+	var wait := vis.filter(func(s): return s.waiting)
+	block.sort_custom(func(a, b): return a.since < b.since or (a.since == b.since and vis.find(a) < vis.find(b)))
+	var keys := {}
+	for s in block:
+		keys[s.key] = true
+		if not _stuck_keys.has(s.key):
+			stuck_open = true
+	_stuck_keys = keys
 	_stuck_panel.visible = not vis.is_empty()
-	var sig := ""
-	for s in vis:
+	var folded := not block.is_empty() and not stuck_open
+	_stuck_panel.custom_minimum_size.x = 0 if folded else 250
+	var sig := "%s%s" % [stuck_open, waiting_open]
+	for s in block + wait:
 		sig += s.who + s.why + ";"
 	_rebuild(_stuck, sig, func(c: Container) -> void:
-		c.add_child(_label("Stuck (%d)" % vis.size(), true, Palette.YELLOW, 17))
-		for s in vis:
-			var b := _button("⚑  %s\n     %s" % [s.who, s.why], func(): game.focus_on(s.focus_kind, s.focus_id))
-			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			b.custom_minimum_size = Vector2(0, 44)
-			c.add_child(b))
+		if not block.is_empty():
+			var head := _button("Stuck (%d)   %s" % [block.size(), "▴" if stuck_open else "▾"], func(): stuck_open = not stuck_open)
+			head.icon = MarkTextures.flag() if folded else null
+			head.add_theme_constant_override("icon_max_width", 16)
+			head.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			head.add_theme_font_override("font", _bold)
+			head.add_theme_font_size_override("font_size", 17)
+			for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+				head.add_theme_color_override(state, Palette.YELLOW)
+			head.tooltip_text = "Hide the stuck list. It opens again when something new gets stuck." if stuck_open else "Show what’s stuck"
+			c.add_child(head)
+			if folded:
+				return
+			for s in block:
+				c.add_child(_stuck_entry(sim, s, false))
+		if wait.is_empty():
+			return
+		if not block.is_empty():
+			c.add_child(_rule())
+		var n := wait.size()
+		var line := _button("%d standing order%s waiting   %s" % [n, "" if n == 1 else "s", "▴" if waiting_open else "▾"], func(): waiting_open = not waiting_open)
+		line.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		for state in ["font_color", "font_focus_color"]:
+			line.add_theme_color_override(state, Palette.CHALK_DIM)
+		line.tooltip_text = "Orders the village keeps up on its own, short of materials for now. Nothing is blocked."
+		c.add_child(line)
+		if waiting_open:
+			for s in wait:
+				c.add_child(_stuck_entry(sim, s, true)))
+
+
+## One stuck-list entry; clicking it moves the camera there. A resident's entry carries their
+## tunic swatch (issue #79), a blocker a yellow flag, a waiting order nothing and dim text.
+func _stuck_entry(sim: Sim, s: Dictionary, waiting: bool) -> Button:
+	var b := _button("%s\n%s" % [s.who, s.why], func(): game.focus_on(s.focus_kind, s.focus_id))
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.custom_minimum_size = Vector2(0, 44)
+	b.add_theme_constant_override("icon_max_width", 14)
+	b.add_theme_constant_override("h_separation", 10)
+	var r := sim.resident(s.focus_id) if s.focus_kind == "res" else {}
+	if waiting:
+		for state in ["font_color", "font_focus_color"]:
+			b.add_theme_color_override(state, Palette.CHALK_DIM)
+	elif not r.is_empty():
+		b.icon = _swatch_tex(r.shirt)
+	else:
+		b.icon = MarkTextures.flag()
+	return b
 
 
 func _refresh_toasts() -> void:
@@ -688,10 +784,16 @@ func _place_toasts() -> void:
 	_toasts.position = Vector2(left, _tally_panel.get_global_rect().end.y + 8)
 	_toasts.size = Vector2(width, 0)
 	for p in _toasts.get_children():
-		var lab := p.get_child(0) as Label if p.get_child(0) is Label else p.get_child(0).get_child(0) as Label
-		var rest := 28.0  # the panel's margins
-		if p.get_child(0) is HBoxContainer and p.get_child(0).get_child_count() > 1:
-			rest += 14 + p.get_child(0).get_child(1).get_combined_minimum_size().x
+		var lab: Label = null
+		var rest := 28.0  # the panel's margins, then the swatch and button beside the text
+		if p.get_child(0) is Label:
+			lab = p.get_child(0)
+		else:
+			for ch in p.get_child(0).get_children():
+				if ch is Label:
+					lab = ch
+				else:
+					rest += 14 + ch.get_combined_minimum_size().x
 		var natural := lab.get_theme_font("font").get_string_size(lab.text, HORIZONTAL_ALIGNMENT_LEFT, -1, lab.get_theme_font_size("font_size")).x
 		lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lab.custom_minimum_size.x = minf(ceilf(natural) + 1, width - rest)
@@ -700,6 +802,9 @@ func _place_toasts() -> void:
 func add_toast(ev: Dictionary) -> void:
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 14)
+	var who: Dictionary = game.sim.resident(ev.res_id) if ev.res_id else {}
+	if not who.is_empty():
+		h.add_child(_swatch(who.shirt))
 	h.add_child(_label(ev.text))
 	if ev.res_id:
 		h.add_child(_button("Go to them", func(): game.focus_on("res", ev.res_id), "Secondary"))
@@ -748,14 +853,18 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		if rs.size() > 1:
 			c.add_child(_label("%d residents" % rs.size(), true, Palette.CHALK, 24))
 			for r in rs:
-				c.add_child(_label("%s: %s" % [r.name, _status(sim, r)], false, Palette.CHALK_DIM))
+				var line := HBoxContainer.new()
+				line.add_theme_constant_override("separation", 8)
+				line.add_child(_swatch(r.shirt))
+				line.add_child(_label("%s: %s" % [r.name, _status(sim, r)], false, Palette.CHALK_DIM))
+				c.add_child(line)
 			if rs.size() == 2:
 				_add_meadow_button(c, sim, rs)
 			return
 		if rs.is_empty():
 			return
 		var r: Dictionary = rs[0]
-		c.add_child(_head(r.name, _status(sim, r), true, 24))
+		c.add_child(_head(r.name, _status(sim, r), true, 24, r.shirt))
 		if r.progress >= 0:
 			c.add_child(_bar(r.progress))
 		if r.away:
