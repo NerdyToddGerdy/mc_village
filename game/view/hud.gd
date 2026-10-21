@@ -17,6 +17,9 @@ var _maps := HBoxContainer.new()    ## The map switcher (issue #101): Village, a
 var _party := Button.new()          ## "Party at the old mine: mining", when residents work on another map.
 var _party_panel: PanelContainer
 var _home_btn: Button               ## "Call the party home", beside the party line while the site is in view (issue #108).
+var _party_details := VBoxContainer.new()  ## The party's members, packs and objective, while the site is in view (#109).
+var _choice_panel: PanelContainer   ## A choice the game stopped for (issues #110, #111).
+var _choice_box := VBoxContainer.new()
 var _board_panel: PanelContainer
 var _board := VBoxContainer.new()
 var _tools_drop: PanelContainer
@@ -103,7 +106,13 @@ func _ready() -> void:
 	_home_btn = _button("Call the party home", func(): game.call_home(), "Primary")
 	_home_btn.visible = false
 	party_row.add_child(_home_btn)
-	_party_panel = _panel(party_row, Vector2.ZERO, 4)
+	var party_box := VBoxContainer.new()
+	party_box.add_theme_constant_override("separation", 6)
+	party_box.add_child(party_row)
+	_party_details.add_theme_constant_override("separation", 4)
+	_party_details.custom_minimum_size.x = 300
+	party_box.add_child(_party_details)
+	_party_panel = _panel(party_box, Vector2.ZERO, 8)
 	_party_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_party_panel.visible = false
 	tl.add_child(_party_panel)
@@ -174,6 +183,11 @@ func _ready() -> void:
 	_board_panel.top_level = true
 	_board_panel.visible = false
 	_root.add_child(_board_panel)
+	_choice_box.add_theme_constant_override("separation", 8)
+	_choice_box.custom_minimum_size.x = 380
+	_choice_panel = _panel(_choice_box, Vector2.ZERO, 18)
+	_choice_panel.visible = false
+	_root.add_child(_choice_panel)
 	_hint.visible = false
 	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var hs := _box(Color(Palette.SLATE, 0.96), 4, 8)
@@ -618,13 +632,14 @@ func refresh(sim: Sim) -> void:
 	_refresh_goals(sim)
 	for v in _speed_btns:
 		_speed_btns[v].set_pressed_no_signal(game.speed == v)
-	_paused_label.visible = game.speed == 0
+	_paused_label.visible = game.speed == 0 and sim.pending.is_empty()  # a choice says so itself
 	_refresh_stuck(sim)
 	_refresh_selection(sim)
 	_refresh_toolbar(sim)
 	_refresh_board(sim)
 	_refresh_craft(sim)
 	_refresh_planner(sim)
+	_refresh_choice(sim)
 	_refresh_toasts()
 
 
@@ -734,6 +749,14 @@ func _refresh_maps(sim: Sim) -> void:
 		_home_btn.tooltip_text = why if why != "" else "They walk to the entrance with what they’ve mined, and take the road home."
 	_party_panel.visible = line != ""
 	_party.text = line
+	var details: bool = here_site and ex.get("leg", "out") == "out" and ex.party.any(func(id): return sim.at_site(sim.resident(id)))
+	_party_details.visible = details
+	if details:
+		var sig := "%s|%d|%d" % [ex, sim.pack_load(), sim.objective_packed()]
+		for id in ex.party:
+			var r := sim.resident(id)
+			sig += "%s%s%s%d" % [_status(sim, r), r.pick, r.get("hurt", 0), int(r.hunger / 10)]
+		_rebuild(_party_details, sig, func(c: Container) -> void: _fill_party(c, sim))
 	_party.tooltip_text = "Show the %s" % sim.get_map(_party.get_meta("map", "village")).name.to_lower() if line != "" and not here_site else ""
 
 
@@ -1033,8 +1056,9 @@ func _refresh_toasts() -> void:
 func _place_toasts() -> void:
 	var view := _root.size
 	var left := 16.0
-	if _goals_panel.visible:
-		left = _goals_panel.get_global_rect().end.x + 12
+	for p in [_goals_panel, _party_panel]:  # clear of the goals and the party's panel
+		if p.visible:
+			left = maxf(left, p.get_global_rect().end.x + 12)
 	var right := view.x - 16
 	if _stuck_panel.visible:
 		right = _stuck_panel.get_global_rect().position.x - 12
@@ -1086,7 +1110,7 @@ func _refresh_selection(sim: Sim) -> void:
 		for id in sel.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s%s%s%s%d" % [r.jobs, r.kept, equip_kind, r.away, int(sim.back_in(r))]
+				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s%s%s%s%d%d" % [r.jobs, r.kept, equip_kind, r.away, int(sim.back_in(r)), r.get("hurt", 0)]
 		for kind in ["axe", "pick"]:  # Equip appears when there's a tool to choose
 			for st in sim.tool_items(kind, 0):
 				sig += "%s%s%s" % [st.type, st.dur, st.cell]
@@ -1139,6 +1163,8 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		_add_tool_row(c, sim, r, "pick")
 		c.add_child(_row("Carrying", Defs.words(r.carry.type, r.carry.n) if r.carry != null else "Nothing"))
 		c.add_child(_row("Food", _mood(r)))
+		if r.get("hurt", 0) > 0:  # issue #110
+			c.add_child(_row("Health", "Injured" if r.hurt == 1 else "Seriously hurt"))
 		c.add_child(_bar(r.hunger / 100.0, Palette.YELLOW if r.hunger < Tuning.HUNGRY_BELOW else Palette.CHALK))
 		for s in sim.stuck:
 			if s.focus_kind == "res" and s.focus_id == r.id:
@@ -1865,6 +1891,8 @@ func _add_site_report(c: Container, sim: Sim, dest: String) -> void:
 		c.add_child(_label("“%s”" % rep.told, false, Palette.CHALK_DIM, Palette.BODY, true))
 	for x in rep.resources:
 		c.add_child(_row(x.name, "?" if x.reserve < 0 else "about %d" % x.reserve))
+	for f in rep.get("finds", []):
+		c.add_child(_label(f, true, Palette.CHALK, Palette.BODY, true))
 	if not rep.visited:
 		c.add_child(_label("Nobody has been there yet: no estimates, and no hazards known.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
 		return
@@ -2059,6 +2087,7 @@ func _fill_out(c: Container, sim: Sim) -> void:
 		c.add_child(_label("%s %s heading home from the %s." % [names, are, mp.name.to_lower()], false, Palette.CHALK, Palette.BODY, true))
 	elif party.all(func(r): return r.map == ex.dest):
 		c.add_child(_label("The party is at the %s: %s." % [mp.name.to_lower(), names], false, Palette.CHALK, Palette.BODY, true))
+		_fill_party(c, sim)
 		c.add_child(_button("Show the %s" % mp.name.to_lower(), func(): game.switch_map(ex.dest), "Secondary"))
 	else:
 		c.add_child(_label("%s %s carrying the packs to the signpost." % [names, are], false, Palette.CHALK, Palette.BODY, true))
@@ -2109,3 +2138,63 @@ func _board_status(sim: Sim) -> String:
 		"out":
 			return "The party is out at the %s." % sim.get_map(ex.dest).name.to_lower()
 	return "Plan a trip to the old mine here."
+
+
+# ---------------------------------------------------------------- the party at work, and choices (issues #109-#111)
+
+## The party at the site (issue #109): each member's task, pickaxe and hunger, then the packs, the
+## meals, the objective and what will bring them home.
+func _fill_party(c: Container, sim: Sim) -> void:
+	var ex: Dictionary = sim.expedition
+	for id in ex.party:
+		var r := sim.resident(id)
+		if r.is_empty():
+			continue
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 8)
+		line.add_child(_swatch(r.shirt))
+		line.add_child(_label("%s: %s" % [r.name, _status(sim, r)], false, Palette.CHALK))
+		c.add_child(line)
+		var pick: String = "%s pickaxe, %d %s left" % [Defs.TIER_NAMES[r.pick.tier], r.pick.dur, "use" if r.pick.dur == 1 else "uses"] if r.pick != null else "No pickaxe"
+		var health: String = ["", ", injured", ", seriously hurt"][r.get("hurt", 0)]
+		c.add_child(_label("%s. %s%s." % [pick, _mood(r), health], false, Palette.YELLOW if r.get("hurt", 0) > 0 else Palette.CHALK_DIM, Palette.CAPTION, true))
+	var cap := Sim.pack_capacity(ex)
+	c.add_child(_row("Packs", "%d / %d" % [sim.pack_load(), cap]))
+	c.add_child(_bar(float(sim.pack_load()) / maxi(cap, 1), Palette.BLUE))
+	var got: PackedStringArray = []
+	for k in ex.get("cargo", {}):
+		got.append(Defs.words(k, ex.cargo[k]))
+	c.add_child(_label("Cargo: " + (", ".join(got) if not got.is_empty() else "nothing yet"), false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	var meals := 0
+	for k in ex.get("provisions", {}):
+		meals += ex.provisions[k]
+	var spares: int = ex.get("tools", []).size()
+	var keep := "" if ex.get("spend_return", false) else ", %d kept for the walk home" % mini(meals, Sim.return_meals(ex))
+	c.add_child(_label("Meals: %d%s. Spare pickaxes: %d." % [meals, keep, spares], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	c.add_child(_row("Bring back %s" % Defs.ITEMS[ex.target.item].many, "%d / %d" % [sim.objective_packed(), ex.target.n]))
+	c.add_child(_bar(float(sim.objective_packed()) / maxi(ex.target.n, 1), Palette.GREEN))
+	var when: PackedStringArray = []
+	for k in [["target", "the target is reached"], ["full", "the packs are full"], ["low", "food runs low"]]:
+		if ex.policy.get(k[0], false):
+			when.append(k[1])
+	var whens := " or ".join(when) if when.size() < 3 else "%s, %s or %s" % [when[0], when[1], when[2]]
+	c.add_child(_label("Home when %s, or if someone is seriously hurt." % whens if not when.is_empty() else "Home when you call them, or if someone is seriously hurt.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+
+
+## The choice the game stopped for (brief §5): what happened, and each option with its known cost.
+func _refresh_choice(sim: Sim) -> void:
+	var p: Dictionary = sim.pending[0] if not sim.pending.is_empty() else {}
+	_choice_panel.visible = not p.is_empty()
+	if p.is_empty():
+		return
+	_rebuild(_choice_box, "%s" % [p], func(c: Container) -> void:
+		var title := "Iron found" if p.kind == "discovery" else "Seriously hurt"
+		c.add_child(_label(title, true, Palette.YELLOW if p.kind == "injury" else Palette.CHALK, Palette.HEADING))
+		c.add_child(_label(p.text, false, Palette.CHALK, Palette.BODY, true))
+		c.add_child(_label("The game is paused until you choose.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+		for o in p.options:
+			var b := _button(o.label, func(): game.answer(o.id), "Primary" if o == p.options[0] else "Secondary")
+			b.set_meta("label", o.label)
+			c.add_child(b)
+			c.add_child(_label(o.cost, false, Palette.CHALK_DIM, Palette.CAPTION, true)))
+	_choice_panel.position = (_root.size - _choice_panel.get_combined_minimum_size()) / 2.0 - Vector2(0, 40)

@@ -80,7 +80,7 @@ func _initialize() -> void:
 			sim._step_map()
 		sim.use_map("village")
 		camera = {"map": OldMine.ID, "maps": {"village": camera, OldMine.ID: {"target": Vector3(6, 0, 8), "size": 14.0}}}
-	if SaveFormat.VERSION >= 16:  # Ada packing to leave for the old mine, part-packed (issues #105-#107)
+	if SaveFormat.VERSION == 16:  # Ada packing to leave for the old mine, part-packed (issues #105-#107)
 		var board := {}
 		for c in [at(14, 9), at(4, 12), at(2, 1), at(15, 2), at(16, 12), at(1, 14)]:
 			if sim.placement_check("board", c) == "":
@@ -100,6 +100,26 @@ func _initialize() -> void:
 			return
 		board.store = {"bread": 1, "stone_pick": 1}
 		board.tools = [{"type": "stone_pick", "dur": 7}]
+	if SaveFormat.VERSION >= 17:  # Mira's expedition at the old mine: packs part-full, Mira hurt, iron found (#109-#111)
+		var board := {}
+		for c in [at(14, 9), at(4, 12), at(2, 1), at(15, 2), at(16, 12), at(1, 14)]:
+			if sim.placement_check("board", c) == "":
+				board = sim.place_site("board", c)
+				break
+		board.stage = 1
+		board.done = true
+		var mira: Dictionary = sim.residents[2]
+		sim.expedition = {"dest": OldMine.ID, "board": board.id, "party": [mira.id], "target": {"item": "coal", "n": 6},
+			"meals": 3, "picks": 1, "policy": {"target": true, "full": true, "low": true}, "spend_return": false,
+			"state": "out", "leg": "out", "packed": {"bread": 3}, "tools": [{"type": "stone_pick", "dur": 7}],
+			"provisions": {"bread": 2}, "cargo": {"coal": 3}, "broken": 0, "hurt": {"Mira": 1}, "unpacked": true}
+		mira.hurt = 1
+		mira.heal = Tuning.HEAL_TIME[1]
+		sim.on_map(OldMine.ID, func(): sim._find_vein())
+		sim.on_map(OldMine.ID, func(): sim._ask("discovery", "The party found an iron vein in the old mine.", [
+			{"id": "keep", "label": "Keep mining", "cost": "Carry on."}, {"id": "investigate", "label": "Investigate", "cost": "Survey it."},
+			{"id": "return", "label": "Mark it and return later", "cost": "Head home now."}]))
+		sim.events.clear()
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

@@ -2,7 +2,8 @@ class_name OldMine
 extends RefCounted
 ## The old mine (issue #102): Slice 3's one nearby destination, a small hand-laid site map a short
 ## walk east of the village. Stone and coal near the entrance, and an iron vein, hidden behind rubble
-## at the end of a dark tunnel, that nobody knows about until it's found (#111).
+## at the end of a dark tunnel, that nobody knows about until it's found (#111). Loose ceilings and a
+## ledge in the dark make it dangerous (#110).
 
 const ID := "old_mine"
 const NAME := "Old mine"
@@ -28,6 +29,11 @@ const LAYOUT := [
 	"############iii#",
 	"################",
 ]
+
+## Hazards (issue #110): blocks under a loose ceiling, which can cave in on the miner, and a ledge in
+## the dark tunnel to the iron, which someone can fall from.
+const LOOSE := [Vector2i(3, 5), Vector2i(12, 8), Vector2i(5, 13)]
+const LEDGES := [Vector2i(11, 11)]
 
 ## What the village has been told about it, before anyone has been (issue #102).
 const TOLD := "An old mine a short walk east. Stone and coal, they say."
@@ -62,7 +68,16 @@ static func build(s: Sim) -> SimMap:
 					var b := _block(s, c, "iron")
 					b.hidden = true
 					m.boulders.append(b)
+	add_hazards(m)
 	return m
+
+
+## Marks the loose ceilings and the ledge on an old mine map, also for one from an older save.
+static func add_hazards(m: SimMap) -> void:
+	for b in m.boulders:
+		if b.cell in LOOSE:
+			b.loose = true
+	m.ledges = LEDGES.duplicate()
 
 
 static func _block(s: Sim, c: Vector2i, ore: String) -> Dictionary:

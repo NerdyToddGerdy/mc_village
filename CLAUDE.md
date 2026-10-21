@@ -27,6 +27,7 @@ $GODOT --headless --path . -s res://tests/run_tests.gd       # sim tests; exit c
 $GODOT --headless --path . -s res://tests/game_test.gd       # real game scene: menu, save, load, start over
 $GODOT --headless --path . -s res://tests/playtest.gd        # bot plays the whole opening through pushed input events (~1 min)
 $GODOT --headless --path . -s res://tests/playtest_village.gd  # Slice 2 bot: founding (by command), then the village through input
+$GODOT --headless --path . -s res://tests/playtest_slice3.gd   # Slice 3 bot: an expedition from a saved Slice 2 village, through input
 $GODOT --headless --path . --import                          # refresh the class cache after adding a class_name script
 $GODOT --path . --resolution 1280x720 -- --screenshot        # scripted opening, saves user://screenshot.png, quits
 $GODOT --path . --resolution 1280x720 -- --screenshot-menu   # Save game menu (--main or --keys for those pages), saves user://screenshot_menu.png
@@ -42,7 +43,7 @@ There's no single-test runner. To focus on one test, temporarily trim the `tests
   - `sim.gd` holds the state and does the work: ticking, claiming jobs, interpreting job steps, computing stuck reasons, commands, and save/load.
   - Entities are plain Dictionaries (cells are `Vector2i`). Compare them with `is_same()`, never `==`, because GDScript compares Dictionaries by content.
   - **Maps** (`sim_map.gd`): the village plus site maps such as the old mine (`old_mine.gd`). The sim works on one map at a time: `trees`, `items`, `sites` and the rest are the current map's, switched with `use_map` / `on_map`. At rest it's always on the village, so the HUD, goals and tallies read the village. Residents and buildings carry their `map`, and a command about one switches to its map itself. The view switches the sim to the map in view (`game.view_map`) only while it draws or handles input.
-  - **Expeditions:** `sim.expedition` is the one expedition, planned at the expedition board, packed there, then sent off with Depart. A resident on the road is `away`, with `trip` naming where they're going: "meadow", a site such as "old_mine", or "village" on the way home.
+  - **Expeditions:** `sim.expedition` is the one expedition, planned at the expedition board, packed there, then sent off with Depart. A resident on the road is `away`, with `trip` naming where they're going: "meadow", a site such as "old_mine", or "village" on the way home. At the site the party works from its packs (`provisions`, `tools`, `cargo`) without the player. A serious injury or the iron discovery adds to `sim.pending`, a choice the game pauses for until `choose()` answers it.
   - `job.gd` is a job's step list plus its "holds", the reservations it keeps. A step that uses up a hold removes it, and whatever's left is undone when the job ends. Jobs aren't saved.
   - `tuning.gd` holds every number. `defs.gd` holds items, recipes and building templates. `goals.gd` holds the founding checklist.
 - `game/view/`: drawing only.

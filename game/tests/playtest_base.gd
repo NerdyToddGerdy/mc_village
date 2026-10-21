@@ -1,5 +1,5 @@
 extends SceneTree
-## Shared helpers for the bot playtests (playtest.gd, playtest_village.gd): input pushed into the
+## Shared helpers for the bot playtests (playtest.gd, playtest_village.gd, playtest_slice3.gd): input pushed into the
 ## game window the way a player's clicks and keys arrive, plus waiting by stepping the sim.
 
 var game: Game
@@ -207,3 +207,123 @@ static func at(x: int, y: int) -> Vector2i:
 
 static func area(x: int, y: int, w: int, h: int) -> Rect2i:
 	return Rect2i(Vector2i(x, y) + Tuning.OPENING_OFFSET, Vector2i(w, h))
+
+
+# ---------------------------------------------------------------- playing by steps (shared by the village and Slice 3 bots)
+
+var _seen: Array = []       ## Every toast text so far, and every job label residents have shown.
+
+
+## Steps the sim like run(), remembering toasts and what residents were doing.
+func play(seconds: float) -> void:
+	for i in int(seconds * Tuning.TPS):
+		game.sim.step()
+		for r in game.sim.residents:
+			if r.job != null and not _seen.has(r.job.label):
+				_seen.append(r.job.label)
+		for ev in game.sim.events:
+			if ev.type == "toast":
+				_seen.append(ev.text)
+				game._hud.add_toast(ev)
+		game.sim.events.clear()
+		if not game.sim.pending.is_empty():
+			break  # the game stops for a choice, as it does in play
+	game._hud.refresh(game.sim)
+	await frames(3)
+
+
+## Plays a second at a time until `cond` holds, for at most `seconds`. Returns whether it did.
+func play_until(seconds: float, cond: Callable) -> bool:
+	for i in int(seconds):
+		if cond.call():
+			return true
+		await play(1)
+	return cond.call()
+
+
+func seen(text: String) -> bool:
+	return _seen.any(func(t): return text in t)
+
+
+## Points the camera at a cell, so it can be clicked.
+func look_at(c: Vector2i) -> void:
+	game._target = Vector3(c.x + 0.5, 0, c.y + 0.5)
+	game._place_camera()
+	await frames(2)
+
+
+## Whether a cell's screen position is clear of the HUD's corner panels.
+func in_middle(p: Vector2) -> bool:
+	var vis := root.get_visible_rect().size
+	return Rect2(vis * Vector2(0.28, 0.25), vis * Vector2(0.44, 0.45)).has_point(p)
+
+
+## An open spot near `near` where a building of this template can go, or (-1, -1).
+func build_spot(tpl: String, near: Vector2i) -> Vector2i:
+	var sim := game.sim
+	var size: Vector2i = Defs.TEMPLATES[tpl].size
+	for d in range(0, 12):
+		for dx in range(-d, d + 1):
+			for dy in range(-d, d + 1):
+				var o := near + Vector2i(dx, dy)
+				if sim.placement_check(tpl, o, game.rot) != "":
+					continue
+				var ok := true
+				for x in size.x:
+					for y in size.y:
+						var c := o + Vector2i(x, y)
+						ok = ok and sim.walkable(c) and not sim.items.has(c) and not sim.farm.has(c)
+				if ok:
+					return o
+	return Vector2i(-1, -1)
+
+
+## Selects a resident the way a player would: F until it's them.
+func select_resident(r: Dictionary) -> void:
+	for i in game.sim.residents.size() + 1:
+		if game.selection.get("ids", []) == [r.id]:
+			break
+		await key(KEY_F)
+	game._hud.refresh(game.sim)
+	await frames(2)
+
+
+## A w×h rect near `near` where `ok` holds for every cell and both corners are on screen, or a
+## rect at (-1, -1).
+func open_rect_on_screen(near: Vector2i, w: int, h: int, ok: Callable) -> Rect2i:
+	for d in range(0, 10):
+		for dx in range(-d, d + 1):
+			for dy in range(-d, d + 1):
+				var r := Rect2i(near + Vector2i(dx, dy), Vector2i(w, h))
+				if not (in_middle(screen(r.position)) and in_middle(screen(r.end - Vector2i.ONE))):
+					continue
+				var good := true
+				for x in range(r.position.x, r.end.x):
+					for y in range(r.position.y, r.end.y):
+						good = good and ok.call(Vector2i(x, y))
+				if good:
+					return r
+	return Rect2i(-1, -1, 0, 0)
+
+
+## Opens the toolbar's Craft panel on the crafting bench, stepping past the fireplace with Next.
+func open_bench_panel() -> bool:
+	game.selection = {}
+	if not game.craft_menu_open and not await click_button("Craft"):
+		return false
+	for i in 4:
+		game._hud.refresh(game.sim)
+		await frames(2)
+		var bench = game.craft_bench()
+		if bench != null and bench.tpl == "bench":
+			return true
+		await click_button("Bench")
+	return false
+
+
+func count(type: String) -> int:
+	var n := 0
+	for k in game.sim.items:
+		if game.sim.items[k].type == type:
+			n += game.sim.items[k].n
+	return n

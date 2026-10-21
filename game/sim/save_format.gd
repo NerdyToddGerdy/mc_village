@@ -12,12 +12,41 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 16
+const VERSION := 17
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17}
+
+
+## v17: the party works the site, hazards and injuries, and the iron discovery (issues #109-#111).
+## Nobody is hurt and no choice is waiting. The old mine gets its loose ceilings and ledge, and its
+## vein counts as found if it was discovered. A party already out keeps its meals in the packs; one
+## that had set its supplies down at the entrance finds them there, and packs them again.
+static func _v16_to_v17(d: Dictionary) -> Dictionary:
+	var st: Dictionary = d.state
+	for r in st.residents:
+		if not r.has("hurt"):
+			r.hurt = 0
+			r.heal = 0.0
+	if not st.has("pending"):
+		st.pending = []
+	var mine: Dictionary = st.maps.get(OldMine.ID, {})
+	if not mine.is_empty() and not mine.has("ledges"):
+		mine.found = mine.get("discovered", false)
+		mine.ledges = OldMine.LEDGES.duplicate()
+		for b in mine.boulders:
+			if b.cell in OldMine.LOOSE:
+				b.loose = true
+	var ex: Dictionary = st.get("expedition", {})
+	if ex.get("state", "") == "out" and not ex.has("provisions"):
+		ex.provisions = {} if ex.get("unpacked", false) else ex.get("packed", {}).duplicate()
+		if ex.get("unpacked", false):
+			ex.tools = []
+		ex.cargo = ex.get("cargo", {})
+		ex.hurt = {}
+	return d
 
 
 ## v16: expeditions (issues #106, #107). Older saves have none planned, and a resident who's away is

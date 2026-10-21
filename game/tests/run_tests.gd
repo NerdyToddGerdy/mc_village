@@ -54,6 +54,10 @@ func _init() -> void:
 		"test_staging_and_departure",
 		"test_travel_to_the_mine_and_back",
 		"test_return_and_unloading",
+		"test_party_works_the_site",
+		"test_hazards_and_injuries",
+		"test_iron_discovery",
+		"test_slice2_fixture_loads",
 	]
 	for t in tests:
 		_current = t
@@ -291,7 +295,12 @@ func test_every_save_fixture_still_loads() -> void:
 			check(mira.map == OldMine.ID and mine.visited and mine.known, "v%d: Mira is still at the old mine" % v)
 			check(sim.on_map(OldMine.ID, count.bind(sim, "coal")) > 0 and count(sim, "coal") == 0, "v%d: the mine's coal stays at the mine" % v)
 			check(OldMine.LAYOUT.size() == mine.h and sim.ore_left(OldMine.ID, "coal") < 6, "v%d: the mine's mined-out coal stays mined" % v)
-			if v >= 16:  # issues #105-#107: Ada packing at the board, part-packed
+			if v >= 17:  # issues #109-#111: Mira's expedition at the mine, hurt, with the iron found and a choice waiting
+				var ex: Dictionary = sim.expedition
+				check(ex.get("state", "") == "out" and ex.party == [sim.residents[2].id] and ex.provisions == {"bread": 2} and ex.cargo == {"coal": 3}, "v%d: the party's packs survive" % v)
+				check(sim.residents[2].hurt == 1 and sim.residents[2].heal > 0.0, "v%d: Mira is still hurt" % v)
+				check(mine.found and not mine.discovered and sim.pending.size() == 1 and sim.pending[0].kind == "discovery", "v%d: the find and the waiting choice survive" % v)
+			elif v >= 16:  # issues #105-#107: Ada packing at the board, part-packed
 				var bd := sim.expedition_board()
 				check(sim.expedition.get("state", "") == "staging" and sim.expedition.party == [sim.residents[0].id], "v%d: the expedition is still packing, with Ada" % v)
 				check(bd.store.get("bread", 0) == 1 and bd.tools.size() == 1 and bd.tools[0].dur == 7, "v%d: what's packed stays packed, a tool with its wear" % v)
@@ -303,6 +312,9 @@ func test_every_save_fixture_still_loads() -> void:
 			check(mine.boulders.all(func(b): return sim.maps.village.boulders.all(func(o): return o.id != b.id) and b.id < sim.next_id), "v%d: the mine's ids don't clash with the village's" % v)
 		if v < 16:
 			check(sim.residents.all(func(r): return r.trip == ("meadow" if r.away else "")), "v%d: anyone away is at the meadow" % v)
+		if v < 17:  # issues #109-#111: nobody hurt, no choice waiting, and the mine gets its hazards
+			check(sim.residents.all(func(r): return r.hurt == 0) and sim.pending.is_empty(), "v%d: nobody is hurt and no choice waits" % v)
+			check(mine.ledges == OldMine.LEDGES and mine.boulders.filter(func(b): return b.get("loose", false)).size() == OldMine.LOOSE.size(), "v%d: the old mine gets its loose ceilings and ledge" % v)
 		check(sim.sites.any(func(s): return s.tpl == "bench" and s.done and s.queue.has("stone_axe")), "v%d: the bench and its queue survive" % v)
 		if v >= 3:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
@@ -1441,7 +1453,7 @@ func test_site_report_and_depletion() -> void:
 	rep = sim.site_report(OldMine.ID)
 	check(rep.resources[0].reserve == 5 * Tuning.BOULDER_COBBLE and rep.resources[1].reserve == 6 * Tuning.ORE_YIELD.coal, "after a visit: estimated reserves (%s)" % [rep.resources])
 	check(rep.resources.size() == 3 and rep.resources[2].name == "?" and rep.resources[2].reserve == -1, "iron shows as ? until it's found")
-	check(rep.hazards.has("Dark tunnels past the torches") and rep.access == OldMine.ACCESS, "the dark tunnels and narrow access are reported")
+	check(rep.hazards.has("Dark tunnels past the torches: work there is slower") and rep.access == OldMine.ACCESS, "the dark tunnels and narrow access are reported")
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Vector2i(16, 16))
 	send_to_mine(sim, tomas)
 	sim.on_map(OldMine.ID, func():
@@ -1692,12 +1704,14 @@ func test_staging_and_departure() -> void:
 	run(sim, Tuning.MINE_TRIP + 1)
 	var mine := sim.get_map(OldMine.ID)
 	check(ada.map == OldMine.ID and not ada.away and mine.visited and mine.known, "after the walk, Ada is at the old mine")
-	check(sim.on_map(OldMine.ID, func(): return count(sim, "bread")) == 2 and sim.on_map(OldMine.ID, func(): return sim.tool_items("pick", 0).size()) == 1, "with the supplies set down at the entrance")
+	check(sim.expedition.provisions == {"bread": 2} and sim.on_map(OldMine.ID, func(): return sim.items.is_empty()), "with the supplies in the packs (%s)" % [sim.expedition.provisions])
+	check(sim.expedition.tools.is_empty() and ada.pick != null and ada.pick.dur == 9, "Ada, who had no pickaxe, takes the spare from the packs")
 	check(tomas.map == "village", "Tomas keeps the village going")
 
 
 
-## A party of Ada and Tomas, packed and sent off for the old mine with 2 bread and a spare pickaxe.
+## A party of Ada and Tomas, packed and sent off for 6 coal from the old mine with 4 bread (2 of them
+## the return food) and a spare pickaxe.
 ## Returns {ada, tomas, board}, as they step onto the road.
 func send_party(sim: Sim) -> Dictionary:
 	var ada: Dictionary = sim.residents[0]
@@ -1707,11 +1721,11 @@ func send_party(sim: Sim) -> Dictionary:
 	var b := built_board(sim)
 	var plan := sim.new_plan()
 	plan.party = [ada.id, tomas.id]
-	plan.meals = 2
+	plan.meals = 4
 	plan.picks = 1
 	plan.target = {"item": "coal", "n": 6}
 	sim.plan_expedition(plan)
-	b.store = {"bread": 2, "stone_pick": 1}
+	b.store = {"bread": 4, "stone_pick": 1}
 	b.tools = [{"type": "stone_pick", "dur": 9}]
 	for i in 30 * Tuning.TPS:
 		sim.step()
@@ -1738,12 +1752,14 @@ func test_travel_to_the_mine_and_back() -> void:
 	check(ada.away and tomas.away and Sim.manhattan(Sim.rcell(ada), sign) <= 1, "they leave from the signpost")
 	var due: int = ada.back_at
 	var arrived := -1
+	var arrived_at := Vector2i(-9, -9)
 	for i in int((Tuning.MINE_TRIP + 2) * Tuning.TPS):
 		sim.step()
 		if arrived < 0 and ada.map == OldMine.ID:
 			arrived = sim.tick
+			arrived_at = Sim.rcell(ada)
 	check(arrived == due, "Ada arrives after exactly %d s on the road" % int(Tuning.MINE_TRIP))
-	check(ada.map == OldMine.ID and tomas.map == OldMine.ID and Sim.manhattan(Sim.rcell(ada), sim.get_map(OldMine.ID).entrance) <= 1, "at the mine's entrance")
+	check(ada.map == OldMine.ID and tomas.map == OldMine.ID and arrived_at == sim.get_map(OldMine.ID).entrance, "at the mine's entrance")
 	run(sim, 5)
 	# The way home: the party walks to the entrance, then the same time on the road.
 	check(sim.call_home() == "" and sim.expedition.leg == "home", "Call the party home")
@@ -1776,40 +1792,235 @@ func test_return_and_unloading() -> void:
 	check(sim.plan_problems(sim.new_plan()).has("One expedition at a time"), "the board is locked while the party is out")
 	for i in int((Tuning.MINE_TRIP + 40) * Tuning.TPS):
 		sim.step()
-		if ada.map == OldMine.ID and tomas.map == OldMine.ID and not tomas.away:
+		if sim.at_site(ada) and sim.at_site(tomas):
 			break
-	# Mine the coal nearest the entrance, then call them home.
-	sim.on_map(OldMine.ID, func():
-		var coal: Array = sim.boulders.filter(func(b): return b.get("ore", "") == "coal")
-		coal.sort_custom(func(a, b): return Sim.manhattan(a.cell, sim.m.entrance) < Sim.manhattan(b.cell, sim.m.entrance))
-		for c in coal.slice(0, 2):
-			sim.designate_mine(Rect2i(c.cell, Vector2i.ONE)))
-	ada.hunger = 30.0  # she eats a packed meal at the mine
-	for i in 90 * Tuning.TPS:
-		sim.step()
-		if sim.stats.get("ore_mined", 0) >= 2 and ada.hunger > 40.0:
-			break
-	tomas.pick.dur = 1  # one pickaxe breaks on the trip
-	sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16), null, ["boulder"]))
-	run(sim, 15)
-	var coal_mined: int = sim.on_map(OldMine.ID, func(): return count(sim, "coal"))
-	check(coal_mined >= 4, "the party mined coal (%d)" % coal_mined)
-	check(sim.call_home() == "", "call them home")
-	for i in int((Tuning.MINE_TRIP + 40) * Tuning.TPS):
+	ada.hunger = 30.0  # she eats a meal from the packs
+	tomas.pick.dur = 1  # his pickaxe breaks, and he takes the spare from the packs
+	for i in int((Tuning.MINE_TRIP + 240) * Tuning.TPS):
 		sim.step()
 		if sim.expedition.is_empty():
 			break
-	check(sim.expedition.is_empty() and ada.map == "village" and tomas.map == "village", "the party is home and the expedition is over")
+	check(sim.expedition.is_empty() and ada.map == "village" and tomas.map == "village", "the party mines its 6 coal, comes home and the expedition is over")
 	var near_sign := sim.stacks_where(func(st): return Sim.manhattan(st.cell, sim.route_sign()) <= 3)
 	check(near_sign.any(func(st): return st.type == "coal"), "the cargo is set down at the signpost as stacks")
 	var b: Dictionary = p.board
 	check(b.report.size() == 2 and b.report[0].begins_with("Back from the old mine: ") and "coal" in b.report[0], "the board has the report: %s" % [b.report])
-	check(b.report[1].begins_with("1 meal eaten") and b.report[1].ends_with("1 pickaxe broken"), "with what it cost: %s" % b.report[1])
-	check(sim.on_map(OldMine.ID, func(): return count(sim, "coal")) == 0, "what they mined came home with them")
+	check(b.report[1].contains("meal") and b.report[1].ends_with("1 pickaxe broken") and not b.report[1].begins_with("0 meals"), "with what it cost: %s" % b.report[1])
 	check(sim.plan_problems(sim.new_plan()).filter(func(x): return x == "One expedition at a time").is_empty() and sim.cant_join(ada) == "", "the board is free for the next expedition")
+	var coal_home := 0
+	for st in near_sign:
+		coal_home += st.n if st.type == "coal" else 0
 	run(sim, 60)
 	var stored := 0
 	for st in sim.stacks_where(func(st): return st.type == "coal" and sim.in_zone(st.cell)):
 		stored += st.n
-	check(stored == coal_mined, "the coal is hauled to the stockpile (%d of %d)" % [stored, coal_mined])
+	check(stored == coal_home and coal_home >= 6, "the coal is hauled to the stockpile (%d of %d)" % [stored, coal_home])
 	check(sim.stats.get("expeditions", 0) == 1, "the village counts its expeditions")
+
+
+## Steps until a party member is at the site, working it.
+func until_at_site(sim: Sim, rs: Array, seconds := Tuning.MINE_TRIP + 40) -> void:
+	for i in int(seconds * Tuning.TPS):
+		if rs.all(func(r): return sim.at_site(r)):
+			return
+		sim.step()
+
+
+## Issue #109: the party works the site by its orders: it marks and mines the objective, packs what
+## it mines, eats from the packs (keeping the return food), replaces a broken pickaxe from the packs,
+## and heads home when its return policy is met.
+func test_party_works_the_site() -> void:
+	var sim := Sim.new_game()
+	var p := send_party(sim)
+	var ada: Dictionary = p.ada
+	var tomas: Dictionary = p.tomas
+	until_at_site(sim, [ada, tomas])
+	check(sim.expedition.provisions == {"bread": 4} and sim.expedition.tools.size() == 1 and sim.pack_load() == 5, "the packs hold 4 meals and a spare pickaxe (%d of %d)" % [sim.pack_load(), Sim.pack_capacity(sim.expedition)])
+	check(sim.on_map(OldMine.ID, func(): return sim.items.is_empty()), "nothing is set down at the entrance")
+	sim.step()
+	run(sim, 1)
+	var marked: Array = sim.get_map(OldMine.ID).boulders.filter(func(b): return b.des)
+	check(marked.any(func(b): return b.get("ore", "") == "coal") and marked.all(func(b): return b.get("ore", "") == "coal" or not b.has("ore")), "the objective's coal is marked by itself, with any boulder in the way (%d blocks)" % marked.size())
+	check(marked.all(func(b): return not b.get("loose", false)), "but never a block under a loose ceiling")
+	# Mining fills the packs, the objective first; a broken pickaxe is replaced from the packs.
+	tomas.pick.dur = 1
+	var took_spare := false
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		took_spare = took_spare or (tomas.pick != null and tomas.pick.dur == 9)
+		if sim.expedition.get("leg", "") == "home":
+			break
+	check(took_spare and sim.expedition.tools.is_empty(), "Tomas's pickaxe broke and he took the spare from the packs")
+	check(sim.expedition.home_why == "target reached" and sim.objective_packed() >= 6, "with 6 coal packed, the party heads home: target reached (%s, %d)" % [sim.expedition.get("home_why", ""), sim.objective_packed()])
+	# Provisions: the hungry eat from the packs, but not the return food.
+	var sim2 := Sim.new_game()
+	var p2 := send_party(sim2)
+	until_at_site(sim2, [p2.ada, p2.tomas])
+	sim2.expedition.policy = {"target": false, "full": false, "low": false}
+	sim2.expedition.target.n = 99
+	p2.ada.hunger = 30.0
+	p2.tomas.hunger = 30.0
+	run(sim2, 5)
+	check(sim2.expedition.provisions.get("bread", 0) == 2 and p2.ada.hunger > 40.0 and p2.tomas.hunger > 40.0, "both eat a meal from the packs (%s)" % [sim2.expedition.provisions])
+	p2.ada.hunger = 30.0
+	run(sim2, 5)
+	check(sim2.expedition.provisions.get("bread", 0) == 2 and p2.ada.hunger < 40.0, "the last 2 meals are the return food: Ada goes hungry rather than eat them")
+	check(sim2.spendable_meals() == 0, "nothing left to spend")
+	sim2.expedition.spend_return = true
+	run(sim2, 5)
+	check(sim2.expedition.provisions.get("bread", 0) == 1, "with Spend it chosen, she eats the return food")
+	# The policies: food runs low once only the return food is left.
+	sim2.expedition.spend_return = false
+	sim2.expedition.policy.low = true
+	run(sim2, 1)
+	check(sim2.expedition.get("home_why", "") == "provisions low", "provisions low sends them home (%s)" % sim2.expedition.get("home_why", ""))
+	# Packs full: cargo stops at capacity.
+	var sim3 := Sim.new_game()
+	var p3 := send_party(sim3)
+	until_at_site(sim3, [p3.ada, p3.tomas])
+	sim3.expedition.policy = {"target": false, "full": true, "low": false}
+	sim3.expedition.target = {"item": "cobble", "n": 99}
+	sim3.expedition.cargo = {"cobble": Sim.pack_capacity(sim3.expedition) - sim3.pack_load() - 3}  # nearly full already
+	for i in 300 * Tuning.TPS:
+		sim3.step()
+		if sim3.expedition.get("leg", "") == "home":
+			break
+	check(sim3.expedition.get("home_why", "") == "packs full" and sim3.pack_load() == Sim.pack_capacity(sim3.expedition), "full packs send them home: %d of %d (%s)" % [sim3.pack_load(), Sim.pack_capacity(sim3.expedition), sim3.expedition.get("home_why", "")])
+	check(sim3.on_map(OldMine.ID, func(): return count(sim3, "cobble")) > 0, "what didn't fit stays at the mine")
+	# A save at the site keeps the packs.
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim2.save_state())))
+	check(loaded.expedition.provisions == sim2.expedition.provisions and loaded.expedition.cargo == sim2.expedition.cargo, "the packs survive a save")
+
+
+## Issue #110: hazards hurt; the injured can't mine; a serious injury stops the game with a choice;
+## Ada is never seriously hurt; healing takes the tuned time in bed, longer without one.
+func test_hazards_and_injuries() -> void:
+	var sim := Sim.new_game()
+	var mine := sim.get_map(OldMine.ID)
+	check(mine.boulders.filter(func(b): return b.get("loose", false)).size() == OldMine.LOOSE.size() and mine.ledges == OldMine.LEDGES, "the old mine has its loose ceilings and its ledge")
+	check(OldMine.LEDGES.all(func(c): return mine.is_dark(c)), "the ledge is in the dark")
+	mine.visited = true
+	var hz: Array = sim.site_report(OldMine.ID).hazards
+	check(hz.size() == 3 and hz.any(func(h): return h.begins_with("Loose ceilings")) and hz.any(func(h): return h.begins_with("A ledge")), "the site report lists every hazard: %s" % [hz])
+	# A cave-in: mining loose ceilings, with the sim's seeded random numbers, hurts someone.
+	var hurt_by_cave_in := false
+	for seed in range(1, 12):
+		var s2 := Sim.new_game()
+		s2.rng.seed = seed
+		var t := s2.add_resident("Tomas", Sim.TRAVELERS[0][1], Vector2i(16, 16))
+		send_to_mine(s2, t)
+		s2.on_map(OldMine.ID, func():
+			for b in s2.boulders:
+				b.des = b.get("loose", false) or b.cell == Vector2i(6, 8) or b.cell == Vector2i(10, 9))
+		for i in 200 * Tuning.TPS:
+			s2.step()
+			if t.hurt > 0:
+				break
+		if t.hurt > 0 and s2.stats.get("injuries", 0) > 0:
+			hurt_by_cave_in = true
+			break
+	check(hurt_by_cave_in, "mining a loose ceiling can bring it down on the miner")
+	# The injured can't mine, and walk and work slower.
+	var p := send_party(sim)
+	var ada: Dictionary = p.ada
+	var tomas: Dictionary = p.tomas
+	until_at_site(sim, [ada, tomas])
+	sim.injure(tomas, 1, "a test")
+	run(sim, 20)
+	check(tomas.hurt == 1 and not (tomas.job != null and tomas.job.kind == "gather"), "injured, Tomas doesn't mine (%s)" % (tomas.job.label if tomas.job != null else "idle"))
+	check(Sim.hurt_speed(tomas) == Tuning.INJURED_SPEED, "and moves at %d%%" % int(Tuning.INJURED_SPEED * 100))
+	# Ada is protected: never seriously hurt.
+	sim.injure(ada, 2, "a test")
+	check(ada.hurt == 1 and sim.pending.is_empty(), "Ada can be hurt, but never seriously")
+	# A serious injury stops the game for the player: retreat or press on.
+	sim.events.clear()
+	sim.injure(tomas, 2, "a fall in the dark")
+	check(sim.pending.size() == 1 and sim.pending[0].kind == "injury" and sim.events.any(func(e): return e.type == "pause"), "a serious injury raises a choice and pauses the game")
+	check(sim.pending[0].options.map(func(o): return o.id) == ["retreat", "press_on"], "Retreat or Press on")
+	var pressed := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(pressed.pending.size() == 1, "the choice survives a save")
+	pressed.choose("press_on")
+	run(pressed, 30)
+	var lt: Dictionary = pressed.residents[1]
+	check(pressed.expedition.leg == "out" and lt.job != null and lt.job.kind == "hurt" and Sim.manhattan(Sim.rcell(lt), pressed.get_map(OldMine.ID).entrance) <= 1, "Press on: Tomas waits at the entrance while the rest work")
+	sim.choose("retreat")
+	check(sim.pending.is_empty() and sim.expedition.leg == "home" and sim.expedition.home_why.begins_with("retreat"), "Retreat: the party heads home (%s)" % sim.expedition.home_why)
+	for i in int((Tuning.MINE_TRIP + 180) * Tuning.TPS):
+		sim.step()
+		if sim.expedition.is_empty():
+			break
+	check(sim.expedition.is_empty() and p.board.report.size() == 3 and "Ada injured" in p.board.report[2] and "Tomas seriously injured" in p.board.report[2], "the report names who was hurt: %s" % [p.board.report])
+	# Home: healing in bed takes HEAL_TIME; Tomas has no bed of his own, so he heals slower.
+	var house := sim.place_site("house", open_rect(sim, Vector2i(5, 5)).position)
+	house.stage = 4
+	house.done = true
+	house.owner = ada.id
+	sim.rev += 1
+	var healed_at := -1.0
+	for i in int((Tuning.HEAL_TIME[1] + 60) * Tuning.TPS):
+		sim.step()
+		if ada.hurt == 0:
+			healed_at = float(i) / Tuning.TPS
+			break
+	check(healed_at > Tuning.HEAL_TIME[1] - 1.0 and healed_at < Tuning.HEAL_TIME[1] + 30.0, "Ada heals in her bed in about %d s (%.0f s; %s, hurt %d heal %.0f, %s)" % [int(Tuning.HEAL_TIME[1]), healed_at, ada.job.label if ada.job != null else "idle", ada.hurt, ada.heal, ada.map])
+	check(tomas.hurt == 2 and tomas.job != null and tomas.job.kind == "rest", "Tomas, with no bed, is still resting")
+	check(stuck_text(sim).contains("Tomas: Injured, resting: no bed of their own, so it's slower"), "and says why: " + stuck_text(sim))
+
+
+## Issue #111: mining near the hidden vein finds it, and the game stops for a choice: keep mining,
+## investigate, or mark it and go home.
+func test_iron_discovery() -> void:
+	var sims := {}
+	for choice in ["keep", "investigate", "return"]:
+		var sim := Sim.new_game()
+		var p := send_party(sim)
+		until_at_site(sim, [p.ada, p.tomas])
+		sim.expedition.policy = {"target": false, "full": false, "low": false}
+		var mine := sim.get_map(OldMine.ID)
+		check(not sim.on_map(OldMine.ID, func(): return mine.boulders.any(func(b): return b.get("ore", "") == "iron" and not b.get("hidden", false))), "the iron is hidden before it's found")
+		sim.on_map(OldMine.ID, func():
+			for b in sim.boulders:
+				b.des = not b.has("ore") and b.cell != Vector2i(12, 8)  # the stone, which opens the way to the rubble
+			)
+		for i in 300 * Tuning.TPS:
+			sim.step()
+			if not sim.pending.is_empty():
+				break
+		check(mine.found and not mine.discovered and sim.pending.size() == 1 and sim.pending[0].kind == "discovery", "%s: mining the rubble finds the vein, and the game stops for a choice" % choice)
+		check(sim.pending[0].options.map(func(o): return o.id) == ["keep", "investigate", "return"] and sim.pending[0].options.all(func(o): return o.cost != ""), "three choices, each with its cost")
+		check(sim.site_report(OldMine.ID).finds == ["Iron vein found, not surveyed"] and not sim.plan_targets(OldMine.ID).any(func(x): return x.item == "iron_ore"), "the report shows the vein, not yet a target")
+		sim.choose(choice)
+		sims[choice] = [sim, p]
+	# Keep mining: the vein stays marked and can be mined.
+	var keep: Sim = sims.keep[0]
+	keep.on_map(OldMine.ID, func(): keep.designate_mine(Rect2i(0, 0, 16, 16)))
+	var iron_marked: bool = keep.get_map(OldMine.ID).boulders.any(func(b): return b.get("ore", "") == "iron" and b.des)
+	check(iron_marked and keep.expedition.leg == "out", "Keep mining: the vein can be marked and mined, and the party stays")
+	# Investigate: someone spends time and pickaxe uses, then iron is a known resource.
+	var inv: Sim = sims.investigate[0]
+	var uses_before: int = sims.investigate[1].ada.pick.dur + sims.investigate[1].tomas.pick.dur
+	var surveyed := false
+	for i in 120 * Tuning.TPS:
+		inv.step()
+		if inv.get_map(OldMine.ID).discovered:
+			surveyed = true
+			break
+	check(surveyed and inv.plan_targets(OldMine.ID).any(func(x): return x.item == "iron_ore"), "Investigate: the vein is surveyed and iron can be a target")
+	check(inv.site_report(OldMine.ID).resources[2].reserve == 4 * Tuning.ORE_YIELD.iron and inv.site_report(OldMine.ID).finds.is_empty(), "with its size known")
+	check(sims.investigate[1].ada.pick.dur + sims.investigate[1].tomas.pick.dur <= uses_before - Tuning.SURVEY_USES, "at the cost of %d pickaxe uses" % Tuning.SURVEY_USES)
+	# Mark it and return later: the party heads home now.
+	var ret: Sim = sims["return"][0]
+	check(ret.expedition.leg == "home" and ret.get_map(OldMine.ID).found, "Mark it and return later: the party heads home, the vein remembered")
+	var loaded := Sim.from_state(str_to_var(var_to_str(ret.save_state())))
+	check(loaded.get_map(OldMine.ID).found and not loaded.get_map(OldMine.ID).discovered and loaded.get_map(OldMine.ID).boulders.any(func(b): return b.get("ore", "") == "iron" and not b.has("hidden")), "the find survives a save")
+
+
+## Issue #113: the Slice 2 end-state save the Slice 3 bot starts from still loads, upgraded.
+func test_slice2_fixture_loads() -> void:
+	var r := SaveFormat.read("res://tests/fixtures/slice2_village.save")
+	check(not r.has("error"), "the Slice 2 village reads: %s" % r.get("error", ""))
+	if r.has("error"):
+		return
+	var sim := Sim.from_state(r.data.state)
+	check(sim.residents.size() == 3 and Goals.current(sim) < 0, "three residents, and the founding done")
+	check(sim.sites.any(func(s): return s.tpl == "fireplace" and s.done) and sim.free_count("bread") >= 6 and sim.free_count("plank") >= 6, "a fireplace, meals and planks to start Slice 3 with")
