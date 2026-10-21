@@ -14,6 +14,13 @@ static var YELLOW := Color("#E8C547")
 static var WHEAT := Color("#D8B65A")   ## Farm plots and the Farm order (issue #74); yellow stays for stuck.
 static var SKY := Color("#A9B8B0")
 
+# Type scale (issue #80): every HUD text size is one of these, and nothing is smaller than CAPTION.
+# Bricolage Grotesque's condensed shapes get hard to read below 13 px at 1280×720.
+const CAPTION := 13   ## Notes, hints, counts, keycaps
+const BODY := 15      ## Panel text, rows and buttons
+const HEADING := 18   ## Panel and section titles
+const TITLE := 24     ## The selected thing's name
+
 # World
 static var GRASS := Color("#6F8F4E")
 static var DIRT := Color("#7B5E42")

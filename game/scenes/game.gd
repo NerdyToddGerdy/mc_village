@@ -18,6 +18,7 @@ var build_menu_open: bool:
 	set(v): menu_open = "build" if v else ("" if menu_open == "build" else menu_open)
 var craft_menu_open := false            ## The Craft panel above the toolbar (issue #57).
 var craft_bench_i := 0                  ## Which finished bench the Craft panel shows.
+var jobs_board_open := false            ## The Village jobs board (issue #78).
 var selection := {}                     ## {} | {kind:"res", ids:[...]} | {kind:"tree"/"boulder"/"site", id}
 
 var _acc := 0.0
@@ -39,9 +40,45 @@ var _menu_prev_speed := 1
 var save_dir := "user://saves"  ## Tests point this elsewhere so they never touch real saves.
 const SLOTS := 5
 
+## How big the HUD and menus are drawn (issue #80), the player's choice from the menu. The world
+## isn't scaled. Saved beside the key bindings, so tests use their own settings folder.
+const UI_SCALES := [0.9, 1.0, 1.15, 1.3]
+var ui_scale := 1.0
+
+
+func _ui_settings_path() -> String:
+	return keys.path.get_base_dir().path_join("ui.cfg")
+
+
+func _load_ui_scale() -> void:
+	var cfg := ConfigFile.new()
+	var v = cfg.get_value("ui", "scale", 1.0) if cfg.load(_ui_settings_path()) == OK else 1.0
+	ui_scale = v if v is float and UI_SCALES.has(v) else 1.0
+	for a in OS.get_cmdline_user_args():  # --ui-scale=1.15, for checking the layout in screenshots
+		if a.begins_with("--ui-scale="):
+			ui_scale = a.get_slice("=", 1).to_float()
+	get_window().content_scale_factor = ui_scale
+
+
+## Sets the interface size and saves it. Returns "" or a message for the player.
+func set_ui_scale(v: float) -> String:
+	ui_scale = v
+	get_window().content_scale_factor = v
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_ui_settings_path().get_base_dir()))
+	var cfg := ConfigFile.new()
+	cfg.set_value("ui", "scale", v)
+	return "" if cfg.save(_ui_settings_path()) == OK else "Couldn’t save the interface size."
+
+
+## The next interface size after the current one, round to the smallest.
+func next_ui_scale() -> float:
+	var i := UI_SCALES.find(ui_scale)
+	return UI_SCALES[(i + 1) % UI_SCALES.size()]
+
 
 func _ready() -> void:
 	keys = KeyBindings.new(keys_path)
+	_load_ui_scale()
 	sim = Sim.new_game()
 	_setup_scene()
 	_world.sim = sim
@@ -529,6 +566,8 @@ func _key(e: InputEventKey) -> void:
 	if e.keycode == KEY_ESCAPE:
 		if tool != "" or menu_open != "":
 			set_tool("")
+		elif jobs_board_open:
+			jobs_board_open = false
 		elif craft_menu_open:
 			craft_menu_open = false
 		else:
@@ -547,6 +586,7 @@ func _key(e: InputEventKey) -> void:
 		"chop": set_tool("chop")
 		"break": set_tool("break")
 		"craft": toggle_craft_menu()
+		"jobs": toggle_jobs_board()
 		"hunt": set_tool("hunt")
 		"stock": set_tool("stock")
 		"farm": set_tool("farm")
@@ -626,7 +666,10 @@ func read_slots() -> Array:
 		if r.has("error"):
 			out.append({"error": r.error})
 		else:
-			out.append({"summary": r.data.summary, "tick": r.data.tick, "saved_at": r.data.saved_at})
+			var summary: String = r.data.summary
+			if summary == "Founding complete":  # saved before #81: label it with the village's facts
+				summary = Goals.village_text(Sim.from_state(r.data.state))
+			out.append({"summary": summary, "tick": r.data.tick, "saved_at": r.data.saved_at})
 	return out
 
 
@@ -778,6 +821,21 @@ func cycle_job_priority(r: Dictionary, job: String) -> void:
 	sim.set_job_priority(r, job, r.jobs[job].pri % 3 + 1)
 
 
+## A click on a jobs board cell (issue #78): an Off job switches on at its priority; an on job's
+## priority cycles; Shift-click switches it off.
+func board_click(r: Dictionary, job: String, shift := false) -> void:
+	if shift:
+		sim.set_job_on(r, job, false)
+	elif not r.jobs[job].on:
+		sim.set_job_on(r, job, true)
+	else:
+		cycle_job_priority(r, job)
+
+
+func toggle_jobs_board(open = null) -> void:
+	jobs_board_open = (not jobs_board_open) if open == null else open
+
+
 func set_keep_meals(f: Dictionary, on: bool) -> void:
 	sim.set_keep_meals(f, on)
 
@@ -873,6 +931,7 @@ func _screenshot_menu() -> void:
 ## `godot --path . -- --screenshot` plays a short scripted opening, saves a frame to
 ## user://screenshot.png and quits. Used to check the view without clicking through it.
 func _screenshot_scene() -> void:
+	sim.residents[0].jobs.toolsmith.on = true  # as the checklist asks (issue #91)
 	sim.designate_mine(area(0, 8, 9, 10))
 	var bench := sim.place_site("bench", at(8, 10))
 	for i in 120 * Tuning.TPS:
@@ -1002,6 +1061,10 @@ func _screenshot_scene() -> void:
 			sim.compute_stuck()
 			_hud.refresh(sim)  # what's stuck now counts as seen, so it stays folded
 			_hud.stuck_open = false
+	if "--jobs" in OS.get_cmdline_user_args():  # the Village jobs board (issue #78); add --village for more rows
+		sim.residents[0].jobs.mine.xp = 30
+		sim.residents[0].jobs.toolsmith.on = true
+		jobs_board_open = true
 	if "--toast" in OS.get_cmdline_user_args():  # a short toast and one long enough to wrap (issue #71)
 		_hud.add_toast({"text": "Tomas is now level 2 at Mine.", "res_id": 0, "site_id": 0})
 		_hud.add_toast({"text": "A traveler, Mira, has arrived. She claims the new house and needs tools from the bench before she can mine.", "res_id": sim.residents[0].id, "site_id": 0})

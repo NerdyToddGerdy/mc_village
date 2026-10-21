@@ -41,6 +41,8 @@ func _init() -> void:
 		"test_save_file_round_trip",
 		"test_erasing_stockpile_cells",
 		"test_standing_orders_wait_rather_than_block",
+		"test_craft_patterns_match_their_recipes",
+		"test_toolsmith_is_employed_by_switching_it_on",
 	]
 	for t in tests:
 		_current = t
@@ -83,6 +85,7 @@ func stuck_text(sim: Sim) -> String:
 
 ## Plays the founding moment the way a player would, end to end.
 func play_opening(sim: Sim) -> Dictionary:
+	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	sim.designate_mine(area(0, 0, 10, 18))
 	sim.designate_hunt(whole_map())  # wool for the two beds
 	var bench := sim.place_site("bench", at(8, 10))
@@ -126,6 +129,7 @@ func test_full_opening() -> void:
 
 func test_bench_skips_blocked_recipes_and_comes_before_building() -> void:
 	var sim := Sim.new_game()
+	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	sim.designate_mine(area(0, 0, 10, 18))
 	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
@@ -152,6 +156,7 @@ func test_bench_skips_blocked_recipes_and_comes_before_building() -> void:
 
 func test_auto_ingredients_unlock_with_first_house() -> void:
 	var sim := Sim.new_game()
+	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	sim.designate_mine(area(0, 0, 10, 18))
 	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
@@ -214,6 +219,7 @@ func test_mine_marks_trees_and_boulders() -> void:
 
 func test_save_and_load_mid_game() -> void:
 	var sim := Sim.new_game()
+	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	sim.designate_mine(area(0, 0, 10, 18))
 	sim.designate_hunt(whole_map())
 	var bench := sim.place_site("bench", at(8, 10))
@@ -248,7 +254,7 @@ func test_tool_breaks_and_resident_reports() -> void:
 	run(sim, 30)
 	check(not t.alive, "tree felled")
 	check(ada.axe == null and ada.broken.axe, "axe broke after its last use")
-	check(stuck_text(sim).contains("Axe broke. Needs a new axe"), "resident reports it: " + stuck_text(sim))
+	check(stuck_text(sim).contains("Axe broke. Craft one at the bench, or switch Toolsmith on for someone"), "with no toolsmith, the report says how to fix it: " + stuck_text(sim))
 	sim.designate_mine(Rect2i(sim.trees[0].cell, Vector2i.ONE))
 	run(sim, 5)
 	check(ada.job == null or ada.job.kind != "gather", "resident stops chopping until a new axe exists")
@@ -346,10 +352,68 @@ func test_dropped_tools_keep_their_wear() -> void:
 
 ## Erasing stockpile cells (issue #63): stacks left on them are re-hauled to the cells that are left,
 ## a haul on its way to an erased cell goes to another one, and erasing every cell stops hauling.
+## Issue #95: a bench recipe's crafting-grid pattern shows exactly its inputs, and a fireplace
+## recipe's fuel is one of its inputs. The patterns are display only.
+func test_craft_patterns_match_their_recipes() -> void:
+	for rec in Defs.RECIPES:
+		if rec.get("at", "bench") == "bench":
+			var counts := {}
+			check(rec.has("pattern") and rec.pattern.size() == 3 and rec.pattern.all(func(row): return row.length() == 3), "%s has a 3×3 pattern" % rec.name)
+			for row in rec.get("pattern", []):
+				for ch in row:
+					if ch != " ":
+						var item: String = Defs.PATTERN_KEYS.get(ch, "?")
+						counts[item] = counts.get(item, 0) + 1
+			check(counts == rec.inp, "%s's pattern uses its inputs (%s vs %s)" % [rec.name, counts, rec.inp])
+		else:
+			check(not rec.has("fuel") or rec.inp.has(rec.fuel), "%s's fuel is one of its inputs" % rec.name)
+
+
+## Issue #91: nobody is a toolsmith until the player switches it on, so no spares are made unasked;
+## a traveler skilled at it arrives with it on; hand-queued tools wait for a toolsmith.
+func test_toolsmith_is_employed_by_switching_it_on() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	check(not ada.jobs.toolsmith.on and ada.jobs.craft.on and ada.jobs.mine.on, "Ada starts with every job on but Toolsmith")
+	check(Sim.default_jobs().values().filter(func(j): return not j.on).size() == 1, "Toolsmith is the only job off by default")
+	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	ada.axe = {"type": "wood_axe", "tier": 1, "dur": 5}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "plank", 6)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "stick", 4)
+	run(sim, 2)
+	check(not bench.autoq.has("toolsmith"), "with no toolsmith, no spare is queued (%s)" % [bench.queue])
+	check(Goals.current(sim) <= 2, "the checklist asks for a toolsmith before the pickaxe")
+	sim.queue_add(bench, "wood_pick")
+	run(sim, 10)
+	check(bench.queue.has("wood_pick") and stuck_text(sim).contains("No one does Toolsmith"), "a pickaxe queued by hand waits, and says why: " + stuck_text(sim))
+	sim.set_job_on(ada, "toolsmith", true)
+	run(sim, 2)
+	check(bench.autoq.has("toolsmith"), "once someone is toolsmith, a spare axe is queued (%s)" % [bench.queue])
+	check(Goals.done(sim, 2), "and the checklist's toolsmith step is done")
+	run(sim, 60)
+	check(sim.stats.pick_crafted, "the toolsmith makes the hand-queued pickaxe")
+	# A traveler who arrives skilled as a toolsmith starts with it on.
+	var found := false
+	for seed in 40:
+		var t := Sim.new_game()
+		t.rng.seed = seed
+		t._arrive()
+		var tr: Dictionary = t.residents.back()
+		if tr.jobs.toolsmith.xp > 0:
+			found = true
+			check(tr.jobs.toolsmith.on, "a skilled toolsmith arrives with Toolsmith on")
+			break
+		check(not tr.jobs.toolsmith.on or tr.jobs.toolsmith.xp > 0, "an arrival with another skill has Toolsmith off")
+	check(found, "some seed brings a skilled toolsmith")
+
+
 ## Issue #77: a standing order short of materials is listed as waiting, not stuck, and every entry
 ## remembers when it first showed, so the list can put the longest-stuck first.
 func test_standing_orders_wait_rather_than_block() -> void:
 	var sim := Sim.new_game()
+	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	var ada: Dictionary = sim.residents[0]
 	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
 	bench.stage = 1
@@ -589,7 +653,7 @@ func test_beds_and_free_bed_arrivals() -> void:
 	var s := play_opening(sim)
 	check(s.h1.stage == 4 and s.h2.stage == 4, "both opening houses got their beds")
 	check(sim.stats.get("sheep_hunted", 0) == 6, "the six sheep were hunted for wool")
-	check(Goals.LIST[5].t == "Hunt sheep for wool" and Goals.done(sim, 5), "the founding goals include hunting for wool")
+	check(Goals.LIST[6].t == "Hunt sheep for wool" and Goals.done(sim, 6), "the founding goals include hunting for wool")
 	# A house with no wool for its bed: finished up to the roof, never done, and nobody comes.
 	var bench: Dictionary = s.bench
 	for k in sim.items.keys():
@@ -950,6 +1014,7 @@ func set_level(r: Dictionary, job: String, lv: int) -> void:
 
 func test_skills_rise_and_pay_off() -> void:
 	var sim := Sim.new_game()
+	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	var ada: Dictionary = sim.residents[0]
 	# Levels rise at 8, 25, 50 and 90 points and stop at 5.
 	check(Sim.level(ada, "mine") == 1, "everyone starts at level 1")
@@ -1012,6 +1077,7 @@ func test_skills_rise_and_pay_off() -> void:
 	var a6: Dictionary = sim6.residents[0]
 	set_level(a6, "craft", 4)
 	set_level(a6, "toolsmith", 2)
+	a6.jobs.toolsmith.on = true
 	var bench := sim6.place_site("bench", open_rect(sim6, Vector2i(3, 3)).position + Vector2i(1, 0))
 	bench.stage = 1
 	bench.done = true
@@ -1052,6 +1118,7 @@ func test_skills_rise_and_pay_off() -> void:
 
 func test_toolsmith_keeps_spares() -> void:
 	var sim := Sim.new_game()
+	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	var ada: Dictionary = sim.residents[0]
 	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
 	bench.stage = 1
@@ -1082,6 +1149,7 @@ func test_toolsmith_keeps_spares() -> void:
 	# The best tier the bench can make: stone once there's cobblestone.
 	var sim2 := Sim.new_game()
 	var a2: Dictionary = sim2.residents[0]
+	a2.jobs.toolsmith.on = true
 	var b2 := sim2.place_site("bench", open_rect(sim2, Vector2i(3, 3)).position + Vector2i(1, 0))
 	b2.stage = 1
 	b2.done = true
@@ -1104,7 +1172,7 @@ func test_toolsmith_keeps_spares() -> void:
 	sim3.direct_order(a3, t3)
 	run(sim3, 30)
 	check(b3.queue.is_empty(), "with no toolsmith, no spares are queued")
-	check(a3.axe == null and stuck_text(sim3).contains("Axe broke. Needs a new axe"), "and a broken axe stops and reports: " + stuck_text(sim3))
+	check(a3.axe == null and stuck_text(sim3).contains("Axe broke. Craft one at the bench, or switch Toolsmith on for someone"), "and a broken axe stops and reports: " + stuck_text(sim3))
 
 
 func test_equip_a_chosen_tool() -> void:

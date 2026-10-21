@@ -112,6 +112,15 @@ func _initialize() -> void:
 	await run(150)
 	check(bench.done, "Ada builds the bench")
 
+	# Make Ada the toolsmith (issue #91): only a toolsmith makes tools, and nobody starts as one
+	check(Goals.LIST[Goals.current(sim)].t == "Make Ada the toolsmith", "the checklist asks for a toolsmith next")
+	await key(KEY_F)
+	check(game.selection.get("ids", []) == [ada.id], "F selects Ada")
+	check(not ada.jobs.toolsmith.on and await click_job(ada, "toolsmith"), "J opens the jobs board; click Ada's Toolsmith cell")
+	check(ada.jobs.toolsmith.on and Goals.done(sim, 2), "Ada is the toolsmith, and the checklist moves on")
+	await key(KEY_J)
+	check(not game.jobs_board_open, "J closes the board again")
+
 	# Queue crafts by clicking the bench and its Queue buttons
 	await click(screen(bench_cell, 0.4))
 	check(game.selection.get("kind", "") == "site" and game.selection.id == bench.id, "clicking the bench selects it (got %s)" % [game.selection])
@@ -183,6 +192,9 @@ func _initialize() -> void:
 	var queued_before: int = bench.queue.size()
 	check(await queue_recipe("Planks", 5), "queue 5 planks")
 	check(bench.queue.size() == queued_before + 5, "Queue 5 queues five batches")
+	check(await click_button("queued Planks", "", true), "click the last planks slot in the queue's hotbar")
+	check(bench.queue.size() == queued_before + 4, "clicking a hotbar slot removes it (%d)" % (bench.queue.size() - queued_before))
+	check(await queue_recipe("Planks", 1), "queue one more")
 	await queue_recipe("Planks", 5)
 	check(bench.queue.size() >= queued_before + 8, "two Queue 5 clicks cover a house's planks")
 	await key(KEY_ESCAPE)
@@ -264,7 +276,8 @@ func _initialize() -> void:
 	check(Goals.current(sim) < 0, "every founding goal is done")
 	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
 	await frames(2)
-	check(visible_label("Slice 1 complete"), "the goals panel says Slice 1 is complete")
+	check(visible_label("Founding  ✓") and not visible_label("Slice 1"), "the goals panel folds to a Founding chip")
+	check(Goals.progress_text(sim).ends_with("meals") and "residents" in Goals.progress_text(sim), "saves are labelled with the village's facts: %s" % Goals.progress_text(sim))
 
 	# Farm plots (issue #45): P, drag over open grass, and residents plant wheat
 	await key(KEY_P)
@@ -302,27 +315,29 @@ func _initialize() -> void:
 	check(fire != null and fire.done, "the fireplace is built")
 	check(cooked, "and its standing order cooks the hunted mutton")
 
-	# Jobs grid (issue #47): switch Ada's Haul off and back on, and raise Mine to priority 1
+	# Jobs board (issues #47, #78): switch Ada's Haul off and back on, and raise Mine to priority 1
 	game.selection = {"kind": "res", "ids": [ada.id]}
-	check(await click_button("Haul"), "click Haul in Ada's Jobs grid")
+	check(await click_job(ada, "haul", true), "Shift-click Ada's Haul cell")
 	check(not ada.jobs.haul.on, "Haul is switched off")
-	check(await click_button("Haul"), "click Haul again")
-	check(ada.jobs.haul.on, "Haul is back on")
+	check(await click_job(ada, "haul"), "click it again")
+	check(ada.jobs.haul.on and ada.jobs.haul.pri == 2, "Haul is back on, at the priority it had")
 	for i in 2:
-		await click_job("mine", 2)
-	check(ada.jobs.mine.pri == 1, "clicking Mine's number twice makes it priority 1 (%d)" % ada.jobs.mine.pri)
+		await click_job(ada, "mine")
+	check(ada.jobs.mine.pri == 1, "clicking Mine's cell twice makes it priority 1 (%d)" % ada.jobs.mine.pri)
 	# A panel that changes between a button's press and release keeps the click
-	var pri_btn := job_button("mine", 2)
+	var pri_btn: Button = await job_cell(ada, "mine")
 	var pos := pri_btn.get_global_rect().get_center()
 	await move(pos)
 	await press(pos, true)
-	ada.progress = 0.5 if ada.progress < 0.3 else 0.05  # the resident panel's content changes mid-click
+	ada.jobs.farm.xp += 9  # the board's content changes mid-click
 	game._hud.refresh(game.sim)
 	await frames(2)
 	await press(pos, false)
 	await frames(2)
-	check(ada.jobs.mine.pri == 2, "a click held across a panel change still lands (%d)" % ada.jobs.mine.pri)
+	check(ada.jobs.mine.pri == 2, "a click held across a board change still lands (%d)" % ada.jobs.mine.pri)
 	sim.set_job_priority(ada, "mine", 1)
+	await key(KEY_ESCAPE)
+	check(not game.jobs_board_open and not game._menu.visible, "Esc closes the jobs board first")
 
 	# The sheep meadow (issue #50): send Tomas off the map; he comes back with wool and mutton
 	if not tomas.is_empty():

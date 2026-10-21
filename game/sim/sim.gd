@@ -108,11 +108,12 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 	return r
 
 
-## Every job on, at priority 2 (spec §5).
+## Every job on at priority 2, except Toolsmith (spec §5, issue #91): the player employs a toolsmith
+## by switching it on, since a toolsmith spends materials on spare tools unasked.
 static func default_jobs() -> Dictionary:
 	var out := {}
 	for jb in Defs.JOBS:
-		out[jb] = {"on": true, "pri": 2, "xp": 0}
+		out[jb] = {"on": jb != "toolsmith", "pri": 2, "xp": 0}
 	return out
 
 
@@ -1607,6 +1608,7 @@ func _arrive() -> void:
 	var t := add_resident(who[0] if n < TRAVELERS.size() else "%s %d" % [who[0], n / TRAVELERS.size() + 1], who[1], spawn)
 	var skill: String = Defs.JOBS[rng.randi_range(0, Defs.JOBS.size() - 1)]
 	t.jobs[skill].xp = Tuning.SKILL_LEVELS[Tuning.ARRIVAL_LEVEL - 2]
+	t.jobs[skill].on = true  # a skilled toolsmith arrives at work (issue #91)
 	walk_in(t)
 	_toast("A traveler named %s has arrived, a skilled %s." % [t.name, Defs.JOB_SKILLED[skill]], t.id)
 
@@ -1719,6 +1721,8 @@ func compute_stuck() -> void:
 				var tname := "Axe" if k == "axe" else "Pickaxe"
 				if _spare_queued(k):
 					_add_stuck(r.name, "%s broke. Waiting for the toolsmith’s spare" % tname, at, 1.6, "res", r.id)
+				elif not has_toolsmith():
+					_add_stuck(r.name, "%s broke. Craft one at the bench, or switch Toolsmith on for someone" % tname, at, 1.6, "res", r.id)
 				else:
 					_add_stuck(r.name, "%s broke. Needs a new %s" % [tname, tname.to_lower()], at, 1.6, "res", r.id)
 		if r.note != null and r.note.until > tick:

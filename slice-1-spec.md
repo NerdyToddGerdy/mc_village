@@ -39,7 +39,7 @@ project/
 - The sim emits a per-tick **event list** (`ItemDropped`, `StageCompleted`, `JobBlocked`, `ResidentArrived`, …). Views use events for one-off effects and read state for everything else.
 - All randomness uses a seeded RNG owned by the sim.
 
-**Saving.** A save is the serialized sim state plus the camera position, in one of 5 slots. Each slot also records a one-line summary (the next goal), time played and when it was saved.
+**Saving.** A save is the serialized sim state plus the camera position, in one of 5 slots. Each slot also records a one-line summary (the next goal; in Slice 2, facts about the village once the founding is done), time played and when it was saved.
 - **Saved:** world, items, stockpile zones, sites and their delivered materials, bench queues, residents' positions, tools and broken flags, queued orders, stats and the arrival timer.
 - **Not saved, rebuilt on load:**
   - In-progress jobs, paths and reservations (claims, incoming deliveries, stockpile cell holds). Residents simply re-claim work on the next tick.
@@ -250,6 +250,8 @@ The world is a building site; the player is the foreman. Orders are chalk marks 
 World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`, stone `#8A8D86`, log `#7A5634`, plank `#C49A62`.
 
 **Type.** Bricolage Grotesque (OFL), bundled. Condensed bold for names and stage headings, regular for body, tabular figures for counts. Sentence case everywhere; no all-caps labels, no monospace.
+- **Type scale (#80):** four sizes, named in `palette.gd`: caption 13 (notes, counts, keycaps), body 15, heading 18 (panel titles) and title 24 (the selected thing's name). Nothing is smaller than 13 px, since the condensed shapes get hard to read below that at 1280×720.
+- **Interface size (#80):** the menu's **Interface size** button cycles 90, 100, 115 and 130%. It scales the HUD and menus, not the world, and is saved with the key bindings. At large sizes the goals panel gives way to a selection panel tall enough to reach it.
 
 **Layout** (1280 × 720 minimum, scales via `content_scale`):
 

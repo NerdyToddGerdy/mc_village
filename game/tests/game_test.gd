@@ -416,7 +416,7 @@ func _test_craft_menu(game: Game) -> void:
 	check(game.craft_menu_open and hud._craft_panel.visible, "C opens the craft panel above the toolbar")
 	var queue_btn: Button = null
 	for n in _walk(hud._craft_box):
-		if n is Button and n.text == "Queue 1":
+		if n is Button and n.text == "Queue 1":  # the chosen recipe's (the first, Planks)
 			queue_btn = n
 			break
 	check(queue_btn != null, "the panel lists recipes with Queue buttons")
@@ -432,7 +432,7 @@ func _test_craft_menu(game: Game) -> void:
 	check(game.craft_menu_open, "selecting the bench opens the craft panel")
 	var left_queue := _walk(hud._sel).filter(func(n): return n is Button and n.text.begins_with("Queue"))
 	var right_queue := _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Queue"))
-	check(left_queue.is_empty() and right_queue.size() == Defs.recipes_at("bench").size(), "the recipe list is only on the right (%d left, %d right)" % [left_queue.size(), right_queue.size()])
+	check(left_queue.is_empty() and right_queue.size() == 1, "the recipes are only on the right (%d left, %d right)" % [left_queue.size(), right_queue.size()])
 	check(_walk(hud._sel).any(func(n): return n is Label and n.text == "Crafting bench"), "the left panel still names the bench and its status")
 	_key(game, KEY_ESCAPE)
 
@@ -574,7 +574,7 @@ func _test_fireplace(game: Game) -> void:
 	hud.refresh(sim)
 	await process_frame
 	check(game.craft_menu_open, "selecting the fireplace opens its menu")
-	var rows := _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Queue "))
+	var rows := _walk(hud._craft_box).filter(func(n): return n is Button and n.get_meta("label", "") in ["Bread", "Cooked mutton"])
 	check(rows.size() == 2, "it lists its two recipes, bread and cooked mutton (%d)" % rows.size())
 	var keep: Array = _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Keep 6 meals"))
 	check(keep.size() == 1 and keep[0].text.ends_with("on"), "the standing order shows, on by default")
@@ -606,37 +606,54 @@ func _test_station_tabs(game: Game, f: Dictionary) -> void:
 	hud.refresh(sim)
 	await process_frame
 	check(game.craft_bench().tpl == "bench" and tabs.call().filter(func(t): return t.button_pressed).map(func(t): return t.text) == ["Bench"], "clicking the Bench tab shows the bench")
-	var labels: Array = _walk(hud._craft_box).filter(func(n): return n is Label)
-	var at_queue := labels.find(labels.filter(func(l): return l.text.begins_with("Nothing queued") or l.text.begins_with("Ready") or l.text.begins_with("Waiting") or l.text.begins_with("Gathering") or l.text.begins_with("Crafting") or l.text.begins_with("Nothing")).front())
-	var at_recipes := labels.find(labels.filter(func(l): return l.text == "Recipes").front())
-	check(at_queue >= 0 and at_queue < at_recipes, "what it's doing and its queue come before the recipes")
-	var row := func(name: String) -> Node:
-		return _walk(hud._craft_box).filter(func(n): return n is HBoxContainer and n.get_meta("recipe", "") == name).front()
-	var axe: Node = row.call("Wooden axe")
-	var short: Array = _walk(axe).filter(func(n): return n is Label and n.get_theme_color("font_color") == Palette.YELLOW)
-	var swatches: Array = _walk(axe).filter(func(n): return n is TextureRect)
-	check(swatches.size() == Defs.recipe("wood_axe").inp.size(), "each input has its colour swatch")
-	check(short.size() > 0 and short.size() <= Defs.recipe("wood_axe").inp.size(), "inputs short of one craft are yellow (%d)" % short.size())
+	# Issue #95: a recipe book, a crafting grid in the recipe's pattern, an arrow and the result.
+	var book := func(name: String) -> Button:
+		return _walk(hud._craft_box).filter(func(n): return n is Button and n.get_meta("label", "") == name).front()
+	check(Defs.recipes_at("bench").all(func(r): return book.call(r.name) != null), "the recipe book has a slot for every bench recipe")
+	check(book.call("Planks").button_pressed, "the first recipe is shown to start with")
+	book.call("Wooden pickaxe").pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	var grid: GridContainer = _walk(hud._craft_box).filter(func(n): return n is GridContainer and n.columns == 3).front()
+	var filled: Array = grid.get_children().map(func(slot): return slot.get_child_count() > 0)
+	check(filled == [true, true, true, false, true, false, false, true, false], "picking the pickaxe lays out its pattern on the 3×3 grid (%s)" % [filled])
+	var yellow: Array = grid.get_children().filter(func(slot): return (slot.get_theme_stylebox("panel") as StyleBoxFlat).border_color == Palette.YELLOW)
+	var short_items: Array = Defs.recipe("wood_pick").inp.keys().filter(func(k): return hud._have(sim, game.craft_bench(), k) < Defs.recipe("wood_pick").inp[k])
+	var want := 0
+	for k in short_items:
+		want += Defs.recipe("wood_pick").inp[k]
+	check(yellow.size() == want, "slots the village is short of are outlined yellow (%d of %d)" % [yellow.size(), want])
+	check(_walk(hud._craft_box).any(func(n): return n is Label and n.text == "Wooden pickaxe"), "the result names the recipe")
 	var bench: Dictionary = game.craft_bench()
 	var before: int = bench.queue.size()
-	var plus: Button = _walk(row.call("Planks")).filter(func(n): return n is Button and n.text == "+").front()
-	plus.pressed.emit()
-	plus.pressed.emit()
+	book.call("Planks").pressed.emit()
 	hud.refresh(sim)
 	await process_frame
-	var q: Button = _walk(row.call("Planks")).filter(func(n): return n is Button and n.text.begins_with("Queue")).front()
+	var plus: Button = _walk(hud._craft_box).filter(func(n): return n is Button and n.text == "+").front()
+	plus.pressed.emit()
+	plus.pressed.emit()
+	var q: Button = _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Queue ")).front()
 	check(q.text == "Queue 3", "+ raises the count on the Queue button (%s)" % q.text)
 	q.pressed.emit()
-	check(bench.queue.size() == before + 3, "Queue 3 queues three")
+	check(bench.queue.size() == before + 3, "Queue 3 queues three planks")
 	hud.refresh(sim)
 	await process_frame
-	var chips: Array = _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Planks") and n.text.ends_with("×"))
-	check(chips.size() >= 3, "the queue lists them, each removable")
+	var slots: Array = _walk(hud._craft_box).filter(func(n): return n is Button and n.get_meta("label", "") == "queued Planks")
+	check(slots.size() >= 3, "the queue's hotbar shows them")
+	slots[0].pressed.emit()
+	check(bench.queue.size() == before + 2, "clicking a hotbar slot removes it")
+	check(_walk(hud._craft_box).any(func(n): return n is Label and n.text == "On hand"), "what's on hand is shown")
 	check(not tabs.call().filter(func(t): return t.text == "Fireplace" and t.icon != null).is_empty() == sim.stuck.any(func(x): return not x.waiting and x.focus_id == f.id), "the fireplace tab carries a flag exactly when it's stuck")
-	for i in 3:
-		await process_frame
-	var top: Control = hud._stuck_panel if hud._stuck_panel.visible else hud._speed_panel
-	check(hud._craft_panel.get_global_rect().position.y >= top.get_global_rect().end.y or hud._craft_scroll.custom_minimum_size.y <= 48.0, "the panel stays below the stuck list, scrolling its recipes")
+	# The fireplace is a furnace: what's cooked, a flame, and the fuel.
+	tabs.call().filter(func(t): return t.text == "Fireplace")[0].pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	book.call("Cooked mutton").pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	var fuel: Array = _walk(hud._craft_box).filter(func(n): return n is PanelContainer and n.tooltip_text == "Fuel: 1 log")
+	check(fuel.size() == 1, "the fireplace shows cooked mutton's fuel slot (a log)")
+	check(_walk(hud._craft_box).filter(func(n): return n is GridContainer and n.columns == 3).is_empty(), "and no crafting grid")
 
 
 ## The resident panel's Jobs grid switches jobs and cycles priorities (issue #47).
@@ -648,27 +665,38 @@ func _test_jobs_grid(game: Game) -> void:
 	game.selection = {"kind": "res", "ids": [ada.id]}
 	hud.refresh(sim)
 	await process_frame
-	var haul: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text == "Haul")
-	check(haul.size() == 1 and haul[0].button_pressed, "the Jobs grid shows Haul, switched on")
-	if haul.size() == 1:
-		haul[0].pressed.emit()
-	check(not ada.jobs.haul.on, "clicking Haul switches it off")
+	var summary: Array = _walk(hud._sel).filter(func(n): return n is Label and n.text.begins_with("7 of 8 jobs on"))
+	check(summary.size() == 1, "the resident panel sums up Ada's jobs in a line")
+	var open_btn: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text.begins_with("Jobs board"))
+	check(open_btn.size() == 1, "with a button to the jobs board")
+	open_btn[0].pressed.emit()
 	hud.refresh(sim)
 	await process_frame
-	var buttons: Array = _walk(hud._sel).filter(func(n): return n is Button)
-	var mine_i := buttons.find(buttons.filter(func(b): return b.text == "Mine")[0])
-	var pri: Button = buttons[mine_i + 1]
-	check(pri.text == "2", "Mine shows priority 2")
-	pri.pressed.emit()
-	check(ada.jobs.mine.pri == 3, "clicking the number cycles it to 3")
-	game.cycle_job_priority(ada, "mine")
+	check(game.jobs_board_open and hud._board_panel.visible and hud._jobs_btn.button_pressed, "it opens the board, and the Jobs button shows it")
+	var cell := func(jb: String) -> Button:
+		return _walk(hud._board).filter(func(n): return n is Button and n.get_meta("cell", "") == "%d:%s" % [ada.id, jb] and not n.is_queued_for_deletion()).front()
+	check(_walk(hud._board).filter(func(n): return n is Button and n.has_meta("cell")).size() == 8 * sim.residents.size(), "a cell per resident and job")
+	check(cell.call("haul").text == "2\nLv 1" and cell.call("toolsmith").text.begins_with("Off"), "a cell shows the priority (or Off) and the level")
+	var counts: Array = _walk(hud._board).filter(func(n): return n is Label and n.text == "nobody")
+	check(counts.size() == 1 and counts[0].get_theme_color("font_color") == Palette.YELLOW, "the Toolsmith column says nobody does it, in yellow")
+	game.board_click(ada, "haul", true)
+	check(not ada.jobs.haul.on, "Shift-click switches a job off")
+	game.board_click(ada, "haul")
+	check(ada.jobs.haul.on and ada.jobs.haul.pri == 2, "a click switches it back on at its priority")
+	game.board_click(ada, "mine")
+	check(ada.jobs.mine.pri == 3, "a click on an on job cycles its priority to 3")
+	game.board_click(ada, "mine")
 	check(ada.jobs.mine.pri == 1, "and round to 1")
 	ada.jobs.farm.xp = 30
 	hud.refresh(sim)
 	await process_frame
-	var levels: Array = _walk(hud._sel).filter(func(n): return n is Label and n.text.begins_with("Lv "))
-	check(levels.size() == 8, "each job shows its level (%d)" % levels.size())
-	check(levels.any(func(l): return l.text == "Lv 3"), "a level-3 farmer shows Lv 3")
+	check(cell.call("farm").text.ends_with("Lv 3"), "a level-3 farmer shows Lv 3")
+	check(cell.call("mine").text.begins_with("1"), "the board shows the new priority")
+	_key(game, KEY_J)
+	check(not game.jobs_board_open, "J closes the board")
+	_key(game, KEY_J)
+	_key(game, KEY_ESCAPE)
+	check(not game.jobs_board_open and not game._menu.visible, "Esc closes the board before opening the menu")
 
 
 ## Equip in the resident panel lists tools lying about and sends the resident for the chosen one.
@@ -757,6 +785,7 @@ func _test_stuck_list(game: Game) -> void:
 	bench.stage = 1
 	bench.done = true
 	ada.pick = {"type": "wood_pick", "tier": 1, "dur": 5}
+	ada.jobs.toolsmith.on = true  # a toolsmith keeps spares (issue #91)
 	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "cobble", 3)
 	for i in Tuning.TPS:
 		sim.step()
@@ -855,6 +884,76 @@ func _test_resident_marks(game: Game) -> void:
 	check(tunics.size() == Sim.TRAVELERS.size() + 1, "every resident's tunic is different")
 
 
+## Issue #81: once the founding is done the goals panel folds to a chip, and saves are labelled
+## with village facts, including saves made before, which said only "Founding complete".
+func _test_after_the_founding(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	hud.refresh(sim)
+	await _frames()
+	check(_walk(hud._goals).any(func(n): return n is Label and n.text == "The founding"), "during the founding the goals panel shows the checklist")
+	var saved := sim.stats.duplicate()
+	sim.stats.felled = 1
+	sim.stats.pick_crafted = true
+	sim.stats.broken_boulders = 1
+	sim.stats.sheep_hunted = 1
+	sim.stats.houses = 2
+	sim.stats.traveler_home = true
+	sim.stats.division = true
+	sim.residents[0].jobs.toolsmith.on = true
+	sim.zone[sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(2, 2))] = true
+	var bench := sim.place_site("bench", sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(4, -3)))
+	bench.stage = 1
+	bench.done = true
+	check(Goals.current(sim) < 0, "every founding step is done")
+	hud.refresh(sim)
+	await _frames()
+	var labels: Array = _walk(hud._goals).filter(func(n): return n is Label and not n.is_queued_for_deletion()).map(func(l): return l.text)
+	check(labels == ["Founding  ✓"] and hud._goals_panel.get_global_rect().size.x < 200, "afterwards it folds to a small Founding chip (%s)" % [labels])
+	check(Goals.progress_text(sim) == Goals.village_text(sim) and Goals.village_text(sim).begins_with("%d resident" % sim.residents.size()), "the save label is the village's facts: %s" % Goals.progress_text(sim))
+	check(game.save_slot(3) == "" and game.read_slots()[2].summary == Goals.village_text(sim), "a new save carries that label")
+	var old: Dictionary = SaveFormat.read(game._slot_path(3)).data
+	old.summary = "Founding complete"
+	SaveFormat.write(game._slot_path(3), old)
+	check(game.read_slots()[2].summary == Goals.village_text(sim), "an older \"Founding complete\" save is listed by its facts too")
+	sim.stats = saved
+	sim.zone.clear()
+
+
+## Issue #80: no HUD text is smaller than the type scale's caption, and the interface size setting
+## cycles 90 → 100 → 115 → 130%, scales the HUD and is saved beside the key bindings.
+func _test_type_and_ui_scale(game: Game) -> void:
+	var hud: Hud = game._hud
+	game.jobs_board_open = true
+	game.craft_menu_open = game.craft_bench() != null
+	game.selection = {"kind": "res", "ids": [game.sim.residents[0].id]}
+	hud.refresh(game.sim)
+	await _frames()
+	var small: Array = _walk(hud._root).filter(func(n): return n is Label and n.is_visible_in_tree() and n.get_theme_font_size("font_size") < Palette.CAPTION)
+	check(small.is_empty(), "no HUD text is under %d px (%s)" % [Palette.CAPTION, small.map(func(l): return "%s=%d" % [l.text.left(12), l.get_theme_font_size("font_size")])])
+	var sizes := {}
+	for n in _walk(hud._root):
+		if n is Label and n.is_visible_in_tree():
+			sizes[n.get_theme_font_size("font_size")] = true
+	check(sizes.keys().all(func(z): return z in [Palette.CAPTION, Palette.BODY, Palette.HEADING, Palette.TITLE]), "every size is on the type scale (%s)" % [sizes.keys()])
+	game.jobs_board_open = false
+	game.craft_menu_open = false
+	check(game.ui_scale == 1.0 and game.get_window().content_scale_factor == 1.0, "the interface starts at 100%")
+	game.open_menu("main")
+	var size_btn: Array = _walk(game._menu).filter(func(n): return n is Button and n.text.begins_with("Interface size") and not n.is_queued_for_deletion())
+	check(size_btn.size() == 1 and size_btn[0].text == "Interface size: 100%", "the menu offers the interface size")
+	size_btn[0].pressed.emit()
+	check(game.ui_scale == 1.15 and is_equal_approx(game.get_window().content_scale_factor, 1.15), "clicking it goes to 115%, and the HUD is drawn bigger")
+	var cfg := ConfigFile.new()
+	check(cfg.load(game._ui_settings_path()) == OK and cfg.get_value("ui", "scale") == 1.15, "the size is saved with the settings")
+	check(game._ui_settings_path().begins_with(game.keys_path.get_base_dir()), "in the test settings folder, beside the keys")
+	for i in 3:
+		game.set_ui_scale(game.next_ui_scale())
+	check(game.ui_scale == 1.0, "it cycles 130% round to 90% and back to 100%")
+	game.close_menu()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(game._ui_settings_path()))
+
+
 func _walk(n: Node) -> Array:
 	var out: Array = [n]
 	for ch in n.get_children():
@@ -933,6 +1032,8 @@ func _initialize() -> void:
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")
 	await _test_stuck_list(game)
 	await _test_resident_marks(game)
+	await _test_after_the_founding(game)
+	await _test_type_and_ui_scale(game)
 	for n in range(1, 6):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(game._slot_path(n)))
 	print("%s" % ("ALL PASSED" if _failures == 0 else "%d FAILED" % _failures))
