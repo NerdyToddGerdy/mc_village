@@ -1,13 +1,14 @@
 class_name SimMap
 extends RefCounted
-## One block map (issue #100): the village, or a site an expedition works, like the old mine.
+## One block map (issue #100): the village, a site an expedition works, like the old mine, or the
+## road between them (issue #118).
 ##
 ## The sim works on one map at a time (`Sim.use_map`), and its per-map fields (`trees`, `items`,
 ## `sites`, ...) read and write that map's. Residents aren't kept here: they're the sim's, each with
 ## the `map` it's on. Paths and jobs never cross maps; only travel moves a resident between them.
 
 var id := "village"
-var kind := "village"        ## "village" or "site".
+var kind := "village"        ## "village", "site" or "route".
 var name := "Village"
 var w := Tuning.MAP_W
 var h := Tuning.MAP_H
@@ -32,6 +33,9 @@ var visited := false         ## Someone has been there, so its site report has r
 var found := false           ## Its hidden find (the old mine's iron) has been found (issue #111).
 var discovered := false      ## And surveyed, so it's a known resource with an estimate.
 var ledges: Array = []       ## Cells with a drop someone can fall from in the dark (issue #110).
+# Route maps (Slice 4, issues #118, #119).
+var water := {}              ## Vector2i -> true: a stream, forded slowly until it's bridged.
+var seen := 0                ## Segments of the route anyone knows, from the village end; the rest is fog.
 
 var occ := PackedByteArray()
 var occ_dirty := true
@@ -44,7 +48,7 @@ func _init(p_w := Tuning.MAP_W, p_h := Tuning.MAP_H) -> void:
 	occ.resize(w * h)
 
 
-const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "ledges"]
+const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "ledges", "water", "seen"]
 
 
 ## The map as plain data. Reservations and job bookkeeping aren't saved (spec §2, Saving).

@@ -52,6 +52,20 @@ static func _draw(img: Image, type: String) -> void:
 			_box(img, Rect2i(8, 22, 48, 26), dark)
 			_box(img, Rect2i(11, 25, 42, 20), c.darkened(0.2))
 			_box(img, Rect2i(15, 25, 34, 10), c)
+		"rail":  # two rails across three sleepers
+			for y in [18, 32, 46]:
+				_box(img, Rect2i(10, y - 5, 44, 10), dark)
+				_box(img, Rect2i(12, y - 3, 40, 6), Palette.LOG)
+			for x in [22, 42]:
+				_box(img, Rect2i(x - 4, 8, 8, 48), dark)
+				_box(img, Rect2i(x - 2, 10, 4, 44), c)
+		"minecart":  # an open tub on two wheels
+			_box(img, Rect2i(8, 18, 48, 28), dark)
+			_box(img, Rect2i(11, 21, 42, 22), c)
+			_box(img, Rect2i(15, 21, 34, 6), c.darkened(0.35))
+			for x in [20.0, 44.0]:
+				_disc(img, Vector2(x, 48), 8, dark)
+				_disc(img, Vector2(x, 48), 5, Palette.CHALK_DIM)
 		"wheat":  # three stalks with heads
 			for x in [22.0, 32.0, 42.0]:
 				_line(img, Vector2(x, 54), Vector2(x, 26), 6, dark)

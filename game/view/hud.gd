@@ -729,6 +729,11 @@ func _refresh_maps(sim: Sim) -> void:
 		if party.is_empty():
 			continue
 		line = "Party at the %s: %s" % [sim.get_map(id).name.to_lower(), _party_doing(party)]
+		if id == Road.ID:  # a party walking the road, or villagers out working on it (issues #118, #119)
+			var walking: Array = party.filter(func(r): return sim.on_road(r))
+			line = "On the road: %s" % _party_doing(party)
+			if not walking.is_empty():
+				line = "Party " + _status(sim, walking[0]).replace("On the road", "on the road")
 		_party.set_meta("map", id)
 		break
 	# Looking at the site the party is working: what they're doing here, and the way to call them home.
@@ -1115,7 +1120,8 @@ func _refresh_selection(sim: Sim) -> void:
 			for st in sim.tool_items(kind, 0):
 				sig += "%s%s%s" % [st.type, st.dur, st.cell]
 	elif target != null and target.kind == "route":
-		sig += "%s" % [sim.residents.map(func(r): return [r.away, r.get("trip", ""), ceili(sim.back_in(r)), r.map, sim.carrying_packs(r)])]
+		sig += "%s%s%s%s" % [sim.residents.map(func(r): return [r.away, r.get("trip", ""), r.map, sim.carrying_packs(r), r.job.label if r.job != null else ""]), sim.route_report(), game.line_preview, game.view_map]
+		sig += "%s" % [sim.cut_boulders().map(func(b): return b.des)]
 	elif target != null and target.kind == "meadow":
 		sig += "%d %d" % [sim.meadow_sheep, int(sim.meadow_regrow)]
 	elif target != null and target.kind == "crop":
@@ -1157,7 +1163,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 				c.add_child(_label("Off the map at the sheep meadow. Away residents don’t work or get hungry.", false, Palette.CHALK_DIM, Palette.BODY, true))
 			else:
 				c.add_child(_label("On the road with the party. Residents on the road don’t work or get hungry.", false, Palette.CHALK_DIM, Palette.BODY, true))
-			c.add_child(_bar(1.0 - sim.back_in(r) / Sim.trip_time(r.get("trip", "meadow")), Palette.GREEN))
+			c.add_child(_bar(1.0 - sim.back_in(r) / sim.trip_time(r.get("trip", "meadow")), Palette.GREEN))
 			return
 		_add_tool_row(c, sim, r, "axe")
 		_add_tool_row(c, sim, r, "pick")
@@ -1423,6 +1429,8 @@ func _status(sim: Sim, r: Dictionary) -> String:
 		return "At the meadow, back in %d s" % ceili(sim.back_in(r))
 	if r.away:
 		return _road_text(sim, r)
+	if sim.on_road(r) and r.job != null:  # walking the road map (issue #118)
+		return "%s, about %d s" % [r.job.label, ceili(sim.road_eta(r))]
 	return r.job.label if r.job != null else "Idle"
 
 
@@ -1886,7 +1894,7 @@ func _fill_plan(c: Container, sim: Sim) -> void:
 ## The site report (brief §8): what the village knows of the place before anyone sets off.
 func _add_site_report(c: Container, sim: Sim, dest: String) -> void:
 	var rep := sim.site_report(dest)
-	c.add_child(_row(rep.name, "%d s walk each way" % int(rep.travel), false))
+	c.add_child(_row(rep.name, "about %d s walk each way" % roundi(rep.travel) if rep.travel >= 0.0 else "the road isn’t walked yet", false))
 	if not rep.visited:
 		c.add_child(_label("“%s”" % rep.told, false, Palette.CHALK_DIM, Palette.BODY, true))
 	for x in rep.resources:
@@ -2076,12 +2084,12 @@ func _fill_out(c: Container, sim: Sim) -> void:
 	var ex: Dictionary = sim.expedition
 	var mp := sim.get_map(ex.dest)
 	var party: Array = ex.party.map(func(id): return sim.resident(id)).filter(func(r): return not r.is_empty())
-	var road: Array = party.filter(func(r): return r.away)
+	var road: Array = party.filter(func(r): return sim.on_road(r))
 	var names := Sim.names_text(party.map(func(r): return r.name))
 	var are := "is" if party.size() == 1 else "are"
 	var home: bool = ex.get("leg", "out") == "home"
 	if not road.is_empty():
-		var when := ceili(sim.back_in(road[0]))
+		var when := ceili(sim.road_eta(road[0]))
 		c.add_child(_label("%s %s on the road %s, there in %d s." % [names, are, "home" if home else "to the " + mp.name.to_lower(), when], false, Palette.CHALK, Palette.BODY, true))
 	elif home:
 		c.add_child(_label("%s %s heading home from the %s." % [names, are, mp.name.to_lower()], false, Palette.CHALK, Palette.BODY, true))
@@ -2107,21 +2115,84 @@ func _add_call_home(c: Container, sim: Sim) -> void:
 	c.add_child(b)
 
 
-## The signpost to the old mine (issue #108): the walk, and who's on the road.
+## The signpost to the old mine (issue #108), and those at both ends of the road: the route report
+## (issue #119) with each segment and the journey, who's on the road, and the work it needs: the
+## bridge, the cut, and the line (issue #121).
 func _fill_route(c: Container, sim: Sim) -> void:
 	var mp := sim.get_map(OldMine.ID)
-	c.add_child(_head("Road to the %s" % mp.name.to_lower() if mp.known else "A road east", "%d s each way" % int(Tuning.MINE_TRIP)))
-	var on_road: Array = sim.residents.filter(func(r): return (r.away and not (r.get("trip", "meadow") in ["", "meadow"])) or sim.carrying_packs(r))
+	var rep := sim.route_report()
+	var sub := "about %d s on foot each way" % roundi(rep.walk) if rep.surveyed else "not walked yet"
+	c.add_child(_head("Road to the %s" % mp.name.to_lower() if mp.known else "A road east", sub))
+	if not mp.known:
+		c.add_child(_label("Nobody in the village knows where it goes yet. An expedition board would.", false, Palette.CHALK_DIM, Palette.BODY, true))
+		return
+	for i in rep.segments.size():
+		var sg: Dictionary = rep.segments[i]
+		if not sg.known:
+			c.add_child(_row("%d  Not walked yet" % (i + 1), "%d cells" % sg.len))
+			continue
+		var track: String = {"none": "", "planned": "track planned", "built": "track laid"}[sg.track]
+		c.add_child(_row("%d  %s" % [i + 1, sg.name], track if track != "" else "%d cells, %s" % [sg.len, sg.terrain]))
+		if sg.obstacle != "":
+			var done: bool = sg.obstacle in ["Bridged", "Cleared"]
+			c.add_child(_label(sg.obstacle, false, Palette.CHALK_DIM if done else Palette.YELLOW, Palette.CAPTION, true))
+	if rep.surveyed:
+		c.add_child(_label("By cart about %d s, once the line is laid." % roundi(rep.cart), false, Palette.CHALK, Palette.BODY, true))
+	else:
+		c.add_child(_label("The first party to walk it will survey the rest of the road.", false, Palette.CHALK_DIM, Palette.BODY, true))
+	var on_road: Array = sim.residents.filter(func(r): return r.map == Road.ID or sim.carrying_packs(r))
 	for r in on_road:
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override("separation", 8)
 		line.add_child(_swatch(r.shirt))
 		line.add_child(_label("%s: %s" % [r.name, _status(sim, r)], false, Palette.CHALK))
 		c.add_child(line)
-	if on_road.is_empty():
-		c.add_child(_label("Nobody is on the road.", false, Palette.CHALK_DIM, Palette.BODY, true))
-	var hint := "Parties set off from here. Plan one at the expedition board." if mp.known else "Nobody in the village knows where it goes yet. An expedition board would."
-	c.add_child(_label(hint, false, Palette.CHALK_DIM, Palette.BODY, true))
+	if game.view_map != Road.ID:
+		c.add_child(_button("Show the road", func(): game.switch_map(Road.ID), "Secondary"))
+	# The work the road needs.
+	var seen: int = sim.road().seen
+	if sim.bridge().is_empty() and seen > Sim._seg_of("stream"):
+		var b := _button("Build the bridge", func(): game.plan_bridge(), "Secondary")
+		b.tooltip_text = "A plank bridge over the stream: %s. Village builders carry the planks out." % Defs.cost_text(Defs.TEMPLATES.bridge.stages[0].cost)
+		c.add_child(b)
+	var cut := sim.cut_boulders()
+	if not cut.is_empty() and seen > Sim._seg_of("cut") and not cut.all(func(x): return x.des):
+		var b := _button("Clear the cut", func(): game.clear_cut(), "Secondary")
+		b.tooltip_text = "Marks the boulders on the line to be mined. Miners walk out from the village."
+		c.add_child(b)
+	_add_line(c, sim)
+
+
+## The line (issue #121): how far it's laid, or the plan with its cost and the time it saves.
+func _add_line(c: Container, sim: Sim) -> void:
+	var states: Array = range(Road.segment_count()).map(func(i): return sim.track_state(i))
+	if states.has("planned") or states.has("built"):
+		var laid := states.count("built")
+		c.add_child(_row("The line", "%d of %d segments laid" % [laid, states.size()], false))
+		var nxt := sim.next_track()
+		if nxt >= 0 and sim.track_blocker(nxt) != "":
+			c.add_child(_label("%s: %s" % [Road.SEGMENTS[nxt].name, sim.track_blocker(nxt).to_lower()], false, Palette.YELLOW, Palette.CAPTION, true))
+		if not states.has("none"):
+			return
+	var why := sim.plan_line_blocker()
+	if not game.line_preview:
+		var b := _button("Plan the line", func(): game.line_preview = true, "Primary")
+		b.disabled = why != ""
+		b.tooltip_text = why if why != "" else "Track along the road, from the village to the mine."
+		c.add_child(b)
+		return
+	var cost := sim.line_cost()
+	var craft := " Crafting them takes %d iron ingots." % cost.ingots if cost.ingots > 0 else ""
+	c.add_child(_label("%d rails, with %d on hand.%s" % [cost.rails, cost.on_hand, craft], false, Palette.CHALK, Palette.BODY, true))
+	c.add_child(_label("Laid from the village end. Saves about %d s a round trip, once there's a cart." % roundi(cost.saved), false, Palette.CHALK, Palette.BODY, true))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var lay := _button("Lay track", func(): game.plan_line(), "Primary")
+	lay.disabled = why != ""
+	lay.tooltip_text = why
+	row.add_child(lay)
+	row.add_child(_button("Not now", func(): game.line_preview = false, "Secondary"))
+	c.add_child(row)
 
 
 ## "Starving", "Hungry", "Peckish" or "Fed".

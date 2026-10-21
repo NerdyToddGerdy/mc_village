@@ -120,6 +120,16 @@ func _initialize() -> void:
 			{"id": "keep", "label": "Keep mining", "cost": "Carry on."}, {"id": "investigate", "label": "Investigate", "cost": "Survey it."},
 			{"id": "return", "label": "Mark it and return later", "cost": "Head home now."}]))
 		sim.events.clear()
+	if SaveFormat.VERSION >= 18:  # the road walked, the bridge part-supplied, the line planned and its first segment laid (#118-#121)
+		var rd := sim.road()
+		rd.known = true
+		rd.seen = Road.segment_count()
+		sim.plan_bridge()
+		sim.bridge().store = {"plank": 4}
+		sim.plan_line()
+		var first := sim.track_site(0)
+		first.stage = 1
+		first.done = true
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

@@ -162,6 +162,8 @@ func _build_static() -> void:
 	var col := Batch.new()
 	if sim.m.kind == "site":
 		_add_site_ground(solid)
+	elif sim.m.kind == "route":
+		_add_route_ground(solid)
 	else:
 		for x in sim.w:
 			for y in sim.h:
@@ -169,7 +171,7 @@ func _build_static() -> void:
 				solid.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT)
 				solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), Palette.GRASS * Color(v, v, v))
 	for b in sim.boulders:
-		if b.alive and not b.get("hidden", false):
+		if b.alive and not b.get("hidden", false) and not _in_fog(b.cell):
 			var c: Vector2i = b.cell
 			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), Palette.STONE)
 			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.STONE.lightened(0.06))
@@ -251,6 +253,89 @@ func _add_site_ground(b: Batch) -> void:
 	b.box(Vector3(e.x - 0.05, 1.4, e.y - 0.1), Vector3(e.x + 0.2, 1.6, e.y + 1.1), Palette.LOG)
 
 
+static var WATER := Color("#4E7EA3")
+static var TRODDEN := Color("#8C7B58")
+static var FOG := Color("#A9B3AF")
+static var SLEEPER := Color("#6A4A2E")
+
+
+## The road to the mine (issue #118): grass with a trodden path along the line, the stream, and the
+## rocky cut's walls. Past the segments anyone has walked, it's fog (issue #119).
+func _add_route_ground(b: Batch) -> void:
+	var mp := sim.m
+	for x in mp.w:
+		for y in mp.h:
+			var c := Vector2i(x, y)
+			var v := 0.96 + _hash(x, y) * 0.08
+			if _in_fog(c):
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.05, y + 1), FOG * Color(v, v, v))
+				continue
+			if mp.rock.has(c):
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 1.2, y + 1), MINE_ROCK * Color(v, v, v))
+				continue
+			if mp.water.has(c):  # a little below the banks
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.4, y + 1), Palette.DIRT)
+				b.box(Vector3(x, -0.4, y), Vector3(x + 1, -0.25, y + 1), WATER * Color(v, v, v))
+				continue
+			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT)
+			var top := TRODDEN if y == Road.LINE_ROW else Palette.GRASS
+			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), top * Color(v, v, v))
+	_add_end_sign(b, Road.VILLAGE_END + Vector2i(0, -1), -1.0, Palette.GRASS)
+	_add_end_sign(b, Road.MINE_END + Vector2i(0, -1), 1.0, Palette.STONE)
+
+
+## True for a cell on the road nobody has walked to yet (issue #119).
+func _in_fog(c: Vector2i) -> bool:
+	return sim.m.kind == "route" and Road.segment_at(c.x) >= sim.m.seen
+
+
+## A signpost at an end of the road, its board pointing off the map (-1 west, 1 east) with a dab of
+## where it leads.
+func _add_end_sign(b: Batch, c: Vector2i, dir: float, dab: Color) -> void:
+	var x := c.x + 0.5
+	var z := c.y + 0.5
+	b.box(Vector3(x - 0.09, 0, z - 0.09), Vector3(x + 0.09, 1.8, z + 0.09), Palette.LOG)
+	var a := x + 0.15 * -dir
+	var e := x + 0.7 * dir
+	b.box(Vector3(minf(a, e), 1.15, z - 0.06), Vector3(maxf(a, e), 1.6, z + 0.06), Palette.PLANK)
+	b.box(Vector3(minf(e, e + 0.15 * dir), 1.25, z - 0.05), Vector3(maxf(e, e + 0.15 * dir), 1.5, z + 0.05), Palette.PLANK)
+	var m0 := x + 0.12 * dir
+	var m1 := x + 0.45 * dir
+	b.box(Vector3(minf(m0, m1), 1.24, z - 0.08), Vector3(maxf(m0, m1), 1.5, z + 0.08), dab)
+
+
+## The plank bridge over the stream (issue #119): a deck across it with a rail each side.
+func _add_bridge(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var col := Palette.PLANK if s.done else Color(Palette.BLUE, 0.4)
+	var x0 := float(o.x)
+	var x1 := float(o.x + s.size.x)
+	b.box(Vector3(x0, 0, o.y + 0.1), Vector3(x1, 0.14, o.y + s.size.y - 0.1), col)
+	if not s.done:
+		return
+	for k in range(o.x, o.x + s.size.x):
+		b.box(Vector3(k + 0.02, 0.14, o.y + 0.1), Vector3(k + 0.06, 0.15, o.y + s.size.y - 0.1), Palette.PLANK.darkened(0.25))
+	for z in [o.y + 0.1, o.y + s.size.y - 0.22]:
+		b.box(Vector3(x0, 0.14, z), Vector3(x1, 0.62, z + 0.12), Palette.LOG)
+
+
+## A segment of track (issue #121): sleepers across the line and a rail each side, or its blueprint.
+func _add_track(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	if not s.done:
+		for k in s.size.x:
+			var gy := 0.14 if Road.bridge_rect().has_point(Vector2i(o.x + k, o.y)) and sim.bridge().get("done", false) else 0.0
+			b.box(Vector3(o.x + k + 0.3, gy, o.y + 0.12), Vector3(o.x + k + 0.7, gy + 0.06, o.y + 0.88), Color(Palette.BLUE, 0.4))
+		return
+	var rail: Color = Palette.ITEM_COLORS.rail
+	for k in s.size.x:
+		var x: int = o.x + k
+		var y := 0.14 if Road.bridge_rect().has_point(Vector2i(x, o.y)) else 0.0  # up on the bridge's deck
+		b.box(Vector3(x + 0.3, y, o.y + 0.08), Vector3(x + 0.7, y + 0.07, o.y + 0.92), SLEEPER)
+		for z in [o.y + 0.22, o.y + 0.7]:
+			b.box(Vector3(x, y + 0.07, z), Vector3(x + 1, y + 0.15, z + 0.08), rail)
+
+
 func _add_ore_flecks(b: Batch, c: Vector2i, col: Color) -> void:
 	for p in [Vector3(0.25, 0.3, 0.92), Vector3(0.62, 0.45, 0.92), Vector3(0.92, 0.25, 0.4), Vector3(0.92, 0.48, 0.7)]:
 		var lo := Vector3(c.x + p.x - 0.09, p.y - 0.07, c.y + p.z - 0.09)
@@ -330,7 +415,20 @@ func _add_item(b: Batch, s: Dictionary) -> void:
 		b.box(Vector3(cx - 0.3, 0, cz - 0.06), Vector3(cx + 0.3, 0.08, cz + 0.06), Palette.LOG)
 		b.box(Vector3(cx + 0.12, 0, cz - 0.16), Vector3(cx + 0.3, 0.14, cz + 0.16), color)
 		return
+	if s.type == "minecart":  # a tub on wheels, set down on the ground (issue #120)
+		b.box(Vector3(cx - 0.36, 0.12, cz - 0.28), Vector3(cx + 0.36, 0.55, cz + 0.28), color)
+		b.box(Vector3(cx - 0.3, 0.45, cz - 0.22), Vector3(cx + 0.3, 0.56, cz + 0.22), color.darkened(0.4))
+		for k in [-0.22, 0.22]:
+			b.box(Vector3(cx + k - 0.08, 0, cz - 0.32), Vector3(cx + k + 0.08, 0.16, cz + 0.32), Palette.SLATE_DEEP)
+		return
 	var levels: int = mini(4, ceili(s.n / 4.0))
+	if s.type == "rail":  # rails lie in bundles: a pair of bars over a sleeper, a layer to every 4
+		for i in levels:
+			var y := i * 0.1
+			b.box(Vector3(cx - 0.3, y, cz - 0.08), Vector3(cx + 0.3, y + 0.05, cz + 0.08), Palette.LOG)
+			for k in [-0.16, 0.16]:
+				b.box(Vector3(cx - 0.06 + k, y + 0.05, cz - 0.32), Vector3(cx + 0.06 + k, y + 0.1, cz + 0.32), color)
+		return
 	if s.type == "iron_ingot":  # ingots lie as bars, two to a layer, crossing each layer (issue #103)
 		for i in levels:
 			var y := i * 0.12
@@ -357,6 +455,12 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 		return
 	if s.tpl == "board":
 		_add_board(solid if s.done else ghost, s)
+		return
+	if s.tpl == "bridge":
+		_add_bridge(solid if s.done else ghost, s)
+		return
+	if s.tpl == "track":
+		_add_track(solid if s.done else ghost, s)
 		return
 	var stage: int = s.stage
 	var gcol := Color(Palette.BLUE, 0.4)
@@ -512,7 +616,7 @@ func _build_occluders() -> void:
 	var solid := Batch.new()
 	var see_through := Batch.new()
 	for t in sim.trees:
-		if not t.alive:
+		if not t.alive or _in_fog(t.cell):
 			continue
 		var fade: bool = faded.has(t.id)
 		var b := see_through if fade else solid
@@ -936,6 +1040,10 @@ func pick(origin: Vector3, dir: Vector3, residents := true):
 		solid.append([bush, AABB(Vector3(bush.cell.x + 0.14, 0, bush.cell.y + 0.14), Vector3(0.72, 0.52, 0.72))])
 	for s in sim.sites:
 		solid.append([s, AABB(Vector3(s.origin.x, 0, s.origin.y), Vector3(s.size.x, maxf(sim.site_height(s), 0.3), s.size.y))])
+	if sim.m.kind == "route":  # the signposts at both ends of the road show the route (issue #119)
+		for e in [Road.VILLAGE_END, Road.MINE_END]:
+			var at: Vector2i = e + Vector2i(0, -1)
+			solid.append([{"kind": "route", "id": 0, "cell": at}, AABB(Vector3(at.x - 0.3, 0, at.y + 0.3), Vector3(1.6, 1.8, 0.4))])
 	if sim.m.kind == "village":
 		var sign := sim.meadow_sign()
 		solid.append([{"kind": "meadow", "id": 0, "cell": sign}, AABB(Vector3(sign.x - 0.4, 0, sign.y + 0.3), Vector3(1.1, 1.8, 0.4))])

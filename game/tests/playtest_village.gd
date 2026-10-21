@@ -235,7 +235,7 @@ func _initialize() -> void:
 	check(sim.packed().meals == 4, "4 meals are packed")
 	check(await click_button("Depart"), "click Depart")
 	check(sim.carrying_packs(ada) and sim.carrying_packs(tomas), "Ada and Tomas carry the packs to the signpost")
-	check(await play_until(60, func(): return ada.away and tomas.away), "they set off from the signpost (issue #108)")
+	check(await play_until(60, func(): return ada.map == Road.ID and tomas.map == Road.ID), "they set off from the signpost onto the road (issues #108, #118)")
 	check(ada.trip == OldMine.ID, "for the old mine")
 	await play(2)
 	check(visible_label("on the road to the old mine") or find_button("Party on the road to the old mine") != null, "the board and the party line say they're on the road")
@@ -245,7 +245,7 @@ func _initialize() -> void:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(game.selection.get("kind", "") == "route" and visible_label("Road to the old mine"), "clicking the signpost shows the road to the old mine")
-	check(await play_until(Tuning.MINE_TRIP + 10, func(): return ada.map == OldMine.ID and tomas.map == OldMine.ID), "they reach the old mine")
+	check(await play_until(40, func(): return ada.map == OldMine.ID and tomas.map == OldMine.ID), "they walk the road and reach the old mine")
 	await key(KEY_TAB)
 	check(game.view_map == OldMine.ID, "Tab shows them at the old mine")
 	# Mine the coal nearest the entrance, then call them home from the party line.
@@ -259,11 +259,12 @@ func _initialize() -> void:
 	check(await click_button("Call the party home"), "click Call the party home, beside the party line at the mine")
 	check(sim.expedition.get("leg", "") == "home", "the party heads home")
 	await key(KEY_TAB)
-	check(game.view_map == "village", "Tab back to the village")
+	await key(KEY_TAB)
+	check(game.view_map == "village", "Tab, past the road, back to the village")
 
 	# ---- Return and unloading (issue #112): the cargo is set down at the signpost and hauled away
 	var coal_before := count("coal")
-	check(await play_until(Tuning.MINE_TRIP + 40, func(): return sim.expedition.is_empty()), "the party gets home")
+	check(await play_until(70, func(): return sim.expedition.is_empty()), "the party gets home")
 	check(seen("Back from the old mine: ") and seen("coal"), "a toast reports what came back")
 	check(ada.map == "village" and tomas.map == "village" and not ada.away, "Ada and Tomas are back in the village")
 	if true:  # room for the cargo: the stockpile is nearly full by now, so paint more, as a player would
