@@ -319,7 +319,7 @@ func _test_craft_menu(game: Game) -> void:
 	check(game.craft_menu_open and hud._craft_panel.visible, "C opens the craft panel above the toolbar")
 	var queue_btn: Button = null
 	for n in _walk(hud._craft_box):
-		if n is Button and n.text == "Queue":
+		if n is Button and n.text == "Queue 1":
 			queue_btn = n
 			break
 	check(queue_btn != null, "the panel lists recipes with Queue buttons")
@@ -335,7 +335,7 @@ func _test_craft_menu(game: Game) -> void:
 	check(game.craft_menu_open, "selecting the bench opens the craft panel")
 	var left_queue := _walk(hud._sel).filter(func(n): return n is Button and n.text.begins_with("Queue"))
 	var right_queue := _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Queue"))
-	check(left_queue.is_empty() and right_queue.size() == 2 * Defs.recipes_at("bench").size(), "the recipe list is only on the right (%d left, %d right)" % [left_queue.size(), right_queue.size()])
+	check(left_queue.is_empty() and right_queue.size() == Defs.recipes_at("bench").size(), "the recipe list is only on the right (%d left, %d right)" % [left_queue.size(), right_queue.size()])
 	check(_walk(hud._sel).any(func(n): return n is Label and n.text == "Crafting bench"), "the left panel still names the bench and its status")
 	_key(game, KEY_ESCAPE)
 
@@ -477,14 +477,69 @@ func _test_fireplace(game: Game) -> void:
 	hud.refresh(sim)
 	await process_frame
 	check(game.craft_menu_open, "selecting the fireplace opens its menu")
-	var rows := _walk(hud._craft_box).filter(func(n): return n is Button and n.text == "Queue")
+	var rows := _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Queue "))
 	check(rows.size() == 2, "it lists its two recipes, bread and cooked mutton (%d)" % rows.size())
 	var keep: Array = _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Keep 6 meals"))
 	check(keep.size() == 1 and keep[0].text.ends_with("on"), "the standing order shows, on by default")
 	if keep.size() == 1:
 		keep[0].pressed.emit()
 	check(not f.keep_meals, "clicking it turns the standing order off")
+	await _test_station_tabs(game, f)
 	_key(game, KEY_ESCAPE)
+
+
+## Issue #76: one tab per station, the queue first, and recipe rows with inputs and a counted Queue.
+func _test_station_tabs(game: Game, f: Dictionary) -> void:
+	var hud: Hud = game._hud
+	var sim := game.sim
+	if not game.benches().any(func(b): return b.tpl == "bench"):  # a second station, for tabs
+		for d in range(3, 15):
+			var c: Vector2i = f.origin + Vector2i(d, 0)
+			if sim.placement_check("bench", c) == "":
+				var b := sim.place_site("bench", c)
+				b.stage = 1
+				b.done = true
+				break
+	game.open_craft_menu(f)
+	hud.refresh(sim)
+	await process_frame
+	var tabs := func() -> Array: return _walk(hud._craft_box).filter(func(n): return n is Button and n.toggle_mode and n.text in ["Bench", "Fireplace"])
+	check(tabs.call().size() == 2 and tabs.call().filter(func(t): return t.button_pressed).map(func(t): return t.text) == ["Fireplace"], "a tab for each station, the fireplace's pressed")
+	tabs.call().filter(func(t): return t.text == "Bench")[0].pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	check(game.craft_bench().tpl == "bench" and tabs.call().filter(func(t): return t.button_pressed).map(func(t): return t.text) == ["Bench"], "clicking the Bench tab shows the bench")
+	var labels: Array = _walk(hud._craft_box).filter(func(n): return n is Label)
+	var at_queue := labels.find(labels.filter(func(l): return l.text.begins_with("Nothing queued") or l.text.begins_with("Ready") or l.text.begins_with("Waiting") or l.text.begins_with("Gathering") or l.text.begins_with("Crafting") or l.text.begins_with("Nothing")).front())
+	var at_recipes := labels.find(labels.filter(func(l): return l.text == "Recipes").front())
+	check(at_queue >= 0 and at_queue < at_recipes, "what it's doing and its queue come before the recipes")
+	var row := func(name: String) -> Node:
+		return _walk(hud._craft_box).filter(func(n): return n is HBoxContainer and n.get_meta("recipe", "") == name).front()
+	var axe: Node = row.call("Wooden axe")
+	var short: Array = _walk(axe).filter(func(n): return n is Label and n.get_theme_color("font_color") == Palette.YELLOW)
+	var swatches: Array = _walk(axe).filter(func(n): return n is TextureRect)
+	check(swatches.size() == Defs.recipe("wood_axe").inp.size(), "each input has its colour swatch")
+	check(short.size() > 0 and short.size() <= Defs.recipe("wood_axe").inp.size(), "inputs short of one craft are yellow (%d)" % short.size())
+	var bench: Dictionary = game.craft_bench()
+	var before: int = bench.queue.size()
+	var plus: Button = _walk(row.call("Planks")).filter(func(n): return n is Button and n.text == "+").front()
+	plus.pressed.emit()
+	plus.pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	var q: Button = _walk(row.call("Planks")).filter(func(n): return n is Button and n.text.begins_with("Queue")).front()
+	check(q.text == "Queue 3", "+ raises the count on the Queue button (%s)" % q.text)
+	q.pressed.emit()
+	check(bench.queue.size() == before + 3, "Queue 3 queues three")
+	hud.refresh(sim)
+	await process_frame
+	var chips: Array = _walk(hud._craft_box).filter(func(n): return n is Button and n.text.begins_with("Planks") and n.text.ends_with("×"))
+	check(chips.size() >= 3, "the queue lists them, each removable")
+	check(not tabs.call().filter(func(t): return t.text == "Fireplace" and t.icon != null).is_empty() == sim.stuck.any(func(x): return not x.waiting and x.focus_id == f.id), "the fireplace tab carries a flag exactly when it's stuck")
+	for i in 3:
+		await process_frame
+	var top: Control = hud._stuck_panel if hud._stuck_panel.visible else hud._speed_panel
+	check(hud._craft_panel.get_global_rect().position.y >= top.get_global_rect().end.y or hud._craft_scroll.custom_minimum_size.y <= 48.0, "the panel stays below the stuck list, scrolling its recipes")
 
 
 ## The resident panel's Jobs grid switches jobs and cycles priorities (issue #47).
