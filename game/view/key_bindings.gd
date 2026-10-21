@@ -22,6 +22,7 @@ const ACTIONS := [
 	["fireplace", "Orders", "Place a fireplace", [KEY_K]],
 	["rotate", "Orders", "Turn a building while placing", [KEY_R]],
 	["next_res", "Residents", "Select the next resident", [KEY_F]],
+	["jobs", "Residents", "Open the village jobs board", [KEY_J]],
 	["next_stuck", "Residents", "Go to the next stuck item", [KEY_N]],
 	["pause", "Time and camera", "Pause", [KEY_QUOTELEFT, KEY_ASCIITILDE]],
 	["toggle_pause", "Time and camera", "Pause or resume", [KEY_SPACE]],

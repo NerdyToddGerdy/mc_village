@@ -22,17 +22,22 @@ const ITEMS := {
 ## The tally bar's Materials group, in order (issue #73). Raw mutton is counted under Food instead.
 const MATERIALS := ["log", "plank", "stick", "cobble", "wheat", "wool"]
 
+## `pattern` (bench) and `fuel` (fireplace) are display only, for the Craft panel's crafting grid and
+## furnace (issue #95); they never change what a recipe costs. A pattern is three rows of three, each
+## letter one item from PATTERN_KEYS, and uses exactly the recipe's inputs.
 const RECIPES := [
-	{"id": "planks", "name": "Planks", "inp": {"log": 1}, "out": {"plank": 4}},
-	{"id": "sticks", "name": "Sticks", "inp": {"plank": 2}, "out": {"stick": 4}},
-	{"id": "wood_axe", "name": "Wooden axe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_axe": 1}},
-	{"id": "wood_pick", "name": "Wooden pickaxe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_pick": 1}},
-	{"id": "stone_axe", "name": "Stone axe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_axe": 1}},
-	{"id": "stone_pick", "name": "Stone pickaxe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_pick": 1}},
+	{"id": "planks", "name": "Planks", "inp": {"log": 1}, "out": {"plank": 4}, "pattern": ["   ", " L ", "   "]},
+	{"id": "sticks", "name": "Sticks", "inp": {"plank": 2}, "out": {"stick": 4}, "pattern": [" P ", " P ", "   "]},
+	{"id": "wood_axe", "name": "Wooden axe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_axe": 1}, "pattern": ["PP ", "PS ", " S "]},
+	{"id": "wood_pick", "name": "Wooden pickaxe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_pick": 1}, "pattern": ["PPP", " S ", " S "]},
+	{"id": "stone_axe", "name": "Stone axe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_axe": 1}, "pattern": ["CC ", "CS ", " S "]},
+	{"id": "stone_pick", "name": "Stone pickaxe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_pick": 1}, "pattern": ["CCC", " S ", " S "]},
 	# Fireplace recipes (issue #46). "at" says which job building makes a recipe; the default is the bench.
 	{"id": "bread", "name": "Bread", "inp": {"wheat": 3}, "out": {"bread": 1}, "at": "fireplace", "doing": "Baking bread"},
-	{"id": "cooked_mutton", "name": "Cooked mutton", "inp": {"mutton": 1, "log": 1}, "out": {"cooked_mutton": 1}, "at": "fireplace", "doing": "Cooking mutton"},
+	{"id": "cooked_mutton", "name": "Cooked mutton", "inp": {"mutton": 1, "log": 1}, "out": {"cooked_mutton": 1}, "at": "fireplace", "doing": "Cooking mutton", "fuel": "log"},
 ]
+
+const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble"}
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
 const JOBS := ["mine", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]

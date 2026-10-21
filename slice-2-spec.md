@@ -44,8 +44,9 @@ Slice 2 is done when, from a fresh start, a player can:
 - **The clearing starts with 6 sheep**, enough wool for the two opening beds.
 - **Arrivals need a free bed** (§7). Tomas comes once the second house, bed included, is finished.
 - **Ada's house** is hers when its bed is finished, not when its roof is.
-- **Slice 1 goals** gain "Hunt sheep for wool" before Ada's house. The founding checklist otherwise stays.
-- **Tool breakage:** while anyone has the Toolsmith job switched on, a resident whose tool breaks fetches a spare instead of stopping (§6). With no toolsmith, the Slice 1 rule holds: they stop and report.
+- **Slice 1 goals** gain "Make Ada the toolsmith" after the bench (#91) and "Hunt sheep for wool" before Ada's house. The founding checklist otherwise stays, and its hints name the Gather and Paint menus (#93, #94).
+- **After the founding (#81):** the goals panel folds to a small "Founding ✓" chip, since it has nothing left to guide. Whether Slice 2 gets a checklist of its own is still open. Saves made after the founding are labelled with facts about the village, "4 residents, 3 houses, 18 meals", rather than "Founding complete", so they can be told apart. The menu's subtitle reads "Your village: …" the same way. Older saves labelled "Founding complete" are listed by the same facts, read from the save.
+- **Tool breakage:** while anyone has the Toolsmith job switched on, a resident whose tool breaks fetches a spare instead of stopping (§6). With no toolsmith, the Slice 1 rule holds: they stop and report, and the report says how to fix it: "Axe broke. Craft one at the bench, or switch Toolsmith on for someone" (#91).
 
 ## 3. Sheep, hunting and the meadow
 
@@ -115,7 +116,9 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 **Job types:** Mine, Haul, Build, Craft (the bench's planks and sticks), Toolsmith (the bench's tools), Farm, Cook, Hunt.
 
 Each resident has, for **every** job:
-- **On or off.** Everything starts on.
+- **On or off.** Everything starts on except **Toolsmith**, which starts off for everyone, Ada included (#91). A toolsmith uses up planks, sticks and cobblestone on spare tools without being asked, so the player employs one by switching it on. A traveler who arrives skilled as a toolsmith starts with it on.
+  - **Tools queued by hand need a toolsmith too** (decided with the owner). The founding checklist has a step for it, "Make Ada the toolsmith", between building the bench and crafting the pickaxe. Until someone has it on, a queued tool waits, and the stuck list says "No one does Toolsmith".
+  - Older saves keep their residents' switches, so a running village doesn't lose its toolsmith.
 - **Priority** 1 to 3, where 1 is first. Everything starts at 2.
 - **Level** 1 to 5, rising with experience.
 
@@ -123,6 +126,13 @@ Each resident has, for **every** job:
 1. Direct and queued orders first, regardless of toggles.
 2. Then eating, when hungry (§4).
 3. Then jobs that are switched on, priority 1 first, then 2, then 3. Within a priority, Slice 1's order still applies: bench and fireplace work, then building, then gathering, then hauling.
+
+**Village jobs board (#78).** Jobs are switched and prioritised on one board for everyone, opened with **J** (rebindable) or the **Jobs** button in the tally bar, and closed with J, the button or Esc.
+- **Rows** are residents, each with their tunic swatch and name; clicking a name selects them. **Columns** are the eight jobs. A column's header counts who does that job ("3 on"), and reads "nobody" in yellow at 0, matching the stuck list's "No one does Build".
+- **A cell** shows the job's priority (or Off), the resident's level in it, and a tick of progress to the next level.
+- **Clicking:** a click on an Off cell switches the job on at the priority it had. A click on an on cell cycles its priority 1 → 2 → 3 → 1. **Shift-click** switches it off.
+- **The resident panel** keeps one line about jobs, "7 of 8 jobs on. Best at Mine, level 3.", and a **Jobs board** button, in place of the old per-resident grid. That frees its height for tools, food and orders.
+- The board sits where the goals panel is, and the goals panel hides while it's open.
 
 **Skills.**
 - **Experience:** each finished task in a job gives 1 point in that job. Levels 2, 3, 4 and 5 need 8, 25, 50 and 90 points.
@@ -165,11 +175,11 @@ Each resident has, for **every** job:
 
 ## 6. Toolsmith
 
-A resident with **Toolsmith** switched on keeps the village in spare tools:
+A resident with **Toolsmith** switched on keeps the village in spare tools. That switch is what makes them **employed** (decided with the owner, #91): a resident with every job on, Toolsmith included, counts.
 - For each tool kind someone is using (axe, pickaxe), the toolsmith keeps **1 spare** in stock, of the best tier the bench can make with materials on hand. Spare tools come from the toolsmith's own bench queue entries, marked "(toolsmith)".
 - A resident whose tool breaks **fetches a spare** instead of stopping. Their "Axe broke" report clears as soon as they pick it up.
 - **Nothing to make a spare from:** the stuck list says why ("Toolsmith needs 2 more sticks for a spare axe").
-- **No toolsmith at all:** Slice 1's rule holds, and residents stop and report.
+- **No toolsmith at all:** no spares are queued, Slice 1's rule holds, and residents stop and report ("Axe broke. Craft one at the bench, or switch Toolsmith on for someone").
 - **In use** means someone holds a tool of that kind or has had one break. **A spare** is any axe or pickaxe lying about or stockpiled.
 - **Which tier:** stone when there's enough cobblestone on hand for it, otherwise wood. Its planks and sticks are queued ahead of it like any other recipe, once that's unlocked.
 - **One entry at a time:** each kind gets one toolsmith entry, at the first finished bench. If you remove the entry, the toolsmith queues it again. To stop it, switch Toolsmith off.
@@ -200,12 +210,17 @@ Once a crafting bench is finished, a **Craft** button appears in the orders tool
 - **The recipes and queue appear only there, on the right.** Selecting the bench in the world, or its entry in the stuck list, opens the Craft panel at that bench. The selection panel on the left shows just a summary: the bench's status, any stuck reason, and an "Open the craft menu" button when the panel is closed.
 - Esc closes it.
 
-**Layout (#76).**
+**Layout (#76, #95).** The panel is laid out like a crafting table's screen, in the HUD's slate-and-chalk style (decided with the owner), with our own code-drawn item icons.
 - **Tabs:** with more than one station, a row of tabs at the top, one per bench and fireplace ("Bench", "Fireplace", "Bench 2"). A station with a blocker has a yellow flag on its tab.
-- **Queue first:** what the station is doing, its stuck reasons and its queue come first, in a fixed-height area that scrolls. Each queued item is a chip; clicking one removes it.
-- **Recipe rows:** below a rule, each recipe shows its name, then each input as a colour swatch and count, then what it makes. An input is yellow when there isn't enough on hand for one: in the station, on the way, or lying about. One control queues a recipe: **− Queue n +**. The count stays per recipe, from 1 to 20.
-- **Steady layout:** the queue area doesn't change height, so the Queue buttons never move under the cursor while the queue changes.
-- **Fit:** the panel stays between the stuck list (or the speed buttons) and the toolbar, and its recipe list scrolls rather than covering them. Folding the stuck list (§9) gives it more room.
+- **What it's doing** and its first stuck reason come first, in a line of fixed height.
+- **Recipe book** (left): a slot per recipe at the station, showing its result's icon. Click one to show it. A recipe there isn't enough on hand for one of is dimmed, with a yellow corner. On hand means in the station, on the way, or lying about.
+- **Crafting grid** (middle): the chosen recipe's ingredients on a 3×3 grid in its pattern, as in Minecraft: planks are a log, sticks two planks stacked, an axe three planks and two sticks in an axe's shape. Slots of an ingredient the village is short of are outlined in yellow. **The grid only shows the recipe:** residents fetch the ingredients, so nothing is dropped into it. The patterns are display data in `defs.gd` and never change what a recipe costs.
+- **Fireplace:** a furnace instead of a grid: what's cooked (with its count), a flame, and the fuel below. Cooked mutton burns a log; bread needs no fuel.
+- **Arrow and result:** an arrow to the result slot, with its count, the recipe's name, and **− Queue n +** (#76). The count stays per recipe, from 1 to 20.
+- **Queue:** below a rule, a hotbar of slots, one per queued item; the first fills as it's made, and the toolsmith's and auto-queued entries carry a small T or A. Clicking a slot removes it. Past 8, "and N more".
+- **On hand:** the station's ingredients as read-only slots with counts.
+- **Steady layout:** everything above the queue keeps its size, so the Queue control never moves under the cursor while the queue changes.
+- **Fit:** at 1280×720 the bench panel sits under a short stuck list without covering the house blueprint. A long stuck list can be folded (§9) to make room.
 
 ## 8. Buildings and orders added
 
@@ -273,6 +288,7 @@ Taken together, the upgrade steps:
 | Z | Open the Paint menu (#93); Z then 1 is Stockpile |
 | P | Farm plot order, directly |
 | B | Open the Build menu |
+| J | Open the Village jobs board (#78) |
 | 1–9, while a toolbar menu is open | Pick that row (B then 2 places a house) |
 | K | Place a fireplace |
 | A drag that starts on a painted cell | Erase that zone: stockpile cells (#63) or farm plots (#93) |

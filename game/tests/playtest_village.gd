@@ -142,6 +142,7 @@ func _initialize() -> void:
 
 	# ---- The founding (set up by command; playtest.gd plays it through input). Only the opening's
 	# 18×18 is mined, so the ring of trees and boulders around it is left for the village.
+	sim.set_job_on(sim.residents[0], "toolsmith", true)  # the checklist's "Make Ada the toolsmith" (issue #91)
 	sim.designate_mine(area(0, 0, 10, 18))
 	sim.designate_hunt(Rect2i(0, 0, sim.w, sim.h))
 	var bench := sim.place_site("bench", at(8, 10))
@@ -178,6 +179,7 @@ func _initialize() -> void:
 
 	# ---- Farm: paint plots, picked in the Paint menu; wheat is planted, grows and is harvested
 	check(await click_button("Paint") and await click_button("Farm plot"), "pick Farm plot in the Paint menu")
+	game._hud.refresh(sim)
 	check(game.tool == "farm" and game._hud._tool_btns.paint.text == "Paint: Farm plot", "Farm plot is on, and the Paint button says so")
 	var fr := open_rect_on_screen(at(9, 9), 3, 2, func(p): return sim.farm_blocked(p) == "")
 	check(fr.position.x >= 0, "open grass on screen for a farm")
@@ -218,23 +220,23 @@ func _initialize() -> void:
 	check(h3 != null and h3.tpl == "house", "H: a third house is placed")
 	check(not game._menu.visible, "placing it leaves the menu closed")
 
-	# ---- Jobs: switch Build off for both and see why nothing's built; then priorities
+	# ---- Jobs board (issue #78): switch Build off for both and see why nothing's built; then priorities
 	for r in [ada, tomas]:
-		await select_resident(r)
-		check(await click_job("build"), "click Build in %s's Jobs grid" % r.name)
+		check(await click_job(r, "build", true), "Shift-click %s's Build cell on the jobs board" % r.name)
 		check(not r.jobs.build.on, "%s's Build is off" % r.name)
+	check(visible_label("nobody"), "the Build column says nobody does it")
+	await key(KEY_ESCAPE)
 	await play(1)
 	check(find_button("No one does Build") != null, "with Build off for everyone, the stuck list says \"No one does Build\"")
 	for r in [ada, tomas]:
-		await select_resident(r)
-		check(await click_job("build"), "click Build again for %s" % r.name)
+		check(await click_job(r, "build"), "click %s's Build cell again" % r.name)
 	check(ada.jobs.build.on and tomas.jobs.build.on, "Build is back on for both")
-	await select_resident(tomas)
 	for i in 2:
-		await click_job("farm", 2)
+		await click_job(tomas, "farm")
 	check(tomas.jobs.farm.pri == 1, "Tomas's Farm is raised to priority 1")
-	await click_job("farm", 2)
+	await click_job(tomas, "farm")
 	check(tomas.jobs.farm.pri == 2, "and cycled back to 2")
+	await key(KEY_ESCAPE)
 	# Planks for the house, from the toolbar's Craft panel
 	check(await open_bench_panel(), "open the Craft panel on the bench")
 	await key(KEY_QUOTELEFT)
@@ -249,7 +251,10 @@ func _initialize() -> void:
 			levels = maxi(levels, Sim.level(r, jb))
 	check(levels >= 2 and seen("is now level"), "skill levels rise with work, with a toast (best level %d)" % levels)
 	await select_resident(ada)
-	check(visible_label("Lv "), "the Jobs grid shows levels")
+	check(visible_label("Best at "), "Ada's panel names what she's best at")
+	var best_cell: Button = await job_cell(ada, "mine")
+	check(best_cell != null and "Lv " in best_cell.text, "the jobs board shows levels")
+	await key(KEY_ESCAPE)
 
 	# ---- Toolsmith: an axe is made, a spare is kept, and a broken axe is replaced from it
 	check(await open_bench_panel(), "open the bench's Craft panel again")

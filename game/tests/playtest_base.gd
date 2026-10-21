@@ -121,20 +121,23 @@ func click_button(text: String, near := "", last := false) -> bool:
 	return true
 
 
-## Queues `n` of a recipe in the Craft panel: sets its count with − and +, then clicks Queue.
+## Queues `n` of a recipe in the Craft panel: picks it in the recipe book (issue #95), sets the count
+## with − and +, then clicks Queue.
 func queue_recipe(recipe: String, n := 1) -> bool:
+	if not await click_button(recipe):
+		return false
 	for i in 40:
 		await frames(1)
 		game._hud.refresh(game.sim)
 		await frames(1)
-		var q := find_button("Queue", recipe)
+		var q := find_button("Queue ")
 		if q == null:
 			printerr("     (no Queue button for %s)" % recipe)
 			return false
 		var cur := int(q.text.get_slice(" ", 1))
 		if cur == n:
-			return await click_button("Queue", recipe)
-		await click_button("+" if cur < n else "−", recipe)
+			return await click_button("Queue ")
+		await click_button("+" if cur < n else "−")
 	return false
 
 
@@ -173,22 +176,25 @@ func open_cell(c: Vector2i, size := Vector2i.ONE) -> Vector2i:
 	return c
 
 
-## A button in the Jobs grid of the selected resident's panel: the job's name, or with `column`
-## 1 its level and 2 its priority.
-func job_button(job: String, column := 0) -> Button:
-	for n in _all(game._hud._sel):
-		if n is Button and n.text == Defs.JOB_NAMES[job] and not n.is_queued_for_deletion():
-			var row: Array = n.get_parent().get_children()
-			return row[row.find(n) + column] as Button
+## A resident's cell for a job on the Village jobs board (issue #78), opening the board if needed.
+func job_cell(r: Dictionary, job: String) -> Button:
+	if not game.jobs_board_open:
+		await key(KEY_J)
+	game._hud.refresh(game.sim)
+	await frames(2)
+	for n in _all(game._hud._board):
+		if n is Button and n.get_meta("cell", "") == "%d:%s" % [r.id, job] and not n.is_queued_for_deletion():
+			return n
 	return null
 
 
-func click_job(job: String, column := 0) -> bool:
-	var b := job_button(job, column)
+## Clicks a jobs board cell: switches an Off job on, or cycles its priority; with Shift, switches it off.
+func click_job(r: Dictionary, job: String, shift := false) -> bool:
+	var b: Button = await job_cell(r, job)
 	if b == null:
-		printerr("     (no %s in the Jobs grid)" % job)
+		printerr("     (no %s cell for %s on the jobs board)" % [job, r.name])
 		return false
-	await click(b.get_global_rect().get_center())
+	await click(b.get_global_rect().get_center(), MOUSE_BUTTON_LEFT, shift)
 	game._hud.refresh(game.sim)
 	await frames(2)
 	return true

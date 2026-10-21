@@ -87,31 +87,37 @@ func _title(text: String, sub: String) -> void:
 	var t := hud.label(text, true, Palette.CHALK, 34)
 	_box.add_child(t)
 	if sub != "":
-		_box.add_child(hud.label(sub, false, Palette.CHALK_DIM, 15, true))
+		_box.add_child(hud.label(sub, false, Palette.CHALK_DIM, Palette.BODY, true))
 
 
 func _big_button(text: String, on_press: Callable, primary := false) -> Button:
 	var b := hud.button(text, on_press)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	b.custom_minimum_size = Vector2(0, 48)
-	b.add_theme_font_size_override("font_size", 17)
+	b.custom_minimum_size = Vector2(0, 44)
+	b.add_theme_font_size_override("font_size", Palette.HEADING)
 	var border := Palette.CHALK if primary else Palette.CHALK_DIM
-	b.add_theme_stylebox_override("normal", hud.box(Palette.SLATE_DEEP if primary else Color(0, 0, 0, 0), 4, 14, border))
-	b.add_theme_stylebox_override("hover", hud.box(Palette.SLATE_DEEP, 4, 14, Palette.CHALK))
+	b.add_theme_stylebox_override("normal", hud.box(Palette.SLATE_DEEP if primary else Color(0, 0, 0, 0), 4, 10, border))
+	b.add_theme_stylebox_override("hover", hud.box(Palette.SLATE_DEEP, 4, 10, Palette.CHALK))
 	return b
 
 
 func _render_main() -> void:
-	_title("Block Village", "The founding. %s." % Goals.progress_text(game.sim))
+	var founded := Goals.current(game.sim) < 0
+	_title("Block Village", ("Your village: %s." if founded else "The founding. %s.") % Goals.progress_text(game.sim))
 	_box.add_child(_big_button("Play" if first else "Resume", func(): game.close_menu(), true))
 	_box.add_child(_big_button("Save game", func(): show_view("save")))
 	_box.add_child(_big_button("Load game", func(): show_view("load")))
 	_box.add_child(_big_button("Controls", func(): show_view("keys")))
+	var size := _big_button("Interface size: %d%%" % roundi(game.ui_scale * 100), func():
+		game.set_ui_scale(game.next_ui_scale())
+		show_view("main"))
+	size.tooltip_text = "How big the panels and their text are drawn: 90, 100, 115 or 130%. Click for the next size."
+	_box.add_child(size)
 	_box.add_child(_big_button("Start over", func(): _ask("Start a new game? Anything you haven’t saved will be lost.", "Start over", "restart")))
 	if not OS.has_feature("web"):  # a browser tab can't be quit from inside the game
 		_box.add_child(_big_button("Quit", func(): _ask("Quit Block Village? Anything you haven’t saved will be lost.", "Quit", "quit")))
 	_add_confirm()
-	_box.add_child(hud.label("Saves are kept on this computer. Esc or M opens this menu.", false, Palette.CHALK_DIM, 13, true))
+	_box.add_child(hud.label("Saves are kept on this computer. Esc or M opens this menu.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
 
 
 func _render_keys() -> void:
@@ -124,7 +130,7 @@ func _render_keys() -> void:
 		if not groups.has(a[1]):
 			groups.append(a[1])
 	for g in groups:
-		list.add_child(hud.label(g, true, Palette.CHALK, 16))
+		list.add_child(hud.label(g, true, Palette.CHALK, Palette.BODY))
 		var grid := GridContainer.new()
 		grid.columns = 3
 		grid.add_theme_constant_override("h_separation", 12)
@@ -132,18 +138,18 @@ func _render_keys() -> void:
 			if a[1] != g:
 				continue
 			var waiting: bool = listening == a[0]
-			var key_label := hud.label("Press a key…" if waiting else k.text(a[0]), true, Palette.YELLOW if waiting or k.keys[a[0]].is_empty() else Palette.CHALK, 14)
+			var key_label := hud.label("Press a key…" if waiting else k.text(a[0]), true, Palette.YELLOW if waiting or k.keys[a[0]].is_empty() else Palette.CHALK, Palette.BODY)
 			key_label.custom_minimum_size = Vector2(110, 0)
 			grid.add_child(key_label)
-			var name := hud.label(a[2], false, Palette.CHALK, 14)
+			var name := hud.label(a[2], false, Palette.CHALK, Palette.BODY)
 			name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			grid.add_child(name)
 			var change := hud.button("Cancel" if waiting else "Change", func(): _listen(a[0]), "Secondary")
 			change.custom_minimum_size = Vector2(80, 30)
 			grid.add_child(change)
 		for row in FIXED_ROWS.get(g, []):
-			grid.add_child(hud.label(row[0], true, Palette.CHALK_DIM, 14))
-			grid.add_child(hud.label(row[1], false, Palette.CHALK_DIM, 14))
+			grid.add_child(hud.label(row[0], true, Palette.CHALK_DIM, Palette.BODY))
+			grid.add_child(hud.label(row[1], false, Palette.CHALK_DIM, Palette.BODY))
 			grid.add_child(Control.new())
 		list.add_child(grid)
 	var scroll := ScrollContainer.new()
@@ -153,10 +159,10 @@ func _render_keys() -> void:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_box.add_child(scroll)
 	if listening != "":
-		_box.add_child(hud.label("Press the new key for “%s”. Esc cancels." % KeyBindings.label_of(listening), false, Palette.YELLOW, 14, true))
+		_box.add_child(hud.label("Press the new key for “%s”. Esc cancels." % KeyBindings.label_of(listening), false, Palette.YELLOW, Palette.BODY, true))
 	_add_confirm()
 	if _msg != "":
-		_box.add_child(hud.label(_msg, false, Palette.CHALK_DIM, 14, true))
+		_box.add_child(hud.label(_msg, false, Palette.CHALK_DIM, Palette.BODY, true))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.add_child(_back_button())
@@ -224,12 +230,12 @@ func _render_slots() -> void:
 		info.add_child(hud.label("Slot %d" % n, true))
 		var unreadable: bool = meta != null and meta.has("error")
 		if meta == null:
-			info.add_child(hud.label("Empty", false, Palette.CHALK_DIM, 14))
+			info.add_child(hud.label("Empty", false, Palette.CHALK_DIM, Palette.BODY))
 		elif unreadable:
-			info.add_child(hud.label(meta.error, false, Palette.YELLOW, 14, true))
+			info.add_child(hud.label(meta.error, false, Palette.YELLOW, Palette.BODY, true))
 		else:
-			info.add_child(hud.label(meta.summary, false, Palette.CHALK, 14))
-			info.add_child(hud.label("%s. Saved %s" % [_played(meta.tick), _when(meta.saved_at)], false, Palette.CHALK_DIM, 13))
+			info.add_child(hud.label(meta.summary, false, Palette.CHALK, Palette.BODY))
+			info.add_child(hud.label("%s. Saved %s" % [_played(meta.tick), _when(meta.saved_at)], false, Palette.CHALK_DIM, Palette.CAPTION))
 		row.add_child(info)
 		var b: Button
 		if saving:
@@ -249,7 +255,7 @@ func _render_slots() -> void:
 		_box.add_child(slot_panel)
 	_add_confirm()
 	if _msg != "":
-		_box.add_child(hud.label(_msg, _msg_err, Palette.YELLOW if _msg_err else Palette.CHALK_DIM, 15, true))
+		_box.add_child(hud.label(_msg, _msg_err, Palette.YELLOW if _msg_err else Palette.CHALK_DIM, Palette.BODY, true))
 	_box.add_child(_back_button())
 
 
@@ -269,7 +275,7 @@ func _add_confirm() -> void:
 		return
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
-	v.add_child(hud.label(_confirm.text, false, Palette.CHALK, 15, true))
+	v.add_child(hud.label(_confirm.text, false, Palette.CHALK, Palette.BODY, true))
 	var h := HBoxContainer.new()
 	var go := hud.button(_confirm.yes, _do_confirmed)
 	go.add_theme_color_override("font_color", Palette.YELLOW)

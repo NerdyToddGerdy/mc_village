@@ -12,6 +12,9 @@ var _bold: FontVariation
 var _root := Control.new()
 var _tallies := HBoxContainer.new()
 var _tools_btn: Button
+var _jobs_btn: Button               ## Opens the Village jobs board (issue #78).
+var _board_panel: PanelContainer
+var _board := VBoxContainer.new()
 var _tools_drop: PanelContainer
 var _tally_panel: PanelContainer
 var _tally_seen := {}           ## Item types that have turned up in this game; the rest stay hidden.
@@ -33,7 +36,7 @@ var _sel := VBoxContainer.new()
 var _build_menu: PanelContainer
 var _craft_panel: PanelContainer
 var _craft_box := VBoxContainer.new()
-var _craft_scroll: ScrollContainer  ## The Craft panel's recipe list, sized by _fit_craft().
+var _craft_pick := {}           ## Station template -> the recipe its Craft panel shows (issue #95).
 var _craft_n := {}              ## Recipe id -> how many its Queue button queues (issue #76).
 const CRAFT_MAX := 20
 var _speed_panel: PanelContainer
@@ -73,6 +76,10 @@ func _ready() -> void:
 	_tools_btn.toggle_mode = true
 	_tools_btn.custom_minimum_size = Vector2(0, 36)
 	tally_row.add_child(_tools_btn)
+	_jobs_btn = _button("Jobs", func(): game.toggle_jobs_board())
+	_jobs_btn.toggle_mode = true
+	_jobs_btn.custom_minimum_size = Vector2(0, 36)
+	tally_row.add_child(_jobs_btn)
 	_tally_panel = _panel(tally_row, Vector2(0, 0))
 	tl.add_child(_tally_panel)
 	_tools_list.add_theme_constant_override("separation", 10)
@@ -118,7 +125,7 @@ func _ready() -> void:
 		br.add_child(mp)
 	_build_menu = _menu_panels.build
 	_craft_box.add_theme_constant_override("separation", 8)
-	_craft_panel = _panel(_craft_box, Vector2(360, 0))
+	_craft_panel = _panel(_craft_box, Vector2(400, 0))
 	_craft_panel.visible = false
 	br.add_child(_craft_panel)
 	var tools := HBoxContainer.new()
@@ -134,6 +141,10 @@ func _ready() -> void:
 	br.add_child(_panel(tools, Vector2.ZERO, 4))
 
 	_root.add_child(_tools_drop)
+	_board_panel = _panel(_board, Vector2.ZERO)
+	_board_panel.top_level = true
+	_board_panel.visible = false
+	_root.add_child(_board_panel)
 	_hint.visible = false
 	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var hs := _box(Color(Palette.SLATE, 0.96), 4, 8)
@@ -163,7 +174,7 @@ func _order_button(t: String) -> Button:
 	cap_box.content_margin_bottom = 0
 	cap.add_theme_stylebox_override("panel", cap_box)
 	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var cap_label := _label("", false, Palette.CHALK_DIM, 13)
+	var cap_label := _label("", false, Palette.CHALK_DIM, Palette.CAPTION)
 	cap.add_child(cap_label)
 	b.add_child(cap)
 	_tool_btns[t] = b
@@ -186,7 +197,7 @@ func _set_order_label(t: String, name: String, key: String) -> void:
 	_tool_keys[t].get_parent().visible = key != ""
 	var right := 12.0
 	if key != "":
-		right = 10 + _font.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 12 + 10
+		right = 10 + _font.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, Palette.CAPTION).x + 12 + 10
 	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
 		var sb := (_theme.get_stylebox(state, "Button") as StyleBoxFlat).duplicate() as StyleBoxFlat
 		sb.content_margin_left = 40
@@ -237,7 +248,7 @@ func _draw_mark(c: Control, t: String) -> void:
 
 # ---------------------------------------------------------------- shared builders (also used by the menu)
 
-func label(text: String, bold := false, color := Palette.CHALK, size := 15, wrap := false) -> Label:
+func label(text: String, bold := false, color := Palette.CHALK, size := Palette.BODY, wrap := false) -> Label:
 	return _label(text, bold, color, size, wrap)
 
 
@@ -262,7 +273,7 @@ func _make_theme() -> void:
 	_bold.base_font = _font
 	_bold.variation_opentype = {ts.name_to_tag("wght"): 720, ts.name_to_tag("wdth"): 80}
 	_theme.default_font = _font
-	_theme.default_font_size = 15
+	_theme.default_font_size = Palette.BODY
 	_theme.set_color("font_color", "Label", Palette.CHALK)
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		_theme.set_color(state, "Button", Palette.CHALK)
@@ -330,7 +341,7 @@ func _panel(content: Control, min_size: Vector2, margin := 12) -> PanelContainer
 	return p
 
 
-func _label(text: String, bold := false, color := Palette.CHALK, size := 15, wrap := false) -> Label:
+func _label(text: String, bold := false, color := Palette.CHALK, size := Palette.BODY, wrap := false) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.add_theme_color_override("font_color", color)
@@ -441,12 +452,12 @@ func _menu_row(menu: String, i: int, e: Dictionary) -> Button:
 	for key in ["%d" % (i + 1), direct]:
 		if key != "":
 			caps.add_child(_keycap(key))
-			caps_w += _font.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 12 + 4
+			caps_w += _font.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, Palette.CAPTION).x + 12 + 4
 	var words := VBoxContainer.new()
 	words.add_theme_constant_override("separation", 0)
 	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	words.add_child(_label(e.name, true, Palette.CHALK, 15))
-	var sub := _label(e.sub, false, Palette.CHALK_DIM, 13, true)
+	words.add_child(_label(e.name, true, Palette.CHALK, Palette.BODY))
+	var sub := _label(e.sub, false, Palette.CHALK_DIM, Palette.CAPTION, true)
 	var sub_w := MENU_W - 40 - 10 - 10 - caps_w
 	sub.custom_minimum_size.x = sub_w
 	words.add_child(sub)
@@ -468,8 +479,8 @@ func _menu_row(menu: String, i: int, e: Dictionary) -> Button:
 	icon.draw.connect(func(): _draw_mark(icon, e.mark))
 	b.add_child(icon)
 	# A wrapped label reports its height only after layout, so measure the text for the row's height.
-	var sub_h := _font.get_multiline_string_size(e.sub, HORIZONTAL_ALIGNMENT_LEFT, sub_w, 13).y
-	b.custom_minimum_size = Vector2(MENU_W, maxf(12 + _bold.get_height(15) + sub_h + 2, 52))
+	var sub_h := _font.get_multiline_string_size(e.sub, HORIZONTAL_ALIGNMENT_LEFT, sub_w, Palette.CAPTION).y
+	b.custom_minimum_size = Vector2(MENU_W, maxf(12 + _bold.get_height(Palette.BODY) + sub_h + 2, 52))
 	b.resized.connect(func():
 		m.size = b.size
 		icon.position = Vector2(12, (b.size.y - 18) / 2))
@@ -487,7 +498,7 @@ func _keycap(key: String) -> PanelContainer:
 	cap_box.content_margin_right = 5
 	cap.add_theme_stylebox_override("panel", cap_box)
 	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cap.add_child(_label(key, false, Palette.CHALK_DIM, 13))
+	cap.add_child(_label(key, false, Palette.CHALK_DIM, Palette.CAPTION))
 	return cap
 
 
@@ -507,7 +518,7 @@ func _head(title: String, status: String, bold := false, size := 15, swatch := "
 		named.add_child(t)
 		t = named
 		title_w += 22
-	var status_w := _font.get_string_size(status, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+	var status_w := _font.get_string_size(status, HORIZONTAL_ALIGNMENT_LEFT, -1, Palette.BODY).x
 	if title_w + 16 + status_w <= HEAD_FIT:
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 16)
@@ -518,7 +529,7 @@ func _head(title: String, status: String, bold := false, size := 15, swatch := "
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 2)
 	v.add_child(t)
-	v.add_child(_label(status, false, Palette.CHALK_DIM, 15, true))
+	v.add_child(_label(status, false, Palette.CHALK_DIM, Palette.BODY, true))
 	return v
 
 
@@ -548,7 +559,7 @@ func _bar(frac: float, color := Palette.BLUE) -> Control:
 
 
 func _reason(text: String) -> Label:
-	return _label("⚑  " + text, true, Palette.YELLOW, 15, true)
+	return _label("⚑  " + text, true, Palette.YELLOW, Palette.BODY, true)
 
 
 ## Replaces a container's children only when `sig` differs from last time.
@@ -577,6 +588,7 @@ func refresh(sim: Sim) -> void:
 	_refresh_stuck(sim)
 	_refresh_selection(sim)
 	_refresh_toolbar(sim)
+	_refresh_board(sim)
 	_refresh_craft(sim)
 	_refresh_toasts()
 
@@ -644,11 +656,11 @@ func _tally(name: String, n: int, n_loose: int, color := Palette.CHALK) -> VBoxC
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 0)
 	var h := HBoxContainer.new()
-	h.add_child(_label(name, false, Palette.CHALK_DIM, 14))
-	h.add_child(_label(str(n), true, color, 18))
+	h.add_child(_label(name, false, Palette.CHALK_DIM, Palette.BODY))
+	h.add_child(_label(str(n), true, color, Palette.HEADING))
 	v.add_child(h)
 	if n_loose > 0:
-		v.add_child(_label("%d loose" % n_loose, false, Palette.CHALK_DIM, 12))
+		v.add_child(_label("%d loose" % n_loose, false, Palette.CHALK_DIM, Palette.CAPTION))
 	return v
 
 
@@ -715,7 +727,7 @@ func _refresh_tools(sim: Sim) -> void:
 					any = true
 					g.add_child(_reason("Axe broke" if k == "axe" else "Pickaxe broke"))
 			if not any:
-				g.add_child(_label("Bare hands", false, Palette.CHALK_DIM, 14))
+				g.add_child(_label("Bare hands", false, Palette.CHALK_DIM, Palette.BODY))
 			c.add_child(g)
 		if not spare.is_empty():
 			var g := VBoxContainer.new()
@@ -728,11 +740,11 @@ func _refresh_tools(sim: Sim) -> void:
 				where.append("%d in the stockpile" % stored)
 			if loose:
 				where.append("%d lying loose" % loose)
-			g.add_child(_label(", ".join(where), false, Palette.CHALK_DIM, 13))
+			g.add_child(_label(", ".join(where), false, Palette.CHALK_DIM, Palette.CAPTION))
 			for st in spare:
 				g.add_child(_tool_row(st.type, st.get("dur", Sim.full_uses(st.type))))
 			c.add_child(g)
-		c.add_child(_label("Craft tools at the bench. Residents pick up a better tool when a job needs one.", false, Palette.CHALK_DIM, 13, true)))
+		c.add_child(_label("Craft tools at the bench. Residents pick up a better tool when a job needs one.", false, Palette.CHALK_DIM, Palette.CAPTION, true)))
 
 
 func _tool_row(type: String, dur: int) -> VBoxContainer:
@@ -796,7 +808,11 @@ func _process(_delta: float) -> void:
 			if n.has_meta("disarmed_text"):
 				n.text = n.get_meta("disarmed_text")
 	_place_toasts()
-	_fit_craft()
+	if _board_panel.visible:
+		_board_panel.position = Vector2(_tally_panel.global_position.x, _tally_panel.get_global_rect().end.y + 8)
+	# The goals panel gives way to the jobs board, which sits over it, and to a selection panel tall
+	# enough to reach it (at a large interface size, issue #80): what's selected matters more.
+	_goals_panel.visible = not game.jobs_board_open and (not _sel_panel.visible or _sel_panel.get_global_rect().position.y > _goals_panel.get_global_rect().position.y + _goals_panel.get_combined_minimum_size().y + 8)
 	var open := _tools_pinned or _tools_btn.has_focus() or _over_tools(_pointer)
 	_tools_drop.visible = open
 	if open:
@@ -810,14 +826,19 @@ func _refresh_goals(sim: Sim) -> void:
 	var done_sig := ""
 	for i in Goals.LIST.size():
 		done_sig += "1" if Goals.done(sim, i) else "0"
+	# Once the founding is done, the panel folds to a small chip: it has nothing left to guide (#81).
+	_goals_panel.custom_minimum_size.x = 0 if cur < 0 else 290
 	_rebuild(_goals, "%d%s" % [cur, done_sig], func(c: Container) -> void:
 		var n_done := done_sig.count("1")
-		c.add_child(_row("The founding", "%d of %d" % [n_done, Goals.LIST.size()], false))
 		if cur < 0:
-			c.add_child(_label("Slice 1 complete. The village has its first two residents.", false, Palette.GREEN, 14, true))
+			var chip := _label("Founding  ✓", true, Palette.GREEN, Palette.BODY)
+			chip.tooltip_text = "Every founding step is done: the village has its bench, its houses and its first traveler."
+			chip.mouse_filter = Control.MOUSE_FILTER_STOP
+			c.add_child(chip)
 			return
-		c.add_child(_label("%d  %s" % [cur + 1, Goals.LIST[cur].t], true, Palette.CHALK, 15, true))
-		c.add_child(_label(Goals.LIST[cur].h, false, Palette.CHALK_DIM, 13, true)))
+		c.add_child(_row("The founding", "%d of %d" % [n_done, Goals.LIST.size()], false))
+		c.add_child(_label("%d  %s" % [cur + 1, Goals.LIST[cur].t], true, Palette.CHALK, Palette.BODY, true))
+		c.add_child(_label(Goals.LIST[cur].h, false, Palette.CHALK_DIM, Palette.CAPTION, true)))
 
 
 ## The stuck list (issue #77) has two tiers. Blockers, work that can't go on, get a yellow flag,
@@ -847,7 +868,7 @@ func _refresh_stuck(sim: Sim) -> void:
 			head.add_theme_constant_override("icon_max_width", 16)
 			head.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			head.add_theme_font_override("font", _bold)
-			head.add_theme_font_size_override("font_size", 17)
+			head.add_theme_font_size_override("font_size", Palette.HEADING)
 			for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 				head.add_theme_color_override(state, Palette.YELLOW)
 			head.tooltip_text = "Hide the stuck list. It opens again when something new gets stuck." if stuck_open else "Show what’s stuck"
@@ -974,13 +995,13 @@ func _refresh_selection(sim: Sim) -> void:
 
 func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 	if sel.is_empty():
-		c.add_child(_label("Nothing selected", true, Palette.CHALK, 17))
-		c.add_child(_label("Click Ada to select her. With Ada selected, right-click a tree to mine it, or use the orders toolbar to mark work for anyone. Press F to select a resident.", false, Palette.CHALK_DIM, 15, true))
+		c.add_child(_label("Nothing selected", true, Palette.CHALK, Palette.HEADING))
+		c.add_child(_label("Click Ada to select her. With Ada selected, right-click a tree to mine it, or use the orders toolbar to mark work for anyone. Press F to select a resident.", false, Palette.CHALK_DIM, Palette.BODY, true))
 		return
 	if sel.kind == "res":
 		var rs: Array = sel.ids.map(func(id): return sim.resident(id)).filter(func(r): return not r.is_empty())
 		if rs.size() > 1:
-			c.add_child(_label("%d residents" % rs.size(), true, Palette.CHALK, 24))
+			c.add_child(_label("%d residents" % rs.size(), true, Palette.CHALK, Palette.TITLE))
 			for r in rs:
 				var line := HBoxContainer.new()
 				line.add_theme_constant_override("separation", 8)
@@ -997,7 +1018,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		if r.progress >= 0:
 			c.add_child(_bar(r.progress))
 		if r.away:
-			c.add_child(_label("Off the map at the sheep meadow. Away residents don’t work or get hungry.", false, Palette.CHALK_DIM, 14, true))
+			c.add_child(_label("Off the map at the sheep meadow. Away residents don’t work or get hungry.", false, Palette.CHALK_DIM, Palette.BODY, true))
 			c.add_child(_bar(1.0 - sim.back_in(r) / Tuning.MEADOW_TRIP, Palette.GREEN))
 			return
 		_add_tool_row(c, sim, r, "axe")
@@ -1012,14 +1033,14 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		if not r.orders.is_empty():
 			c.add_child(_label("Queued orders", true))
 			for i in r.orders.size():
-				c.add_child(_label("%d  %s" % [i + 1, Sim.order_text(r.orders[i])], false, Palette.CHALK, 14))
+				c.add_child(_label("%d  %s" % [i + 1, Sim.order_text(r.orders[i])], false, Palette.CHALK, Palette.BODY))
 			c.add_child(_destructive("Clear orders", "Click again to clear orders", "orders:%d" % r.id, func(): game.clear_orders(r)))
 		if equip_kind != "":
 			return  # the tool list takes the Jobs grid's room while it's open
 		_add_meadow_button(c, sim, [r])
 		if r.axe == null and not r.broken.axe:
-			c.add_child(_label("Chopping by hand is slow. Stone needs a pickaxe.", false, Palette.CHALK_DIM, 15, true))
-		_add_jobs_grid(c, r)
+			c.add_child(_label("Chopping by hand is slow. Stone needs a pickaxe.", false, Palette.CHALK_DIM, Palette.BODY, true))
+		_add_jobs_summary(c, sim, r)
 		return
 	if target == null:
 		c.add_child(_label("That’s gone.", false, Palette.CHALK_DIM))
@@ -1030,12 +1051,12 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target), "Secondary" if target.des else "Primary"))
 		"bush":
 			c.add_child(_head("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX]))
-			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, 14, true))
+			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, Palette.BODY, true))
 		"meadow":
 			c.add_child(_head("Sheep meadow", "%d of %d sheep" % [sim.meadow_sheep, Tuning.MEADOW_SHEEP]))
 			var more := "" if sim.meadow_sheep >= Tuning.MEADOW_SHEEP else " The next one in %d seconds." % ceili(Tuning.MEADOW_REGROW - sim.meadow_regrow)
-			c.add_child(_label("Off the map, past this signpost. The meadow regains a sheep every %d minutes.%s" % [int(Tuning.MEADOW_REGROW / 60.0), more], false, Palette.CHALK_DIM, 14, true))
-			c.add_child(_label("Select one or two residents and choose Send to the meadow. Each brings back %d wool and %d raw mutton." % [Tuning.MEADOW_TAKE, Tuning.MEADOW_TAKE], false, Palette.CHALK_DIM, 14, true))
+			c.add_child(_label("Off the map, past this signpost. The meadow regains a sheep every %d minutes.%s" % [int(Tuning.MEADOW_REGROW / 60.0), more], false, Palette.CHALK_DIM, Palette.BODY, true))
+			c.add_child(_label("Select one or two residents and choose Send to the meadow. Each brings back %d wool and %d raw mutton." % [Tuning.MEADOW_TAKE, Tuning.MEADOW_TAKE], false, Palette.CHALK_DIM, Palette.BODY, true))
 		"crop":
 			var stage := Sim.crop_stage(target)
 			var status := "Empty, waiting to be planted"
@@ -1049,7 +1070,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			if target.claim != 0:
 				var who: String = sim.resident(target.claim).get("name", "Someone")
 				c.add_child(_label("%s is %s it." % [who, "harvesting" if stage == 4 else "planting"], false, Palette.CHALK_DIM))
-			c.add_child(_label("Wheat takes %d minutes to grow and gives %d when harvested." % [int(Tuning.WHEAT_GROW / 60.0), Tuning.WHEAT_YIELD], false, Palette.CHALK_DIM, 14, true))
+			c.add_child(_label("Wheat takes %d minutes to grow and gives %d when harvested." % [int(Tuning.WHEAT_GROW / 60.0), Tuning.WHEAT_YIELD], false, Palette.CHALK_DIM, Palette.BODY, true))
 			c.add_child(_destructive("Remove this plot", "Click again to remove the plot", "plot:%d" % target.id, func(): game.remove_farm_plot(target)))
 		"sheep":
 			c.add_child(_head("Sheep", "Drops 1 wool and 1 raw mutton"))
@@ -1074,7 +1095,7 @@ func _refresh_craft(sim: Sim) -> void:
 	if not _craft_panel.visible:
 		return
 	var list: Array = game.benches()
-	var sig := "%s|%s|%s|%s|%s|%s" % [list.map(func(b): return b.id), bench, sim.auto_craft, _craft_n, sim.stuck.map(func(x): return x.why), _blocked_sites(sim)]
+	var sig := "%s|%s|%s|%s|%s|%s|%s|%d" % [list.map(func(b): return b.id), bench, sim.auto_craft, _craft_n, sim.stuck.map(func(x): return x.why), _blocked_sites(sim), _craft_pick, int(_craft_progress(sim, bench) * 10)]
 	for k in Palette.ITEM_COLORS:
 		sig += "%d," % sim.free_count(k)
 	_rebuild(_craft_box, sig, func(c: Container) -> void:
@@ -1110,61 +1131,103 @@ func _station_tabs(sim: Sim, list: Array, current: Dictionary) -> Control:
 	return tabs
 
 
-## The Jobs grid (issue #47): each job's on/off switch and its priority, 1 first. Click a job's name
-## to switch it, and its number to cycle the priority.
-func _add_jobs_grid(c: Container, r: Dictionary) -> void:
-	var title := _row("Jobs", "Priority 1 goes first", false)
-	(title.get_child(0) as Label).add_theme_font_override("font", _bold)
-	(title.get_child(1) as Label).add_theme_color_override("font_color", Palette.CHALK_DIM)
-	(title.get_child(1) as Label).add_theme_font_size_override("font_size", 13)
-	c.add_child(title)
-	var grid := GridContainer.new()
-	grid.columns = 6
-	grid.add_theme_constant_override("h_separation", 2)
-	grid.add_theme_constant_override("v_separation", 2)
+## The resident panel's line about jobs (issue #78): how many are on and what they're best at, with
+## a button to the Village jobs board, where jobs are switched and prioritised.
+func _add_jobs_summary(c: Container, sim: Sim, r: Dictionary) -> void:
+	var on: int = Defs.JOBS.filter(func(jb): return r.jobs[jb].on).size()
+	var best: String = Defs.JOBS[0]
 	for jb in Defs.JOBS:
-		var st: Dictionary = r.jobs[jb]
-		var on := _button(Defs.JOB_NAMES[jb], func(): game.toggle_job(r, jb))
-		on.toggle_mode = true
-		on.set_pressed_no_signal(st.on)
-		on.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		on.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		on.add_theme_font_size_override("font_size", 14)
-		on.tooltip_text = "%s is %s. Click to switch it %s." % [Defs.JOB_NAMES[jb], "on" if st.on else "off", "off" if st.on else "on"]
-		if not st.on:
-			for k in ["font_color", "font_hover_color", "font_pressed_color"]:
-				on.add_theme_color_override(k, Color(Palette.CHALK_DIM, 0.55))
-		grid.add_child(on)
-		grid.add_child(_level_cell(r, jb))
-		var pri := _button(str(st.pri) if st.on else "–", func(): game.cycle_job_priority(r, jb))
-		pri.custom_minimum_size = Vector2(30, 0)
-		pri.disabled = not st.on
-		pri.add_theme_font_size_override("font_size", 14)
-		pri.tooltip_text = "Priority %d. Click to change it." % st.pri
-		grid.add_child(pri)
-	c.add_child(grid)
+		if r.jobs[jb].xp > r.jobs[best].xp:
+			best = jb
+	var lv := Sim.level(r, best)
+	var line := "%d of %d jobs on. " % [on, Defs.JOBS.size()] + ("Best at %s, level %d." % [Defs.JOB_NAMES[best], lv] if lv > 1 else "Every job at level 1 so far.")
+	c.add_child(_label(line, false, Palette.CHALK_DIM, Palette.BODY, true))
+	var key: String = game.keys.first("jobs")
+	var b := _button("Jobs board" + ("  (%s)" % key if key != "" else ""), func(): game.toggle_jobs_board(true), "Secondary")
+	b.tooltip_text = "Switch jobs on and off and set priorities for everyone"
+	c.add_child(b)
 
 
-## A job's level, with a thin bar of progress to the next one (issue #48).
-func _level_cell(r: Dictionary, jb: String) -> Control:
+## The Village jobs board (issue #78): a row per resident, a column per job. A cell shows the job's
+## priority (or Off), the resident's level and a tick of progress to the next level. Clicking an Off
+## cell switches the job on at the priority it had; clicking an on cell cycles 1 → 2 → 3 → 1;
+## Shift-click switches it off. A column header counts who does the job, yellow when nobody does.
+func _refresh_board(sim: Sim) -> void:
+	_board_panel.visible = game.jobs_board_open
+	_jobs_btn.set_pressed_no_signal(game.jobs_board_open)
+	if not game.jobs_board_open:
+		return
+	var sig := "%s|%s" % [game.selection, _keys_sig]
+	for r in sim.residents:
+		sig += "%d%s%s%s;" % [r.id, r.name, r.jobs, r.away]
+	_rebuild(_board, sig, func(c: Container) -> void:
+		var head := HBoxContainer.new()
+		var title := _label("Village jobs", true, Palette.CHALK, Palette.HEADING)
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		head.add_child(title)
+		head.add_child(_label("Click: on, then priority 1 → 2 → 3.  Shift-click: off.", false, Palette.CHALK_DIM, Palette.CAPTION))
+		c.add_child(head)
+		var grid := GridContainer.new()
+		grid.columns = Defs.JOBS.size() + 1
+		grid.add_theme_constant_override("h_separation", 3)
+		grid.add_theme_constant_override("v_separation", 3)
+		grid.add_child(Control.new())
+		for jb in Defs.JOBS:
+			var n: int = sim.residents.filter(func(r): return r.jobs[jb].on).size()
+			var col := VBoxContainer.new()
+			col.add_theme_constant_override("separation", 0)
+			var name := _label(Defs.JOB_NAMES[jb], true, Palette.CHALK, Palette.BODY)
+			name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			col.add_child(name)
+			var count := _label("nobody" if n == 0 else "%d on" % n, false, Palette.YELLOW if n == 0 else Palette.CHALK_DIM, Palette.CAPTION)
+			count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			col.add_child(count)
+			col.tooltip_text = "No one does %s." % Defs.JOB_NAMES[jb] if n == 0 else "%d of %d residents do %s." % [n, sim.residents.size(), Defs.JOB_NAMES[jb]]
+			col.mouse_filter = Control.MOUSE_FILTER_STOP
+			grid.add_child(col)
+		for r in sim.residents:
+			var who := _button(r.name + (" (away)" if r.away else ""), func(): game.focus_on("res", r.id))
+			who.icon = _swatch_tex(r.shirt)
+			who.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			who.custom_minimum_size = Vector2(120, 0)
+			who.toggle_mode = true
+			who.set_pressed_no_signal(game.selection.get("ids", []).has(r.id))
+			who.tooltip_text = "Select %s" % r.name
+			grid.add_child(who)
+			for jb in Defs.JOBS:
+				grid.add_child(_board_cell(r, jb))
+		c.add_child(grid))
+
+
+func _board_cell(r: Dictionary, jb: String) -> Button:
+	var st: Dictionary = r.jobs[jb]
 	var lv := Sim.level(r, jb)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 1)
-	box.custom_minimum_size = Vector2(30, 0)
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.mouse_filter = Control.MOUSE_FILTER_PASS
-	var l := _label("Lv %d" % lv, lv >= Tuning.ARRIVAL_LEVEL, Palette.CHALK if lv > 1 else Palette.CHALK_DIM, 12)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(l)
+	var b := _button("%s\nLv %d" % [str(st.pri) if st.on else "Off", lv], func(): pass)
+	b.set_meta("cell", "%d:%s" % [r.id, jb])
+	b.toggle_mode = true
+	b.set_pressed_no_signal(st.on)
+	b.custom_minimum_size = Vector2(66, 48)
+	b.add_theme_font_size_override("font_size", Palette.BODY)
+	b.add_theme_constant_override("line_spacing", -3)
+	if not st.on:
+		for k in ["font_color", "font_hover_color", "font_focus_color"]:
+			b.add_theme_color_override(k, Color(Palette.CHALK_DIM, 0.6))
+	# The click's Shift comes with the mouse event, so note it before the press lands.
+	b.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT:
+			b.set_meta("shift", ev.shift_pressed))
+	b.pressed.connect(func(): game.board_click(r, jb, b.get_meta("shift", false)))
 	var bar := _bar(Sim.level_progress(r, jb), Palette.GREEN)
-	bar.custom_minimum_size = Vector2(28, 3)
-	box.add_child(bar)
-	var xp: int = r.jobs[jb].get("xp", 0)
-	if lv > Tuning.SKILL_LEVELS.size():
-		box.tooltip_text = "Level %d at %s, the top level." % [lv, Defs.JOB_NAMES[jb]]
-	else:
-		box.tooltip_text = "Level %d at %s: %d of %d points to level %d. Each level works %d%% faster." % [lv, Defs.JOB_NAMES[jb], xp, Tuning.SKILL_LEVELS[lv - 1], lv + 1, roundi(Tuning.SKILL_SPEED * 100)]
-	return box
+	bar.custom_minimum_size = Vector2(0, 3)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(bar)
+	b.resized.connect(func():
+		bar.position = Vector2(10, b.size.y - 7)
+		bar.size = Vector2(b.size.x - 20, 3))
+	var xp: int = st.get("xp", 0)
+	var lv_text := "level %d, the top level" % lv if lv > Tuning.SKILL_LEVELS.size() else "level %d: %d of %d points to level %d" % [lv, xp, Tuning.SKILL_LEVELS[lv - 1], lv + 1]
+	b.tooltip_text = "%s, %s: %s, %s." % [r.name, Defs.JOB_NAMES[jb], "priority %d" % st.pri if st.on else "off", lv_text]
+	return b
 
 
 ## A resident's axe or pickaxe, with Equip to choose another one (lying about or stockpiled).
@@ -1176,24 +1239,24 @@ func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
 	var spare := sim.tool_items(kind, 0)
 	if not spare.is_empty() or equip_kind == kind:
 		var b := _button("Close" if equip_kind == kind else "Equip", func(): equip_kind = "" if equip_kind == kind else kind, "Secondary")
-		b.add_theme_font_size_override("font_size", 13)
+		b.add_theme_font_size_override("font_size", Palette.CAPTION)
 		b.tooltip_text = "Choose which %s %s uses" % ["axe" if kind == "axe" else "pickaxe", r.name]
 		h.add_child(b)
 	c.add_child(h)
 	if t != null and r.kept[kind]:
 		var k := HBoxContainer.new()
-		var l := _label("Kept until it breaks.", false, Palette.CHALK_DIM, 13)
+		var l := _label("Kept until it breaks.", false, Palette.CHALK_DIM, Palette.CAPTION)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		k.add_child(l)
 		var auto := _button("Use the best", func(): game.release_kept_tool(r, kind), "Secondary")
-		auto.add_theme_font_size_override("font_size", 13)
+		auto.add_theme_font_size_override("font_size", Palette.CAPTION)
 		auto.tooltip_text = "Let %s swap it for a better one when there is one" % r.name
 		k.add_child(auto)
 		c.add_child(k)
 	if equip_kind != kind:
 		return
 	if spare.is_empty():
-		c.add_child(_label("No other %s is lying about or stockpiled." % ("axe" if kind == "axe" else "pickaxe"), false, Palette.CHALK_DIM, 13, true))
+		c.add_child(_label("No other %s is lying about or stockpiled." % ("axe" if kind == "axe" else "pickaxe"), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 		return
 	spare.sort_custom(func(a, b): return Defs.ITEMS[a.type].tier > Defs.ITEMS[b.type].tier or (a.type == b.type and a.dur > b.dur))
 	for st in spare:
@@ -1204,7 +1267,7 @@ func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
 			game.equip_tool(r, st))
 		b.theme_type_variation = "Secondary"
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.add_theme_font_size_override("font_size", 13)
+		b.add_theme_font_size_override("font_size", Palette.CAPTION)
 		c.add_child(b)
 
 
@@ -1239,7 +1302,7 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		var stage_line: String = "Stage %d of %d: %s" % [s.stage + 1, tpl.stages.size(), st.name.to_lower()] if tpl.stages.size() > 1 else "Blueprint"
 		c.add_child(_head(tpl.name, stage_line))
 		if not sim.footprint_clear(s):
-			c.add_child(_label("Clearing the ground first: %s." % Sim.clearing_text(sim.site_obstacles(s)), false, Palette.CHALK, 15, true))
+			c.add_child(_label("Clearing the ground first: %s." % Sim.clearing_text(sim.site_obstacles(s)), false, Palette.CHALK, Palette.BODY, true))
 		for k in st.cost:
 			var have: int = s.store.get(k, 0)
 			c.add_child(_row(Defs.ITEMS[k].label, "%d / %d" % [have, st.cost[k]], false))
@@ -1250,19 +1313,19 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 			c.add_child(_label("%s is building." % sim.resident(s.builder).name, false, Palette.CHALK_DIM))
 		if s.stage + 1 < tpl.stages.size():
 			var nxt: Dictionary = tpl.stages[s.stage + 1]
-			c.add_child(_label("%s next: %s." % [nxt.name, Defs.cost_text(nxt.cost)], false, Palette.CHALK_DIM, 15, true))
+			c.add_child(_label("%s next: %s." % [nxt.name, Defs.cost_text(nxt.cost)], false, Palette.CHALK_DIM, Palette.BODY, true))
 		c.add_child(_destructive("Cancel blueprint", "Click again to cancel the blueprint", "site:%d" % s.id, func(): game.cancel_site(s)))
 		return
 	if s.tpl == "house":
 		var owner := sim.resident(s.owner)
 		var line := "Home of %s." % owner.name if not owner.is_empty() else ("Empty. A traveler should arrive soon." if sim.arrival_at >= 0 else "Empty.")
-		c.add_child(_label("House", true, Palette.CHALK, 24))
-		c.add_child(_label(line, false, Palette.CHALK_DIM, 15, true))
+		c.add_child(_label("House", true, Palette.CHALK, Palette.TITLE))
+		c.add_child(_label(line, false, Palette.CHALK_DIM, Palette.BODY, true))
 		return
 	# A finished bench or fireplace: a short summary here. Its recipes and queue live only in the
 	# Craft panel on the right, which selecting it opens.
-	c.add_child(_label(tpl.name, true, Palette.CHALK, 24))
-	c.add_child(_label(_bench_status(sim, s), false, Palette.CHALK_DIM, 15, true))
+	c.add_child(_label(tpl.name, true, Palette.CHALK, Palette.TITLE))
+	c.add_child(_label(_bench_status(sim, s), false, Palette.CHALK_DIM, Palette.BODY, true))
 	for x in reasons:
 		c.add_child(_reason(x.why))
 	if not game.craft_menu_open:
@@ -1292,55 +1355,54 @@ func _bench_status(sim: Sim, s: Dictionary) -> String:
 	return "%s %s for %s" % ["Gathering" if ai >= 0 else "Waiting for", ", ".join(missing), head.name.to_lower()]
 
 
-## The full station panel (issue #76): what it's doing and its queue first, in a block of fixed
-## height so the recipe rows below never move while the queue changes (issue #57: buttons used to
-## jump mid-click). Then the recipes, each with its inputs and one Queue control with a count.
+## The station panel (issue #95), laid out like a crafting table's screen: a recipe book of result
+## icons, the chosen recipe's crafting grid (a furnace at the fireplace), an arrow to the result with
+## Queue, then the queue as a hotbar and what's on hand. The grid only shows the recipe: residents
+## fetch the ingredients, so nothing is dropped into it. What's doing and stuck comes first, and the
+## top part never changes size, so the Queue control stays put as the queue changes (#57, #76).
 func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 	var reasons := sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id)
 	if game.benches().size() < 2:  # with tabs, the pressed tab names the station
-		c.add_child(_label(Defs.TEMPLATES[s.tpl].name, true, Palette.CHALK, 22))
-	var top := VBoxContainer.new()
-	top.add_theme_constant_override("separation", 6)
-	top.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(_label(_bench_status(sim, s), false, Palette.CHALK, 15, true))
-	for x in reasons:
-		top.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, 14, true))
-	if s.queue.is_empty():
-		top.add_child(_label("Nothing queued. Queue a recipe below.", false, Palette.CHALK_DIM, 14, true))
-	else:
-		var flow := HFlowContainer.new()
-		flow.add_theme_constant_override("h_separation", 4)
-		flow.add_theme_constant_override("v_separation", 4)
-		for i in s.queue.size():
-			var mark := ""
-			if str(s.autoq[i]) == "toolsmith":
-				mark = " (toolsmith)"
-			elif s.autoq[i]:
-				mark = " (auto)"
-			var chip := _button("%s%s  ×" % [Defs.recipe(s.queue[i]).name, mark], func(): game.unqueue_craft(s, i), "Secondary")
-			chip.tooltip_text = "Click to remove. The queue is worked in order, skipping what can’t be made yet."
-			flow.add_child(chip)
-		top.add_child(flow)
-	var head := ScrollContainer.new()
-	head.custom_minimum_size = Vector2(0, 96)
-	head.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	head.add_child(top)
-	c.add_child(head)
+		c.add_child(_label(Defs.TEMPLATES[s.tpl].name, true, Palette.CHALK, Palette.HEADING))
+	var status := VBoxContainer.new()
+	status.add_theme_constant_override("separation", 2)
+	status.custom_minimum_size = Vector2(0, 44)
+	status.add_child(_label(_bench_status(sim, s), false, Palette.CHALK, Palette.BODY, true))
+	for x in reasons.slice(0, 1):
+		status.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
+	c.add_child(status)
+	var recipes: Array = Defs.recipes_at(s.tpl)
+	var rec: Dictionary = Defs.recipe(_craft_pick.get(s.tpl, recipes[0].id))
+	if rec.is_empty() or not recipes.has(rec):
+		rec = recipes[0]
+	var table := HBoxContainer.new()
+	table.add_theme_constant_override("separation", 14)
+	var book := GridContainer.new()
+	book.columns = 2
+	book.add_theme_constant_override("h_separation", 3)
+	book.add_theme_constant_override("v_separation", 3)
+	book.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	for r in recipes:
+		book.add_child(_book_slot(sim, s, r, is_same(r, rec)))
+	table.add_child(book)
+	table.add_child(_furnace(sim, s, rec) if s.tpl == "fireplace" else _crafting_grid(sim, s, rec))
+	table.add_child(_arrow())
+	var out_type: String = rec.out.keys()[0]
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 6)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.alignment = BoxContainer.ALIGNMENT_CENTER
+	right.add_child(_slot(out_type, rec.out[out_type], 46))
+	right.add_child(_label(rec.name, true, Palette.CHALK, Palette.BODY, true))
+	right.add_child(_queue_control(s, rec))
+	table.add_child(right)
+	c.add_child(table)
 	c.add_child(_rule())
-	var rt := _row("Recipes", "Yellow: not enough on hand for one", false)
-	(rt.get_child(0) as Label).add_theme_font_override("font", _bold)
-	(rt.get_child(1) as Label).add_theme_color_override("font_color", Palette.CHALK_DIM)
-	(rt.get_child(1) as Label).add_theme_font_size_override("font_size", 13)
-	c.add_child(rt)
-	var rows := VBoxContainer.new()
-	rows.add_theme_constant_override("separation", 6)
-	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for rec in Defs.recipes_at(s.tpl):
-		rows.add_child(_recipe_row(sim, s, rec))
-	_craft_scroll = ScrollContainer.new()
-	_craft_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_craft_scroll.add_child(rows)
-	c.add_child(_craft_scroll)
+	var bar := _hotbar(sim, s)
+	if s.tpl == "bench":
+		bar.tooltip_text = "Missing planks and sticks are queued automatically." if sim.auto_craft else "Once Ada’s house is finished, the bench queues the planks and sticks a recipe needs."
+	c.add_child(bar)
+	c.add_child(_on_hand(sim, s))
 	if s.tpl == "fireplace":
 		var on: bool = s.get("keep_meals", true)
 		var keep := _button("Keep %d meals in stock: %s" % [Tuning.MEAL_STOCK, "on" if on else "off"], func(): game.set_keep_meals(s, not on), "Secondary")
@@ -1348,37 +1410,136 @@ func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 		keep.set_pressed_no_signal(on)
 		keep.tooltip_text = "While stored bread and cooked mutton are fewer than %d, cooks make whichever the wheat, mutton and logs allow." % Tuning.MEAL_STOCK
 		c.add_child(keep)
-	else:
-		c.add_child(_label("Missing planks and sticks are queued automatically." if sim.auto_craft else "Once Ada’s house is finished, the bench queues the planks and sticks a recipe needs.", false, Palette.CHALK_DIM, 13, true))
 
 
-## A recipe: its name, each input as a swatch and count (yellow when there isn't enough on hand for
-## one), what it makes, and − Queue n + to queue n at once.
-func _recipe_row(sim: Sim, s: Dictionary, rec: Dictionary) -> Control:
+
+## How many of an item the station could use now: in it, on the way, or lying about.
+func _have(sim: Sim, s: Dictionary, k: String) -> int:
+	return s.store.get(k, 0) + s.incoming.get(k, 0) + sim.free_count(k)
+
+
+func _short(sim: Sim, s: Dictionary, rec: Dictionary) -> Array:
+	return rec.inp.keys().filter(func(k): return _have(sim, s, k) < rec.inp[k])
+
+
+## A square slot: an inset with an item's icon and, past 1, its count in the corner. An outline
+## colour marks it (yellow: short of it).
+func _slot(type: String, n := 1, size := 40, outline := Palette.CHALK_DIM, dim := false) -> PanelContainer:
+	var p := PanelContainer.new()
+	var sb := _box(Palette.SLATE_DEEP, 3, 0, outline)
+	p.add_theme_stylebox_override("panel", sb)
+	p.custom_minimum_size = Vector2(size, size)
+	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	if type != "":
+		var t := TextureRect.new()
+		t.texture = ItemIcons.icon(type)
+		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		t.custom_minimum_size = Vector2(size - 8, size - 8)
+		t.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		t.modulate = Color(1, 1, 1, 0.45) if dim else Color.WHITE
+		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		p.add_child(t)
+		p.tooltip_text = Defs.words(type, n)
+	if n > 1:
+		var count := _label("%d" % n, true, Palette.CHALK, Palette.CAPTION)
+		count.add_theme_color_override("font_outline_color", Palette.SLATE_DEEP)
+		count.add_theme_constant_override("outline_size", 4)
+		count.size_flags_horizontal = Control.SIZE_SHRINK_END
+		count.size_flags_vertical = Control.SIZE_SHRINK_END
+		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		p.add_child(count)
+	return p
+
+
+## A recipe in the book: its result's icon. Dimmed with a yellow corner when there isn't enough on
+## hand for one; pressed while it's the one shown.
+func _book_slot(sim: Sim, s: Dictionary, rec: Dictionary, chosen: bool) -> Button:
+	var out_type: String = rec.out.keys()[0]
+	var short := _short(sim, s, rec)
+	var b := _button("", func(): _craft_pick[s.tpl] = rec.id, "Secondary")
+	b.set_meta("label", rec.name)
+	b.toggle_mode = true
+	b.set_pressed_no_signal(chosen)
+	b.custom_minimum_size = Vector2(38, 38)
+	var t := TextureRect.new()
+	t.texture = ItemIcons.icon(out_type)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 6)
+	t.modulate = Color(1, 1, 1, 0.45) if not short.is_empty() else Color.WHITE
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(t)
+	if not short.is_empty():
+		var corner := ColorRect.new()
+		corner.color = Palette.YELLOW
+		corner.size = Vector2(8, 8)
+		corner.position = Vector2(28, 2)
+		corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(corner)
+	b.tooltip_text = rec.name + (" (not enough %s on hand for one)" % ", ".join(short.map(func(k): return Defs.ITEMS[k].many)) if not short.is_empty() else "")
+	return b
+
+
+## The chosen bench recipe laid out on a 3×3 grid. Slots the village is short of are outlined yellow.
+func _crafting_grid(sim: Sim, s: Dictionary, rec: Dictionary) -> Control:
+	var short := _short(sim, s, rec)
+	var g := GridContainer.new()
+	g.columns = 3
+	g.add_theme_constant_override("h_separation", 3)
+	g.add_theme_constant_override("v_separation", 3)
+	g.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	for row in rec.pattern:
+		for ch in row:
+			var item: String = Defs.PATTERN_KEYS.get(ch, "")
+			g.add_child(_slot(item, 1, 34, Palette.YELLOW if short.has(item) else Palette.CHALK_DIM))
+	return g
+
+
+## The fireplace's screen, like a furnace: what's cooked above, the fuel below, a flame between.
+func _furnace(sim: Sim, s: Dictionary, rec: Dictionary) -> Control:
+	var short := _short(sim, s, rec)
+	var fuel: String = rec.get("fuel", "")
+	var food: String = rec.inp.keys().filter(func(k): return k != fuel)[0]
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	v.add_child(_slot(food, rec.inp[food], 38, Palette.YELLOW if short.has(food) else Palette.CHALK_DIM))
+	var flame := Control.new()
+	flame.custom_minimum_size = Vector2(38, 22)
+	flame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flame.draw.connect(func():
+		var pts := PackedVector2Array([Vector2(19, 2), Vector2(28, 14), Vector2(24, 21), Vector2(14, 21), Vector2(10, 14)])
+		flame.draw_colored_polygon(pts, Palette.SLATE_DEEP)
+		flame.draw_colored_polygon(PackedVector2Array([Vector2(19, 6), Vector2(25, 14), Vector2(22, 19), Vector2(16, 19), Vector2(13, 14)]), Palette.YELLOW if fuel != "" else Palette.CHALK_DIM))
+	v.add_child(flame)
+	var fuel_slot := _slot(fuel, 1, 38, Palette.YELLOW if short.has(fuel) else Palette.CHALK_DIM)
+	fuel_slot.tooltip_text = "Fuel: " + Defs.words(fuel, 1) if fuel != "" else "No fuel needed"
+	v.add_child(fuel_slot)
+	return v
+
+
+## The chalk arrow from the grid to the result.
+func _arrow() -> Control:
+	var a := Control.new()
+	a.custom_minimum_size = Vector2(28, 28)
+	a.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	a.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	a.draw.connect(func():
+		a.draw_line(Vector2(2, 14), Vector2(18, 14), Palette.CHALK, 4)
+		a.draw_colored_polygon(PackedVector2Array([Vector2(16, 5), Vector2(27, 14), Vector2(16, 23)]), Palette.CHALK))
+	return a
+
+
+## − Queue n + (issue #76): the count lives in _craft_n, and every button reads it when pressed, so
+## quick clicks between panel rebuilds all count; they relabel the control at once.
+func _queue_control(s: Dictionary, rec: Dictionary) -> Control:
 	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 8)
-	h.set_meta("recipe", rec.name)
-	var left := VBoxContainer.new()
-	left.add_theme_constant_override("separation", 2)
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.add_child(_label(rec.name, true, Palette.CHALK, 15))
-	var parts := HFlowContainer.new()
-	parts.add_theme_constant_override("h_separation", 8)
-	for k in rec.inp:
-		var have: int = s.store.get(k, 0) + s.incoming.get(k, 0) + sim.free_count(k)
-		var short: bool = have < rec.inp[k]
-		var part := HBoxContainer.new()
-		part.add_theme_constant_override("separation", 4)
-		part.add_child(_swatch(Palette.ITEM_COLORS.get(k, Palette.CHALK)))
-		part.add_child(_label(Defs.words(k, rec.inp[k]), false, Palette.YELLOW if short else Palette.CHALK_DIM, 13))
-		if short:
-			part.tooltip_text = "%s on hand" % Defs.words(k, have)
-		parts.add_child(part)
-	parts.add_child(_label("→ " + Defs.cost_text(rec.out), false, Palette.CHALK_DIM, 13))
-	left.add_child(parts)
-	h.add_child(left)
-	# The count lives in _craft_n and every button reads it when pressed, so quick clicks between
-	# panel rebuilds all count; they also relabel the row at once.
+	h.add_theme_constant_override("separation", 4)
 	var n: int = _craft_n.get(rec.id, 1)
 	var q := _button("Queue %d" % n, func(): game.queue_craft(s, rec.id, _craft_n.get(rec.id, 1)), "Primary")
 	q.custom_minimum_size = Vector2(84, 0)
@@ -1396,24 +1557,95 @@ func _recipe_row(sim: Sim, s: Dictionary, rec: Dictionary) -> Control:
 	more.disabled = n >= CRAFT_MAX
 	less.tooltip_text = "Queue fewer"
 	more.tooltip_text = "Queue more"
-	for b in [less, q, more]:
-		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		h.add_child(b)
 	less.custom_minimum_size = Vector2(30, 0)
 	more.custom_minimum_size = Vector2(30, 0)
+	for b in [less, q, more]:
+		h.add_child(b)
 	return h
 
 
-## Keeps the Craft panel between the stuck list (or the speed buttons) and the toolbar: its recipe
-## list scrolls rather than run up over them (issue #76).
-func _fit_craft() -> void:
-	if not _craft_panel.visible or _craft_scroll == null or not is_instance_valid(_craft_scroll):
-		return
-	var above: Control = _stuck_panel if _stuck_panel.visible else _speed_panel
-	var room := _craft_panel.get_global_rect().end.y - above.get_global_rect().end.y - 8
-	var rest := _craft_panel.get_combined_minimum_size().y - _craft_scroll.custom_minimum_size.y
-	var want: float = _craft_scroll.get_child(0).get_combined_minimum_size().y if _craft_scroll.get_child_count() else 0.0
-	_craft_scroll.custom_minimum_size.y = clampf(room - rest, minf(want, 48.0), want)
+## The queue as a hotbar: a slot per entry (click to remove), the first filling as it's made. The
+## toolsmith's and auto-queued entries carry a small letter. Empty slots fill out the bar.
+func _hotbar(sim: Sim, s: Dictionary) -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	v.add_child(_label("Queue" if not s.queue.is_empty() else "Queue: nothing yet. Pick a recipe above and queue it.", true if not s.queue.is_empty() else false, Palette.CHALK if not s.queue.is_empty() else Palette.CHALK_DIM, Palette.BODY))
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 4)
+	var shown := mini(s.queue.size(), HOTBAR)
+	for i in shown:
+		var rec := Defs.recipe(s.queue[i])
+		var out_type: String = rec.out.keys()[0]
+		var b := _button("", func(): game.unqueue_craft(s, i), "Secondary")
+		var mark := ""
+		if str(s.autoq[i]) == "toolsmith":
+			mark = "T"
+		elif s.autoq[i]:
+			mark = "A"
+		b.set_meta("label", "queued %s" % rec.name)
+		b.custom_minimum_size = Vector2(36, 36)
+		var t := TextureRect.new()
+		t.texture = ItemIcons.icon(out_type)
+		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 5)
+		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(t)
+		if mark != "":
+			var m := _label(mark, true, Palette.CHALK_DIM, Palette.CAPTION)
+			m.position = Vector2(3, 0)
+			m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(m)
+		if i == 0 and s.crafter != 0 and s.crafting == rec.name:
+			var fill := _bar(_craft_progress(sim, s), Palette.GREEN)
+			fill.position = Vector2(4, 30)
+			fill.size = Vector2(28, 3)
+			fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(fill)
+		b.tooltip_text = "%s%s. Click to remove." % [rec.name, {"T": " (toolsmith)", "A": " (auto)"}.get(mark, "")]
+		bar.add_child(b)
+	for i in range(shown, HOTBAR):
+		bar.add_child(_slot("", 1, 36, Color(Palette.CHALK_DIM, 0.35)))
+	v.add_child(bar)
+	if s.queue.size() > HOTBAR:
+		v.add_child(_label("and %d more" % (s.queue.size() - HOTBAR), false, Palette.CHALK_DIM, Palette.CAPTION))
+	return v
+
+
+const HOTBAR := 8
+
+
+## How far along the craft at the head of the queue is, 0 to 1.
+func _craft_progress(sim: Sim, s: Dictionary) -> float:
+	var r := sim.resident(s.crafter)
+	return clampf(r.progress, 0.0, 1.0) if not r.is_empty() and r.progress >= 0 else 0.0
+
+
+## The village's stock of this station's ingredients, read-only, like an inventory row.
+func _on_hand(sim: Sim, s: Dictionary) -> Control:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 4)
+	var l := _label("On hand", true, Palette.CHALK, Palette.BODY)
+	l.custom_minimum_size = Vector2(70, 0)
+	h.add_child(l)
+	var items: Array = []
+	for rec in Defs.recipes_at(s.tpl):
+		for k in rec.inp:
+			if not items.has(k):
+				items.append(k)
+	for k in items:
+		var n := _have(sim, s, k)
+		var slot := _slot(k, maxi(n, 1), 36, Palette.CHALK_DIM, n == 0)
+		if n <= 1:  # show 1 and 0 too: a slot with no number would read as one
+			var count := _label("%d" % n, true, Palette.CHALK if n > 0 else Palette.CHALK_DIM, Palette.CAPTION)
+			count.add_theme_color_override("font_outline_color", Palette.SLATE_DEEP)
+			count.add_theme_constant_override("outline_size", 4)
+			count.size_flags_horizontal = Control.SIZE_SHRINK_END
+			count.size_flags_vertical = Control.SIZE_SHRINK_END
+			slot.add_child(count)
+		slot.tooltip_text = "%s on hand" % Defs.words(k, n)
+		h.add_child(slot)
+	return h
 
 
 # ---------------------------------------------------------------- cursor hint
