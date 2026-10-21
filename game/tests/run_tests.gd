@@ -40,6 +40,7 @@ func _init() -> void:
 		"test_newer_or_damaged_saves_are_refused",
 		"test_save_file_round_trip",
 		"test_erasing_stockpile_cells",
+		"test_standing_orders_wait_rather_than_block",
 	]
 	for t in tests:
 		_current = t
@@ -272,6 +273,10 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
 		else:
 			check(sim.residents[0].orders == [], "v%d: residents get an empty order list" % v)
+		if v < 14:
+			check(sim.residents[0].shirt == Sim.ADA_TUNIC and sim.residents[1].shirt == Sim.TRAVELERS[0][1], "v%d: residents get the new tunics" % v)
+		else:
+			check(sim.residents[0].shirt == Sim.ADA_TUNIC, "v%d: tunics survive" % v)
 		if v >= 13:
 			check(sim.meadow_sheep == 5 and sim.meadow_regrow > 0.0, "v%d: the meadow's sheep survive" % v)
 		else:
@@ -341,6 +346,41 @@ func test_dropped_tools_keep_their_wear() -> void:
 
 ## Erasing stockpile cells (issue #63): stacks left on them are re-hauled to the cells that are left,
 ## a haul on its way to an erased cell goes to another one, and erasing every cell stops hauling.
+## Issue #77: a standing order short of materials is listed as waiting, not stuck, and every entry
+## remembers when it first showed, so the list can put the longest-stuck first.
+func test_standing_orders_wait_rather_than_block() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	ada.pick = {"type": "wood_pick", "tier": 1, "dur": 5}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "cobble", 3)
+	run(sim, 1)
+	var spare: Array = sim.stuck.filter(func(s): return s.why.contains("for a spare"))
+	check(spare.size() == 1 and spare[0].waiting, "the toolsmith's spare waits: " + stuck_text(sim))
+	var house := sim.place_site("house", open_rect(sim, Vector2i(7, 7)).position + Vector2i(1, 1))
+	house.stage = 1  # walls, with no planks anywhere
+	sim.compute_stuck()
+	var walls: Array = sim.stuck.filter(func(s): return s.focus_kind == "site" and s.focus_id == house.id)
+	check(walls.size() == 1 and not walls[0].waiting, "a house short of planks is stuck: " + stuck_text(sim))
+	check(walls[0].since > spare[0].since, "the walls showed later than the spare (%d, %d)" % [walls[0].since, spare[0].since])
+	var since: int = walls[0].since
+	var why: String = walls[0].why
+	sim.drop_items(Sim.rcell(ada) + Vector2i(0, 2), "plank", 2)  # fewer missing, same problem
+	run(sim, 2)
+	walls = sim.stuck.filter(func(s): return s.focus_kind == "site" and s.focus_id == house.id)
+	check(walls.size() == 1 and walls[0].why != why and walls[0].since == since, "a changing count keeps the entry's age (%s, %s)" % [walls[0].why if walls.size() else "", walls[0].since if walls.size() else -1])
+	house.stage = 4
+	house.done = true
+	run(sim, 1)
+	house.done = false
+	house.stage = 1
+	sim.compute_stuck()
+	walls = sim.stuck.filter(func(s): return s.focus_kind == "site" and s.focus_id == house.id)
+	check(walls.size() == 1 and walls[0].since > since, "an entry that clears and comes back starts over")
+
+
 func test_erasing_stockpile_cells() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]

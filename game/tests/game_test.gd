@@ -585,6 +585,124 @@ func _test_meadow(game: Game) -> void:
 	check(game._pick(game._cam.unproject_position(Vector3(ada.pos.x + 0.5, 0.5, ada.pos.y + 0.5))) == null or game._pick(game._cam.unproject_position(Vector3(ada.pos.x + 0.5, 0.5, ada.pos.y + 0.5))).kind != "res", "she can't be clicked while away")
 
 
+func _frames(n := 3) -> void:
+	for i in n:
+		await process_frame
+
+
+func _stuck_buttons(hud: Hud) -> Array:
+	return _walk(hud._stuck).filter(func(n): return n is Button and not n.is_queued_for_deletion())
+
+
+## Issue #77: the stuck list's two tiers, folding, and opening again for a new blocker.
+func _test_stuck_list(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	var world: WorldView = game._world
+	game.set_speed(0)
+	var ada: Dictionary = sim.residents[0]
+	var bench := sim.place_site("bench", Sim.rcell(ada) + Vector2i(3, 0))
+	bench.stage = 1
+	bench.done = true
+	ada.pick = {"type": "wood_pick", "tier": 1, "dur": 5}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "cobble", 3)
+	for i in Tuning.TPS:
+		sim.step()
+	hud.refresh(sim)
+	await _frames()
+	var texts: Array = _stuck_buttons(hud).map(func(b): return b.text)
+	check(hud._stuck_panel.visible and texts.any(func(t): return "1 standing order waiting" in t), "a short standing order shows as one waiting line: %s" % [texts])
+	check(not texts.any(func(t): return "Stuck" in t or "for a spare" in t), "with nothing blocked there's no Stuck header, and the waiting tier starts closed")
+	check(world._flags.get_child_count() == 0, "a waiting order raises no flag on the map")
+	_stuck_buttons(hud).filter(func(b): return "waiting" in b.text)[0].pressed.emit()
+	hud.refresh(sim)
+	await _frames()
+	var spare: Array = _stuck_buttons(hud).filter(func(b): return "for a spare" in b.text)
+	check(spare.size() == 1 and spare[0].icon == null, "the waiting line opens to its entries, dim and without a flag")
+	var spot := Vector2i(-1, -1)
+	for d in range(4, 20):  # open ground for a house, so its walls are what it's missing
+		for c in [Sim.rcell(ada) + Vector2i(-d, -d), Sim.rcell(ada) + Vector2i(d, -d), Sim.rcell(ada) + Vector2i(-d, d)]:
+			if spot.x < 0 and sim.placement_check("house", c) == "":
+				var open := true
+				for x in range(-1, 6):
+					for y in range(-1, 6):
+						var p: Vector2i = c + Vector2i(x, y)
+						open = open and sim.walkable(p) and not sim.items.has(p)
+				if open:
+					spot = c
+	var house := sim.place_site("house", spot)
+	house.stage = 1
+	sim.compute_stuck()
+	hud.refresh(sim)
+	await _frames()
+	var heads: Array = _stuck_buttons(hud).filter(func(b): return b.text.begins_with("Stuck (1)"))
+	check(heads.size() == 1, "a blocker brings the Stuck header")
+	check(_stuck_buttons(hud).any(func(b): return "Walls need" in b.text and b.icon == MarkTextures.flag()), "a blocker's entry carries the yellow flag")
+	check(world._flags.get_child_count() == 1, "and one flag on the map")
+	heads[0].pressed.emit()
+	hud.refresh(sim)
+	await _frames()
+	check(not hud.stuck_open and _stuck_buttons(hud).size() == 1 and hud._stuck_panel.get_global_rect().size.x < 250, "the header folds the list into a small chip")
+	sim.compute_stuck()
+	hud.refresh(sim)
+	await _frames()
+	check(not hud.stuck_open, "it stays folded while nothing new gets stuck")
+	ada.note = {"text": "Can’t reach the stockpile", "until": sim.tick + 1000}
+	sim.compute_stuck()
+	hud.refresh(sim)
+	await _frames()
+	check(hud.stuck_open, "a new blocker opens it again")
+	var starving: Array = _stuck_buttons(hud).filter(func(b): return "Can’t reach" in b.text)
+	check(starving.size() == 1 and starving[0].icon == hud._swatch_tex(ada.shirt), "a resident's entry carries their tunic swatch")
+	# A site's entry made later goes below Ada's, though the sim lists sites before residents.
+	for i in 5:
+		sim.step()
+	ada.note = {"text": "Can’t reach the stockpile", "until": sim.tick + 1000}
+	house.stage = 2
+	sim.compute_stuck()
+	hud.refresh(sim)
+	await _frames()
+	var order: Array = _stuck_buttons(hud).map(func(b): return b.text)
+	var at_ada := order.find(order.filter(func(t): return "Can’t reach" in t)[0])
+	var at_house := order.find(order.filter(func(t): return t.begins_with("House")).back())
+	check(at_ada < at_house, "the longest-stuck entry comes first: %s" % [order])
+	ada.note = null
+
+
+## Issue #79: residents told apart by tunic, with a name tag, a heavier ring and swatches.
+func _test_resident_marks(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	var world: WorldView = game._world
+	var ada: Dictionary = sim.residents[0]
+	check(ada.shirt == Sim.ADA_TUNIC, "Ada wears her tunic")
+	var node: Node3D = world._people[ada.id]
+	var tag: Label3D = node.get_node("Body/Tag")
+	game.selection = {}
+	game._mouse = Vector2(-100, -100)
+	await _frames()
+	check(not tag.visible, "no name tag on an unselected resident away from the mouse")
+	game._mouse = game._cam.unproject_position(Vector3(ada.pos.x + 0.5, 0.6, ada.pos.y + 0.5))
+	await _frames()
+	check(tag.visible and tag.text == "Ada" and tag.no_depth_test, "hovering a resident shows their name over everything")
+	game._mouse = Vector2(-100, -100)
+	game.selection = {"kind": "res", "ids": [ada.id]}
+	hud.refresh(sim)
+	await _frames()
+	check(tag.visible, "a selected resident keeps their name tag")
+	var ring: Node3D = node.get_node("Ring")
+	check(ring.visible and ring.get_child_count() == 2, "the selection ring is a chalk band on a dark under-stroke")
+	check(_walk(hud._sel).any(func(n): return n is TextureRect and n.texture == hud._swatch_tex(ada.shirt)), "the resident panel shows Ada's swatch beside her name")
+	hud.add_toast({"text": "Ada is now level 2 at Mine.", "res_id": ada.id, "site_id": 0})
+	var toast: Control = hud._toasts.get_child(hud._toasts.get_child_count() - 1)
+	check(toast.get_child(0).get_child(0) is TextureRect, "a toast about a resident starts with their swatch")
+	var tunics := {}
+	for t in Sim.TRAVELERS:
+		tunics[t[1]] = true
+	tunics[Sim.ADA_TUNIC] = true
+	check(tunics.size() == Sim.TRAVELERS.size() + 1, "every resident's tunic is different")
+
+
 func _walk(n: Node) -> Array:
 	var out: Array = [n]
 	for ch in n.get_children():
@@ -659,6 +777,8 @@ func _initialize() -> void:
 	game.open_menu("main")
 	game.restart()
 	check(game.sim.tick == 0 and game.sim.residents.size() == 1 and not menu.visible, "Start over begins a fresh game")
+	await _test_stuck_list(game)
+	await _test_resident_marks(game)
 	for n in range(1, 6):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(game._slot_path(n)))
 	print("%s" % ("ALL PASSED" if _failures == 0 else "%d FAILED" % _failures))

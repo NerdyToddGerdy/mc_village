@@ -25,6 +25,7 @@ var _person_mats := {}
 var live_outlines: Array = []   ## {rect: Rect2i, h: float, color: Color, dashed: bool}
 var live_fills: Array = []      ## {rect: Rect2i, h: float, color: Color}
 var selected_ids: Array = []    ## Resident ids with a selection ring.
+var hover_id := 0               ## The resident under the mouse, who shows a name tag; 0 for none.
 ## What the player is looking at, as [world point, entity id to ignore]. Trees standing between the
 ## camera and any of these fade to a see-through shape (brief §11: fade obstructing objects).
 var focus_points: Array = []
@@ -131,7 +132,7 @@ func _process(delta: float) -> void:
 		_built_rev = sim.rev
 	var sig := ""
 	for s in sim.stuck:
-		sig += "%s%s%s;" % [s.cell, s.height, s.why]
+		sig += "%s%s%s%s;" % [s.cell, s.height, s.why, s.waiting]
 	if sig != _stuck_sig:
 		_stuck_sig = sig
 		_build_flags()
@@ -447,6 +448,8 @@ func _build_flags() -> void:
 	for ch in _flags.get_children():
 		ch.queue_free()
 	for s in sim.stuck:
+		if s.waiting:
+			continue  # a standing order short of materials is advice, not a blocker (issue #77)
 		var sp := _sprite(MarkTextures.flag(), Vector3(s.cell.x, s.height + 0.45, s.cell.y), 0.9, _flags)
 		sp.render_priority = 15
 
@@ -481,24 +484,28 @@ func drawn_pos(r: Dictionary) -> Vector2:
 	return prev.lerp(r.pos, tick_fraction)
 
 
-func _person_mat(color: Color) -> StandardMaterial3D:
-	var key := color.to_html()
+## A resident's body part. Parts hidden behind a tree or wall show as a faint silhouette in the
+## resident's tunic colour, so who is who reads even under a canopy (issue #79).
+func _person_mat(color: Color, tunic: Color) -> StandardMaterial3D:
+	var key := color.to_html() + tunic.to_html()
 	if not _person_mats.has(key):
 		var m := StandardMaterial3D.new()
 		m.albedo_color = color
 		m.roughness = 1.0
-		m.next_pass = _xray_material()
+		m.next_pass = _xray_material(tunic)
 		_person_mats[key] = m
 	return _person_mats[key]
 
 
-var _xray: ShaderMaterial
+var _xrays := {}
+var _tag_font: FontVariation
 
 
-## A faint chalk silhouette shown only where something (a tree, a wall) is in front of a resident,
+## A faint silhouette shown only where something (a tree, a wall) is in front of a resident,
 ## so they're never lost behind it. Visible parts of the resident draw normally.
-func _xray_material() -> ShaderMaterial:
-	if _xray == null:
+func _xray_material(tunic: Color) -> ShaderMaterial:
+	var key := tunic.to_html()
+	if not _xrays.has(key):
 		var sh := Shader.new()
 		sh.code = """
 shader_type spatial;
@@ -517,19 +524,20 @@ void fragment() {
 	ALPHA = tint.a;
 }
 """
-		_xray = ShaderMaterial.new()
-		_xray.shader = sh
-		_xray.set_shader_parameter("tint", Color(Palette.CHALK, 0.45))
-		_xray.render_priority = 1
-	return _xray
+		var x := ShaderMaterial.new()
+		x.shader = sh
+		x.set_shader_parameter("tint", Color(tunic.lerp(Palette.CHALK, 0.3), 0.7))
+		x.render_priority = 1
+		_xrays[key] = x
+	return _xrays[key]
 
 
-func _part(parent: Node3D, size: Vector3, y: float, color: Color) -> MeshInstance3D:
+func _part(parent: Node3D, size: Vector3, y: float, color: Color, tunic := Palette.CHALK) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	bm.size = size
 	mi.mesh = bm
-	mi.material_override = _person_mat(color)
+	mi.material_override = _person_mat(color, tunic)
 	mi.position = Vector3(0, y + size.y / 2, 0)
 	parent.add_child(mi)
 	return mi
@@ -541,24 +549,53 @@ func _make_person(r: Dictionary) -> Node3D:
 	var body := Node3D.new()
 	body.name = "Body"
 	n.add_child(body)
-	_part(body, Vector3(0.26, 0.32, 0.26), 0, Palette.LEGS)
-	_part(body, Vector3(0.34, 0.46, 0.34), 0.32, Color("#" + r.shirt))
-	_part(body, Vector3(0.24, 0.32, 0.24), 0.78, Palette.SKIN)
-	var carry := _part(body, Vector3(0.28, 0.24, 0.28), 1.14, Palette.PLANK)
+	var tunic := Color("#" + r.shirt)
+	_part(body, Vector3(0.26, 0.32, 0.26), 0, Palette.LEGS, tunic)
+	_part(body, Vector3(0.34, 0.46, 0.34), 0.32, tunic, tunic)
+	_part(body, Vector3(0.24, 0.32, 0.24), 0.78, Palette.SKIN, tunic)
+	var carry := _part(body, Vector3(0.28, 0.24, 0.28), 1.14, Palette.PLANK, tunic)
 	carry.name = "Carry"
-	var ring := MeshInstance3D.new()
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.3
-	torus.outer_radius = 0.4
-	ring.mesh = torus
-	ring.scale = Vector3(1, 0.15, 1)
-	ring.position.y = 0.03
-	var rm := StandardMaterial3D.new()
-	rm.albedo_color = Palette.CHALK
-	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	ring.material_override = rm
+	# The selection ring: a chalk band on a dark under-stroke, drawn over everything like the
+	# other marks so light grass and trees can't swallow it (issue #79).
+	var ring := Node3D.new()
 	ring.name = "Ring"
+	for band in [[0.27, 0.55, Palette.SLATE_DEEP, 12], [0.33, 0.48, Palette.CHALK, 13]]:
+		var mi := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = band[0]
+		torus.outer_radius = band[1]
+		torus.rings = 48
+		mi.mesh = torus
+		mi.scale = Vector3(1, 0.05, 1)
+		mi.position.y = 0.04
+		var rm := StandardMaterial3D.new()
+		rm.albedo_color = band[2]
+		rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		rm.no_depth_test = true
+		rm.render_priority = band[3]
+		mi.material_override = rm
+		ring.add_child(mi)
 	n.add_child(ring)
+	var tag := Label3D.new()
+	tag.name = "Tag"
+	tag.text = r.name
+	if _tag_font == null:  # the HUD's condensed bold, as for names on the slate boards
+		_tag_font = FontVariation.new()
+		_tag_font.base_font = load("res://assets/fonts/BricolageGrotesque.ttf")
+		_tag_font.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 720, TextServerManager.get_primary_interface().name_to_tag("wdth"): 80}
+	tag.font = _tag_font
+	tag.font_size = 40
+	tag.pixel_size = 0.01
+	tag.modulate = Palette.CHALK
+	tag.outline_modulate = Palette.SLATE_DEEP
+	tag.outline_size = 16
+	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	tag.no_depth_test = true
+	tag.render_priority = 17
+	tag.outline_render_priority = 16
+	tag.position.y = 1.55
+	tag.visible = false
+	body.add_child(tag)
 	var bar := Sprite3D.new()
 	bar.name = "Bar"
 	bar.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -584,10 +621,13 @@ func _update_people() -> void:
 		var carry: MeshInstance3D = n.get_node("Body/Carry")
 		carry.visible = r.carry != null
 		if r.carry != null:
-			carry.material_override = _person_mat(Palette.ITEM_COLORS[r.carry.type])
+			carry.material_override = _person_mat(Palette.ITEM_COLORS[r.carry.type], Color("#" + r.shirt))
 		(n.get_node("Ring") as Node3D).visible = selected_ids.has(r.id)
 		var bar: Sprite3D = n.get_node("Body/Bar")
 		bar.visible = r.progress >= 0.0
+		var tag: Label3D = n.get_node("Body/Tag")
+		tag.visible = selected_ids.has(r.id) or hover_id == r.id
+		tag.position.y = 1.95 if bar.visible else 1.55
 		if bar.visible:
 			bar.texture = _bar_texture(r.progress)
 
@@ -709,11 +749,16 @@ func ground_cell(origin: Vector3, dir: Vector3):
 ## 2. the nearest tree trunk, boulder, sheep, bush, building or farm plot;
 ## 3. a tree canopy, only when nothing else is under the cursor, so leaves in front don't
 ##    swallow clicks meant for what's behind them.
+## The resident under a ray from the camera, or null.
+func pick_resident(origin: Vector3, dir: Vector3):
+	return _nearest_hit(origin, dir, sim.residents.filter(func(r): return not r.away).map(func(r):
+		var p := Vector3(r.pos.x + 0.5, 0, r.pos.y + 0.5)
+		return [r, AABB(p - Vector3(0.25, 0, 0.25), Vector3(0.5, 1.15, 0.5))]))
+
+
 func pick(origin: Vector3, dir: Vector3, residents := true):
 	if residents:
-		var r = _nearest_hit(origin, dir, sim.residents.filter(func(r): return not r.away).map(func(r):
-			var p := Vector3(r.pos.x + 0.5, 0, r.pos.y + 0.5)
-			return [r, AABB(p - Vector3(0.25, 0, 0.25), Vector3(0.5, 1.15, 0.5))]))
+		var r = pick_resident(origin, dir)
 		if r != null:
 			return r
 	var solid: Array = []

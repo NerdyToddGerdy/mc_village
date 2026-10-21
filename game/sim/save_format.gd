@@ -12,12 +12,24 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 13
+const VERSION := 14
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14}
+
+
+## v14: brighter tunics that read on grass and under a canopy (issue #79). Residents in older saves
+## swap their old tunic for the new one in the same place on the list; any other colour stays.
+static func _v13_to_v14(d: Dictionary) -> Dictionary:
+	var old := ["3E6E7E", "8C4F6B", "6B7F3A", "8A6A2E", "4F6A8C", "7A4A6E", "3E7E6A", "8C5A3E", "5E5A8C"]
+	var now: Array = [Sim.ADA_TUNIC] + Sim.TRAVELERS.map(func(t): return t[1])
+	for r in d.state.residents:
+		var i := old.find(r.shirt)
+		if i >= 0:
+			r.shirt = now[i]
+	return d
 
 
 ## v13: the sheep meadow (issue #50). Older saves get a full meadow, and nobody is away.

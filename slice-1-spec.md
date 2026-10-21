@@ -275,7 +275,7 @@ World palette (kept darker than the chalk so marks sit on top): grass `#6F8F4E`,
     - A "Broke" note for any tool that broke.
     - Spare tools, with how many are in the stockpile and how many are lying loose.
 - Top right: speed controls.
-- Right edge: stuck list, shown only when something is stuck; clicking an entry focuses the camera.
+- Right edge: stuck list, shown only when something is stuck; clicking an entry focuses the camera. Slice 2 splits it into stuck and waiting tiers and lets it fold (slice-2-spec.md §9).
 - Buttons come in three styles, set as theme type variations (#75):
   - **Primary** (chalk outline): a panel's main action, such as Send to the meadow, Queue, Mine, Hunt, Save here or Load.
   - **Secondary** (dim text in a faint outline): inline actions such as Equip, Close, Next, Queue 5, Use the best, Back and Cancel, and the tools in the Equip list.
