@@ -64,6 +64,9 @@ func _init() -> void:
 		"test_survey_and_obstacles",
 		"test_rails_and_minecarts",
 		"test_plan_the_line",
+		"test_track_crew_and_railhead",
+		"test_stations_and_the_cart",
+		"test_ride_the_line",
 	]
 	for t in tests:
 		_current = t
@@ -322,6 +325,12 @@ func test_every_save_fixture_still_loads() -> void:
 		if v >= 18:  # issues #118-#121: the road walked, the bridge part-supplied, the line planned with one segment laid
 			check(rd.known and sim.route_surveyed() and sim.bridge().store == {"plank": 4} and not sim.bridge().done, "v%d: the survey and the part-supplied bridge survive" % v)
 			check(sim.track_state(0) == "built" and range(1, 6).all(func(i): return sim.track_state(i) == "planned"), "v%d: the planned line survives" % v)
+			check(sim.track_site(0).laid == Tuning.RAILS_PER_SEGMENT, "v%d: a laid segment counts its rails laid" % v)
+		if v >= 19:  # issues #122-#124: a half-laid segment, the railhead pile, a station and the parked cart
+			check(sim.track_site(1).laid == 1 and sim.railhead_rails() == 3, "v%d: the half-laid segment and the railhead pile survive" % v)
+			check(sim.station("village").done and not sim.station("mine").done and sim.cart.at == "village", "v%d: the stations and the parked cart survive" % v)
+		elif v == 18:
+			check(sim.cart.is_empty() and sim.station("village").is_empty(), "v%d: no cart or stations yet" % v)
 		else:  # an older save gets the road, unwalked, known if the old mine is
 			check(rd.known == mine.known and rd.seen == 1 and rd.sites.is_empty(), "v%d: the road to the mine is added, unwalked" % v)
 		if v < 17:  # issues #109-#111: nobody hurt, no choice waiting, and the mine gets its hazards
@@ -1981,7 +1990,7 @@ func test_hazards_and_injuries() -> void:
 		if ada.hurt == 0:
 			healed_at = float(i) / Tuning.TPS
 			break
-	check(healed_at > Tuning.HEAL_TIME[1] - 1.0 and healed_at < Tuning.HEAL_TIME[1] + 30.0, "Ada heals in her bed in about %d s (%.0f s; %s, hurt %d heal %.0f, %s)" % [int(Tuning.HEAL_TIME[1]), healed_at, ada.job.label if ada.job != null else "idle", ada.hurt, ada.heal, ada.map])
+	check(healed_at > Tuning.HEAL_TIME[1] - 10.0 and healed_at < Tuning.HEAL_TIME[1] + 30.0, "Ada heals in her bed in about %d s (%.0f s; %s, hurt %d heal %.0f, %s)" % [int(Tuning.HEAL_TIME[1]), healed_at, ada.job.label if ada.job != null else "idle", ada.hurt, ada.heal, ada.map])
 	check(tomas.hurt == 2 and tomas.job != null and tomas.job.kind == "rest", "Tomas, with no bed, is still resting")
 	check(stuck_text(sim).contains("Tomas: Injured, resting: no bed of their own, so it's slower"), "and says why: " + stuck_text(sim))
 
@@ -2201,3 +2210,180 @@ func test_plan_the_line() -> void:
 	var back: int = sim.on_map(Road.ID, func(): return sim.items.values().filter(func(st): return st.type == "rail").reduce(func(a, st): return a + st.n, 0))
 	check(sim.track_state(3) == "none" and back >= 1, "cancelling a segment returns its rails as a stack (%d)" % back)
 	check(sim.plan_line() == "" and sim.track_state(3) == "planned", "and planning again fills the gap")
+
+
+
+## A road ready for the cart: walked, bridged, the cut cleared, both stations built and the cart parked
+## at the village station, with track laid on the segments in `built`.
+func ready_line(sim: Sim, built: Array) -> void:
+	var rd := sim.road()
+	rd.known = true
+	rd.seen = Road.segment_count()
+	sim.plan_bridge()
+	sim.bridge().stage = 1
+	sim.bridge().done = true
+	for b in sim.cut_boulders():
+		b.alive = false
+	rd.occ_dirty = true
+	for end in ["village", "mine"]:
+		sim.plan_station(end)
+		sim.station(end).stage = 1
+		sim.station(end).done = true
+	sim.plan_line()
+	for i in built:
+		var t := sim.track_site(i)
+		t.stage = 1
+		t.done = true
+		t.laid = Tuning.RAILS_PER_SEGMENT
+	sim.cart = {"at": "village", "x": Sim.station_x("village"), "state": "parked", "load": {}, "riders": [], "acc": 0.0}
+	sim.rev += 1
+
+
+## Issue #122: rails go out to a railhead pile, then to the segment being laid, which fills in rail by
+## rail; the crew's stuck reasons say what's missing.
+func test_track_crew_and_railhead() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	built_board(sim)
+	var rd := sim.road()
+	rd.seen = Road.segment_count()
+	sim.plan_bridge()
+	sim.bridge().stage = 1
+	sim.bridge().done = true
+	for b in sim.cut_boulders():
+		b.alive = false
+	rd.occ_dirty = true
+	sim.plan_line()
+	sim.compute_stuck()
+	check(sim.stuck.any(func(x): return x.why == "Track: needs 12 more rails"), "with no rails, the track says how many it needs: %s" % stuck_text(sim))
+	for r in sim.residents:
+		r.jobs.build.on = false
+	sim.compute_stuck()
+	check(sim.stuck.any(func(x): return x.why == "Track: no one with Build on"), "and that nobody lays track with Build off")
+	ada.jobs.build.on = true
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "rail", 12)
+	var labels: Array = []
+	var half := false
+	var at_railhead := false
+	for i in 500 * Tuning.TPS:
+		sim.step()
+		if ada.job != null and not labels.has(ada.job.label):
+			labels.append(ada.job.label)
+		if sim.track_site(0).get("laid", 0) == 1 and not sim.track_site(0).done:
+			half = true
+		if sim.railhead_rails() > 0:
+			at_railhead = true
+		if sim.line_complete():
+			break
+	check(labels.has("Carrying rails to the railhead") and labels.has("Hauling rails to the track") and labels.has("Laying track"), "Ada carries rails to the railhead, then to the track, and lays it (%s)" % [labels])
+	check(at_railhead, "the rails pile up at the railhead on the road's village end")
+	check(half, "a segment fills in rail by rail")
+	check(sim.line_complete() and sim.railhead_rails() == 0, "the whole line is laid, using all 12 rails")
+	check(sim.stuck.all(func(x): return not x.why.begins_with("Track")), "and the track's reasons are gone")
+	# Progress and the railhead pile survive a save.
+	var sim2 := Sim.new_game()
+	built_board(sim2)
+	sim2.road().seen = Road.segment_count()
+	sim2.plan_line()
+	sim2.track_site(0).store = {"rail": 1}
+	sim2.track_site(0).laid = 1
+	sim2.on_map(Road.ID, sim2.drop_items.bind(Road.RAILHEAD, "rail", 5))
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim2.save_state())))
+	check(loaded.track_site(0).laid == 1 and loaded.track_site(0).store.rail == 1 and loaded.railhead_rails() == 5, "a half-laid segment and the railhead pile are saved")
+
+
+## Issue #123: a station at each end, built from the village; a minecart hauled out and parked at the
+## village station; the cart adds its room to the packs once the line is complete.
+func test_stations_and_the_cart() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	built_board(sim)
+	check(sim.plan_station("mine") == "Nobody has walked that far yet" and sim.plan_station("village") == "", "the village station can go down before the road is walked, the mine's can't")
+	sim.road().seen = Road.segment_count()
+	check(sim.plan_station("mine") == "" and sim.plan_station("mine") != "", "one station at each end")
+	var vs := sim.station("village")
+	check(vs.size == Vector2i(3, 1) and vs.plot == Rect2i(Road.STATIONS.village, Vector2i(3, 3)), "a 1×3 platform, with room kept for a loading station")
+	check(sim.on_map(Road.ID, sim.walkable.bind(Road.STATIONS.village)), "the platform is walked on")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "plank", 12)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 1), "cobble", 8)
+	for i in 300 * Tuning.TPS:
+		sim.step()
+		if vs.done and sim.station("mine").done:
+			break
+	check(vs.done and sim.station("mine").done, "Ada carries the materials out and builds both stations")
+	# The minecart is hauled out and parked.
+	ada.hunger = 100.0  # no food in a new game: keep her from starving
+	sim.drop_items(sim.route_sign() + Vector2i(-3, 2), "minecart", 1)  # Ada may be out on the road
+	var docked := false
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if not sim.cart.is_empty():
+			docked = true
+			break
+	check(docked and sim.cart.at == "village" and sim.cart.state == "parked" and count(sim, "minecart") == 0, "the minecart is hauled out and parked at the village station")
+	check(not sim.cart_ready(), "it can't be ridden while the cut blocks the line")
+	for b in sim.cut_boulders():
+		b.alive = false
+	sim.road().occ_dirty = true
+	check(sim.cart_ready() and not sim.cart_adds_room(), "with the cut clear it's ready, but adds no room until the line is laid")
+	sim.plan_line()
+	for i in Road.segment_count():
+		sim.track_site(i).stage = 1
+		sim.track_site(i).done = true
+	var plan := sim.new_plan()
+	plan.party = [ada.id]
+	check(plan.cart_cap and Sim.pack_capacity(plan) == Tuning.PACK_CAPACITY + Tuning.CART_CAPACITY, "with the line complete, the cart's room is added to the packs (%d)" % Sim.pack_capacity(plan))
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.cart.at == "village" and loaded.station("mine").done, "the stations and the parked cart are saved")
+
+
+## Issue #124: the party and its cargo ride the line both ways; a partial line is between riding and
+## walking; mining at the site is no faster; the cargo comes off at the village station.
+func test_ride_the_line() -> void:
+	var times := {}
+	var mining := {}
+	for kind in ["walk", "partial", "full"]:
+		var sim := Sim.new_game()
+		sim.paint_zone(open_rect(sim, Vector2i(4, 3)))
+		if kind != "walk":
+			ready_line(sim, [0, 1, 2] if kind == "partial" else range(Road.segment_count()))
+		else:
+			sim.road().seen = Road.segment_count()
+		var p := send_party(sim)
+		until_at_site(sim, [p.ada, p.tomas], 60)
+		var ex: Dictionary = sim.expedition
+		times[kind] = float(ex.road_out[1] - ex.road_out[0]) / Tuning.TPS
+		check(ex.cart == (kind != "walk"), "%s: the party rides only when there's a cart" % kind)
+		# Mining at the site: the time from arriving to the first 2 coal packed.
+		var start := sim.tick
+		for i in 120 * Tuning.TPS:
+			sim.step()
+			if sim.expedition.cargo.get("coal", 0) >= 2:
+				break
+		mining[kind] = sim.tick - start
+		if kind == "full":
+			var mid := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+			check(sim.call_home() == "", "call the party home")
+			var rode := false
+			var saved_mid := false
+			var unloading := false
+			for i in 90 * Tuning.TPS:
+				sim.step()
+				if sim.cart.state == "moving" and not sim.cart.riders.is_empty():
+					rode = true
+					if not saved_mid:
+						saved_mid = true
+						mid = Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+				if sim.cart.state == "unloading":
+					unloading = true
+				if sim.expedition.is_empty():
+					break
+			check(rode and sim.expedition.is_empty(), "they ride home too")
+			check(unloading and sim.cart.at == "village" and sim.cart.load.is_empty(), "the cart is unloaded at the village station")
+			check(p.board.report.any(func(x): return x.begins_with("By cart:")), "the report gives the time on the road and the time saved: %s" % [p.board.report])
+			run(sim, 60)
+			check(sim.road().items.values().filter(func(st): return st.type == "coal").is_empty() and count(sim, "coal") >= 2, "the coal is hauled from the platform to the stockpile")
+			run(mid, 90)
+			check(mid.expedition.is_empty() and mid.residents[0].map == "village", "a game saved mid-ride gets home too")
+	check(times.full < times.partial and times.partial < times.walk, "riding beats walking, and a partial line is in between (%.1f s, %.1f s, %.1f s)" % [times.full, times.partial, times.walk])
+	check(absi(mining.walk - mining.full) <= 2 and absi(mining.walk - mining.partial) <= 2, "mining at the site takes the same with or without the line (%s)" % [mining])

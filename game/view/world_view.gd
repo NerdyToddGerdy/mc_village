@@ -13,6 +13,8 @@ var _built_rev := -1
 var _built_map := ""
 var _stuck_sig := ""
 var _solid: MultiMeshInstance3D
+var _cart: MultiMeshInstance3D  ## The minecart, redrawn as it moves (issue #124).
+var _cart_sig := ""
 var _ghost: MultiMeshInstance3D
 var _over_dark: MultiMeshInstance3D
 var _over_col: MultiMeshInstance3D
@@ -81,6 +83,7 @@ func set_sim(s: Sim) -> void:
 
 func _ready() -> void:
 	_solid = _mm(_material(false, false, 0))
+	_cart = _mm(_material(false, false, 0))
 	_trees = _mm(_material(false, false, 0))
 	var faded := _material(true, false, 0)
 	faded.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
@@ -150,6 +153,7 @@ func _draw_map() -> void:
 	_build_occluders()
 	_update_people()
 	_update_sheep()
+	_build_cart()
 	_build_live()
 
 
@@ -319,21 +323,70 @@ func _add_bridge(b: Batch, s: Dictionary) -> void:
 		b.box(Vector3(x0, 0.14, z), Vector3(x1, 0.62, z + 0.12), Palette.LOG)
 
 
-## A segment of track (issue #121): sleepers across the line and a rail each side, or its blueprint.
-func _add_track(b: Batch, s: Dictionary) -> void:
+## A segment of track (issues #121, #122): sleepers across the line and a rail each side where it's
+## laid, rail by rail from the village end, and its blueprint on the rest.
+func _add_track(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	var o: Vector2i = s.origin
-	if not s.done:
-		for k in s.size.x:
-			var gy := 0.14 if Road.bridge_rect().has_point(Vector2i(o.x + k, o.y)) and sim.bridge().get("done", false) else 0.0
-			b.box(Vector3(o.x + k + 0.3, gy, o.y + 0.12), Vector3(o.x + k + 0.7, gy + 0.06, o.y + 0.88), Color(Palette.BLUE, 0.4))
-		return
+	var laid: int = s.size.x if s.done else s.get("laid", 0) * s.size.x / Tuning.RAILS_PER_SEGMENT
 	var rail: Color = Palette.ITEM_COLORS.rail
 	for k in s.size.x:
 		var x: int = o.x + k
-		var y := 0.14 if Road.bridge_rect().has_point(Vector2i(x, o.y)) else 0.0  # up on the bridge's deck
-		b.box(Vector3(x + 0.3, y, o.y + 0.08), Vector3(x + 0.7, y + 0.07, o.y + 0.92), SLEEPER)
+		var on_bridge: bool = Road.bridge_rect().has_point(Vector2i(x, o.y)) and sim.bridge().get("done", false)
+		var y := 0.14 if on_bridge else 0.0  # up on the bridge's deck
+		if k >= laid:
+			ghost.box(Vector3(x + 0.3, y, o.y + 0.12), Vector3(x + 0.7, y + 0.06, o.y + 0.88), Color(Palette.BLUE, 0.4))
+			continue
+		solid.box(Vector3(x + 0.3, y, o.y + 0.08), Vector3(x + 0.7, y + 0.07, o.y + 0.92), SLEEPER)
 		for z in [o.y + 0.22, o.y + 0.7]:
-			b.box(Vector3(x, y + 0.07, z), Vector3(x + 1, y + 0.15, z + 0.08), rail)
+			solid.box(Vector3(x, y + 0.07, z), Vector3(x + 1, y + 0.15, z + 0.08), rail)
+
+
+## A station (issue #123): a plank platform on a stone kerb beside the line, with a buffer stop at its
+## far end, facing off the map.
+func _add_station(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var x0 := float(o.x)
+	var x1 := float(o.x + s.size.x)
+	if not s.done:
+		b.box(Vector3(x0, 0, o.y + 0.05), Vector3(x1, 0.25, o.y + 0.95), Color(Palette.BLUE, 0.4))
+		return
+	b.box(Vector3(x0, 0, o.y + 0.05), Vector3(x1, 0.22, o.y + 0.95), Palette.COBBLE)
+	b.box(Vector3(x0, 0.22, o.y + 0.05), Vector3(x1, 0.3, o.y + 0.95), Palette.PLANK)
+	var stop := x0 if s.get("end", "village") == "village" else x1 - 0.25  # the buffer stop, at the line's end
+	b.box(Vector3(stop, 0, Road.LINE_ROW + 0.15), Vector3(stop + 0.25, 0.5, Road.LINE_ROW + 0.85), Palette.LOG)
+	b.box(Vector3(stop - 0.02, 0.38, Road.LINE_ROW + 0.2), Vector3(stop + 0.27, 0.48, Road.LINE_ROW + 0.8), Palette.RED)
+
+
+static var CART_DARK := Color("#3E4448")
+
+
+## The minecart on the line (issues #123, #124), with any cargo heaped in it. Riders are drawn as
+## people at the cart's place.
+func _build_cart() -> void:
+	var c: Dictionary = sim.cart
+	var sig := "" if c.is_empty() or map_id != Road.ID else "%.2f%s" % [c.x, c.load]
+	if sig == _cart_sig:
+		return
+	_cart_sig = sig
+	var b := Batch.new()
+	if sig != "":
+		var x: float = c.x + 0.5
+		var z := Road.LINE_ROW + 0.5
+		var y: float = 0.14 if Road.bridge_rect().has_point(Vector2i(roundi(c.x), Road.LINE_ROW)) and sim.bridge().get("done", false) else 0.0
+		var col: Color = Palette.ITEM_COLORS.minecart
+		b.box(Vector3(x - 0.42, y + 0.12, z - 0.3), Vector3(x + 0.42, y + 0.5, z + 0.3), col)
+		b.box(Vector3(x - 0.36, y + 0.42, z - 0.24), Vector3(x + 0.36, y + 0.51, z + 0.24), CART_DARK)
+		for k in [-0.26, 0.26]:
+			b.box(Vector3(x + k - 0.08, y, z - 0.34), Vector3(x + k + 0.08, y + 0.16, z + 0.34), Palette.SLATE_DEEP)
+		var n := 0
+		for k in c.load:
+			var it_col: Color = Palette.ITEM_COLORS[k]
+			for i in mini(c.load[k], 6 - n):
+				var px := x - 0.25 + float(n % 3) * 0.25
+				var pz := z - 0.1 + float(n / 3) * 0.2
+				b.box(Vector3(px - 0.1, y + 0.5, pz - 0.08), Vector3(px + 0.1, y + 0.64, pz + 0.08), it_col)
+				n += 1
+	b.apply(_cart)
 
 
 func _add_ore_flecks(b: Batch, c: Vector2i, col: Color) -> void:
@@ -460,7 +513,10 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 		_add_bridge(solid if s.done else ghost, s)
 		return
 	if s.tpl == "track":
-		_add_track(solid if s.done else ghost, s)
+		_add_track(solid, ghost, s)
+		return
+	if s.tpl == "station":
+		_add_station(solid if s.done else ghost, s)
 		return
 	var stage: int = s.stage
 	var gcol := Color(Palette.BLUE, 0.4)

@@ -1121,7 +1121,7 @@ func _refresh_selection(sim: Sim) -> void:
 				sig += "%s%s%s" % [st.type, st.dur, st.cell]
 	elif target != null and target.kind == "route":
 		sig += "%s%s%s%s" % [sim.residents.map(func(r): return [r.away, r.get("trip", ""), r.map, sim.carrying_packs(r), r.job.label if r.job != null else ""]), sim.route_report(), game.line_preview, game.view_map]
-		sig += "%s" % [sim.cut_boulders().map(func(b): return b.des)]
+		sig += "%s%s%s" % [sim.cut_boulders().map(func(b): return b.des), sim.cart, [sim.station("village"), sim.station("mine")]]
 	elif target != null and target.kind == "meadow":
 		sig += "%d %d" % [sim.meadow_sheep, int(sim.meadow_regrow)]
 	elif target != null and target.kind == "crop":
@@ -1311,7 +1311,7 @@ func _refresh_board(sim: Sim) -> void:
 		return
 	var sig := "%s|%s" % [game.selection, _keys_sig]
 	for r in sim.residents:
-		sig += "%d%s%s%s;" % [r.id, r.name, r.jobs, r.away]
+		sig += "%d%s%s%s%s;" % [r.id, r.name, r.jobs, r.away, r.map]
 	_rebuild(_board, sig, func(c: Container) -> void:
 		var head := HBoxContainer.new()
 		var title := _label("Village jobs", true, Palette.CHALK, Palette.HEADING)
@@ -1338,13 +1338,13 @@ func _refresh_board(sim: Sim) -> void:
 			col.mouse_filter = Control.MOUSE_FILTER_STOP
 			grid.add_child(col)
 		for r in sim.residents:
-			var who := _button(r.name + (" (away)" if r.away else ""), func(): game.focus_on("res", r.id))
+			var who := _button(r.name + (" (away)" if r.away else (" (on the road)" if r.map == Road.ID else "")), func(): game.focus_on("res", r.id))
 			who.icon = _swatch_tex(r.shirt)
 			who.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			who.custom_minimum_size = Vector2(120, 0)
 			who.toggle_mode = true
 			who.set_pressed_no_signal(game.selection.get("ids", []).has(r.id))
-			who.tooltip_text = "Select %s" % r.name
+			who.tooltip_text = "Select %s" % r.name if r.map != Road.ID else "Select %s. %s" % [r.name, _status(sim, r)]
 			grid.add_child(who)
 			for jb in Defs.JOBS:
 				grid.add_child(_board_cell(r, jb))
@@ -1429,8 +1429,10 @@ func _status(sim: Sim, r: Dictionary) -> String:
 		return "At the meadow, back in %d s" % ceili(sim.back_in(r))
 	if r.away:
 		return _road_text(sim, r)
-	if sim.on_road(r) and r.job != null:  # walking the road map (issue #118)
+	if sim.on_road(r) and r.job != null and not sim.cart.get("riders", []).has(r.id):  # walking the road map (issue #118)
 		return "%s, about %d s" % [r.job.label, ceili(sim.road_eta(r))]
+	if r.map == Road.ID and not sim.on_road(r) and r.job != null:  # out working on the road (issue #122)
+		return "On the road: %s" % r.job.label.to_lower()
 	return r.job.label if r.job != null else "Idle"
 
 
@@ -1460,6 +1462,26 @@ func _tool_text(t: Dictionary) -> String:
 func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	var tpl: Dictionary = Defs.TEMPLATES[s.tpl]
 	var reasons := sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id)
+	if s.tpl == "track":  # a segment of the line (issues #121, #122)
+		c.add_child(_head("Track", Road.SEGMENTS[s.seg].name))
+		if s.done:
+			c.add_child(_label("Laid. Carts run at full speed here.", false, Palette.CHALK_DIM, Palette.BODY, true))
+			return
+		var laid: int = s.get("laid", 0)
+		c.add_child(_row("Rails laid", "%d / %d" % [laid, Tuning.RAILS_PER_SEGMENT], false))
+		c.add_child(_bar(float(laid) / Tuning.RAILS_PER_SEGMENT))
+		c.add_child(_row("Rails here", str(s.store.get("rail", 0))))
+		for x in reasons:
+			c.add_child(_reason(x.why))
+		if sim.next_track() != s.seg:
+			c.add_child(_label("Waiting its turn: track is laid from the village end.", false, Palette.CHALK_DIM, Palette.BODY, true))
+		if s.builder:
+			c.add_child(_label("%s is laying it." % sim.resident(s.builder).name, false, Palette.CHALK_DIM))
+		c.add_child(_destructive("Cancel this segment", "Click again to cancel it", "site:%d" % s.id, func(): game.cancel_site(s)))
+		return
+	if s.tpl == "station" and s.done:  # issue #123
+		_fill_station(c, sim, s)
+		return
 	if not s.done:
 		var st := sim.current_stage(s)
 		var stage_line: String = "Stage %d of %d: %s" % [s.stage + 1, tpl.stages.size(), st.name.to_lower()] if tpl.stages.size() > 1 else "Blueprint"
@@ -1996,6 +2018,8 @@ func _add_packs(c: Container, plan: Dictionary) -> void:
 	var sup := Sim.plan_supplies(plan)
 	var room := maxi(0, cap - sup)
 	c.add_child(_row("Packs", "%d supplies, room for %d of %d" % [sup, room, cap]))
+	if plan.get("cart_cap", false):
+		c.add_child(_label("Includes the cart's %d, with the line laid." % Tuning.CART_CAPACITY, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	if cap == 0:
 		return
 	var bar := HBoxContainer.new()
@@ -2136,7 +2160,9 @@ func _fill_route(c: Container, sim: Sim) -> void:
 		if sg.obstacle != "":
 			var done: bool = sg.obstacle in ["Bridged", "Cleared"]
 			c.add_child(_label(sg.obstacle, false, Palette.CHALK_DIM if done else Palette.YELLOW, Palette.CAPTION, true))
-	if rep.surveyed:
+	if rep.surveyed and not sim.cart.is_empty():
+		c.add_child(_label("On foot about %d s, by cart about %d s as the line stands." % [roundi(rep.walk), roundi(rep.cart_now)], false, Palette.CHALK, Palette.BODY, true))
+	elif rep.surveyed:
 		c.add_child(_label("By cart about %d s, once the line is laid." % roundi(rep.cart), false, Palette.CHALK, Palette.BODY, true))
 	else:
 		c.add_child(_label("The first party to walk it will survey the rest of the road.", false, Palette.CHALK_DIM, Palette.BODY, true))
@@ -2160,7 +2186,34 @@ func _fill_route(c: Container, sim: Sim) -> void:
 		var b := _button("Clear the cut", func(): game.clear_cut(), "Secondary")
 		b.tooltip_text = "Marks the boulders on the line to be mined. Miners walk out from the village."
 		c.add_child(b)
+	for end in ["village", "mine"]:  # the stations (issue #123)
+		if sim.station(end).is_empty() and seen > Road.segment_at(Road.STATIONS[end].x) and not sim.plan_line_blocker().begins_with("Walk"):
+			var b := _button("Build the %s station" % end, func(): game.plan_station(end), "Secondary")
+			b.tooltip_text = "A platform beside the line where the cart stops, loads and unloads: %s." % Defs.cost_text(Defs.TEMPLATES.station.stages[0].cost)
+			c.add_child(b)
 	_add_line(c, sim)
+
+
+## A station (issue #123): the line's state, where the cart is, and what's on the platform.
+func _fill_station(c: Container, sim: Sim, s: Dictionary) -> void:
+	c.add_child(_head("Station", "%s end" % ("Village" if s.end == "village" else "Mine")))
+	var laid := range(Road.segment_count()).filter(func(i): return sim.track_state(i) == "built").size()
+	c.add_child(_row("The line", "%d of %d segments laid" % [laid, Road.segment_count()]))
+	var where := "No minecart yet. Craft one at the bench, and it's hauled out here."
+	var cart: Dictionary = sim.cart
+	if not cart.is_empty():
+		match cart.state:
+			"moving": where = "The cart is on the line, %s" % ("to the mine" if sim.expedition.get("leg", "out") == "out" else "coming home")
+			"loading": where = "The cart is being loaded at the mine end"
+			"unloading": where = "The cart is being unloaded at the village end"
+			_: where = "The cart is parked at the %s end" % cart.at
+	c.add_child(_label(where + ".", false, Palette.CHALK, Palette.BODY, true))
+	var on: Array = sim.road().items.values().filter(func(st): return Rect2i(s.origin, s.size).grow(1).has_point(st.cell))
+	if on.is_empty():
+		c.add_child(_label("Nothing on the platform.", false, Palette.CHALK_DIM, Palette.BODY, true))
+	for st in on:
+		c.add_child(_row(Defs.ITEMS[st.type].label, str(st.n)))
+	c.add_child(_label("Carts load and unload here at %d items a second. Haulers carry what's set down to the stockpile." % int(Tuning.LOAD_RATE), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 
 
 ## The line (issue #121): how far it's laid, or the plan with its cost and the time it saves.

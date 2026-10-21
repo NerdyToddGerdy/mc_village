@@ -75,6 +75,10 @@ var expedition := {}
 ## Choices waiting for the player, oldest first (issues #110, #111): {kind, text, options, res_id, map}.
 ## The game pauses while there's one.
 var pending: Array = []
+## The line's one minecart once it's parked at a station (issue #123), or {}:
+##   {at: "village" or "mine", x (along the line), state: "parked", "loading", "moving" or "unloading",
+##    load: {item: n} (cargo in it), riders: [resident ids], acc (items toward the next one loaded)}
+var cart := {}
 var stuck: Array = []        ## {who, why, map, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
 var _stuck_since := {}       ## A stuck entry's key -> the tick it first showed, to order the list (issue #77). Not saved.
 var events: Array = []       ## {type: "toast", text, res_id, site_id, map}
@@ -629,6 +633,8 @@ func stage_needs(s: Dictionary, jobs := []) -> Dictionary:
 		var ai := bench_active(s, jobs)
 		if ai >= 0:
 			cost = Defs.recipe(s.queue[ai]).inp
+	elif s.tpl == "track":  # rails still to lay (issue #122)
+		cost = {"rail": Tuning.RAILS_PER_SEGMENT - s.get("laid", 0)}
 	else:
 		cost = current_stage(s).cost
 	var out := {}
@@ -688,6 +694,9 @@ func _on_site_done(s: Dictionary) -> void:
 		return
 	if s.tpl == "bridge":
 		_toast("The bridge over the stream is built: no more wading, and track can cross.", 0, s.id)
+		return
+	if s.tpl == "station":
+		_toast("The station at the %s end of the line is built." % s.end, 0, s.id)
 		return
 	if s.tpl == "track":
 		if line_complete():
@@ -1073,8 +1082,9 @@ func _release(r: Dictionary, j: Job) -> void:
 			"stack": hd.stack.res -= hd.n
 			"incoming": hd.site.incoming[hd.type] -= hd.n
 			"zone":
-				if m.zone_res.get(hd.cell, 0) == r.id:
-					m.zone_res.erase(hd.cell)
+				var zm: SimMap = maps[hd.get("map", map_id)]
+				if zm.zone_res.get(hd.cell, 0) == r.id:
+					zm.zone_res.erase(hd.cell)
 			"claim":
 				if hd.ent.claim == r.id:
 					hd.ent.claim = 0
@@ -1234,6 +1244,8 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			return true
 		"haul_drop":
 			m.zone_res.erase(st.cell)
+			if r.carry == null:
+				return "gone"
 			j.holds.erase(st.hold)
 			drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
 			r.carry = null
@@ -1250,7 +1262,43 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			r.progress = -1.0
 			rev += 1
 			return true
+		"railhead_drop":  # rails set down at the railhead pile (issue #122)
+			if r.carry == null:
+				return "gone"
+			drop_items(_railhead_spot(), r.carry.type, r.carry.n)
+			r.carry = null
+			return true
+		"dock":  # the minecart parked at the village station (issue #123)
+			if r.carry == null or not cart.is_empty():
+				return "gone"
+			r.carry = null
+			cart = {"at": "village", "x": station_x("village"), "state": "parked", "load": {}, "riders": [], "acc": 0.0}
+			rev += 1
+			_toast("The minecart is parked at the village station.", r.id)
+			return true
+		"board":  # into the cart (issue #124)
+			if cart.is_empty():
+				return true
+			if not cart.riders.has(r.id):
+				cart.riders.append(r.id)
+			j.label = st.riding
+			return true
+		"ride":
+			if cart.is_empty() or not cart.riders.has(r.id):
+				return true
+			r.pos = _seat(r)
+			r.path = []
+			if cart.state == "parked" and cart.at == st.to:
+				cart.riders.erase(r.id)
+				r.pos = Vector2(_off_cart_cell())
+				return true
+			return false
+		"unload_wait":  # the party unloading its packs at the signpost (issue #123)
+			return not expedition.get("unloading", false)
 		"road_end":  # the far end of the road: into the site, or home (issue #118)
+			var leg: String = "road_" + expedition.get("leg", "out")
+			if expedition.has(leg):
+				expedition[leg][1] = tick
 			if r.trip == "village":
 				_arrive_home(r)
 			else:
@@ -1379,7 +1427,7 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 				return Tuning.CHOP_TIME[tier]
 			return Tuning.BREAK_TIME[tier] if tier > 0 else -1.0
 		"build":
-			return Tuning.STAGE_TIME
+			return Tuning.LAY_TIME if st.site.tpl == "track" else Tuning.STAGE_TIME
 		"hunt":
 			return Tuning.HUNT_TIME
 		"plant":
@@ -1467,7 +1515,10 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			expedition.survey = false
 			_toast("%s surveyed the vein: about %d iron ore. Iron can be an expedition's target now." % [r.name, ore_left(map_id, "iron") * Tuning.ORE_YIELD.iron], r.id)
 		"build":
-			_complete_stage(st.site)
+			if st.site.tpl == "track":
+				_lay_rail(st.site)
+			else:
+				_complete_stage(st.site)
 		"craft":
 			var b: Dictionary = st.site
 			var rec := recipe_for(r, st.recipe)
@@ -1524,6 +1575,12 @@ func _claim(r: Dictionary) -> void:
 		var pj = _pack_job(r, c)
 		r.job = pj if pj != null else _stage_job()
 		return
+	if expedition.get("unloading", false) and expedition.party.has(r.id) and r.map == "village":
+		var u := Job.new("unload", "Unloading the packs", "the signpost")
+		u.step(_goto([route_sign()], true))
+		u.step({"op": "unload_wait"})
+		r.job = u
+		return
 	if on_the_way(r):  # out of village labor: off to the signpost, or home from the site (issue #108)
 		r.job = _road_job()
 		return
@@ -1577,7 +1634,7 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 		"build":
 			if not jobs.has("build"):
 				return null
-			var ready := m.sites.filter(func(s): return not s.done and s.builder == 0 and site_open(s) and has_all(s.store, current_stage(s).cost) and not _cooling(s) and footprint_clear(s))
+			var ready := m.sites.filter(func(s): return site_ready(s))
 			if not ready.is_empty():
 				return _tagged(_build_job(r, _nearest_site(ready, c)), "build")
 			var dj = _try_deliver(r, c, m.sites.filter(func(s): return not s.done and site_open(s) and footprint_clear(s)))
@@ -1618,10 +1675,11 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			if pj != null:
 				return _tagged(pj, "haul")
 			if m.zone.is_empty():
-				return null
+				return _road_claim(r, "haul", jobs)
 			var hs = _haul_source(c, carry_cap(r))
 			if hs != null:
 				return _tagged(_haul_job(r, hs.stack, hs.dest, hs.n), "haul")
+			return _road_claim(r, "haul", jobs)
 	return null
 
 
@@ -1716,7 +1774,7 @@ func step() -> void:
 	var kinds := {}
 	var working := 0
 	for r in residents:
-		if r.job != null and not (r.job.kind in ["move", "arrive", "stage", "road", "rest", "hurt", "commute"]):
+		if r.job != null and not (r.job.kind in ["move", "arrive", "stage", "road", "rest", "hurt", "commute", "unload"]):
 			kinds[r.job.kind] = true
 			working += 1
 	if working >= 2 and kinds.size() >= 2:
@@ -1758,6 +1816,10 @@ func _step_map() -> void:
 			continue
 		_step_resident(r)
 	_step_site()
+	if map_id == "village":
+		_step_unload()
+	elif map_id == Road.ID:
+		_step_cart()
 	if auto_craft and tick % 10 == 0:
 		expand_queues()
 	if tick % 10 == 0:
@@ -1995,7 +2057,11 @@ func _stuck_on_map() -> void:
 			var bl := track_blocker(s.seg)
 			if bl != "":
 				_add_stuck(tpl.name, "Track: %s first" % bl.to_lower(), mid, 0.4, "site", s.id)
-				continue
+			elif not residents.any(func(o): return o.jobs.build.on):
+				_add_stuck(tpl.name, "Track: no one with Build on", mid, 0.4, "site", s.id)
+			elif line_short() > 0:
+				_add_stuck(tpl.name, "Track: needs %d more rails" % line_short(), mid, 0.4, "site", s.id)
+			continue
 		if not s.done and not footprint_clear(s):
 			var ob := site_obstacles(s)
 			var nb: int = ob.boulders.size()
@@ -2137,8 +2203,8 @@ func site_height(s: Dictionary) -> float:
 		return 0.7 if s.done else 0.2
 	if s.tpl == "board":
 		return 1.5 if s.done else 0.2
-	if s.tpl in ["bridge", "track"]:
-		return 0.2
+	if s.tpl in ["bridge", "track", "station"]:
+		return 0.2 if s.tpl != "station" or not s.done else 0.9
 	return [0.2, 0.5, 2.5, 4.0, 4.0][mini(s.stage, 4)]
 
 
@@ -2571,12 +2637,12 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 			party.append(r.id)
 			break
 	return {"dest": dest, "party": party, "target": {"item": "coal", "n": 8}, "meals": 3, "picks": 1,
-		"policy": {"target": true, "full": true, "low": true}, "spend_return": false}
+		"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": cart_adds_room()}
 
 
 ## The party's packs: each member carries PACK_CAPACITY items, shared by supplies and cargo.
 static func pack_capacity(plan: Dictionary) -> int:
-	return plan.party.size() * Tuning.PACK_CAPACITY
+	return plan.party.size() * Tuning.PACK_CAPACITY + (Tuning.CART_CAPACITY if plan.get("cart_cap", false) else 0)
 
 
 ## Room the supplies take: a meal or a spare pickaxe is one item each.
@@ -2745,6 +2811,8 @@ func depart() -> String:
 	b.tools = []
 	expedition.state = "out"
 	expedition.leg = "out"
+	expedition.cart = cart_ready()  # the party rides the line if there's a cart at the village station (issue #124)
+	expedition.cart_cap = cart_adds_room()
 	expedition.broken = 0
 	expedition.provisions = expedition.packed.duplicate()  # the meals in the packs (issue #109)
 	expedition.cargo = {}
@@ -2922,24 +2990,66 @@ func _arrive_home(r: Dictionary) -> void:
 	var spot = on_map("village", nearest_walkable.bind(route_sign()))
 	move_to_map(r, "village", spot if spot != null else route_sign())
 	if expedition.party.all(func(id): return resident(id).map == "village" and not resident(id).away):
-		on_map("village", _unload)
+		_start_unloading()
 
 
-func _unload() -> void:
+## The party unpacks at the signpost by hand (issue #123): cargo first, unless it came off the cart at
+## the station, then meals, then spare tools, at HAND_RATE an item a second each.
+func _start_unloading() -> void:
 	var ex := expedition
+	var left := {}
+	if not ex.get("cargo_unloaded", false):
+		for k in ex.get("cargo", {}):
+			left[k] = left.get(k, 0) + ex.cargo[k]
+	for k in ex.get("provisions", {}):
+		left[k] = left.get(k, 0) + ex.provisions[k]
+	ex.unpack = left
+	ex.unpack_tools = ex.get("tools", []).duplicate(true)
+	ex.unloading = true
+	ex.unload_acc = 0.0
+	if left.is_empty() and ex.unpack_tools.is_empty():
+		on_map("village", _finish_return)
+
+
+## One tick of unpacking at the signpost.
+func _step_unload() -> void:
+	var ex := expedition
+	if not ex.get("unloading", false):
+		return
+	var hands: int = ex.party.filter(func(id): return resident(id).map == "village").size()
+	ex.unload_acc += Tuning.HAND_RATE * maxi(1, hands) * Tuning.DT
 	var spot = nearest_walkable(route_sign())
 	spot = spot if spot != null else route_sign()
+	while ex.unload_acc >= 1.0:
+		ex.unload_acc -= 1.0
+		if not ex.unpack.is_empty():
+			var k: String = ex.unpack.keys()[0]
+			_drop_cargo(spot, k, 1)
+			ex.unpack[k] -= 1
+			if ex.unpack[k] <= 0:
+				ex.unpack.erase(k)
+		elif not ex.unpack_tools.is_empty():
+			var t: Dictionary = ex.unpack_tools.pop_front()
+			_drop_cargo(spot, t.type, 1, t.dur)
+		if ex.unpack.is_empty() and ex.unpack_tools.is_empty():
+			_finish_return()
+			return
+
+
+## Sets items down as stacks that are hauled before anything else (issue #112).
+func _drop_cargo(spot: Vector2i, type: String, n: int, dur := -1) -> void:
 	var before := {}
 	for k in m.items:
 		before[k] = true
-	for src in [ex.get("cargo", {}), ex.get("provisions", {})]:
-		for k in src:
-			drop_items(spot, k, src[k])
-	for t in ex.get("tools", []):
-		drop_items(spot, t.type, 1, t.dur)
-	for k in m.items:  # the new stacks are hauled before anything else
+	drop_items(spot, type, n, dur)
+	for k in m.items:
 		if not before.has(k):
 			m.items[k].cargo = true
+
+
+## Everything's unpacked: the report, and the board is free again.
+func _finish_return() -> void:
+	var ex := expedition
 	var report := expedition_report(ex)
 	var b := site(ex.board)
 	if not b.is_empty():
@@ -2972,6 +3082,9 @@ func expedition_report(ex: Dictionary) -> Array:
 	if broken > 0:
 		cost += ", %d %s broken" % [broken, "pickaxe" if broken == 1 else "pickaxes"]
 	lines.append(cost)
+	if ex.get("cart", false) and ex.has("road_out") and ex.has("road_home"):  # issue #124
+		var took: float = float(ex.road_out[1] - ex.road_out[0] + ex.road_home[1] - ex.road_home[0]) / Tuning.TPS
+		lines.append("By cart: %d s on the road there and back, about %d s saved" % [roundi(took), maxi(0, roundi(2.0 * route_walk_time() - took))])
 	var hurt: PackedStringArray = []
 	for who in ex.get("hurt", {}):
 		hurt.append("%s %s" % [who, "injured" if ex.hurt[who] == 1 else "seriously injured"])
@@ -2996,6 +3109,10 @@ func on_road(r: Dictionary) -> bool:
 func _onto_road(r: Dictionary, to: String) -> void:
 	move_to_map(r, Road.ID, Road.VILLAGE_END if to != "village" else Road.MINE_END)
 	r.trip = to
+	if expedition.get("state", "") == "out":  # when the leg started, for the report (issue #124)
+		var leg: String = "road_" + expedition.get("leg", "out")
+		if not expedition.has(leg):
+			expedition[leg] = [tick, tick]
 	road().known = true
 	_reveal(rcell(r))
 
@@ -3004,6 +3121,15 @@ func _onto_road(r: Dictionary, to: String) -> void:
 func _road_walk_job(r: Dictionary) -> Job:
 	var home: bool = r.trip == "village"
 	var j := Job.new("road", "On the road home" if home else "On the road to the %s" % maps[expedition.dest].name.to_lower(), "the end of the road")
+	var from := "mine" if home else "village"
+	var to := "village" if home else "mine"
+	if expedition.get("cart", false) and not cart.is_empty() and (cart.riders.has(r.id) or (cart.state == "parked" and cart.at == from)):
+		j.label = ("Riding home" if home else "Riding to the %s" % maps[expedition.dest].name.to_lower()) + " by cart"
+		if not cart.riders.has(r.id):  # walk to the cart and get in
+			j.step(_goto([Vector2i(roundi(cart.x), Road.LINE_ROW)], true))
+			j.step({"op": "board", "riding": j.label})
+			j.label = "Getting into the cart"
+		j.step({"op": "ride", "to": to})
 	j.step(_goto([Road.VILLAGE_END if home else Road.MINE_END], false))
 	j.step({"op": "road_end"})
 	return j
@@ -3106,7 +3232,7 @@ func route_report() -> Dictionary:
 			continue
 		segs.append({"name": sg.name, "known": true, "len": Road.seg_len(i), "terrain": sg.terrain,
 			"obstacle": obstacle_text(i), "track": track_state(i)})
-	return {"segments": segs, "surveyed": route_surveyed(), "walk": route_walk_time(), "cart": route_cart_time()}
+	return {"segments": segs, "surveyed": route_surveyed(), "walk": route_walk_time(), "cart": route_cart_time(), "cart_now": route_cart_now()}
 
 
 ## Places the plank bridge over the stream (issue #119). Returns why it can't, or "".
@@ -3267,7 +3393,7 @@ func _road_claim(r: Dictionary, kind: String, jobs: Array):
 	match kind:
 		"build":
 			if jobs.has("build"):
-				var ready := m.sites.filter(func(st): return not st.done and st.builder == 0 and site_open(st) and has_all(st.store, current_stage(st).cost) and not _cooling(st) and footprint_clear(st))
+				var ready := m.sites.filter(func(st): return site_ready(st))
 				if not ready.is_empty():
 					j = _via_road(_tagged(_build_job(r, _nearest_site(ready, Road.VILLAGE_END)), "build"), 0)
 				else:
@@ -3276,6 +3402,13 @@ func _road_claim(r: Dictionary, kind: String, jobs: Array):
 							continue
 						var need := stage_needs(st)
 						for t in need:
+							var here_src: Array = m.items.values().filter(func(x): return x.type == t and avail(x) > 0)
+							if not here_src.is_empty():  # already out on the road: rails at the railhead
+								var at_road: Dictionary = nearest(here_src, Road.VILLAGE_END)
+								j = _via_road(_tagged(_deliver_job(st, t, mini(mini(need[t], carry_cap(r)), avail(at_road)), at_road), "build"), 0)
+								break
+							if st.tpl == "track":  # rails go out to the railhead first (issue #122)
+								continue
 							var src: Array = maps.village.items.values().filter(func(x): return x.type == t and avail(x) > 0)
 							if src.is_empty():
 								continue
@@ -3284,6 +3417,13 @@ func _road_claim(r: Dictionary, kind: String, jobs: Array):
 							break
 						if j != null:
 							break
+					if j == null:
+						j = _railhead_job(r, c)
+		"haul":
+			if jobs.has("haul"):
+				j = _dock_job(r, c)
+				if j == null:
+					j = _platform_haul(r, true)
 		"gather":
 			if jobs.has("mine") and r.get("hurt", 0) == 0:
 				var targets: Array = m.trees.filter(func(t): return t.alive and t.des and t.claim == 0 and not _cooling(t))
@@ -3311,7 +3451,293 @@ func _claim_on_road(r: Dictionary) -> Job:
 			var j = _claim_kind(r, c, kind, jobs)
 			if j != null:
 				return j
+		if jobs.has("haul"):
+			var hj = _platform_haul(r, false)
+			if hj != null:
+				return hj
 	return _back_job()
+
+
+# Laying the line (issue #122): rails go out to the railhead, then to the segment being laid, rail by rail.
+
+## Whether a site can be built now: a track segment with a rail to lay, or a stage with all it needs.
+func site_ready(st: Dictionary) -> bool:
+	if st.done or st.builder != 0 or not site_open(st) or _cooling(st) or not footprint_clear(st):
+		return false
+	if st.tpl == "track":
+		return st.store.get("rail", 0) > 0
+	return has_all(st.store, current_stage(st).cost)
+
+
+## One rail laid: the segment fills in rail by rail, and is usable once complete.
+func _lay_rail(st: Dictionary) -> void:
+	if st.store.get("rail", 0) <= 0:
+		return
+	st.store.rail -= 1
+	st.laid = st.get("laid", 0) + 1
+	rev += 1
+	if st.laid >= Tuning.RAILS_PER_SEGMENT:
+		st.stage = 1
+		st.done = true
+		st.store = {}
+		st.incoming = {}
+		_on_site_done(st)
+
+
+func _railhead_spot() -> Vector2i:
+	return Road.RAILHEAD
+
+
+## Rails at the railhead (and anywhere else on the road) that nobody has claimed yet.
+func railhead_rails() -> int:
+	var n := 0
+	for st in road().items.values():
+		if st.type == "rail":
+			n += avail(st)
+	return n
+
+
+## Rails on their way out to the railhead.
+func _rails_inflight() -> int:
+	var n := 0
+	for r in residents:
+		if r.job != null and r.job.kind == "railhead":
+			n += r.job.steps[-1].n
+	return n
+
+
+## Rails the planned line still needs laid, less those delivered or on their way to a segment.
+func _line_rails_owed() -> int:
+	var n := 0
+	for i in Road.segment_count():
+		var t := track_site(i)
+		if not t.is_empty() and not t.done:
+			n += Tuning.RAILS_PER_SEGMENT - t.get("laid", 0) - t.store.get("rail", 0) - t.incoming.get("rail", 0)
+	return maxi(0, n)
+
+
+## Rails still to carry out to the railhead.
+func railhead_need() -> int:
+	return maxi(0, _line_rails_owed() - railhead_rails() - _rails_inflight())
+
+
+## Rails the line still needs that don't exist anywhere yet.
+func line_short() -> int:
+	var have: int = railhead_rails() + _rails_inflight() + on_map("village", free_count.bind("rail"))
+	return maxi(0, _line_rails_owed() - have)
+
+
+## A load of rails from the village out to the railhead pile, or null.
+func _railhead_job(r: Dictionary, c: Vector2i):
+	var need := railhead_need()
+	if need <= 0:
+		return null
+	var src: Array = maps.village.items.values().filter(func(x): return x.type == "rail" and avail(x) > 0)
+	if src.is_empty():
+		return null
+	var from: Dictionary = nearest(src, c)
+	var n := mini(mini(need, carry_cap(r)), avail(from))
+	var j := Job.new("railhead", "Carrying rails to the railhead", "the railhead")
+	j.work = "build"
+	from.res += n
+	var sh := j.hold({"t": "stack", "stack": from, "n": n})
+	j.step(_goto([from.cell], false))
+	j.step({"op": "pickup", "stack": from, "n": n, "hold": sh})
+	j.step(_goto([route_sign()], true))
+	j.step({"op": "cross", "to": Road.ID})
+	j.step(_goto([_railhead_spot()], false))
+	j.step({"op": "railhead_drop", "n": n})
+	return j
+
+
+# Stations and the cart (issue #123).
+
+## The station at "village" or "mine" end, planned or built, or {}.
+func station(end: String) -> Dictionary:
+	for st in road().sites:
+		if st.tpl == "station" and st.end == end:
+			return st
+	return {}
+
+
+## Where the cart stops at a station, along the line.
+static func station_x(end: String) -> float:
+	return Road.STATIONS[end].x + 1.0
+
+
+## Places a station at one end of the road (issue #123). Returns why it can't, or "".
+func plan_station(end: String) -> String:
+	if not station(end).is_empty():
+		return "That station is already planned"
+	if road().seen <= Road.segment_at(Road.STATIONS[end].x):
+		return "Nobody has walked that far yet"
+	var prev := use_map(Road.ID)
+	var st := place_site("station", Road.STATIONS[end])
+	use_map(prev)
+	st.end = end
+	st.plot = Rect2i(Road.STATIONS[end], Vector2i(3, 3))  # room to grow into a loading station
+	return ""
+
+
+## The minecart on its way to the village station, by someone hauling it.
+func _docking() -> bool:
+	return residents.any(func(r): return r.job != null and r.job.steps.any(func(x): return x.op == "dock"))
+
+
+## A finished minecart from the village, hauled out to the village station and parked there.
+func _dock_job(r: Dictionary, c: Vector2i):
+	var vs := station("village")
+	if vs.is_empty() or not vs.done or not cart.is_empty() or _docking():
+		return null
+	var carts: Array = maps.village.items.values().filter(func(x): return x.type == "minecart" and avail(x) > 0)
+	if carts.is_empty():
+		return null
+	var from: Dictionary = nearest(carts, c)
+	var j := Job.new("haul", "Hauling the minecart to the station", "the station")
+	j.work = "haul"
+	from.res += 1
+	var sh := j.hold({"t": "stack", "stack": from, "n": 1})
+	j.step(_goto([from.cell], false))
+	j.step({"op": "pickup", "stack": from, "n": 1, "hold": sh})
+	j.step(_goto([route_sign()], true))
+	j.step({"op": "cross", "to": Road.ID})
+	j.step(_goto(site_cells(vs), true))
+	j.step({"op": "dock"})
+	return j
+
+
+## Cargo set down on a station's platform, hauled back along the road to the village stockpile.
+func _platform_haul(r: Dictionary, from_village: bool):
+	var src: Array = road().items.values().filter(func(x): return x.get("cargo", false) and avail(x) > 0)
+	if src.is_empty():
+		return null
+	var st: Dictionary = nearest(src, Road.VILLAGE_END)
+	var vm: SimMap = maps.village
+	var dest = on_map("village", zone_dest.bind(st.type))
+	if dest == null:
+		return null
+	var there = vm.items.get(dest)
+	var n := mini(mini(avail(st), carry_cap(r)), Defs.stack_cap(st.type) - (there.n if there != null else 0))
+	if n <= 0:
+		return null
+	vm.zone_res[dest] = r.id
+	var j := Job.new("haul", "Hauling %s from the station" % Defs.ITEMS[st.type].many, "the stockpile")
+	j.work = "haul"
+	st.res += n
+	var sh := j.hold({"t": "stack", "stack": st, "n": n})
+	var zh := j.hold({"t": "zone", "cell": dest, "map": "village"})
+	if from_village:
+		j.step(_goto([route_sign()], true))
+		j.step({"op": "cross", "to": Road.ID})
+	j.step(_goto([st.cell], false))
+	j.step({"op": "pickup", "stack": st, "n": n, "hold": sh})
+	j.step(_goto([Road.VILLAGE_END], false))
+	j.step({"op": "cross", "to": "village"})
+	j.step(_goto([dest], false))
+	j.step({"op": "haul_drop", "cell": dest, "type": st.type, "n": n, "hold": zh})
+	return j
+
+
+## Whether a party leaving now would ride: the cart waits at the village station, both stations are
+## built, and nothing stands on the line in the cut.
+func cart_ready() -> bool:
+	if cart.is_empty() or cart.state != "parked" or cart.at != "village":
+		return false
+	var vs := station("village")
+	var ms := station("mine")
+	return not vs.is_empty() and vs.done and not ms.is_empty() and ms.done and cut_boulders().is_empty()
+
+
+## The cart adds its room to the packs while the whole line is laid (issue #123).
+func cart_adds_room() -> bool:
+	return maps.has(Road.ID) and line_complete() and cart_ready()
+
+
+## Where a rider sits in the cart: side by side along it.
+func _seat(r: Dictionary) -> Vector2:
+	var i: int = cart.riders.find(r.id)
+	return Vector2(cart.x + (i - (cart.riders.size() - 1) / 2.0) * 0.3, Road.LINE_ROW)
+
+
+## Where a rider steps off the cart.
+func _off_cart_cell() -> Vector2i:
+	return Vector2i(roundi(cart.x), Road.LINE_ROW)
+
+
+## One tick of the cart (issues #123, #124): it waits for the whole party, is loaded at the mine end,
+## rides the line (pushed at walking pace where there's no track yet), and is unloaded onto the
+## village platform.
+func _step_cart() -> void:
+	if cart.is_empty():
+		return
+	var ex := expedition
+	match cart.state:
+		"parked":
+			if ex.get("state", "") != "out" or not ex.get("cart", false):
+				return
+			var home: bool = ex.get("leg", "out") == "home"
+			if cart.at != ("mine" if home else "village") or not ex.party.all(func(id): return cart.riders.has(id)):
+				return
+			if home and not ex.get("cart_loaded", false):
+				cart.state = "loading"
+				cart.acc = 0.0
+				ex.to_load = ex.get("cargo", {}).duplicate()
+				return
+			cart.state = "moving"
+		"loading":
+			cart.acc += Tuning.LOAD_RATE * Tuning.DT
+			while cart.acc >= 1.0 and not ex.get("to_load", {}).is_empty():
+				cart.acc -= 1.0
+				var k: String = ex.to_load.keys()[0]
+				cart.load[k] = cart.load.get(k, 0) + 1
+				ex.to_load[k] -= 1
+				if ex.to_load[k] <= 0:
+					ex.to_load.erase(k)
+				rev += 1
+			if ex.get("to_load", {}).is_empty():
+				ex.cart_loaded = true
+				cart.state = "moving"
+		"moving":
+			var dir := 1.0 if ex.get("leg", "out") == "out" else -1.0
+			var dest := "mine" if dir > 0.0 else "village"
+			var c := Vector2i(roundi(cart.x), Road.LINE_ROW)
+			var speed := Tuning.CART_SPEED if track_state(Road.segment_at(c.x)) == "built" else Tuning.WALK * ground_speed(c)
+			cart.x += dir * speed * Tuning.DT
+			var tx := station_x(dest)
+			if (dir > 0.0 and cart.x >= tx) or (dir < 0.0 and cart.x <= tx):
+				cart.x = tx
+				cart.at = dest
+				cart.state = "unloading" if dest == "village" and not cart.load.is_empty() else "parked"
+				cart.acc = 0.0
+				rev += 1
+			for id in cart.riders:
+				resident(id).pos = _seat(resident(id))
+		"unloading":
+			cart.acc += Tuning.LOAD_RATE * Tuning.DT
+			var spot: Vector2i = Road.STATIONS[cart.at] + Vector2i(1, 0)
+			while cart.acc >= 1.0 and not cart.load.is_empty():
+				cart.acc -= 1.0
+				var k: String = cart.load.keys()[0]
+				_drop_cargo(spot, k, 1)
+				cart.load[k] -= 1
+				if cart.load[k] <= 0:
+					cart.load.erase(k)
+			if cart.load.is_empty():
+				cart.state = "parked"
+				ex.cargo_unloaded = true
+				rev += 1
+
+
+## The journey from end to end by cart as the line stands now: a walk to the cart, the ride (pushed at
+## walking pace over segments without track), and a walk from it (issue #124).
+func route_cart_now() -> float:
+	var t := float(Road.STATIONS.village.x + 1 - Road.VILLAGE_END.x) / Tuning.WALK + float(Road.MINE_END.x - Road.STATIONS.mine.x - 1) / Tuning.WALK
+	var prev := use_map(Road.ID)
+	for x in range(int(station_x("village")), int(station_x("mine"))):
+		var c := Vector2i(x, Road.LINE_ROW)
+		t += 1.0 / (Tuning.CART_SPEED if track_state(Road.segment_at(x)) == "built" else Tuning.WALK * ground_speed(c))
+	use_map(prev)
+	return t
 
 
 # ---------------------------------------------------------------- the party at the site (issue #109)
@@ -3796,7 +4222,7 @@ func save_state() -> Dictionary:
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
 		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
 		"rng_state": rng.state, "meadow_sheep": meadow_sheep, "meadow_regrow": meadow_regrow,
-		"expedition": expedition.duplicate(true), "pending": pending.duplicate(true)}
+		"expedition": expedition.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true)}
 
 
 static func from_state(d: Dictionary) -> Sim:
@@ -3825,6 +4251,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.meadow_regrow = d.meadow_regrow
 	s.expedition = d.get("expedition", {}).duplicate(true)
 	s.pending = d.get("pending", []).duplicate(true)
+	s.cart = d.get("cart", {}).duplicate(true)
 	s._add_site_maps()
 	for rd in d.residents:
 		var r: Dictionary = rd.duplicate(true)
