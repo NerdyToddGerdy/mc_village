@@ -235,7 +235,7 @@ func _update_live_overlays() -> void:
 			var turns := {"house": "the door", "bench": "its workshop plot", "fireplace": "its kitchen plot", "board": "its map room plot"}
 			hint = "Place %s." % names[placing] + (" %s turns %s." % [turn, turns[placing]] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
-	if sel != null and sel.kind in ["tree", "boulder", "sheep", "bush", "crop", "meadow"]:
+	if sel != null and sel.kind in ["tree", "boulder", "sheep", "bush", "crop", "meadow", "route"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
@@ -376,6 +376,9 @@ func selected_entity():
 		"meadow":
 			if view_map == "village":
 				return {"kind": "meadow", "id": 0, "cell": sim.meadow_sign()}
+		"route":
+			if view_map == "village":
+				return {"kind": "route", "id": 0, "cell": sim.route_sign()}
 		"crop":
 			for c in sim.farm.values():
 				if c.id == selection.id:
@@ -502,7 +505,7 @@ func _right_click(e: InputEventMouseButton) -> void:
 		if r.is_empty():
 			continue
 		if r.away:
-			_hud.add_toast({"text": "%s is away at the meadow." % r.name, "res_id": r.id, "site_id": 0})
+			_hud.add_toast({"text": "%s is %s." % [r.name, "away at the meadow" if r.get("trip", "meadow") in ["", "meadow"] else "on the road"], "res_id": r.id, "site_id": 0})
 			continue
 		if r.get("hunger", 100.0) <= 0.0:
 			_hud.add_toast({"text": "%s is starving and won’t work until fed." % r.name, "res_id": r.id, "site_id": 0})
@@ -955,6 +958,11 @@ func depart() -> String:
 	return sim.depart()
 
 
+## Calls the party home from the site (issue #108).
+func call_home() -> String:
+	return sim.call_home()
+
+
 func cancel_expedition() -> void:
 	sim.cancel_expedition()
 	plan = sim.new_plan()
@@ -1267,8 +1275,33 @@ func _screenshot_scene() -> void:
 			confirm_plan()
 			for i in 12 * Tuning.TPS:
 				sim.step()
+		if "--road" in OS.get_cmdline_user_args():  # departed: carrying the packs to the signpost (issue #108)
+			for i in 60 * Tuning.TPS:
+				if sim.depart_blocker() == "":
+					break
+				sim.step()
+			sim.depart()
+			for i in int(0.4 * Tuning.TPS):
+				sim.step()
+			planner_open = false
+			selection = {"kind": "route", "id": 0}
+			sim.events.clear()
+			var sign := sim.route_sign()
+			var ada: Dictionary = sim.residents[0]
+			_target = Vector3(ada.pos.x + 3.0, 0, ada.pos.y)
+			_cam.size = 9.0
+			if "--arrived" in OS.get_cmdline_user_args():  # the party at work in the old mine, seen from there
+				for i in int((Tuning.MINE_TRIP + 30) * Tuning.TPS):
+					sim.step()
+				sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16)))
+				for i in 10 * Tuning.TPS:
+					sim.step()
+				selection = {}
+				switch_map(OldMine.ID)
+				_cam.size = 14.0
+		else:
+			_target = Vector3(b.origin.x + 4.5, 0, b.origin.y - 1.5)  # the board left of the planner
 		sim.events.clear()
-		_target = Vector3(b.origin.x + 4.5, 0, b.origin.y - 1.5)  # the board left of the planner
 		_place_camera()
 	if "--mine" in OS.get_cmdline_user_args():  # Ada at work in the old mine, seen from there (issues #101, #102)
 		var mine := sim.get_map(OldMine.ID)

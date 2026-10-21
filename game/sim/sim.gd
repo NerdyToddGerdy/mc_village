@@ -65,8 +65,10 @@ var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
 ## The planned expedition (issues #106, #107), or {} when there's none. One at a time (#25):
 ##   {dest, board (site id), party: [resident ids], target: {item, n}, meals, picks,
-##    policy: {target, full, low}, spend_return, state: "staging" or "out", packed: {item: n}, tools: [{type, dur}]}
-## `packed` and `tools` are filled when the party departs, from what was packed at the board.
+##    policy: {target, full, low}, spend_return, state: "staging" or "out", packed: {item: n}, tools: [{type, dur}],
+##    leg: "out" or "home", cargo: {item: n}, cargo_tools: [{type, dur}], broken: n}
+## `packed` and `tools` are filled when the party departs, from what was packed at the board. `leg` is
+## which way the party is going once it's out (issue #108); `cargo` is what it carries home (#112).
 var expedition := {}
 var stuck: Array = []        ## {who, why, map, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
 var _stuck_since := {}       ## A stuck entry's key -> the tick it first showed, to order the list (issue #77). Not saved.
@@ -1094,6 +1096,8 @@ func _wear(r: Dictionary, kind: String) -> void:
 		r.broken[kind] = true
 		r.kept[kind] = false
 		stats.tools_broken += 1
+		if kind == "pick" and expedition.get("state", "") == "out" and expedition.party.has(r.id):
+			expedition.broken = expedition.get("broken", 0) + 1
 		_toast("%s’s %s broke." % [r.name, Defs.ITEMS[t.type].one], r.id)
 
 
@@ -1202,13 +1206,16 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
 			r.carry = null
 			return true
-		"depart":
+		"depart":  # off the edge of the map, onto the road (the meadow, issue #50, or a site, #108)
+			var to: String = st.get("to", "meadow")
 			r.away = true
-			r.trip = "meadow"
-			r.back_at = tick + int(Tuning.MEADOW_TRIP * Tuning.TPS)
+			r.trip = to
+			r.back_at = tick + int(trip_time(to) * Tuning.TPS)
 			r.path = []
 			r.progress = -1.0
 			rev += 1
+			if to == "village" and not expedition.party.any(func(id): return resident(id).map == map_id and not resident(id).away):
+				_pack_cargo()  # the last to leave takes what the party carries home
 			return true
 		"wait_board":  # waits at the board until the party departs (issue #107)
 			if expedition.get("state", "") != "staging" or not expedition.party.has(r.id):
@@ -1388,6 +1395,9 @@ func _claim(r: Dictionary) -> void:
 		var pj = _pack_job(r, c)
 		r.job = pj if pj != null else _stage_job()
 		return
+	if on_the_way(r):  # out of village labor: off to the signpost, or home from the site (issue #108)
+		r.job = _road_job()
+		return
 	if auto_craft:
 		expand_queues()
 	keep_meals_stocked()
@@ -1475,10 +1485,11 @@ func _tagged(j: Job, work: String) -> Job:
 	return j
 
 
-## The nearest loose stack that has room in a stockpile, as {stack, dest, n}, or null.
+## The nearest loose stack that has room in a stockpile (unloaded cargo first), as {stack, dest, n}, or null.
 func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 	var loose := stacks_where(func(s): return avail(s) > 0 and not in_zone(s.cell))
-	loose.sort_custom(func(a, b): return manhattan(a.cell, c) < manhattan(b.cell, c))
+	# An expedition's unloaded cargo goes first (issue #112), then the nearest.
+	loose.sort_custom(func(a, b): return a.get("cargo", false) and not b.get("cargo", false) or (a.get("cargo", false) == b.get("cargo", false) and manhattan(a.cell, c) < manhattan(b.cell, c)))
 	for ls in loose:
 		var dest = zone_dest(ls.type)
 		if dest == null:
@@ -1560,7 +1571,7 @@ func step() -> void:
 	var kinds := {}
 	var working := 0
 	for r in residents:
-		if r.job != null and not (r.job.kind in ["move", "arrive", "stage"]):
+		if r.job != null and not (r.job.kind in ["move", "arrive", "stage", "road"]):
 			kinds[r.job.kind] = true
 			working += 1
 	if working >= 2 and kinds.size() >= 2:
@@ -1595,6 +1606,8 @@ func _step_map() -> void:
 			if tick >= r.back_at:
 				if r.get("trip", "meadow") in ["", "meadow"]:
 					_return_from_meadow(r)
+				elif r.trip == "village":
+					_arrive_home(r)
 				else:
 					_arrive_at_site(r)
 			continue
@@ -2010,7 +2023,7 @@ func paint_zone(rect: Rect2i) -> void:
 	for x in range(rect.position.x, rect.end.x):
 		for y in range(rect.position.y, rect.end.y):
 			var c := Vector2i(x, y)
-			if walkable(c) and site_at(c) == null and not m.farm.has(c) and reserved_at(c) == null and c != meadow_sign():
+			if walkable(c) and site_at(c) == null and not m.farm.has(c) and reserved_at(c) == null and c != meadow_sign() and c != route_sign():
 				m.zone[c] = true
 	rev += 1
 
@@ -2073,7 +2086,7 @@ func farm_blocked(c: Vector2i) -> String:
 		return "a building"
 	if m.farm.has(c):
 		return "a farm plot"
-	if c == meadow_sign():
+	if c == meadow_sign() or c == route_sign():
 		return "the signpost"
 	if m.zone.has(c):
 		return "a stockpile"
@@ -2131,6 +2144,8 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 		return "Too close to the edge"
 	if foot.has_point(meadow_sign()):
 		return "The meadow signpost is in the way"
+	if foot.has_point(route_sign()):
+		return "The signpost to the old mine is in the way"
 	for s in m.sites:
 		if Rect2i(s.origin, s.size).intersects(foot):
 			return "Overlaps another building"
@@ -2371,6 +2386,8 @@ func cant_join(r: Dictionary) -> String:
 		return "Still walking in"
 	if r.away:
 		return "Away at the meadow" if r.get("trip", "meadow") in ["", "meadow"] else "On the road"
+	if expedition.get("state", "") == "out" and expedition.party.has(r.id):
+		return "Out with the party"
 	if r.map != "village":
 		return "At the " + maps[r.map].name.to_lower()
 	return ""
@@ -2557,17 +2574,15 @@ func depart() -> String:
 	b.store = {}
 	b.tools = []
 	expedition.state = "out"
+	expedition.leg = "out"
+	expedition.broken = 0
 	var names: Array = []
-	for id in expedition.party:
+	for id in expedition.party:  # each walks to the signpost with the packs, then takes the road (issue #108)
 		var r := resident(id)
 		fail_job(r)
 		r.direct = null
 		r.orders.clear()
 		r.note = null
-		r.away = true
-		r.trip = expedition.dest
-		r.back_at = tick + int(Tuning.MINE_TRIP * Tuning.TPS)
-		r.path = []
 		names.append(r.name)
 	rev += 1
 	_toast("%s set off for the %s." % [names_text(names), maps[expedition.dest].name.to_lower()], 0, b.id)
@@ -2582,8 +2597,7 @@ static func names_text(names: Array) -> String:
 
 
 ## A party member at the end of the road: they appear at the site's entrance. The first to arrive
-## sets the supplies down there. (#108 adds the signpost, time on the road and the way home; #109
-## packs supplies and cargo instead of setting them down.)
+## sets the supplies down there. (#109 packs supplies and cargo instead of setting them down.)
 func _arrive_at_site(r: Dictionary) -> void:
 	var id: String = r.trip
 	var mp: SimMap = maps[id]
@@ -2659,6 +2673,170 @@ func _stuck_expedition() -> void:
 		var r := resident(id)
 		if not r.is_empty() and not at_board(r):
 			_add_stuck("Expedition", "Waiting for %s" % r.name, at, 1.9, "res", r.id, false, true)
+
+
+# ---------------------------------------------------------------- travel and the return (issues #108, #112)
+
+## The signpost on the village's east edge where the road to the old mine starts and ends.
+func route_sign() -> Vector2i:
+	var v: SimMap = maps.village
+	return Vector2i(v.w - 1, v.h / 2)
+
+
+## Seconds on the road to `to`, and back: the meadow's trip, or the walk to and from a site.
+static func trip_time(to: String) -> float:
+	return Tuning.MEADOW_TRIP if to in ["", "meadow"] else Tuning.MINE_TRIP
+
+
+## Whether a party member is on their way: walking to the signpost to leave the village, or to the
+## site's entrance to come home. Either way, they're out of the work where they are.
+func on_the_way(r: Dictionary) -> bool:
+	if expedition.get("state", "") != "out" or not expedition.party.has(r.id) or r.away:
+		return false
+	if expedition.get("leg", "out") == "out":
+		return r.map == "village"
+	return r.map == expedition.dest
+
+
+## Whether a party member is carrying the packs through the village, on the way out (drawn as packs).
+func carrying_packs(r: Dictionary) -> bool:
+	return on_the_way(r) and r.map == "village"
+
+
+## The walk to where the road starts: the village signpost, or the site's entrance on the way home.
+func _road_job() -> Job:
+	if map_id == "village":
+		var dest: String = expedition.dest
+		var j := Job.new("road", "Heading for the %s" % maps[dest].name.to_lower(), "the signpost")
+		j.step(_goto([route_sign()], true))
+		j.step({"op": "depart", "to": dest})
+		return j
+	var h := Job.new("road", "Heading home", "the entrance")
+	h.step(_goto([m.entrance], false))
+	h.step({"op": "depart", "to": "village"})
+	return h
+
+
+## Why the party can't be called home yet, or "" when it can.
+func call_home_blocker() -> String:
+	if expedition.get("state", "") != "out":
+		return "No party is out"
+	if expedition.get("leg", "out") == "home":
+		return "The party is already heading home"
+	for id in expedition.party:
+		var r := resident(id)
+		if r.map != expedition.dest or r.away:
+			return "The party isn't at the %s yet" % maps[expedition.dest].name.to_lower()
+	return ""
+
+
+## Calls the party home (until #109's return policy does it): they walk to the entrance, take what
+## they've gathered, and set off. Returns why it can't, or "".
+func call_home() -> String:
+	var why := call_home_blocker()
+	if why != "":
+		return why
+	expedition.leg = "home"
+	for id in expedition.party:
+		var r := resident(id)
+		fail_job(r)
+		r.direct = null
+		r.orders.clear()
+	_toast("The party is heading home from the %s." % maps[expedition.dest].name.to_lower(), expedition.party[0])
+	return ""
+
+
+## What the party takes home, when the last of them leaves the site: the leftover meals and spare
+## pickaxes first, then the objective's resource, then whatever else was mined, as far as the packs
+## go. Anything that doesn't fit stays at the site. (#109 replaces this with packing as they work.)
+func _pack_cargo() -> void:
+	var room: int = expedition.party.size() * Tuning.PACK_CAPACITY
+	var target: String = expedition.target.item
+	var order := func(st: Dictionary) -> int:
+		if Defs.MEALS.has(st.type):
+			return 0
+		if Defs.is_tool_item(st.type):
+			return 1
+		return 2 if st.type == target else 3
+	var stacks: Array = m.items.values()
+	stacks.sort_custom(func(a, b): return order.call(a) < order.call(b))
+	expedition.cargo = {}
+	expedition.cargo_tools = []
+	for st in stacks:
+		if room <= 0:
+			break
+		var n: int = mini(st.n, room)
+		room -= n
+		if Defs.is_tool_item(st.type):
+			expedition.cargo_tools.append({"type": st.type, "dur": st.get("dur", full_uses(st.type))})
+		else:
+			expedition.cargo[st.type] = expedition.cargo.get(st.type, 0) + n
+		st.n -= n
+		if st.n <= 0:
+			m.items.erase(st.cell)
+	rev += 1
+
+
+## A party member back at the village signpost. When the last one is back, the packs are unloaded
+## there as stacks, which haulers carry to the stockpile, and the board is free again (issue #112).
+func _arrive_home(r: Dictionary) -> void:
+	r.away = false
+	r.trip = ""
+	var spot = on_map("village", nearest_walkable.bind(route_sign()))
+	move_to_map(r, "village", spot if spot != null else route_sign())
+	if expedition.party.all(func(id): return resident(id).map == "village" and not resident(id).away):
+		on_map("village", _unload)
+
+
+func _unload() -> void:
+	var ex := expedition
+	var spot = nearest_walkable(route_sign())
+	spot = spot if spot != null else route_sign()
+	var cargo: Dictionary = ex.get("cargo", {})
+	var before := {}
+	for k in m.items:
+		before[k] = true
+	for k in cargo:
+		drop_items(spot, k, cargo[k])
+	for t in ex.get("cargo_tools", []):
+		drop_items(spot, t.type, 1, t.dur)
+	for k in m.items:  # the new stacks are hauled before anything else
+		if not before.has(k):
+			m.items[k].cargo = true
+	var report := expedition_report(ex)
+	var b := site(ex.board)
+	if not b.is_empty():
+		b.report = report
+	expedition = {}
+	stats.expeditions = stats.get("expeditions", 0) + 1
+	rev += 1
+	_toast(". ".join(report) + ".", 0, b.get("id", 0))
+
+
+## What an expedition brought back and what it cost, for the toast and the board (issue #112):
+## ["Back from the old mine: 18 cobblestone, 9 coal", "3 meals eaten, 1 pickaxe broken"].
+func expedition_report(ex: Dictionary) -> Array:
+	var cargo: Dictionary = ex.get("cargo", {})
+	var got: PackedStringArray = []
+	var meals_back := 0
+	for k in cargo:
+		if Defs.MEALS.has(k):
+			meals_back += cargo[k]
+		else:
+			got.append(Defs.words(k, cargo[k]))
+	var name: String = maps[ex.dest].name.to_lower()
+	var lines: Array = ["Back from the %s: %s" % [name, ", ".join(got)] if not got.is_empty() else "Back from the %s with nothing mined" % name]
+	var meals_packed := 0
+	for k in ex.get("packed", {}):
+		if Defs.MEALS.has(k):
+			meals_packed += ex.packed[k]
+	var eaten := maxi(0, meals_packed - meals_back)
+	var broken: int = ex.get("broken", 0)
+	var cost := "%d %s eaten" % [eaten, "meal" if eaten == 1 else "meals"]
+	if broken > 0:
+		cost += ", %d %s broken" % [broken, "pickaxe" if broken == 1 else "pickaxes"]
+	lines.append(cost)
+	return lines
 
 
 # ---------------------------------------------------------------- site maps (issue #102)

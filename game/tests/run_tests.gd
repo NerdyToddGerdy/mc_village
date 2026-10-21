@@ -52,6 +52,8 @@ func _init() -> void:
 		"test_expedition_board",
 		"test_planning_an_expedition",
 		"test_staging_and_departure",
+		"test_travel_to_the_mine_and_back",
+		"test_return_and_unloading",
 	]
 	for t in tests:
 		_current = t
@@ -1679,9 +1681,12 @@ func test_staging_and_departure() -> void:
 	check(loaded.residents[0].job == null or loaded.residents[0].job.kind != "stage", "and Ada goes back to work")
 	# Depart: the party leaves with the packed supplies and is out of village labor.
 	check(sim.depart() == "", "Depart sends the party off")
-	check(ada.away and ada.trip == OldMine.ID and ada.job == null and not sim.here().has(ada), "Ada is on the road, not in the village's labor")
 	check(sim.expedition.state == "out" and sim.expedition.packed == {"bread": 2} and sim.expedition.tools.size() == 1, "the expedition carries what was packed")
-	check(b.store.is_empty() and sim.cant_join(ada) == "On the road", "the board is empty again")
+	check(b.store.is_empty() and sim.cant_join(ada) == "Out with the party", "the board is empty again")
+	run(sim, 0.5)
+	check(ada.job != null and ada.job.kind == "road" and sim.carrying_packs(ada), "Ada carries the packs to the signpost")
+	until_away(sim, ada)
+	check(ada.away and ada.trip == OldMine.ID and ada.job == null and not sim.here().has(ada), "then she's on the road, not in the village's labor")
 	var road := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(road.residents[0].away and road.residents[0].trip == OldMine.ID and road.residents[0].back_at == ada.back_at, "saving on the road keeps her on the road")
 	run(sim, Tuning.MINE_TRIP + 1)
@@ -1689,3 +1694,122 @@ func test_staging_and_departure() -> void:
 	check(ada.map == OldMine.ID and not ada.away and mine.visited and mine.known, "after the walk, Ada is at the old mine")
 	check(sim.on_map(OldMine.ID, func(): return count(sim, "bread")) == 2 and sim.on_map(OldMine.ID, func(): return sim.tool_items("pick", 0).size()) == 1, "with the supplies set down at the entrance")
 	check(tomas.map == "village", "Tomas keeps the village going")
+
+
+
+## A party of Ada and Tomas, packed and sent off for the old mine with 2 bread and a spare pickaxe.
+## Returns {ada, tomas, board}, as they step onto the road.
+func send_party(sim: Sim) -> Dictionary:
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	for r in [ada, tomas]:
+		r.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
+	var b := built_board(sim)
+	var plan := sim.new_plan()
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 2
+	plan.picks = 1
+	plan.target = {"item": "coal", "n": 6}
+	sim.plan_expedition(plan)
+	b.store = {"bread": 2, "stone_pick": 1}
+	b.tools = [{"type": "stone_pick", "dur": 9}]
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	sim.depart()
+	return {"ada": ada, "tomas": tomas, "board": b}
+
+
+## Issue #108: the party walks to the signpost on the east edge, is on the road for MINE_TRIP each
+## way, and arrives on the right map; a trip survives saving in either direction.
+func test_travel_to_the_mine_and_back() -> void:
+	var sim := Sim.new_game()
+	var sign := sim.route_sign()
+	check(sign == Vector2i(sim.w - 1, sim.h / 2) and sim.walkable(sign), "the signpost to the old mine stands on the east edge")
+	check(sim.farm_blocked(sign) == "the signpost" and sim.placement_check("bench", sign) == "The signpost to the old mine is in the way", "nothing is built, farmed or stockpiled on it")
+	var p := send_party(sim)
+	var ada: Dictionary = p.ada
+	var tomas: Dictionary = p.tomas
+	check(sim.call_home() != "", "the party can't be called home before it gets there")
+	until_away(sim, ada, 60)
+	check(absf(sim.back_in(ada) - Tuning.MINE_TRIP) < 0.1, "the road takes MINE_TRIP (%.1f s)" % sim.back_in(ada))
+	until_away(sim, tomas, 60)
+	check(ada.away and tomas.away and Sim.manhattan(Sim.rcell(ada), sign) <= 1, "they leave from the signpost")
+	var due: int = ada.back_at
+	var arrived := -1
+	for i in int((Tuning.MINE_TRIP + 2) * Tuning.TPS):
+		sim.step()
+		if arrived < 0 and ada.map == OldMine.ID:
+			arrived = sim.tick
+	check(arrived == due, "Ada arrives after exactly %d s on the road" % int(Tuning.MINE_TRIP))
+	check(ada.map == OldMine.ID and tomas.map == OldMine.ID and Sim.manhattan(Sim.rcell(ada), sim.get_map(OldMine.ID).entrance) <= 1, "at the mine's entrance")
+	run(sim, 5)
+	# The way home: the party walks to the entrance, then the same time on the road.
+	check(sim.call_home() == "" and sim.expedition.leg == "home", "Call the party home")
+	check(sim.call_home() == "The party is already heading home", "only once")
+	until_away(sim, ada, 30)
+	until_away(sim, tomas, 30)
+	check(ada.away and ada.trip == "village" and ada.map == OldMine.ID, "they leave from the mine's entrance, on the road home")
+	var mid := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	var home_at: int = maxi(ada.back_at, tomas.back_at)
+	check(mid.residents[0].trip == "village" and mid.residents[0].back_at == ada.back_at and mid.expedition.leg == "home", "saving on the road home keeps the time left")
+	run(sim, float(home_at - sim.tick) / Tuning.TPS + 0.1)
+	check(ada.map == "village" and not ada.away and Sim.manhattan(Sim.rcell(ada), sim.route_sign()) <= 1, "they come back at the village signpost")
+	run(mid, float(home_at - mid.tick) / Tuning.TPS + 0.1)
+	check(mid.residents[0].map == "village" and mid.expedition.is_empty(), "and the loaded game's party gets home too")
+	# The meadow trip still works as before.
+	sim.send_to_meadow(tomas)
+	until_away(sim, tomas)
+	check(tomas.trip == "meadow" and absf(sim.back_in(tomas) - Tuning.MEADOW_TRIP) < 0.1, "a meadow trip is unchanged")
+
+
+## Issue #112: back at the signpost, the cargo and leftover meals are set down as stacks and hauled
+## to the stockpile; a report says what came back and what it cost; the board is free again.
+func test_return_and_unloading() -> void:
+	var sim := Sim.new_game()
+	var zone := open_rect(sim, Vector2i(4, 3))
+	sim.paint_zone(zone)
+	var p := send_party(sim)
+	var ada: Dictionary = p.ada
+	var tomas: Dictionary = p.tomas
+	check(sim.plan_problems(sim.new_plan()).has("One expedition at a time"), "the board is locked while the party is out")
+	for i in int((Tuning.MINE_TRIP + 40) * Tuning.TPS):
+		sim.step()
+		if ada.map == OldMine.ID and tomas.map == OldMine.ID and not tomas.away:
+			break
+	# Mine the coal nearest the entrance, then call them home.
+	sim.on_map(OldMine.ID, func():
+		var coal: Array = sim.boulders.filter(func(b): return b.get("ore", "") == "coal")
+		coal.sort_custom(func(a, b): return Sim.manhattan(a.cell, sim.m.entrance) < Sim.manhattan(b.cell, sim.m.entrance))
+		for c in coal.slice(0, 2):
+			sim.designate_mine(Rect2i(c.cell, Vector2i.ONE)))
+	ada.hunger = 30.0  # she eats a packed meal at the mine
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		if sim.stats.get("ore_mined", 0) >= 2 and ada.hunger > 40.0:
+			break
+	tomas.pick.dur = 1  # one pickaxe breaks on the trip
+	sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16), null, ["boulder"]))
+	run(sim, 15)
+	var coal_mined: int = sim.on_map(OldMine.ID, func(): return count(sim, "coal"))
+	check(coal_mined >= 4, "the party mined coal (%d)" % coal_mined)
+	check(sim.call_home() == "", "call them home")
+	for i in int((Tuning.MINE_TRIP + 40) * Tuning.TPS):
+		sim.step()
+		if sim.expedition.is_empty():
+			break
+	check(sim.expedition.is_empty() and ada.map == "village" and tomas.map == "village", "the party is home and the expedition is over")
+	var near_sign := sim.stacks_where(func(st): return Sim.manhattan(st.cell, sim.route_sign()) <= 3)
+	check(near_sign.any(func(st): return st.type == "coal"), "the cargo is set down at the signpost as stacks")
+	var b: Dictionary = p.board
+	check(b.report.size() == 2 and b.report[0].begins_with("Back from the old mine: ") and "coal" in b.report[0], "the board has the report: %s" % [b.report])
+	check(b.report[1].begins_with("1 meal eaten") and b.report[1].ends_with("1 pickaxe broken"), "with what it cost: %s" % b.report[1])
+	check(sim.on_map(OldMine.ID, func(): return count(sim, "coal")) == 0, "what they mined came home with them")
+	check(sim.plan_problems(sim.new_plan()).filter(func(x): return x == "One expedition at a time").is_empty() and sim.cant_join(ada) == "", "the board is free for the next expedition")
+	run(sim, 60)
+	var stored := 0
+	for st in sim.stacks_where(func(st): return st.type == "coal" and sim.in_zone(st.cell)):
+		stored += st.n
+	check(stored == coal_mined, "the coal is hauled to the stockpile (%d of %d)" % [stored, coal_mined])
+	check(sim.stats.get("expeditions", 0) == 1, "the village counts its expeditions")
