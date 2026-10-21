@@ -46,9 +46,22 @@ const ORE_YIELD := {"coal": 2, "iron": 2}  ## Items an ore block drops (coal; ir
 const TORCH_LIGHT := 3.0                ## Cells a torch lights; open cells further from every torch are dark.
 # Expeditions (Slice 3, issues #106, #107).
 const PARTY_MAX := 3                    ## Residents in a party, at most.
-const PACK_CAPACITY := 10               ## Items each party member carries, shared by supplies and cargo.
+const PACK_CAPACITY := 15               ## Items each party member carries, shared by supplies and cargo.
 const RETURN_MEALS := 1                 ## Meals per party member kept for the walk home.
 const MEAL_FOOD := 50.0                 ## Food a meal is counted as when estimating time on site (bread's).
+# Hazards and injuries (issue #110).
+const CAVE_IN_CHANCE := 0.5             ## Chance that mining a loose-ceiling block brings it down on the miner.
+const CAVE_IN_SERIOUS := 0.5            ## Chance a cave-in's injury is serious.
+const FALL_CHANCE := 0.05               ## Chance of a fall each time someone steps onto a ledge in the dark.
+const FALL_SERIOUS := 0.25              ## Chance a fall's injury is serious.
+const DARK_WORK := 0.7                  ## Work speed in an unlit tunnel.
+const INJURED_SPEED := 0.6              ## Walk and work speed while injured.
+const HEAL_TIME := [0.0, 120.0, 300.0]  ## Seconds of rest in bed to heal: injured, seriously injured.
+const HEAL_NO_BED := 0.5                ## Healing speed resting without a bed of one's own.
+# The iron discovery (issue #111).
+const FIND_RADIUS := 2                  ## Mining a block this close (in steps) to the hidden vein finds it.
+const SURVEY_TIME := 15.0               ## Seconds to investigate the vein.
+const SURVEY_USES := 3                  ## Pickaxe uses investigating takes.
 
 # Skills (issue #47/#48, slice-2-spec.md §5).
 const SKILL_LEVELS := [8, 25, 50, 90]   ## Experience for levels 2, 3, 4 and 5; one point per finished task.

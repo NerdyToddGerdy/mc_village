@@ -48,7 +48,7 @@ jobs:
       - name: Sim tests
         run: |
           set -o pipefail
-          timeout 300 ~/godot/godot --headless --path . -s res://tests/run_tests.gd 2>&1 | tee /tmp/sim.log
+          timeout 600 ~/godot/godot --headless --path . -s res://tests/run_tests.gd 2>&1 | tee /tmp/sim.log
           grep -qE '^[1-9][0-9]* checks, 0 failed$' /tmp/sim.log
 
       - name: Game scene tests
@@ -68,3 +68,9 @@ jobs:
           set -o pipefail
           timeout 600 ~/godot/godot --headless --path . -s res://tests/playtest_village.gd 2>&1 | tee /tmp/village.log
           grep -q '^PLAYTEST PASSED$' /tmp/village.log
+
+      - name: Expedition bot playtest (Slice 3)
+        run: |
+          set -o pipefail
+          timeout 600 ~/godot/godot --headless --path . -s res://tests/playtest_slice3.gd 2>&1 | tee /tmp/slice3.log
+          grep -q '^PLAYTEST PASSED$' /tmp/slice3.log

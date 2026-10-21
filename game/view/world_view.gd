@@ -175,6 +175,11 @@ func _build_static() -> void:
 			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.STONE.lightened(0.06))
 			if b.has("ore"):  # flecks of ore on its faces and top (issue #103)
 				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[Defs.ORES[b.ore].item])
+			if b.get("loose", false) and sim.m.visited:  # a loose ceiling: cracks, and props holding it (issue #110)
+				for k in 2:
+					var x := c.x + 0.25 + k * 0.4
+					solid.box(Vector3(x, 0.62, c.y + 0.9), Vector3(x + 0.06, 0.95, c.y + 0.95), CRACK)
+					solid.box(Vector3(c.x + 0.9, 0.62, c.y + 0.25 + k * 0.4), Vector3(c.x + 0.95, 0.95, c.y + 0.31 + k * 0.4), CRACK)
 	for bush in sim.bushes:
 		_add_bush(solid, bush)
 	if sim.m.kind == "village":
@@ -200,6 +205,7 @@ func _build_static() -> void:
 
 
 static var MINE_FLOOR := Color("#5B5650")
+static var CRACK := Color("#2A2724")
 static var MINE_ROCK := Color("#6E6A63")
 static var TORCH_FLAME := Color("#F2A640")
 static var DARK_TINT := Color("#2C3445")
@@ -219,14 +225,27 @@ func _add_site_ground(b: Batch) -> void:
 			var floor_col := MINE_FLOOR * Color(v, v, v)
 			if mp.is_dark(c):  # unlit: darker and a little cold, but still read as floor, not a hole
 				floor_col = floor_col.darkened(0.38).lerp(DARK_TINT, 0.25)
+			if c in mp.ledges and mp.visited:  # a ledge: the floor drops, with a pale lip (issue #110)
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.3, y + 1), floor_col.darkened(0.2))
+				b.box(Vector3(x, -0.3, y), Vector3(x + 1, 0, y + 0.12), floor_col.lightened(0.25))
+				continue
 			b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0, y + 1), floor_col)
 	for t in mp.torches:
 		var x: float = t.x + 0.5
 		var z: float = t.y + 0.5
 		b.box(Vector3(x - 0.06, 0.7, z - 0.06), Vector3(x + 0.06, 1.1, z + 0.06), Palette.LOG)
 		b.box(Vector3(x - 0.1, 1.1, z - 0.1), Vector3(x + 0.1, 1.3, z + 0.1), TORCH_FLAME)
-	# The way back to the village: a timber frame over the entrance.
+	# The way back to the village: a timber frame over the entrance, and the party's packs beside it
+	# while it works the site (issue #109): a crate for every 3 items in them.
 	var e := mp.entrance
+	if sim.expedition.get("state", "") == "out" and sim.expedition.dest == mp.id and sim.expedition.party.any(func(id): return sim.at_site(sim.resident(id))):
+		var crates := mini(9, ceili(sim.pack_load() / 3.0))
+		for i in crates:
+			var px: float = e.x + 1.2 + float(i % 3) * 0.3  # along the tunnel wall just inside
+			var pz: float = e.y + 0.17
+			var py := float(i / 3) * 0.26
+			b.box(Vector3(px - 0.13, py, pz - 0.13), Vector3(px + 0.13, py + 0.26, pz + 0.13), CRATE)
+			b.box(Vector3(px - 0.135, py + 0.1, pz - 0.135), Vector3(px + 0.135, py + 0.14, pz + 0.135), Palette.LOG)
 	b.box(Vector3(e.x, 0, e.y - 0.05), Vector3(e.x + 0.15, 1.4, e.y + 0.1), Palette.LOG)
 	b.box(Vector3(e.x, 0, e.y + 0.9), Vector3(e.x + 0.15, 1.4, e.y + 1.05), Palette.LOG)
 	b.box(Vector3(e.x - 0.05, 1.4, e.y - 0.1), Vector3(e.x + 0.2, 1.6, e.y + 1.1), Palette.LOG)
@@ -680,6 +699,8 @@ func _make_person(r: Dictionary) -> Node3D:
 	_part(body, Vector3(0.24, 0.32, 0.24), 0.78, Palette.SKIN, tunic)
 	var carry := _part(body, Vector3(0.28, 0.24, 0.28), 1.14, Palette.PLANK, tunic)
 	carry.name = "Carry"
+	var bandage := _part(body, Vector3(0.27, 0.08, 0.27), 0.96, Palette.CHALK, tunic)  # hurt (issue #110)
+	bandage.name = "Bandage"
 	var pack := _part(body, Vector3(0.3, 0.34, 0.14), 0.38, CRATE, tunic)  # an expedition's packs (issue #108)
 	pack.name = "Pack"
 	pack.position += Vector3(0.24, 0, -0.04)
@@ -749,6 +770,7 @@ func _update_people() -> void:
 		var carry: MeshInstance3D = n.get_node("Body/Carry")
 		carry.visible = r.carry != null
 		(n.get_node("Body/Pack") as Node3D).visible = sim.carrying_packs(r)
+		(n.get_node("Body/Bandage") as Node3D).visible = r.get("hurt", 0) > 0
 		if r.carry != null:
 			carry.material_override = _person_mat(Palette.ITEM_COLORS[r.carry.type], Color("#" + r.shirt))
 		(n.get_node("Ring") as Node3D).visible = selected_ids.has(r.id)

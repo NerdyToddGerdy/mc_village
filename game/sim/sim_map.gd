@@ -13,7 +13,8 @@ var w := Tuning.MAP_W
 var h := Tuning.MAP_H
 var trees: Array = []        ## {id, kind:"tree", cell, logs, alive, des, claim, unreach_until}
 ## {id, kind:"boulder", cell, alive, des, claim, unreach_until}, plus on a site map `ore` ("coal" or
-## "iron") for an ore block, and `hidden` for one nobody has found yet, which stands as plain rock.
+## "iron") for an ore block, `hidden` for one nobody has found yet, which stands as plain rock, and
+## `loose` for one under a loose ceiling (issue #110).
 var boulders: Array = []
 var sheep: Array = []        ## {id, kind:"sheep", pos, cell, dest, wait, alive, des, claim, unreach_until}
 var bushes: Array = []       ## {id, kind:"bush", cell, berries, regrow}: berry bushes (issue #44)
@@ -28,7 +29,9 @@ var torches: Array = []      ## Rock cells with a torch on them; tunnels beyond 
 var entrance := Vector2i.ZERO  ## Where a party arrives and leaves.
 var known := true            ## Shown in the map switcher. A site becomes known before anyone goes.
 var visited := false         ## Someone has been there, so its site report has real estimates.
-var discovered := false      ## Its hidden find (the old mine's iron) has been found.
+var found := false           ## Its hidden find (the old mine's iron) has been found (issue #111).
+var discovered := false      ## And surveyed, so it's a known resource with an estimate.
+var ledges: Array = []       ## Cells with a drop someone can fall from in the dark (issue #110).
 
 var occ := PackedByteArray()
 var occ_dirty := true
@@ -41,7 +44,7 @@ func _init(p_w := Tuning.MAP_W, p_h := Tuning.MAP_H) -> void:
 	occ.resize(w * h)
 
 
-const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "discovered"]
+const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "ledges"]
 
 
 ## The map as plain data. Reservations and job bookkeeping aren't saved (spec §2, Saving).

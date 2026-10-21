@@ -1,6 +1,6 @@
 # Slice 3 Spec — The First Expedition
 
-Companion to `block-village-design-brief.md`, `slice-1-spec.md` and `slice-2-spec.md`. Slice 3 builds on everything in Slices 1 and 2; this spec only describes what's new or changed. Numbers are **provisional** and collected in the tuning table (§13).
+Companion to `block-village-design-brief.md`, `slice-1-spec.md` and `slice-2-spec.md`. Slice 3 builds on everything in Slices 1 and 2; this spec only describes what's new or changed. Numbers are **provisional** and collected in the tuning table (§16).
 
 Tracking issue: #12. Decisions settled with the owner (2026-10-20), and recorded in the brief (§5, §8, §13, §14):
 
@@ -42,7 +42,7 @@ Slice 3 is done when, from a Slice 2 village, a player can:
 
 **Stuck reasons and toasts** carry their map. Clicking one about the other map switches the view to it first.
 
-**Paint and Build are for the village.** On a site map, the toolbar shows only Gather and Craft. Stockpiles, farms and buildings can't go on a site; an expedition packs what it gathers instead (#109).
+**Paint and Build are for the village.** On a site map, the toolbar shows only Gather and Craft. Stockpiles, farms and buildings can't go on a site; an expedition packs what it gathers instead (§11).
 
 **Switching the view.**
 - A chalk **map switcher** in the tally bar shows **Village** and, once it's known, **Old mine**. The default key is **Tab**, rebindable.
@@ -62,9 +62,9 @@ Slice 3 is done when, from a Slice 2 village, a player can:
 
 **Mining** works as in the village: the Mine and Break orders mark boulders and ore, and residents with a pickaxe break them. Ore blocks drop their ore (§4).
 
-**Light.** Torches on the walls light the tunnels near them. Floor further than the torch light (§13) from every torch is **dark**, drawn darker so the dark tunnels read at a glance. Darkness is a hazard (#110).
+**Light.** Torches on the walls light the tunnels near them. Floor further than the torch light (§16) from every torch is **dark**, drawn darker so the dark tunnels read at a glance. Darkness is a hazard (§12).
 
-**The hidden vein** stands as plain rock wall until it's discovered (#111): it can't be marked, mined or walked through, and the site report doesn't show it.
+**The hidden vein** stands as plain rock wall until it's found (§13): it can't be marked, mined or walked through, and the site report doesn't show it.
 
 **Depletion.** Ore and boulders don't come back once mined, and the site report's estimates go down as they're mined. Tree regrowth stays open (#22).
 
@@ -81,7 +81,7 @@ Slice 3 is done when, from a Slice 2 village, a player can:
 | Iron ore | The iron vein, once it's discovered | Smelting into ingots (§5) |
 | Iron ingot | Smelting at the fireplace (§5) | Iron tools (§5) |
 
-Each has its own colour, distinct from cobblestone and logs, an icon for the Craft panel, and a tally in the Materials group once it first turns up. Ingots are stacked as crossing layers of bars. Hauling and stockpiling treat them like any other item. On a site map, they're packed as cargo instead (#109).
+Each has its own colour, distinct from cobblestone and logs, an icon for the Craft panel, and a tally in the Materials group once it first turns up. Ingots are stacked as crossing layers of bars. Hauling and stockpiling treat them like any other item. On a site map, they're packed as cargo instead (§11).
 
 ## 5. Smelting and iron tools (#104)
 
@@ -94,7 +94,7 @@ Each has its own colour, distinct from cobblestone and logs, an icon for the Cra
 | Iron axe | 3 iron ingots, 2 sticks | 1 iron axe |
 | Iron pickaxe | 3 iron ingots, 2 sticks | 1 iron pickaxe |
 
-They last longer and work faster than stone (the tier rows in §13). Residents already prefer the best tool about, so an iron one is picked up over stone.
+They last longer and work faster than stone (the tier rows in §16). Residents already prefer the best tool about, so an iron one is picked up over stone.
 
 **The toolsmith's spare** is the best tier there's material for: iron when there are 3 ingots, then stone, then wood.
 
@@ -120,7 +120,7 @@ The planner draws up one plan:
 - **Return food:** `RETURN_MEALS` per member is kept for the walk home and left out of the estimate. **Spend it** lets the party eat it (brief §8).
 - **Spare pickaxes** to take.
 - **Packs:** each member carries `PACK_CAPACITY` items. A meal or a spare pickaxe takes 1, and cargo gets the rest, so more provisions leave less room to bring things back. A bar shows supplies, the cargo target and what's spare.
-- **Return policy:** any of target reached, packs full, or food running low. A serious injury always brings the party home and stops the game for the player (#110).
+- **Return policy:** any of target reached, packs full, or food running low. A serious injury stops the game for the player, who can call them home (§12).
 
 **What stops a plan** is listed in the player's words, and **Start packing** stays disabled until there's nothing:
 - no party, or more than 3;
@@ -157,9 +157,9 @@ The planner draws up one plan:
 
 **On the road**, residents aren't drawn on either map, don't work and don't get hungry. Their panel, the signpost and the line under the tally bar say "On the road to the old mine, N s" or "On the road home, N s". The line switches to the place they're headed when clicked.
 
-**Arriving.** At the entrance, the site counts as visited, and the first to arrive sets the supplies down there. (#109 replaces this with packs the party works from.)
+**Arriving.** At the entrance, the site counts as visited, and the party works from its packs (§11).
 
-**Calling the party home.** Until #109's return policy does it by itself, the player calls the party home with **Call the party home**: beside the party line while the site is in view ("The party is here: mining"), on the board's planner, or on a party member's panel. It's enabled once the whole party is at the site. Each member walks to the entrance and steps onto the road home. When the last one leaves, the party takes its **cargo**, as far as the packs go (`PACK_CAPACITY` each): leftover meals and spare pickaxes first, then the objective's resource, then anything else mined. Whatever doesn't fit stays at the site. (#109 replaces this with packing cargo as they mine.)
+**Coming home.** The party heads home when its return policy is met (§11), when the player chooses Retreat (§12) or Mark it and return later (§13), or when the player calls it home with **Call the party home**: beside the party line while the site is in view ("The party is here: mining"), on the board's planner, or on a party member's panel. That's enabled once the whole party is at the site. Each member walks to the entrance and steps onto the road home, with the packs. Whatever wasn't packed stays at the site.
 
 **The way home** takes the same `MINE_TRIP`, until Slice 4's minecarts shorten it. They appear at the village signpost.
 
@@ -173,29 +173,94 @@ The planner draws up one plan:
 
 **The report** is a toast, and stays on the board's planner under "Last expedition":
 - "Back from the old mine: 9 coal, 6 cobblestone" (or "with nothing mined");
-- "3 meals eaten, 1 pickaxe broken". Meals eaten are the packed meals that didn't come back.
+- "3 meals eaten, 1 pickaxe broken". Meals eaten are the packed meals that didn't come back;
+- "Tomas seriously injured", when anyone was hurt (§12).
 
-(#110 adds who was hurt.)
+**Recovery.** The party rejoins village labor straight away, and anyone hurt goes to bed to heal (§12). The expedition is over, so the board can plan the next one.
 
-**Recovery.** The party rejoins village labor straight away. (#110 sends anyone hurt to bed.) The expedition is over, so the board can plan the next one.
+## 11. The party works the site (#109)
 
-## 11. Still to build
+**The packs.** Once out, the party's packs hold its meals (provisions), its spare pickaxes, and its **cargo**: what it mines. Together they fill `PACK_CAPACITY` per member. Nothing is set down at the entrance on arrival. The packs are drawn as crates just inside the entrance, a crate for every 3 items.
 
-These issues carry their own rules until they're built; each one adds its section here.
+**Working by its orders.** At the site, party members work without the player and whatever their job toggles, in this order:
+- The seriously hurt wait at the entrance (§12).
+- A member whose pickaxe broke takes the best spare from the packs.
+- Mined items are carried into the packs at the entrance. The objective's resource comes first until there's enough, then anything else mined. Extra of the objective is packed last, and only once nothing is left marked to mine, so the packs keep room for what's still to come.
+- If the vein is to be investigated, someone with a pickaxe surveys it (§13).
+- Members with a pickaxe, and not hurt, mine whatever is marked.
 
-- #109 The party works the site.
-- #110 Hazards and injuries.
-- #111 The iron discovery.
-- #113 The Slice 3 bot playtest and hand playtest.
+**Marking the objective.** The party marks blocks of the objective's resource itself, nearest the entrance first and one at a time, until what's packed, lying about and marked will make the target. It leaves blocks under a known loose ceiling (§12) for the player to choose. The player can still mark more on the site map with Gather.
 
-## 12. Controls
+**Eating** works as at home, but from the packs: a hungry member walks to the entrance and eats a meal. The return food (`RETURN_MEALS` each) is left alone unless the plan chose **Spend it**. With nothing left to eat, a member goes hungry, and says so.
+
+**The return policy** is checked whenever the whole party is at work there, unless a choice is waiting for the player:
+- **Target reached:** the objective's resource packed reaches the target.
+- **Packs full:** no room left.
+- **Food runs low:** no meals left the party may eat.
+- And always: **nothing left to mine**, once nothing is marked or left of the objective, nothing is lying about to pack, and nobody is busy.
+
+When one is met, the party heads home with a toast: "Heading home: target reached". **Call the party home** still sends them home at any time.
+
+**The party panel.** While the site is in view, the panel under the party line shows each member's task, pickaxe and uses left, hunger and health; the packs against their capacity, the cargo by item, the meals left (and how many are kept for the walk home) and the spare pickaxes; the objective's progress; and what will bring them home. The board's planner shows the same while they're out.
+
+**Stuck reasons** at the site carry its map, with the site's name as who's stuck:
+- "Old mine: No pickaxe left. The party can only pack what's mined; call them home";
+- "Old mine: Everyone is hurt, so nobody can mine. Call them home";
+- "Old mine: The packs are full" (waiting, when the packs-full policy is off);
+- "Old mine: Investigating the vein needs someone with a pickaxe".
+
+## 12. Hazards and injuries (#110)
+
+**Hazards** are specific events at specific places (brief §8), all in the site report once someone has been there:
+- **Loose ceilings** over three of the old mine's blocks, drawn with cracks. Mining one brings it down on the miner with `CAVE_IN_CHANCE`, serious with `CAVE_IN_SERIOUS`. The party never marks these itself.
+- **A ledge** in the dark tunnel to the iron: the floor drops, with a pale lip. Each step onto it in the dark is a fall with `FALL_CHANCE`, serious with `FALL_SERIOUS`.
+- **Dark tunnels:** work there is slower (`DARK_WORK`), and the ledge is dark.
+
+Rolls use the sim's seeded random numbers, so a game replays the same.
+
+**Injured** (a white bandage on the resident, and "Health: Injured" in their panel): walks and works at `INJURED_SPEED`, and can't mine, by order or by job. At the site they still pack.
+
+**Seriously hurt:** can't work at all. At the site, **the game stops** for the player (§13's choice dialog):
+- **Retreat:** the party heads home now, with what it has packed ("Heading home: retreat, Tomas is seriously hurt");
+- **Press on:** the hurt one waits at the entrance while the rest keep working, and walks home with them.
+
+**Ada (the PC)** can be hurt, but never seriously: her injuries stop at injured, so she always walks home.
+
+**Healing** happens at home. A hurt resident rests in **their own bed** (beside their house) for `HEAL_TIME`, then goes back to work with a toast. Without a bed of their own, they rest where they are, at `HEAL_NO_BED` speed. They eat when hungry, then go back to resting. The stuck list's waiting tier says "Tomas: Seriously hurt, resting in bed (240 s)", or "Injured, resting: no bed of their own, so it's slower (180 s)". A hurt resident can't join a party.
+
+**The report** names who was hurt: "Ada injured, Tomas seriously injured".
+
+Death and rescue stay open (#20).
+
+## 13. The iron discovery (#111)
+
+**Finding it.** Mining a block within `FIND_RADIUS` steps of the hidden vein finds it. In the old mine, that's the rubble at the end of the deepest tunnel. The vein is revealed and can be seen, marked and mined, though its size isn't known yet. A toast says "The party found iron in the old mine." With a party there, **the game stops** with three choices, each with its known cost:
+- **Keep mining:** carry on for the objective. The vein stays marked.
+- **Investigate:** a party member walks to the vein and spends `SURVEY_TIME` and `SURVEY_USES` pickaxe uses surveying it. Then the vein's size is known, and iron is a resource the planner can send a party for.
+- **Mark it and return later:** the party heads home now.
+
+**Remembered.** The find is saved knowledge. Until it's surveyed, the site report shows "Iron vein found, not surveyed" and iron with no estimate, and the planner can't target it. Once surveyed, iron has its reserve.
+
+**Choices that stop the game.** The discovery and a serious injury share one mechanism: the sim keeps a list of **pending choices**, and the game pauses while there's one, can't be unpaused, and shows a centred dialog: what happened, "The game is paused until you choose", and each option with its cost. Answering carries on at the speed the game had. Pending choices are saved.
+
+It's the only discovery in Slice 3.
+
+**Saving.** Save format **v17** saves each resident's injury and healing time, the pending choices, the expedition's packs, the old mine's `found` and `ledges`, and its blocks' `loose`. Older saves upgrade with nobody hurt and no choice waiting, and the old mine gets its hazards. A party already out keeps its meals in the packs; one that had set its supplies down at the entrance finds them there and packs them again.
+
+## 14. The Slice 3 playtests (#113)
+
+**The bot** (`tests/playtest_slice3.gd`) starts from a Slice 2 village saved in `tests/fixtures/slice2_village.save`, made once by `tests/fixtures/make_slice2_fixture.gd`. Through input, it builds the board, plans Ada and Tomas for 10 cobblestone, packs and departs, keeps the village working, marks the rubble, answers the discovery with Investigate, marks iron and coal, answers a serious injury (triggered by the test) with Retreat, watches the return and unloading, smelts iron and crafts an iron pickaxe. It fails on any blocker in the stuck list that doesn't name something the player can do.
+
+**The hand playtest** is the owner's: the checklist is in the PR for #113.
+
+## 15. Controls
 
 | Action | Default key |
 |---|---|
 | Switch between the village and a site | Tab |
 | Place an expedition board | None (rebindable). It's in the Build menu |
 
-## 13. Tuning table (provisional)
+## 16. Tuning table (provisional)
 
 | Name | Value | Meaning |
 |---|---|---|
@@ -210,6 +275,18 @@ These issues carry their own rules until they're built; each one adds its sectio
 | `DURABILITY` iron | 60 uses | An iron tool's uses (stone 25). |
 | Expedition board cost | 6 planks, 4 sticks | One stage. |
 | `PARTY_MAX` | 3 | Residents in a party, at most. |
-| `PACK_CAPACITY` | 10 | Items each party member carries, shared by supplies and cargo. |
+| `PACK_CAPACITY` | 15 | Items each party member carries, shared by supplies and cargo. |
 | `RETURN_MEALS` | 1 | Meals per member kept for the walk home. |
 | `MEAL_FOOD` | 50 | Food a meal counts as when estimating time at the site (bread's). |
+| `CAVE_IN_CHANCE` | 0.5 | Chance that mining a block under a loose ceiling brings it down on the miner. |
+| `CAVE_IN_SERIOUS` | 0.5 | Chance a cave-in's injury is serious. |
+| `FALL_CHANCE` | 0.05 | Chance of a fall each time someone steps onto a ledge in the dark. |
+| `FALL_SERIOUS` | 0.25 | Chance a fall's injury is serious. |
+| `DARK_WORK` | 0.7 | Work speed in an unlit tunnel. |
+| `INJURED_SPEED` | 0.6 | Walk and work speed while injured. |
+| `HEAL_TIME` | 120 s, 300 s | Rest in bed to heal: injured, seriously hurt. |
+| `HEAL_NO_BED` | 0.5 | Healing speed without a bed of one's own. |
+| `FIND_RADIUS` | 2 steps | Mining a block this close to the hidden vein finds it. |
+| `SURVEY_TIME` | 15 s | Investigating the vein. |
+| `SURVEY_USES` | 3 | Pickaxe uses investigating takes. |
+| Loose ceilings, ledge | 3 blocks, 1 cell | Placed in `game/sim/old_mine.gd`. |

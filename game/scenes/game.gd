@@ -155,6 +155,11 @@ func _process(delta: float) -> void:
 		sim.step()
 		_acc -= Tuning.DT
 		n += 1
+		if not sim.pending.is_empty():
+			break
+	# A choice for the player stops the game until it's answered (issues #110, #111).
+	if not sim.pending.is_empty() and speed != 0:
+		set_speed(0)
 	# How far the game is into the next tick, for drawing residents between ticks (issue #4).
 	# Paused, they're drawn exactly where they are.
 	_world.tick_fraction = 1.0 if speed == 0 else clampf(_acc / Tuning.DT, 0.0, 1.0)
@@ -755,6 +760,8 @@ func load_slot(n: int) -> String:
 # ---------------------------------------------------------------- commands (also called by the HUD)
 
 func set_speed(v: int) -> void:
+	if v != 0 and not sim.pending.is_empty():
+		return  # a choice is waiting for the player
 	if speed != 0:
 		last_speed = speed
 	speed = v
@@ -961,6 +968,13 @@ func depart() -> String:
 ## Calls the party home from the site (issue #108).
 func call_home() -> String:
 	return sim.call_home()
+
+
+## Answers the choice the game stopped for (issues #110, #111), and carries on at the speed it had.
+func answer(option: String) -> void:
+	sim.choose(option)
+	if sim.pending.is_empty() and speed == 0:
+		set_speed(last_speed if last_speed > 0 else 1)
 
 
 func cancel_expedition() -> void:
@@ -1299,6 +1313,11 @@ func _screenshot_scene() -> void:
 				selection = {}
 				switch_map(OldMine.ID)
 				_cam.size = 14.0
+				if "--find" in OS.get_cmdline_user_args():  # the iron discovery's choice (issue #111)
+					sim.on_map(OldMine.ID, sim._check_find.bind(Vector2i(12, 12)))
+				if "--hurt" in OS.get_cmdline_user_args():  # a serious injury's choice (issue #110)
+					sim.on_map(OldMine.ID, sim.injure.bind(sim.residents[1], 2, "a cave-in"))
+				sim.events.clear()
 		else:
 			_target = Vector3(b.origin.x + 4.5, 0, b.origin.y - 1.5)  # the board left of the planner
 		sim.events.clear()

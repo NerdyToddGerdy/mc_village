@@ -6,121 +6,6 @@ extends "res://tests/playtest_base.gd"
 ## and settings folders. Run from game/:
 ##   godot --headless --path . -s res://tests/playtest_village.gd
 
-var _seen: Array = []       ## Every toast text so far, and every job label residents have shown.
-
-
-## Steps the sim like run(), remembering toasts and what residents were doing.
-func play(seconds: float) -> void:
-	for i in int(seconds * Tuning.TPS):
-		game.sim.step()
-		for r in game.sim.residents:
-			if r.job != null and not _seen.has(r.job.label):
-				_seen.append(r.job.label)
-		for ev in game.sim.events:
-			if ev.type == "toast":
-				_seen.append(ev.text)
-				game._hud.add_toast(ev)
-		game.sim.events.clear()
-	game._hud.refresh(game.sim)
-	await frames(3)
-
-
-## Plays a second at a time until `cond` holds, for at most `seconds`. Returns whether it did.
-func play_until(seconds: float, cond: Callable) -> bool:
-	for i in int(seconds):
-		if cond.call():
-			return true
-		await play(1)
-	return cond.call()
-
-
-func seen(text: String) -> bool:
-	return _seen.any(func(t): return text in t)
-
-
-## Points the camera at a cell, so it can be clicked.
-func look_at(c: Vector2i) -> void:
-	game._target = Vector3(c.x + 0.5, 0, c.y + 0.5)
-	game._place_camera()
-	await frames(2)
-
-
-## Whether a cell's screen position is clear of the HUD's corner panels.
-func in_middle(p: Vector2) -> bool:
-	var vis := root.get_visible_rect().size
-	return Rect2(vis * Vector2(0.28, 0.25), vis * Vector2(0.44, 0.45)).has_point(p)
-
-
-## An open spot near `near` where a building of this template can go, or (-1, -1).
-func build_spot(tpl: String, near: Vector2i) -> Vector2i:
-	var sim := game.sim
-	var size: Vector2i = Defs.TEMPLATES[tpl].size
-	for d in range(0, 12):
-		for dx in range(-d, d + 1):
-			for dy in range(-d, d + 1):
-				var o := near + Vector2i(dx, dy)
-				if sim.placement_check(tpl, o, game.rot) != "":
-					continue
-				var ok := true
-				for x in size.x:
-					for y in size.y:
-						var c := o + Vector2i(x, y)
-						ok = ok and sim.walkable(c) and not sim.items.has(c) and not sim.farm.has(c)
-				if ok:
-					return o
-	return Vector2i(-1, -1)
-
-
-## Selects a resident the way a player would: F until it's them.
-func select_resident(r: Dictionary) -> void:
-	for i in game.sim.residents.size() + 1:
-		if game.selection.get("ids", []) == [r.id]:
-			break
-		await key(KEY_F)
-	game._hud.refresh(game.sim)
-	await frames(2)
-
-
-## A w×h rect near `near` where `ok` holds for every cell and both corners are on screen, or a
-## rect at (-1, -1).
-func open_rect_on_screen(near: Vector2i, w: int, h: int, ok: Callable) -> Rect2i:
-	for d in range(0, 10):
-		for dx in range(-d, d + 1):
-			for dy in range(-d, d + 1):
-				var r := Rect2i(near + Vector2i(dx, dy), Vector2i(w, h))
-				if not (in_middle(screen(r.position)) and in_middle(screen(r.end - Vector2i.ONE))):
-					continue
-				var good := true
-				for x in range(r.position.x, r.end.x):
-					for y in range(r.position.y, r.end.y):
-						good = good and ok.call(Vector2i(x, y))
-				if good:
-					return r
-	return Rect2i(-1, -1, 0, 0)
-
-
-## Opens the toolbar's Craft panel on the crafting bench, stepping past the fireplace with Next.
-func open_bench_panel() -> bool:
-	game.selection = {}
-	if not game.craft_menu_open and not await click_button("Craft"):
-		return false
-	for i in 4:
-		game._hud.refresh(game.sim)
-		await frames(2)
-		var bench = game.craft_bench()
-		if bench != null and bench.tpl == "bench":
-			return true
-		await click_button("Bench")
-	return false
-
-
-func count(type: String) -> int:
-	var n := 0
-	for k in game.sim.items:
-		if game.sim.items[k].type == type:
-			n += game.sim.items[k].n
-	return n
-
 
 func _initialize() -> void:
 	game = load("res://scenes/main.tscn").instantiate()
@@ -363,13 +248,13 @@ func _initialize() -> void:
 	check(await play_until(Tuning.MINE_TRIP + 10, func(): return ada.map == OldMine.ID and tomas.map == OldMine.ID), "they reach the old mine")
 	await key(KEY_TAB)
 	check(game.view_map == OldMine.ID, "Tab shows them at the old mine")
-	# Mine the coal nearest the entrance, then call them home from Ada's panel.
+	# Mine the coal nearest the entrance, then call them home from the party line.
 	var mine := sim.get_map(OldMine.ID)
 	sim.on_map(OldMine.ID, func():
 		var coal: Array = sim.boulders.filter(func(b): return b.get("ore", "") == "coal")
 		coal.sort_custom(func(a, b): return Sim.manhattan(a.cell, mine.entrance) < Sim.manhattan(b.cell, mine.entrance))
 		sim.designate_mine(Rect2i(coal[0].cell, Vector2i.ONE)))
-	check(await play_until(90, func(): return sim.stats.get("ore_mined", 0) >= 1), "the party mines coal")
+	check(await play_until(150, func(): return sim.expedition.get("cargo", {}).get("coal", 0) >= 1), "the party mines coal and packs it (issue #109)")
 	game.selection = {}
 	check(await click_button("Call the party home"), "click Call the party home, beside the party line at the mine")
 	check(sim.expedition.get("leg", "") == "home", "the party heads home")

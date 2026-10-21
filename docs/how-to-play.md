@@ -190,7 +190,7 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 - **Party:** choose 1 to 3 residents. Each shows their Mine level, pickaxe and hunger. Anyone who can't go, such as someone at the meadow, says why.
 - **Bring back:** what to gather and how much.
 - **Meals to take** and **spare pickaxes.** One meal each is kept for the walk home, unless you choose **Spend it**.
-- **Packs:** each member carries 10 items. Supplies (yellow) and cargo (blue) share that room, so more food leaves less room for what they bring back.
+- **Packs:** each member carries 15 items. Supplies (yellow) and cargo (blue) share that room, so more food leaves less room for what they bring back.
 - **Come home when:** the target is reached, the packs are full, or food runs low. Choose one or more. A serious injury always brings them home.
 
 **Packing.** **Start packing** doesn't send anyone yet. Residents with Haul on carry the meals and spare pickaxes to the board, where they stack up as crates. The party finishes what they're doing and waits at the board. The planner shows what's packed and who's there, and the stuck list says what it's waiting for.
@@ -199,7 +199,18 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 
 **The road.** The party carries the packs to the signpost on the east edge of the village, then spends 60 seconds on the road to the old mine. On the road, they aren't drawn, don't work and don't get hungry. Click the signpost to see who's on the road. At the mine, their supplies are set down at the entrance.
 
-**Coming home.** When you're ready, choose **Call the party home**: it's in the bar under the tallies while you're looking at the mine, and on the board and each party member's panel. They walk to the mine's entrance with what they've mined, as much as the packs hold, and take the road home. Back at the signpost, they set the cargo down and it's hauled to the stockpile before anything else. A report says what came back and what it cost, and the board shows it until the next expedition.
+**At the mine** the party works by itself. It marks the blocks of what it was sent for, nearest first, mines them, and carries what it mines into its packs by the entrance. It eats from the packs, leaving the food for the walk home unless you chose Spend it. A broken pickaxe is swapped for a spare from the packs. You can mark more blocks with Gather while you're looking at the mine. The panel under the party line shows each member, the packs, the meals and how close they are to the target.
+
+**Coming home.** The party heads home by itself when its return policy is met: the target reached, the packs full, or the food running low. You can also choose **Call the party home** at any time: it's in the bar under the tallies while you're looking at the mine, and on the board and each party member's panel. Back at the signpost, they set the cargo down and it's hauled to the stockpile before anything else. A report says what came back, what it cost and who was hurt, and the board shows it until the next expedition.
+
+**Hazards.** Once someone has been to the old mine, its report lists the dangers:
+- **Loose ceilings** over a few blocks, drawn with cracks. Mining one can bring it down on the miner. The party never marks these by itself; it's your call.
+- **A ledge** in the dark tunnel to the deepest part, where someone can fall.
+- **Dark tunnels**, where work is slower.
+
+**Injuries.** An injured resident wears a white bandage, walks and works slower, and can't mine. Someone **seriously hurt** can't work, and the game stops for you to choose: **Retreat** (everyone heads home now) or **Press on** (they wait at the entrance while the rest keep working). Ada can be hurt, but never seriously. At home, the hurt rest in their own bed until they've healed: 2 minutes for an injury, 5 for a serious one, and slower without a bed of their own.
+
+**The discovery.** There's something else in the old mine. When the party finds it, the game stops with three choices, each with its cost: **Keep mining**, **Investigate** (someone spends time and pickaxe uses surveying it, and you can send parties for it from then on), or **Mark it and return later** (the party heads home now). The find is remembered either way.
 
 ## New residents
 
