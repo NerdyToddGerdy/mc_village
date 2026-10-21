@@ -20,16 +20,18 @@ Tracking issue: #11. Decisions settled with the owner while writing this spec:
 
 Slice 2 is done when, from a fresh start, a player can:
 
-- [ ] Hunt the clearing's sheep for wool and mutton.
-- [ ] Finish both opening houses including their beds, then welcome Tomas (who now needs a free bed).
-- [ ] Paint a farm, watch wheat be planted, grow and get harvested.
-- [ ] Build a fireplace, with its kitchen space reserved, and see residents bake bread and cook mutton.
-- [ ] See residents get hungry, fetch food and eat, and see a clear reason when there's no food.
-- [ ] Turn jobs on and off and set priorities per resident, and watch skill levels rise with work.
-- [ ] Have a toolsmith keep spare tools stocked, so broken tools get replaced without the player.
-- [ ] Send a resident to the sheep meadow and have them come back with wool and mutton.
-- [ ] Build a third house with its bed and have a new traveler arrive.
-- [ ] Understand every stall from its on-screen reason alone.
+**Done (#11).** Every item below is played through by `tests/playtest_village.gd` with real input: keys, clicks and drags. The founding is set up by command there, since `tests/playtest.gd` already plays it through input.
+
+- [x] Hunt the clearing's sheep for wool and mutton.
+- [x] Finish both opening houses including their beds, then welcome Tomas (who now needs a free bed).
+- [x] Paint a farm, watch wheat be planted, grow and get harvested.
+- [x] Build a fireplace, with its kitchen space reserved, and see residents bake bread and cook mutton.
+- [x] See residents get hungry, fetch food and eat, and see a clear reason when there's no food.
+- [x] Turn jobs on and off and set priorities per resident, and watch skill levels rise with work.
+- [x] Have a toolsmith keep spare tools stocked, so broken tools get replaced without the player.
+- [x] Send a resident to the sheep meadow and have them come back with wool and mutton.
+- [x] Build a third house with its bed and have a new traveler arrive.
+- [x] Understand every stall from its on-screen reason alone.
 
 ## 2. Changes to Slice 1 rules
 

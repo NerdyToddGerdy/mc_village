@@ -6,16 +6,18 @@ Companion to `block-village-design-brief.md`. The brief says *what* was decided;
 
 Slice 1 is done when a player can, from a fresh start and without debug tools:
 
-- [ ] Chop trees bare-handed and see logs drop.
-- [ ] Place and build a crafting bench from logs.
-- [ ] Queue crafts at the bench: planks, sticks, wooden and stone axe/pickaxe.
-- [ ] Break boulders once a pickaxe exists; see "Needs a pickaxe" before then.
-- [ ] Paint a stockpile zone and watch items get hauled to it.
-- [ ] Place two houses and watch them fill in stage by stage as materials arrive.
-- [ ] See a traveler arrive after the second house is finished and claim it.
-- [ ] Craft tools for the traveler and see the two residents work different jobs at once.
-- [ ] Understand every stall from its on-screen reason alone.
-- [ ] Pause, run at 1× and 3×, and issue orders while paused.
+**Done.** Every item below is played through with real input by `tests/playtest.gd`, and was hand-playtested in #1.
+
+- [x] Chop trees bare-handed and see logs drop.
+- [x] Place and build a crafting bench from logs.
+- [x] Queue crafts at the bench: planks, sticks, wooden and stone axe/pickaxe.
+- [x] Break boulders once a pickaxe exists; see "Needs a pickaxe" before then.
+- [x] Paint a stockpile zone and watch items get hauled to it.
+- [x] Place two houses and watch them fill in stage by stage as materials arrive.
+- [x] See a traveler arrive after the second house is finished and claim it.
+- [x] Craft tools for the traveler and see the two residents work different jobs at once.
+- [x] Understand every stall from its on-screen reason alone.
+- [x] Pause, run at 1× and 3×, and issue orders while paused.
 
 Out of scope: see §13.
 
