@@ -90,28 +90,89 @@ The planner's site report shows the walking estimate once the road is surveyed, 
 
 **Built from the village end.** Only the first unbuilt segment takes rails and work. A segment whose obstacle is still there waits, and its stuck reason says what it needs: "Track: needs the bridge first", "Track: needs the cut cleared first".
 
-**Laying.** Rails go out from the village with Build work, like the bridge's planks, and a segment is laid in one go once its rails are there. #122 adds the railhead pile, rail-by-rail laying and the crew's own stuck reasons.
+**Laying** is the track crew's work (§6).
 
 **Cancel.** Cancelling a track segment sets down any rails delivered to it as a stack beside the line.
 
 **Saving.** Track segments are sites on the road map, each with its segment number.
 
-## 6. What's still to come
+## 6. Laying track (#122)
 
-Each build issue carries its own rules until it's built, then adds its section here:
+**The track crew** are residents with Build on. Track work is on the road map, so they walk out from the village for it and back when it's done or they're hungry. The Jobs board marks them "(on the road)", and their status reads "On the road: laying track".
 
-- #122 Lay track: a visible track crew and the railhead
-- #123 Stations at both ends, with cart loading
-- #124 Ride the line: faster travel both ways, same mining
-- #125 The Slice 4 playtests
+**The railhead.** Rails for the line go first from the village to a **railhead pile** at the road's village end, as much as the planned line still needs. From there the crew carries them to the segment being laid, so trips along the line don't start back in the village.
 
-## 7. Controls
+**Rail by rail.** A segment fills in as its rails are laid, `LAY_TIME` each, drawn as rails on sleepers over its share of the segment. It's usable once every rail is down. Segments are still laid from the village end, and a blocked one waits (§5).
+
+**Stuck reasons** on the segment being laid:
+- "Track: needs 12 more rails": rails the line still needs that don't exist anywhere, counting the village, the railhead and those on their way.
+- "Track: needs the bridge first", "Track: needs the cut cleared first".
+- "Track: no one with Build on".
+
+**Saving.** Save format **v19**: each segment's rails laid. The railhead pile is ordinary stacks on the road map.
+
+## 7. Stations and the cart (#123)
+
+**Stations.** **Build the village station** and **Build the mine station**, on the route panel, place a **Station** at that end of the road: a 1×3 plank platform on a stone kerb beside the line, with a buffer stop. It costs 6 planks and 4 cobblestone, and is built from the village like the bridge. The mine's station needs the road walked. It's walked on, and reserves a 3×3 plot for a later **loading station**.
+
+**The cart.** Once the village station is built, a minecart in the village is hauled out and parked there (Haul work). There's one cart for the line.
+
+**Loading.** Carts load and unload at a station at `LOAD_RATE` items a second. By hand, a party unpacks at the village signpost at `HAND_RATE` an item a second each, so a station is faster. Riding home, the party's cargo is loaded into the cart at the mine station, and unloaded onto the village platform. Haulers then carry it along the road to the village stockpile, before other hauling. The rest of the packs (meals and spare pickaxes) are unpacked at the signpost as before.
+
+**Room.** With the whole line laid and the cart ready, the cart's `CART_CAPACITY` is added to the party's packs in the planner. The planner says so.
+
+**The station's panel** shows how much of the line is laid, where the cart is, and what's on the platform.
+
+**Saving.** v19 adds the cart: where it is, what's in it, and who's riding.
+
+## 8. Riding the line (#124)
+
+**When the party rides.** A party rides if, when it departs, the cart is parked at the village station, both stations are built, and the cut is clear. The line doesn't have to be finished.
+
+**Riding.** At the road's end, each member walks to the cart and gets in. When the whole party is aboard, the cart rides to the far station:
+- at `CART_SPEED` over laid segments;
+- pushed at walking pace (slower still wading the stream) where there's no track yet.
+
+There they get out and walk to the end of the road. Coming home, the cart waits at the mine station, is loaded, and rides back. The party and the cargo ride together: there's no unmanned freight.
+
+**Shown.** The cart is drawn moving along the line, with its riders side by side in it and the cargo heaped on top. Riders' status reads "Riding to the old mine by cart" or "Riding home by cart". The route report gives the walk and the ride as the line stands now: "On foot about 16 s, by cart about 7 s as the line stands."
+
+**Extraction unchanged.** Mining at the site is the same with or without the line, and a test guards this.
+
+**The report** adds the time on the road and the time saved: "By cart: 15 s on the road there and back, about 17 s saved."
+
+**Saving.** The cart's position, state, load and riders are saved, so a game saved mid-ride carries on.
+
+## 9. The Slice 4 playtests (#125)
+
+**Fixture.** `tests/fixtures/slice3_village.save`, made by `tests/fixtures/make_slice3_fixture.gd` from the Slice 2 village: the expedition board built, the old mine visited and its iron vein mined out, 13 iron ingots in the stockpile, and Ada with an iron pickaxe. The road is known but not walked.
+
+**The bot** (`tests/playtest_slice4.gd`) plays through input:
+1. A first trip on foot surveys the road.
+2. From the signpost: Build the bridge, Clear the cut, and build both stations.
+3. Rails and a minecart are queued at the bench.
+4. Plan the line, then Lay track. The bot waits for the crew to lay it and the cart to be parked.
+5. A second trip rides the cart.
+
+It checks:
+- the second round trip spends less time on the road;
+- Ada's mining time a block is the same on both trips, normalised for her Mine level, hunger and the dark;
+- the cargo comes off at the village platform and is hauled to the stockpile;
+- every stall names its fix.
+
+It runs in CI.
+
+**Hand playtest:** a checklist mirroring #51 and #113, in #125. Every stall must be understood from its on-screen reason alone.
+
+**Iron.** The line and a cart take 11 iron ingots, more than the old mine's vein yielded at 2 ore a block. So `ORE_YIELD` is raised to 4 iron ore and 3 coal a block: 16 iron ore, and coal enough to smelt it. That leaves room for an iron pickaxe as well.
+
+## 10. Controls
 
 | Action | Default key |
 |---|---|
 | Switch between the village, the old mine and the road | Tab |
 
-## 8. Tuning table (provisional)
+## 11. Tuning table (provisional)
 
 Starting values from the issues. Rows marked "set by #N" get their value when that issue is built.
 
@@ -125,7 +186,10 @@ Starting values from the issues. Rows marked "set by #N" get their value when th
 | Rails recipe | 6 iron ingots + 1 stick → 16 rails | As in Minecraft. |
 | Minecart recipe | 5 iron ingots → 1 minecart | |
 | `RAILS_PER_SEGMENT` | 2 | The whole line takes 12 rails, one craft's worth. |
-| `CART_SPEED` | 8 cells/s | Riding speed over finished track, for the route's estimate. #124 uses it for riding. |
-| `CART_CAPACITY` | 20 | Items a minecart carries. Used from #123. |
-| Station cost | planks and cobblestone, set by #123 | A 1×3 platform with a buffer stop. |
-| Station loading rate | set by #123 | Items per second loaded or unloaded at a station. |
+| `LAY_TIME` | 4 s | Laying one rail. |
+| `CART_SPEED` | 8 cells/s | Riding over laid track. Where there's none, the cart is pushed at `WALK`. |
+| `CART_CAPACITY` | 20 | Items the cart adds to the packs, with the whole line laid. |
+| Station cost | 6 planks, 4 cobblestone | A 1×3 platform with a buffer stop. |
+| `LOAD_RATE` | 10 items/s | Loading or unloading a cart at a station. |
+| `HAND_RATE` | 2 items/s | Each party member unpacking by hand at the village signpost. |
+| `ORE_YIELD` | coal 3, iron 4 | Raised from Slice 3's 2 and 2, so the vein's 16 iron ore pays for the line, the cart and an iron pickaxe. |

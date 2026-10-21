@@ -13,13 +13,13 @@ const NAME := "Road to the mine"
 ## One row per line, west (the village) to east (the mine).
 ##   . grass   ~ the stream   # rock (the cut's walls)   o boulder   T tree
 const LAYOUT := [
-	".....T..............~~..........########....T...",
-	"....................~~..........########........",
-	"..........T.........~~...............o..........",
+	".....T.....T........~~....T.....########....T...",
+	"...............T....~~..........########........",
+	"....................~~...............o..........",
 	"....................~~...........o..o.o.........",
 	"....................~~............o.............",
-	"............T.......~~..........########........",
-	"....................~~....T.....########......T.",
+	"....................~~..........########........",
+	"....................~~..........########........",
 ]
 
 ## Where the road meets the village (west) and the mine (east). The line runs along this row.
@@ -36,6 +36,11 @@ const SEGMENTS := [
 	{"name": "The rocky cut", "x": 32, "terrain": "a rocky cut", "obstacle": "cut"},
 	{"name": "Below the mine", "x": 40, "terrain": "grass", "obstacle": ""},
 ]
+
+## Where rails for the line are piled before they're carried to the track (issue #122).
+const RAILHEAD := Vector2i(2, 1)
+## The stations (issue #123): 1×3 platforms beside the line, one at each end.
+const STATIONS := {"village": Vector2i(2, 4), "mine": Vector2i(42, 4)}
 
 ## The plank bridge over the stream: where it goes, and its size. It spans the stream along the line.
 const BRIDGE_AT := Vector2i(19, 2)

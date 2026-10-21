@@ -74,3 +74,9 @@ jobs:
           set -o pipefail
           timeout 600 ~/godot/godot --headless --path . -s res://tests/playtest_slice3.gd 2>&1 | tee /tmp/slice3.log
           grep -q '^PLAYTEST PASSED$' /tmp/slice3.log
+
+      - name: Route bot playtest (Slice 4)
+        run: |
+          set -o pipefail
+          timeout 900 ~/godot/godot --headless --path . -s res://tests/playtest_slice4.gd 2>&1 | tee /tmp/slice4.log
+          grep -q '^PLAYTEST PASSED$' /tmp/slice4.log

@@ -226,7 +226,13 @@ Residents who go out to work on the road walk back to the village when they're d
 
 **Rails and minecarts** are made at the bench from the old mine's iron: 6 iron ingots and a stick make 16 rails, and 5 iron ingots make a minecart. Both are Craft work.
 
-**Planning the line.** Once the road has been walked, **Plan the line** on the signpost's panel shows what it would cost: the rails it takes (2 a segment), how many are on hand, the iron to craft the rest, and about how much time a round trip would save by cart. **Lay track** puts a track blueprint along every segment. Track is laid from the village end outward: residents with Build on carry rails out and lay each segment in turn. The stream's segment waits for the bridge, and the cut's for its boulders to be cleared, and the stuck list says so. Riding the line comes later.
+**Planning the line.** Once the road has been walked, **Plan the line** on the signpost's panel shows what it would cost: the rails it takes (2 a segment), how many are on hand, the iron to craft the rest, and about how much time a round trip would save by cart. **Lay track** puts a track blueprint along every segment. Track is laid from the village end outward by the **track crew**, residents with Build on. They carry rails out to a **railhead** pile at the road's village end, then from there to the segment being laid, which fills in rail by rail. The stream's segment waits for the bridge, and the cut's for its boulders to be cleared. The stuck list says what the track needs: more rails, the bridge, the cut, or someone with Build on.
+
+**Stations.** **Build the village station** and **Build the mine station** (6 planks and 4 cobblestone each) put a platform beside the line at each end. Once the village station is built, a minecart from the village is hauled out and parked there. Select a station to see how much of the line is laid, where the cart is and what's on its platform.
+
+**Riding.** When the cart waits at the village station, both stations are built and the cut is clear, the next party rides. They get in at the road's end, ride the laid track fast, and push the cart at walking pace where there's no track yet. Coming home, their cargo is loaded into the cart at the mine and unloaded onto the village platform, faster than unpacking by hand at the signpost. Haulers carry it to the stockpile from there. With the whole line laid, the cart also adds 20 to the party's packs. The report says how long they spent on the road and how much time the cart saved. Mining at the old mine is no faster.
+
+**Unpacking.** A party coming home on foot unpacks at the signpost, two items a second each, before it goes back to work.
 
 ## New residents
 

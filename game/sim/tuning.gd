@@ -41,13 +41,16 @@ const MEADOW_TAKE := 2                  ## Sheep's worth each resident brings ba
 const MEADOW_REGROW := 240.0            ## Seconds for the meadow to regain one sheep.
 
 # Site maps (Slice 3, issues #102, #103).
-const ORE_YIELD := {"coal": 2, "iron": 2}  ## Items an ore block drops (coal; iron ore).
+const ORE_YIELD := {"coal": 3, "iron": 4}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).
 const TORCH_LIGHT := 3.0                ## Cells a torch lights; open cells further from every torch are dark.
 # The road to the mine (Slice 4, issues #118-#121).
 const FORD_SPEED := 0.4                 ## Walking speed wading the stream, before the bridge is built.
 const RAILS_PER_SEGMENT := 2            ## Rails one segment of track takes.
 const CART_SPEED := 8.0                 ## Cells per second riding a minecart over finished track.
 const CART_CAPACITY := 20               ## Items a minecart carries, added to the party's packs once the line is complete.
+const LAY_TIME := 4.0                   ## Seconds to lay one rail (issue #122).
+const LOAD_RATE := 10.0                 ## Items a second loaded into or out of a cart at a station (issue #123).
+const HAND_RATE := 2.0                  ## Items a second each party member unpacks by hand at the signpost.
 # Expeditions (Slice 3, issues #106, #107).
 const PARTY_MAX := 3                    ## Residents in a party, at most.
 const PACK_CAPACITY := 15               ## Items each party member carries, shared by supplies and cargo.

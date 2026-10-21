@@ -4,8 +4,8 @@ extends "res://tests/playtest_base.gd"
 ## replayed. It builds the expedition board, plans a trip for Ada and Tomas, packs and departs,
 ## works the old mine, answers the iron discovery with Investigate and a serious injury with Retreat,
 ## watches the return and unloading, then smelts iron and crafts an iron pickaxe. On the way it walks
-## the road to the mine (Slice 4, #118), then builds the bridge, clears the cut and plans the line from
-## the signpost (#119, #121). It fails on any
+## the road to the mine (Slice 4, #118), then builds the bridge, clears the cut, plans the line and
+## builds both stations from the signpost (#119, #121, #123). It fails on any
 ## stuck reason the player couldn't act on. Uses its own save and settings folders. Run from game/:
 ##   godot --headless --path . -s res://tests/playtest_slice3.gd
 
@@ -119,9 +119,9 @@ func _initialize() -> void:
 	await key(KEY_QUOTELEFT)
 	check(await play_until(120, func(): return sim.get_map(OldMine.ID).discovered), "the vein is surveyed")
 	check(sim.plan_targets(OldMine.ID).any(func(x): return x.item == "iron_ore"), "iron is a known resource now")
-	# Mark two iron blocks and two coal blocks, clear of the loose ceilings.
+	# Mark an iron block and a coal block, clear of the loose ceilings: 4 iron ore and 3 coal.
 	await key(KEY_X)
-	for c in [Vector2i(12, 14), Vector2i(13, 14), Vector2i(5, 10), Vector2i(12, 5)]:
+	for c in [Vector2i(12, 14), Vector2i(5, 10)]:
 		await look_at(c)
 		await click(screen(c, 0.5))
 	await key(KEY_ESCAPE)
@@ -177,6 +177,15 @@ func _initialize() -> void:
 	await frames(2)
 	check(visible_label("12 rails") and visible_label("Saves about"), "it shows the rails the line takes and the time it saves")
 	check(await click_button("Lay track") and range(Road.segment_count()).all(func(i): return sim.track_state(i) == "planned"), "Lay track plans a track blueprint on every segment")
+	# ---- The stations (issue #123), one at each end of the road
+	if count("plank") < 12:
+		check(await open_bench_panel() and await queue_recipe("Planks", 3), "queue planks for the stations")
+		await key(KEY_ESCAPE)
+	await look_at(sim.route_sign())
+	await click(screen(sim.route_sign(), 1.4))
+	check(await click_button("Build the village station") and await click_button("Build the mine station"), "click Build the village station, then the mine station")
+	check(await play_until(400, func(): return sim.station("village").get("done", false) and sim.station("mine").get("done", false)), "villagers carry planks and cobblestone out and build both stations (%s planks, %s cobblestone)" % [count("plank"), count("cobble")])
+	check(seen("The station at the village end of the line is built"), "a toast says so")
 	check(await play_until(Tuning.HEAL_TIME[2] * 2 + 60, func(): return tomas.hurt == 0), "Tomas heals and goes back to work")
 
 	# ---- Every stall had a reason the player could act on

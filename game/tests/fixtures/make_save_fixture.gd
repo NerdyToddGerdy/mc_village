@@ -130,6 +130,16 @@ func _initialize() -> void:
 		var first := sim.track_site(0)
 		first.stage = 1
 		first.done = true
+		first.laid = Tuning.RAILS_PER_SEGMENT
+	if SaveFormat.VERSION >= 19:  # a half-laid segment, rails at the railhead, the village station built and the cart parked (#122-#124)
+		var second := sim.track_site(1)
+		second.laid = 1
+		sim.on_map(Road.ID, sim.drop_items.bind(Road.RAILHEAD, "rail", 3))
+		sim.plan_station("village")
+		sim.station("village").stage = 1
+		sim.station("village").done = true
+		sim.plan_station("mine")
+		sim.cart = {"at": "village", "x": Sim.station_x("village"), "state": "parked", "load": {}, "riders": [], "acc": 0.0}
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

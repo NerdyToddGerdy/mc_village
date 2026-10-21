@@ -994,6 +994,10 @@ func clear_cut() -> String:
 	return sim.clear_cut()
 
 
+func plan_station(end: String) -> String:
+	return sim.plan_station(end)
+
+
 func plan_line() -> String:
 	var why := sim.plan_line()
 	if why == "":
@@ -1335,7 +1339,29 @@ func _screenshot_scene() -> void:
 					sim.plan_bridge()
 					sim.bridge().stage = 1
 					sim.bridge().done = true
-					if "--preview" in args:
+					if "--ride" in args:  # the whole line, both stations, and the party riding home with its cargo (issues #122-#124)
+						for bl in sim.cut_boulders():
+							bl.alive = false
+						sim.road().occ_dirty = true
+						sim.plan_line()
+						for k in Road.segment_count():
+							sim.track_site(k).stage = 1
+							sim.track_site(k).done = true
+						for end in ["village", "mine"]:
+							sim.plan_station(end)
+							sim.station(end).stage = 1
+							sim.station(end).done = true
+						sim.cart = {"at": "mine", "x": Sim.station_x("mine"), "state": "parked", "load": {}, "riders": [], "acc": 0.0}
+						sim.expedition.cart = true
+						sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16)))
+						for i in 40 * Tuning.TPS:
+							sim.step()
+						sim.call_home()
+						for i in 60 * Tuning.TPS:
+							sim.step()
+							if sim.cart.state == "moving" and sim.cart.x < 15.0:
+								break
+					elif "--preview" in args:
 						line_preview = true
 					else:
 						sim.plan_line()
@@ -1346,7 +1372,7 @@ func _screenshot_scene() -> void:
 					sim.compute_stuck()
 				switch_map(Road.ID)
 				selection = {"kind": "route", "id": 0}
-				var at: Vector2 = ada.pos if "--walking" in args else Vector2(18, 3)
+				var at: Vector2 = ada.pos if "--walking" in args or "--ride" in args else Vector2(18, 3)
 				_target = Vector3(at.x + 2.0, 0, at.y)
 				_cam.size = 10.0 if "--walking" in args else 13.0
 				sim.events.clear()

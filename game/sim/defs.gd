@@ -93,6 +93,10 @@ const TEMPLATES := {
 	"track": {"name": "Track", "size": Vector2i(8, 1), "walk": true, "stages": [
 		{"name": "Track", "verb": "needs", "cost": {"rail": Tuning.RAILS_PER_SEGMENT}},
 	]},
+	# A platform with a buffer stop at each end of the line (issue #123). It grows into a loading station.
+	"station": {"name": "Station", "size": Vector2i(3, 1), "walk": true, "plot": "loading station", "stages": [
+		{"name": "Station", "verb": "needs", "cost": {"plank": 6, "cobble": 4}},
+	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},
 		{"name": "Walls", "verb": "need", "cost": {"plank": 16, "log": 4}},
