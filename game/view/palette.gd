@@ -40,4 +40,5 @@ static var ITEM_COLORS := {
 	"log": Color("#7A5634"), "plank": Color("#C49A62"), "stick": Color("#9C7A4E"), "cobble": Color("#7F827C"),
 	"coal": Color("#34312F"), "iron_ore": Color("#C08A68"), "iron_ingot": Color("#C9D0D6"),
 	"wood_axe": Color("#C49A62"), "wood_pick": Color("#C49A62"), "stone_axe": Color("#8A8D86"), "stone_pick": Color("#8A8D86"),
+	"iron_axe": Color("#C9D0D6"), "iron_pick": Color("#C9D0D6"),
 }

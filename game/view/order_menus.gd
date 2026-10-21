@@ -6,6 +6,7 @@ extends RefCounted
 ## Each entry: id (the tool it switches on, or the template it places), name, sub (one line under
 ## the name), mark (the icon drawn for it), and optionally `unlock`, a condition it waits for:
 ##   "sheep": a live sheep exists.
+##   "founded": the founding is done (Slice 3's expedition board, issue #105).
 
 const MENUS := {
 	"gather": {"name": "Gather", "entries": [
@@ -22,6 +23,7 @@ const MENUS := {
 		{"id": "bench", "name": "Crafting bench", "sub": "4 logs. Reserves room for a workshop", "mark": "build"},
 		{"id": "house", "name": "House", "sub": "8 cobblestone, then 16 planks and 4 logs, then 12 planks, then a bed", "mark": "build"},
 		{"id": "fireplace", "name": "Fireplace", "sub": "6 cobblestone. Reserves room for a kitchen", "mark": "build"},
+		{"id": "board", "name": "Expedition board", "sub": "6 planks and 4 sticks. Plans trips to the old mine. Reserves room for a map room", "mark": "build", "unlock": "founded"},
 	]},
 }
 
@@ -47,6 +49,8 @@ static func unlocked(e: Dictionary, sim: Sim) -> bool:
 	match e.get("unlock", ""):
 		"sheep":
 			return sim.sheep.any(func(sh): return sh.alive)
+		"founded":
+			return Goals.current(sim) < 0
 	return true
 
 

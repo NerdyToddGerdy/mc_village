@@ -44,6 +44,11 @@ const MEADOW_REGROW := 240.0            ## Seconds for the meadow to regain one 
 const MINE_TRIP := 60.0                 ## Seconds to walk between the village and the old mine.
 const ORE_YIELD := {"coal": 2, "iron": 2}  ## Items an ore block drops (coal; iron ore).
 const TORCH_LIGHT := 3.0                ## Cells a torch lights; open cells further from every torch are dark.
+# Expeditions (Slice 3, issues #106, #107).
+const PARTY_MAX := 3                    ## Residents in a party, at most.
+const PACK_CAPACITY := 10               ## Items each party member carries, shared by supplies and cargo.
+const RETURN_MEALS := 1                 ## Meals per party member kept for the walk home.
+const MEAL_FOOD := 50.0                 ## Food a meal is counted as when estimating time on site (bread's).
 
 # Skills (issue #47/#48, slice-2-spec.md §5).
 const SKILL_LEVELS := [8, 25, 50, 90]   ## Experience for levels 2, 3, 4 and 5; one point per finished task.
@@ -53,12 +58,13 @@ const ARRIVAL_LEVEL := 3                ## A new arrival's level in their one sk
 const CRAFT_TIME := 3.0                 ## Seconds per bench recipe.
 const BAKE_TIME := 3.0                  ## Seconds to bake bread at the fireplace.
 const COOK_TIME := 3.0                  ## Seconds to cook mutton at the fireplace.
-const MEAL_STOCK := 6                   ## The fireplace's standing order keeps this many meals stored.                 ## Seconds per recipe.
+const MEAL_STOCK := 6                   ## The fireplace's standing order keeps this many meals stored.
+const SMELT_TIME := 5.0                 ## Seconds to smelt one iron ingot at the fireplace (issue #104).
 const STAGE_TIME := 10.0                ## Seconds of build work per construction stage.
 const ARRIVAL_DELAY := 45.0             ## Seconds after a house with a free bed is finished, per traveler.
 const UNREACHABLE_COOLDOWN := 8.0       ## Seconds before retrying a target that couldn't be reached.
 
-## Indexed by tool tier: 0 = bare hands, 1 = wooden, 2 = stone.
-const CHOP_TIME := [20.0, 8.0, 5.0]
-const BREAK_TIME := [0.0, 10.0, 6.0]    ## Tier 0 can't break stone.
-const DURABILITY := [0, 10, 25]         ## Uses before a tool breaks.
+## Indexed by tool tier: 0 = bare hands, 1 = wooden, 2 = stone, 3 = iron (issue #104).
+const CHOP_TIME := [20.0, 8.0, 5.0, 3.5]
+const BREAK_TIME := [0.0, 10.0, 6.0, 4.0]  ## Tier 0 can't break stone.
+const DURABILITY := [0, 10, 25, 60]     ## Uses before a tool breaks.

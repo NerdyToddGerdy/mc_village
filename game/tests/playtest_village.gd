@@ -303,6 +303,60 @@ func _initialize() -> void:
 	check(await play_until(Tuning.ARRIVAL_DELAY + 120, func(): return sim.residents.size() == 3 and not sim.residents[2].arriving), "a third traveler arrives and moves in")
 	check(sim.residents.size() == 3 and sim.residents[2].name == "Mira" and seen("Mira"), "it's Mira, with a toast")
 
+	# ---- Smelting and iron tools (issue #104): ore and coal from the mine, smelted at the fireplace
+	var zc: Vector2i = sim.zone.keys()[0]
+	sim.drop_items(zc, "iron_ore", 3)
+	sim.drop_items(zc, "coal", 3)
+	game._select(fire)
+	check(game.craft_menu_open and await queue_recipe("Smelt iron", 3), "queue 3 Smelt iron at the fireplace")
+	await key(KEY_ESCAPE)
+	check(await play_until(150, func(): return count("iron_ingot") >= 3), "3 iron ore and 3 coal are smelted into 3 ingots (%d)" % count("iron_ingot"))
+	check(seen("Smelting iron"), "a resident was seen smelting")
+	check(await open_bench_panel() and await queue_recipe("Iron pickaxe"), "queue an iron pickaxe at the bench")
+	await key(KEY_ESCAPE)
+	check(await play_until(150, func(): return sim.residents.any(func(r): return r.pick != null and r.pick.type == "iron_pick") or not sim.tool_items("pick", 2).is_empty()), "an iron pickaxe is made")
+
+	# ---- The expedition board (issue #105): built from the Build menu once the founding is done
+	check(await open_bench_panel(), "open the bench for the board's planks and sticks")
+	await queue_recipe("Planks", 2)
+	await queue_recipe("Sticks", 1)
+	await key(KEY_ESCAPE)
+	check(await click_button("Build") and await click_button("Expedition board"), "pick Expedition board in the Build menu")
+	var bp := build_spot("board", at(9, 9))
+	check(bp.x >= 0, "room for the board and its map room plot")
+	await look_at(bp)
+	await click(screen(bp))
+	var board = sim.site_at(bp)
+	check(board != null and board.tpl == "board" and board.plot != null, "the board is placed with its map room plot reserved")
+	check(await play_until(240, func(): return board != null and board.done), "the board is built")
+	check(seen("expedition board is up") and game.known_maps().has(OldMine.ID), "it brings word of the old mine, which the switcher now shows")
+
+	# ---- Planning (issue #106): select the board, read the site report, and fill in the plan
+	await look_at(bp)
+	await click(screen(bp, 1.0))
+	game._hud.refresh(sim)
+	await frames(2)
+	check(game.planner_open and visible_label("Old mine"), "selecting the board opens the planner with the old mine's report")
+	check(visible_label("“%s”" % OldMine.TOLD), "the report says what the village has been told")
+	check(await click_button("Tomas"), "add Tomas to the party")
+	check(await click_button("Coal"), "send them for coal")
+	check(await click_button("meals more"), "take one more meal")
+	check(game.plan.party == [ada.id, tomas.id] and game.plan.meals == 4 and game.plan.target.item == "coal", "the plan is Ada and Tomas, 4 meals, for coal (%s)" % [game.plan])
+	check(await click_button("Start packing"), "click Start packing")
+	check(sim.expedition.get("state", "") == "staging", "packing starts")
+
+	# ---- Staging and departure (issue #107): supplies are packed at the board, then Depart
+	check(await play_until(240, func(): return sim.depart_blocker() == ""), "the supplies are packed and the party gathers at the board (%s)" % sim.depart_blocker())
+	check(sim.packed().meals == 4, "4 meals are packed")
+	check(await click_button("Depart"), "click Depart")
+	check(ada.away and tomas.away and ada.trip == OldMine.ID, "Ada and Tomas set off for the old mine")
+	await play(2)
+	check(visible_label("on the road to the old mine") or find_button("Party on the road to the old mine") != null, "the board and the party line say they're on the road")
+	check(await play_until(Tuning.MINE_TRIP + 10, func(): return ada.map == OldMine.ID and tomas.map == OldMine.ID), "they reach the old mine")
+	await key(KEY_TAB)
+	check(game.view_map == OldMine.ID, "Tab shows them at the old mine")
+	await key(KEY_TAB)
+
 	# ---- Every stall has a reason: anything in the stuck list carries one
 	check(sim.stuck.all(func(s): return s.why != ""), "every stuck item says why")
 

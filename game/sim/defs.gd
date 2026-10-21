@@ -21,7 +21,12 @@ const ITEMS := {
 	"wood_pick": {"one": "wooden pickaxe", "many": "wooden pickaxes", "tool": "pick", "tier": 1},
 	"stone_axe": {"one": "stone axe", "many": "stone axes", "tool": "axe", "tier": 2},
 	"stone_pick": {"one": "stone pickaxe", "many": "stone pickaxes", "tool": "pick", "tier": 2},
+	"iron_axe": {"one": "iron axe", "many": "iron axes", "tool": "axe", "tier": 3},
+	"iron_pick": {"one": "iron pickaxe", "many": "iron pickaxes", "tool": "pick", "tier": 3},
 }
+
+## A tool tier's name: 1 wooden, 2 stone, 3 iron (issue #104).
+const TIER_NAMES := ["Bare", "Wooden", "Stone", "Iron"]
 
 ## The tally bar's Materials group, in order (issue #73). Raw mutton is counted under Food instead.
 const MATERIALS := ["log", "plank", "stick", "cobble", "coal", "iron_ore", "iron_ingot", "wheat", "wool"]
@@ -39,12 +44,17 @@ const RECIPES := [
 	{"id": "wood_pick", "name": "Wooden pickaxe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_pick": 1}, "pattern": ["PPP", " S ", " S "]},
 	{"id": "stone_axe", "name": "Stone axe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_axe": 1}, "pattern": ["CC ", "CS ", " S "]},
 	{"id": "stone_pick", "name": "Stone pickaxe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_pick": 1}, "pattern": ["CCC", " S ", " S "]},
+	# Iron tools (issue #104), from ingots smelted at the fireplace.
+	{"id": "iron_axe", "name": "Iron axe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_axe": 1}, "pattern": ["II ", "IS ", " S "]},
+	{"id": "iron_pick", "name": "Iron pickaxe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_pick": 1}, "pattern": ["III", " S ", " S "]},
 	# Fireplace recipes (issue #46). "at" says which job building makes a recipe; the default is the bench.
 	{"id": "bread", "name": "Bread", "inp": {"wheat": 3}, "out": {"bread": 1}, "at": "fireplace", "doing": "Baking bread"},
 	{"id": "cooked_mutton", "name": "Cooked mutton", "inp": {"mutton": 1, "log": 1}, "out": {"cooked_mutton": 1}, "at": "fireplace", "doing": "Cooking mutton", "fuel": "log"},
+	# Smelting (issue #104): coal is the fuel. It's Cook work, like everything at the fireplace.
+	{"id": "smelt_iron", "name": "Smelt iron", "inp": {"iron_ore": 1, "coal": 1}, "out": {"iron_ingot": 1}, "at": "fireplace", "doing": "Smelting iron", "fuel": "coal"},
 ]
 
-const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble"}
+const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot"}
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
 const JOBS := ["mine", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
@@ -65,6 +75,10 @@ const TEMPLATES := {
 	]},
 	"fireplace": {"name": "Fireplace", "size": Vector2i(1, 1), "station": true, "plot": "kitchen", "stages": [
 		{"name": "Fireplace", "verb": "needs", "cost": {"cobble": 6}},
+	]},
+	# Where expeditions are planned and packed (issue #105). It grows into the map room.
+	"board": {"name": "Expedition board", "size": Vector2i(1, 1), "plot": "map room", "stages": [
+		{"name": "Expedition board", "verb": "needs", "cost": {"plank": 6, "stick": 4}},
 	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},

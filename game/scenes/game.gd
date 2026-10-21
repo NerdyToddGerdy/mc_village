@@ -19,6 +19,8 @@ var build_menu_open: bool:
 var craft_menu_open := false            ## The Craft panel above the toolbar (issue #57).
 var craft_bench_i := 0                  ## Which finished bench the Craft panel shows.
 var jobs_board_open := false            ## The Village jobs board (issue #78).
+var planner_open := false               ## The expedition planner above the toolbar (issue #106).
+var plan := {}                          ## The plan being drawn up in the planner; the sim's once confirmed.
 var selection := {}                     ## {} | {kind:"res", ids:[...]} | {kind:"tree"/"boulder"/"site", id}
 ## The map in view (issue #101): "village" or a site map. The sim stays on the village between
 ## frames; input and drawing switch it to this map while they work, then back.
@@ -229,8 +231,8 @@ func _update_live_overlays() -> void:
 		else:
 			var clr := Sim.clearing_text(sim.obstacles_in(Rect2i(origin, size)))
 			var turn := keys.first("rotate")
-			var names := {"house": "house", "bench": "crafting bench", "fireplace": "fireplace"}
-			var turns := {"house": "the door", "bench": "its workshop plot", "fireplace": "its kitchen plot"}
+			var names := {"house": "house", "bench": "crafting bench", "fireplace": "fireplace", "board": "expedition board"}
+			var turns := {"house": "the door", "bench": "its workshop plot", "fireplace": "its kitchen plot", "board": "its map room plot"}
 			hint = "Place %s." % names[placing] + (" %s turns %s." % [turn, turns[placing]] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
 	if sel != null and sel.kind in ["tree", "boulder", "sheep", "bush", "crop", "meadow"]:
@@ -394,6 +396,8 @@ func _select(hit) -> void:
 		selection = {"kind": hit.kind, "id": hit.id}
 		if hit.kind == "site" and Sim.is_station(hit) and hit.done:
 			open_craft_menu(hit)
+		elif hit.kind == "site" and hit.tpl == "board" and hit.done:
+			open_planner()
 
 
 ## Opens the Craft panel on a particular bench (selecting a bench does this).
@@ -403,6 +407,7 @@ func open_craft_menu(bench: Dictionary) -> void:
 		return
 	craft_bench_i = i
 	craft_menu_open = true
+	planner_open = false
 	menu_open = ""
 
 
@@ -598,6 +603,8 @@ func _key(e: InputEventKey) -> void:
 			jobs_board_open = false
 		elif craft_menu_open:
 			craft_menu_open = false
+		elif planner_open:
+			planner_open = false
 		else:
 			open_menu("main")
 		get_viewport().set_input_as_handled()
@@ -624,6 +631,7 @@ func _key(e: InputEventKey) -> void:
 		"bench": start_placing("bench")
 		"house": start_placing("house")
 		"fireplace": start_placing("fireplace")
+		"board": start_placing("board")
 		"rotate":
 			if tool == "build":
 				rot = (rot + 1) % 4
@@ -674,6 +682,8 @@ func restart() -> void:
 func _use_sim(s: Sim) -> void:
 	sim = s
 	craft_menu_open = false
+	planner_open = false
+	plan = {}
 	craft_bench_i = 0
 	_world.set_sim(s)
 	tool = ""
@@ -767,6 +777,7 @@ func toggle_craft_menu() -> void:
 	craft_menu_open = not craft_menu_open
 	if craft_menu_open:
 		menu_open = ""
+		planner_open = false
 		if tool == "build":
 			tool = ""
 			placing = ""
@@ -778,7 +789,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["paint", "stock", "farm", "build", "bench", "house", "fireplace"]
+const VILLAGE_ONLY := ["paint", "stock", "farm", "build", "bench", "house", "fireplace", "board"]
 
 
 func set_tool(t: String) -> void:
@@ -887,6 +898,68 @@ func set_keep_meals(f: Dictionary, on: bool) -> void:
 	sim.set_keep_meals(f, on)
 
 
+# ---------------------------------------------------------------- expeditions (issues #105-#107)
+
+## Opens the expedition planner (selecting the board does this), with a fresh plan if there's none.
+func open_planner() -> void:
+	if sim.expedition_board().is_empty():
+		return
+	planner_open = true
+	craft_menu_open = false
+	menu_open = ""
+	if plan.is_empty() or not sim.expedition.is_empty():
+		plan = sim.new_plan()
+
+
+func close_planner() -> void:
+	planner_open = false
+
+
+## Adds a resident to the plan's party, or takes them off it.
+func plan_toggle(id: int) -> void:
+	if plan.party.has(id):
+		plan.party.erase(id)
+	elif plan.party.size() < Tuning.PARTY_MAX:
+		plan.party.append(id)
+
+
+## Changes one of the plan's numbers by `by`, kept at 0 or more (the target at 1 or more).
+func plan_step(key: String, by: int) -> void:
+	if key == "target":
+		plan.target.n = maxi(1, plan.target.n + by)
+	else:
+		plan[key] = maxi(0, plan[key] + by)
+
+
+func plan_target(item: String) -> void:
+	plan.target.item = item
+
+
+func plan_policy(key: String) -> void:
+	plan.policy[key] = not plan.policy[key]
+
+
+func plan_spend_return() -> void:
+	plan.spend_return = not plan.spend_return
+
+
+## Start packing: the plan becomes the sim's expedition. Returns why it can't, or "".
+func confirm_plan() -> String:
+	var err := sim.plan_expedition(plan)
+	if err == "":
+		plan = {}
+	return err
+
+
+func depart() -> String:
+	return sim.depart()
+
+
+func cancel_expedition() -> void:
+	sim.cancel_expedition()
+	plan = sim.new_plan()
+
+
 func toggle_mine(target: Dictionary) -> void:
 	_in_view(func(): sim.designate_mine(Rect2i(target.cell, Vector2i.ONE), target))
 
@@ -933,6 +1006,8 @@ func _focus_here(kind: String, id: int) -> void:
 			at = Vector3(s.origin.x + s.size.x / 2.0, 0, s.origin.y + s.size.y / 2.0)
 			if Sim.is_station(s) and s.done:
 				open_craft_menu(s)
+			elif s.tpl == "board" and s.done:
+				open_planner()
 		"boulder":
 			for b in sim.boulders:
 				if b.id == id:
@@ -1170,6 +1245,31 @@ func _screenshot_scene() -> void:
 		sim.residents[0].jobs.mine.xp = 30
 		sim.residents[0].jobs.toolsmith.on = true
 		jobs_board_open = true
+	if "--board" in OS.get_cmdline_user_args():  # the expedition board and its planner (issues #105-#107); --packing while packing
+		for k in 2:  # Tomas and Mira, to choose a party from
+			var who: Array = Sim.TRAVELERS[k]
+			sim.add_resident(who[0], who[1], sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(2 + k, 1)))
+		var b := {}
+		for c in [at(12, 9), at(9, 8), at(6, 9), at(13, 5), at(9, 13), at(4, 12)]:
+			if sim.placement_check("board", c) == "" and sim.walkable(c):
+				b = sim.place_site("board", c)
+				break
+		b.stage = 1
+		b.done = true
+		sim._on_site_done(b)
+		sim.rev += 1
+		_select(b)
+		plan.party.append(sim.residents[1].id)
+		if "--packing" in OS.get_cmdline_user_args():
+			sim.drop_items(area(10, 7, 4, 2).position, "bread", 4)
+			sim.drop_items(area(10, 7, 4, 2).position + Vector2i(1, 0), "stone_pick", 1)
+			plan.meals = 3
+			confirm_plan()
+			for i in 12 * Tuning.TPS:
+				sim.step()
+		sim.events.clear()
+		_target = Vector3(b.origin.x + 4.5, 0, b.origin.y - 1.5)  # the board left of the planner
+		_place_camera()
 	if "--mine" in OS.get_cmdline_user_args():  # Ada at work in the old mine, seen from there (issues #101, #102)
 		var mine := sim.get_map(OldMine.ID)
 		mine.known = true
