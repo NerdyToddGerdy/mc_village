@@ -12,7 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - It's opened directly in a browser, with no build step or dependencies beyond Google Fonts.
   - It covers **Slice 1 only** and stays frozen there. From Slice 2 on, rules live in the specs and the Godot game, which have their own tests and bot playtest. Update the prototype only for Slice 1 rule changes.
   - Its live copy is published as a claude.ai artifact.
-- `game/`: the Godot 4.7 project for Slice 1.
+- `game/`: the Godot 4.7 project, now through Slice 2.
+- `docs/how-to-play.md`: the player's guide. Update it when a change alters what the player sees or does.
 
 ## Commands
 

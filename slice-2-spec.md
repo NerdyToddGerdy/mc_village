@@ -171,7 +171,7 @@ Each resident has, for **every** job:
 - With every job off, a resident still eats and follows direct and queued orders.
 - "No one does X" appears in the stuck list when there's work of that job and every resident has it off.
 
-**Character panel.** The resident panel gains a **Jobs** grid. Each row shows a job's on/off switch, priority (1, 2 or 3; click to cycle) and level with a progress bar to the next level.
+**Character panel.** The resident panel first had a **Jobs** grid (#47). The Village jobs board (#78, above) has replaced it; the panel keeps a one-line summary and a button to the board.
 
 ## 6. Toolsmith
 
