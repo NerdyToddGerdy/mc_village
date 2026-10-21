@@ -9,7 +9,7 @@ The game is built in slices, each a playable step:
 | Slice | What it adds | Status |
 |---|---|---|
 | 1. The founding moment | One founder, bare hands, a crafting bench, tools, stockpiles, two houses, the first traveler | **Done** |
-| 2. A functioning village | Jobs and skills, food, sheep and beds, a toolsmith, more residents | In progress |
+| 2. A functioning village | Jobs and skills, food, sheep and beds, a toolsmith, more residents | Built; hand playtest to come |
 | 3. The first expedition | A small party, provisions, a trip and a return | Planned |
 | 4. Route investment | Minecart tracks that speed up repeated trips | Planned |
 | 5. Nether foothold | A portal, scouting, trading, an outpost | Planned |
@@ -38,43 +38,39 @@ You can also open `game/project.godot` in the Godot editor and press **Play** (F
 
 ## Playing
 
-The game opens on the main menu. Choose **Play**. The goals panel at the top left walks you through the founding, one step at a time.
+**[How to play](docs/how-to-play.md)** is the full guide: the screen, the founding step by step, orders, residents and the jobs board, crafting, building, food and the controls.
 
-1. **Mine trees** (X, then click or drag over them). Ada fells them by hand, slowly.
-2. **Build a crafting bench** (B, then Crafting bench, or press T). Select it and queue planks, sticks and a wooden pickaxe.
-3. **Paint a stockpile** (Z, then drag) so materials get carried somewhere tidy.
-4. **Mine boulders** for cobblestone once there's a pickaxe.
-5. **Build a house** for Ada (H), then a second one. **Queue 5** on the bench saves clicks on planks.
-6. A traveler, **Tomas**, arrives and moves into the spare house.
+In short: choose **Play** on the main menu, and the goals panel at the top left walks you through the founding.
 
-Select a resident to see their tools, hunger and jobs. Switch jobs on or off and set their priorities in the **Jobs** grid. Use **Equip** to hand them a particular axe or pickaxe.
+1. **Chop trees** (X, or Gather → Mine). Ada fells them by hand, slowly.
+2. **Build a crafting bench** (T, or Build → Crafting bench).
+3. **Make Ada the toolsmith** on the jobs board (J), then queue planks, sticks and a wooden pickaxe at the bench (C).
+4. **Paint a stockpile** (Z, then 1) and **break boulders** for cobblestone.
+5. **Hunt sheep** (G) for the wool the beds need, then **build two houses** (H).
+6. A traveler, **Tomas**, arrives for the spare bed. From there, keep the village fed with farms, the fireplace and trips to the sheep meadow, and give each resident the jobs they're best at.
 
 If something is stuck, a yellow flag appears over it and in the **Stuck** list at the top right, with the reason. Click an entry to go there.
 
 ### Controls
 
-All keys can be changed on the menu's **Controls** page. Esc and the mouse can't be changed.
+All keys can be changed on the menu's **Controls** page. Esc and the mouse can't be changed. The [guide](docs/how-to-play.md#controls) has the full list.
 
 | Key or mouse | Action |
 |---|---|
-| X / Z / B | Mine, Stockpile, Build |
-| G / P | Hunt sheep, paint a farm plot |
-| T / H / K | Place a crafting bench, a house or a fireplace (R turns the house door, or the plot a bench or fireplace reserves to grow into) |
-| Shift-drag / Alt-drag with Mine | Mark trees only, or boulders only (Alt is Option on a Mac) |
-| Click | Select a resident, tree, boulder or building |
-| Shift-drag | Select several residents |
-| Right-click | Order the selected residents to mine or walk |
-| Shift + right-click | Queue an order after their current one |
-| Drag, W A S D, arrows | Pan |
-| Mouse wheel, pinch, + / − | Zoom |
-| Space / ~ | Pause or resume / pause |
-| 1 / 2 / 3 | Game speed |
+| E / Z / B / C | Gather, Paint and Build menus, and the Craft panel (1 to 9 pick a menu row) |
+| X / G / P | Mine, Hunt, Farm plot, directly |
+| T / H / K | Place a crafting bench, a house or a fireplace (R turns it) |
+| J | Village jobs board |
+| Click / Shift-drag | Select / select several residents |
+| Right-click / Shift + right-click | Order the selected residents / queue the order |
+| Drag, W A S D, arrows / mouse wheel | Pan / zoom |
+| Space / 1 2 3 | Pause or resume / game speed |
 | F / N | Next resident / next stuck item |
 | Esc or M / ? | Menu / Controls |
 
 ### Saves and settings
 
-The menu has five save slots. Saves and key bindings are kept in Godot's user folder:
+The menu has five save slots and an **Interface size** setting (90 to 130%). Saves, key bindings and the interface size are kept in Godot's user folder:
 
 - macOS: `~/Library/Application Support/Godot/app_userdata/Block Village/`
 - Windows: `%APPDATA%\Godot\app_userdata\Block Village\`
@@ -100,6 +96,7 @@ On macOS, `godot` is `/Applications/Godot.app/Contents/MacOS/Godot`.
 
 | Path | What it is |
 |---|---|
+| `docs/how-to-play.md` | The player's guide to the game as it plays now |
 | `block-village-design-brief.md` | The vision and the design decisions |
 | `slice-1-spec.md`, `slice-2-spec.md` | How each slice works, in detail |
 | `game/` | The Godot project. `sim/` holds the game rules, `view/` draws them, `scenes/` connects them, and `tests/` tests them |
