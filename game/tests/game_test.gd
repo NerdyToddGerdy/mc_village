@@ -254,6 +254,94 @@ func _key(game: Game, code: Key, shift := false) -> void:
 
 
 ## Issue #8: keys can be rebound on the Controls page, with conflict warnings and a reset.
+## The keycaps on a toolbar menu's row: its number, then its direct key if it has one.
+func _menu_caps(game: Game, menu: String, row: String) -> Array:
+	for b in game._hud._menus[menu].get_children():
+		if b is Button and not b.is_queued_for_deletion() and b.get_meta("label", "") == row:
+			return _walk(b).filter(func(n): return n is Label and n.get_parent() is PanelContainer).map(func(l): return l.text)
+	return []
+
+
+## Issues #93, #94: Gather and Paint menus in the toolbar, picked by click or by 1–9 while open.
+func _test_order_menus(game: Game) -> void:
+	var hud: Hud = game._hud
+	var sim := game.sim
+	game.set_tool("")
+	game.craft_menu_open = false
+	hud.refresh(sim)
+	check(hud._tool_btns.keys() == ["gather", "paint", "build", "craft"], "the toolbar is Gather, Paint, Build and Craft (%s)" % [hud._tool_btns.keys()])
+	check(hud._tool_btns.gather.text == "Gather  ▸" and hud._tool_btns.paint.text == "Paint  ▸", "with no order on, the menu buttons say so with ▸")
+	_key(game, KEY_Z)
+	hud.refresh(sim)
+	check(game.menu_open == "paint" and hud._menu_panels.paint.visible, "Z opens the Paint menu")
+	var rows: Array = hud._menus.paint.get_children().filter(func(n): return not n.is_queued_for_deletion())
+	check(rows.map(func(r): return r.get_meta("label", "")) == ["Stockpile", "Farm plot"], "it lists Stockpile and Farm plot")
+	_key(game, KEY_1)
+	check(game.tool == "stock" and game.menu_open == "", "1 picks Stockpile and closes the menu")
+	_key(game, KEY_E)
+	hud.refresh(sim)
+	check(game.menu_open == "gather" and game.tool == "stock", "E opens the Gather menu, leaving Stockpile on until you pick")
+	var names: Array = hud._menus.gather.get_children().filter(func(n): return not n.is_queued_for_deletion()).map(func(b): return b.get_meta("label", ""))
+	var sheep := sim.sheep.any(func(sh): return sh.alive)
+	check(names.slice(0, 3) == ["Mine", "Chop trees", "Break boulders"] and names.has("Hunt") == sheep, "Gather lists Mine, Chop trees, Break boulders, and Hunt while there are sheep (%s)" % [names])
+	hud._menus.gather.get_children().filter(func(b): return b.get_meta("label", "") == "Chop trees")[0].pressed.emit()
+	check(game.tool == "chop" and game.order_kinds(false, true) == ["tree"], "Chop trees marks trees only, whatever the modifiers")
+	hud.refresh(sim)
+	check(hud._tool_btns.gather.text == "Gather: Chop trees" and hud._tool_btns.gather.button_pressed, "the Gather button names the order that's on")
+	game.set_tool("break")
+	check(game.order_kinds(true, false) == ["boulder"], "Break boulders marks boulders only")
+	_key(game, KEY_X)
+	check(game.tool == "mine" and game.menu_open == "" and game.order_kinds(true, false) == ["tree"], "X still switches Mine on directly, Shift still limits it to trees")
+	_key(game, KEY_G)
+	check(game.tool == "hunt", "G still switches Hunt on directly")
+	_key(game, KEY_ESCAPE)
+	check(game.tool == "", "Esc puts the order away")
+	_key(game, KEY_B)
+	_key(game, KEY_2)
+	check(game.tool == "build" and game.placing == "house", "B then 2 places a house, as the Build menu's second row")
+	_key(game, KEY_ESCAPE)
+	_key(game, KEY_Z)
+	_key(game, KEY_ESCAPE)
+	check(game.menu_open == "", "Esc closes an open menu")
+	# A drag that starts on a farm plot erases plots instead of painting (issue #93, like #63's stockpile).
+	var spot := Vector2i(-1, -1)
+	for c in sim.farm:
+		spot = c
+		break
+	if spot.x < 0:
+		for d in range(2, 12):
+			var c: Vector2i = Sim.rcell(sim.residents[0]) + Vector2i(d, d)
+			if sim.farm_blocked(c) == "":
+				sim.paint_farm(Rect2i(c, Vector2i.ONE))
+				spot = c
+				break
+	game.pick_order("paint", "farm")
+	var at: Vector2 = game._cam.unproject_position(Vector3(spot.x + 0.5, 0.0, spot.y + 0.5))
+	_mouse(game, "move", at)
+	_mouse(game, "down", at)
+	check(game._drag.get("erase", false), "starting a Farm drag on a plot erases")
+	_mouse(game, "up", at)
+	check(not sim.farm.has(spot), "and releasing removes the plot")
+	game.set_tool("")
+
+
+## Older key settings: Z moves from Stockpile to the new Paint menu; a new default that the player
+## already uses for something else isn't taken from them.
+func _test_key_migration() -> void:
+	var path := "user://test_settings/old_keys.cfg"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir()))
+	var cfg := ConfigFile.new()
+	for a in KeyBindings.ACTIONS:
+		if a[0] not in ["gather", "paint", "chop", "break"]:
+			cfg.set_value("keys", a[0], a[3])
+	cfg.set_value("keys", "next_res", [KEY_E])
+	cfg.save(path)
+	var k := KeyBindings.new(path)
+	check(k.keys.paint == [KEY_Z] and k.keys.stock.is_empty(), "an old settings file hands Z from Stockpile to Paint")
+	check(k.keys.gather.is_empty() and k.keys.next_res == [KEY_E], "a player's own use of E keeps it; Gather goes without a key")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
 func _test_rebinding(game: Game) -> void:
 	var menu: GameMenu = game._menu
 	game.set_tool("")
@@ -269,17 +357,26 @@ func _test_rebinding(game: Game) -> void:
 	_key(game, KEY_Q)
 	check(game.tool == "mine", "Q picks Mine")
 	game._hud.refresh(game.sim)
-	check(game._hud._tool_btns.mine.text == "Mine" and game._hud._tool_keys.mine.text == "Q", "the toolbar keycap shows the new key")
+	check(game._hud._tool_btns.gather.text == "Gather: Mine", "the Gather button names the order that's on")
+	game.set_tool("gather")
+	game._hud.refresh(game.sim)
+	check(_menu_caps(game, "gather", "Mine") == ["1", "Q"], "the Gather menu's Mine row shows the new key (%s)" % [_menu_caps(game, "gather", "Mine")])
 	game.set_tool("")
 	game.open_menu("keys")
 	menu._listen("stock")
 	_key(game, KEY_Q)
 	check(not menu._confirm.is_empty() and "Mine trees and boulders" in menu._confirm.text, "taking Mine's key asks first")
-	check(game.keys.keys.stock == [KEY_Z], "nothing changes until you confirm")
+	check(game.keys.keys.stock.is_empty(), "nothing changes until you confirm")
 	menu._do_confirmed()
 	check(game.keys.keys.stock == [KEY_Q] and game.keys.keys.mine.is_empty(), "confirming moves Q to Stockpile and leaves Mine without a key")
 	game._hud.refresh(game.sim)
-	check(not game._hud._tool_keys.mine.get_parent().visible and game._hud._tool_keys.stock.text == "Q", "Mine's keycap hides; Stockpile's shows Q")
+	game.set_tool("paint")
+	game._hud.refresh(game.sim)
+	check(_menu_caps(game, "paint", "Stockpile") == ["1", "Q"], "Stockpile's row shows Q (%s)" % [_menu_caps(game, "paint", "Stockpile")])
+	game.set_tool("gather")
+	game._hud.refresh(game.sim)
+	check(_menu_caps(game, "gather", "Mine") == ["1"], "Mine's row has only its number now")
+	game.set_tool("")
 	menu._listen("mine")
 	_key(game, KEY_W)
 	check(not menu._confirm.is_empty() and "Pan up" in menu._confirm.text, "using W warns that it pans the camera")
@@ -288,7 +385,7 @@ func _test_rebinding(game: Game) -> void:
 	_key(game, KEY_ESCAPE)
 	check(menu.listening == "" and game.keys.keys.speed1 == [KEY_1], "Esc cancels waiting for a key")
 	menu._reset_keys()
-	check(game.keys.keys.mine == [KEY_X] and game.keys.keys.stock == [KEY_Z], "Reset to defaults restores every key")
+	check(game.keys.keys.mine == [KEY_X] and game.keys.keys.paint == [KEY_Z] and game.keys.keys.stock.is_empty(), "Reset to defaults restores every key")
 	check(KeyBindings.new(game.keys_path).keys.mine == [KEY_X], "the reset is saved too")
 	game.close_menu()
 	_key(game, KEY_SLASH, true)
@@ -411,7 +508,7 @@ func _test_farm_tool(game: Game) -> void:
 	_key(game, KEY_P)
 	check(game.tool == "farm", "P picks the Farm tool")
 	hud.refresh(sim)
-	check(hud._tool_btns.farm.button_pressed, "and the Farm button shows it's on")
+	check(hud._tool_btns.paint.button_pressed and hud._tool_btns.paint.text == "Paint: Farm plot", "and the Paint button shows Farm plot is on")
 	var a: Vector2 = game._cam.unproject_position(Vector3(rect.position.x + 0.5, 0.0, rect.position.y + 0.5))
 	var b: Vector2 = game._cam.unproject_position(Vector3(rect.end.x - 0.5, 0.0, rect.end.y - 0.5))
 	_mouse(game, "move", a)
@@ -818,6 +915,8 @@ func _initialize() -> void:
 	await _test_fading(game)
 	_test_smooth_movement(game)
 	await _test_rebinding(game)
+	_test_order_menus(game)
+	_test_key_migration()
 	await _test_craft_menu(game)
 	await _test_right_click_never_silent(game)
 	await _test_farm_tool(game)

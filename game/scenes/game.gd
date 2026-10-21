@@ -9,10 +9,13 @@ const ELEVATION_SIN := 0.57735         ## sin(35.26°), for converting screen dr
 var sim: Sim
 var speed := 1
 var last_speed := 1
-var tool := ""                          ## "", "mine", "hunt", "stock", "farm" or "build"
+var tool := ""                          ## "", a Gather or Paint order (OrderMenus.MARK_TOOLS) or "build"
 var placing := ""                       ## Template being placed while tool == "build".
 var rot := 0
-var build_menu_open := false
+var menu_open := ""                     ## The toolbar menu that's open: "", "gather", "paint" or "build".
+var build_menu_open: bool:
+	get: return menu_open == "build"
+	set(v): menu_open = "build" if v else ("" if menu_open == "build" else menu_open)
 var craft_menu_open := false            ## The Craft panel above the toolbar (issue #57).
 var craft_bench_i := 0                  ## Which finished bench the Craft panel shows.
 var selection := {}                     ## {} | {kind:"res", ids:[...]} | {kind:"tree"/"boulder"/"site", id}
@@ -155,17 +158,18 @@ func _update_live_overlays() -> void:
 	var hint := ""
 	var hint_col := Palette.CHALK
 	if not _drag.is_empty() and _drag.kind == "rect":
-		if _drag.get("erase", false):  # erasing stockpile cells: a red outline, and a red fill on each cell that goes
+		if _drag.get("erase", false):  # erasing a zone: a red outline, and a red fill on each cell that goes
+			var cells: Dictionary = sim.farm if tool == "farm" else sim.zone
 			outlines.append({"rect": _drag.rect, "h": 0.03, "color": Palette.RED, "dashed": true})
 			for x in range(_drag.rect.position.x, _drag.rect.end.x):
 				for y in range(_drag.rect.position.y, _drag.rect.end.y):
-					if sim.zone.has(Vector2i(x, y)):
+					if cells.has(Vector2i(x, y)):
 						fills.append({"rect": Rect2i(x, y, 1, 1), "h": 0.02, "color": Color(Palette.RED, 0.45)})
-			hint = "Release to erase these stockpile cells. Anything on them stays and is hauled to the rest."
+			hint = "Release to erase these farm plots. Anything growing on them is lost." if tool == "farm" else "Release to erase these stockpile cells. Anything on them stays and is hauled to the rest."
 			hint_col = Palette.RED
 		else:
 			outlines.append({"rect": _drag.rect, "h": 0.03, "color": {"stock": Palette.GREEN, "farm": Palette.WHEAT}.get(tool, Palette.RED), "dashed": true})
-	elif tool in ["mine", "stock", "hunt", "farm"] and _hover != null:
+	elif tool in OrderMenus.MARK_TOOLS and _hover != null:
 		outlines.append({"rect": Rect2i(_hover, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	if tool == "build" and placing != "" and _hover != null:
 		var origin := _placement_origin()
@@ -191,6 +195,8 @@ func _update_live_overlays() -> void:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
+	if hint == "" and tool in ["chop", "break"] and _hover != null and _drag.is_empty():
+		hint = "Drag to mark trees. Boulders are left alone." if tool == "chop" else "Drag to mark boulders. Trees are left alone."
 	if hint == "" and tool == "mine" and _hover != null:
 		var kinds := mine_kinds(_mods.shift, _mods.alt)
 		if kinds.size() == 1:
@@ -204,12 +210,12 @@ func _update_live_overlays() -> void:
 	if hint == "" and tool == "farm" and _hover != null and _drag.is_empty():
 		var why := sim.farm_blocked(_hover)
 		if sim.farm.has(_hover):
-			hint = "Already a farm plot."
+			hint = "Click or drag from a farm plot to erase. Anything growing there is lost."
 		elif why != "":
 			hint = "Farms go on open grass, not on %s." % why
 			hint_col = Palette.YELLOW
 		else:
-			hint = "Drag over open grass to paint a farm."
+			hint = "Drag over open grass to paint a farm. Start on a farm plot to erase instead."
 	if hint == "" and tool == "" and _drag.is_empty() and selection.get("kind", "") == "res":
 		var hit = _pick(_mouse, false)
 		if hit != null and hit.kind in ["tree", "boulder"]:
@@ -272,6 +278,14 @@ static func mine_kinds(shift: bool, alt: bool) -> Array:
 	if alt and not shift:
 		return ["boulder"]
 	return ["tree", "boulder"]
+
+
+## What the Mine, Chop trees or Break boulders order marks (issue #94).
+func order_kinds(shift: bool, alt: bool) -> Array:
+	match tool:
+		"chop": return ["tree"]
+		"break": return ["boulder"]
+	return mine_kinds(shift, alt)
 
 
 func _placement_origin() -> Vector2i:
@@ -344,7 +358,7 @@ func open_craft_menu(bench: Dictionary) -> void:
 		return
 	craft_bench_i = i
 	craft_menu_open = true
-	build_menu_open = false
+	menu_open = ""
 
 
 # ---------------------------------------------------------------- input
@@ -403,7 +417,7 @@ func _mouse_button(e: InputEventMouseButton) -> void:
 ## tool on; with nobody selected, or someone starving, it says why nothing happened.
 func _right_click(e: InputEventMouseButton) -> void:
 	var has_residents: bool = selection.get("kind", "") == "res" and not selection.ids.is_empty()
-	if build_menu_open or tool == "build" or (tool != "" and not has_residents):
+	if menu_open != "" or tool == "build" or (tool != "" and not has_residents):
 		set_tool("")
 		return
 	if not has_residents:
@@ -441,8 +455,10 @@ func _left_down(e: InputEventMouseButton) -> void:
 				if not e.shift_pressed:
 					set_tool("")
 		return
-	if tool in ["mine", "stock", "hunt", "farm"] and c != null:
-		_drag = {"kind": "rect", "a": c, "rect": Rect2i(c, Vector2i.ONE), "start": e.position, "erase": tool == "stock" and sim.zone.has(c)}
+	if tool in OrderMenus.MARK_TOOLS and c != null:
+		# A drag that starts on a painted cell erases that zone instead (issues #63, #93).
+		var erase: bool = (tool == "stock" and sim.zone.has(c)) or (tool == "farm" and sim.farm.has(c))
+		_drag = {"kind": "rect", "a": c, "rect": Rect2i(c, Vector2i.ONE), "start": e.position, "erase": erase}
 		return
 	# Shift-drag box-selects residents; a plain drag pans the map; a click selects.
 	_drag = {"kind": "box" if e.shift_pressed else "press", "start": e.position, "cur": e.position}
@@ -463,6 +479,8 @@ func _left_up(e: InputEventMouseButton) -> void:
 				sim.erase_zone(d.rect)
 			elif tool == "stock":
 				sim.paint_zone(d.rect)
+			elif tool == "farm" and d.get("erase", false):
+				sim.clear_farm(d.rect)
 			elif tool == "farm":
 				sim.paint_farm(d.rect)
 			elif tool == "hunt":
@@ -470,7 +488,7 @@ func _left_up(e: InputEventMouseButton) -> void:
 				sim.designate_hunt(d.rect, hit if hit != null and hit.kind == "sheep" else null)
 			else:
 				var hit = _pick(e.position, false) if small else null
-				sim.designate_mine(d.rect, hit if hit != null and hit.kind in ["tree", "boulder"] else null, mine_kinds(e.shift_pressed, e.alt_pressed))
+				sim.designate_mine(d.rect, hit if hit != null and hit.kind in ["tree", "boulder"] else null, order_kinds(e.shift_pressed, e.alt_pressed))
 		"box":
 			if small:
 				_select(_pick(e.position))
@@ -500,8 +518,16 @@ func _key(e: InputEventKey) -> void:
 				_: return
 		get_viewport().set_input_as_handled()
 		return
+	if menu_open != "" and e.keycode >= KEY_1 and e.keycode <= KEY_9 and not e.shift_pressed:
+		# In an open toolbar menu, 1–9 pick its rows (Z then 1 paints a stockpile, issue #93).
+		var list: Array = OrderMenus.entries(menu_open, sim)
+		var i: int = e.keycode - KEY_1
+		if i < list.size():
+			pick_order(menu_open, list[i].id)
+		get_viewport().set_input_as_handled()
+		return
 	if e.keycode == KEY_ESCAPE:
-		if tool != "" or build_menu_open:
+		if tool != "" or menu_open != "":
 			set_tool("")
 		elif craft_menu_open:
 			craft_menu_open = false
@@ -518,10 +544,14 @@ func _key(e: InputEventKey) -> void:
 		"speed2": set_speed(2)
 		"speed3": set_speed(3)
 		"mine": set_tool("mine")
+		"chop": set_tool("chop")
+		"break": set_tool("break")
 		"craft": toggle_craft_menu()
 		"hunt": set_tool("hunt")
 		"stock": set_tool("stock")
 		"farm": set_tool("farm")
+		"gather": set_tool("gather")
+		"paint": set_tool("paint")
 		"build": set_tool("build")
 		"bench": start_placing("bench")
 		"house": start_placing("house")
@@ -576,7 +606,7 @@ func _use_sim(s: Sim) -> void:
 	_world.set_sim(s)
 	tool = ""
 	placing = ""
-	build_menu_open = false
+	menu_open = ""
 	selection = {}
 	_drag = {}
 
@@ -654,7 +684,7 @@ func toggle_craft_menu() -> void:
 		return
 	craft_menu_open = not craft_menu_open
 	if craft_menu_open:
-		build_menu_open = false
+		menu_open = ""
 		if tool == "build":
 			tool = ""
 			placing = ""
@@ -669,29 +699,42 @@ func set_tool(t: String) -> void:
 	if t == "craft":
 		toggle_craft_menu()
 		return
-	if t == "build":
+	if t in ["gather", "paint", "build"]:  # the toolbar menus open and close
 		craft_menu_open = false
-		build_menu_open = not build_menu_open
-		if build_menu_open and tool != "build":
+		menu_open = "" if menu_open == t else t
+		if t == "build" and menu_open == "build" and tool != "build":
 			tool = ""
 			placing = ""
-		elif not build_menu_open and tool == "build":
+		elif t == "build" and menu_open == "" and tool == "build":
 			tool = ""
 	elif t == "":
 		tool = ""
 		placing = ""
-		build_menu_open = false
+		menu_open = ""
 	else:
-		build_menu_open = false
+		menu_open = ""
 		tool = "" if tool == t else t
 		placing = ""
+	_drag = {}
+
+
+## Picks a row in a toolbar menu: switches its order on (or starts placing its building) and closes
+## the menu. Unlike the direct keys, picking the order that's already on leaves it on.
+func pick_order(menu: String, id: String) -> void:
+	if menu == "build":
+		start_placing(id)
+		return
+	menu_open = ""
+	craft_menu_open = false
+	tool = id
+	placing = ""
 	_drag = {}
 
 
 func start_placing(tpl: String) -> void:
 	tool = "build"
 	placing = tpl
-	build_menu_open = false
+	menu_open = ""
 
 
 func zoom(f: float) -> void:
@@ -938,6 +981,13 @@ func _screenshot_scene() -> void:
 		sim.drop_items(z, "bread", 2)
 		sim.drop_items(z + Vector2i(1, 0), "mutton", 3)
 		sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(1, 1), "cooked_mutton", 1)
+	if "--gather" in OS.get_cmdline_user_args():  # the Gather menu open (issue #94)
+		selection = {}
+		set_tool("gather")
+	if "--paint" in OS.get_cmdline_user_args():  # Farm plot on, and the Paint menu open (issue #93)
+		selection = {}
+		pick_order("paint", "farm")
+		menu_open = "paint"
 	if "--village" in OS.get_cmdline_user_args():  # Tomas and Mira beside Ada, Tomas selected (issues #77, #79)
 		var ada: Dictionary = sim.residents[0]
 		for k in 2:

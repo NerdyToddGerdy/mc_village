@@ -39,10 +39,13 @@ const CRAFT_MAX := 20
 var _speed_panel: PanelContainer
 var _tool_btns := {}
 var _tool_keys := {}            ## Each orders button's keycap Label.
+var _toolbar_sig := ""
 var _armed_key := ""            ## The Destructive button waiting for its second click, if any.
 var _armed_until := 0
 const ARM_MS := 3000
-var _build_items := {}
+var _menus := {}                ## Toolbar menu id -> its rows' container (OrderMenus.MENUS).
+var _menu_panels := {}          ## Toolbar menu id -> its panel above the toolbar.
+var _tool_icons := {}           ## Toolbar button id -> its icon, redrawn when the active order changes.
 var _keys_sig := ""
 var _hint := Label.new()
 var _paused_label: PanelContainer
@@ -64,7 +67,9 @@ func _ready() -> void:
 	tally_row.add_theme_constant_override("separation", 18)
 	_tallies.add_theme_constant_override("separation", 18)
 	tally_row.add_child(_tallies)
-	_tools_btn = _button("Tools  0  ▾", func(): _tools_pinned = not _tools_pinned)
+	_tools_btn = _button("Tools  0  ▾", func():
+		_tools_pinned = not _tools_pinned
+		_tools_btn.release_focus())  # a click pins; only keyboard focus should hold it open (#90)
 	_tools_btn.toggle_mode = true
 	_tools_btn.custom_minimum_size = Vector2(0, 36)
 	tally_row.add_child(_tools_btn)
@@ -103,22 +108,22 @@ func _ready() -> void:
 	bl.add_child(_sel_panel)
 
 	var br := _corner(Control.PRESET_BOTTOM_RIGHT)
-	var bm := VBoxContainer.new()
-	_build_items.bench = _menu_item("Crafting bench", "4 logs", "", func(): game.start_placing("bench"))
-	_build_items.house = _menu_item("House", "8 cobblestone, then 16 planks and 4 logs, then 12 planks", "", func(): game.start_placing("house"))
-	_build_items.fireplace = _menu_item("Fireplace", "6 cobblestone", "", func(): game.start_placing("fireplace"))
-	bm.add_child(_build_items.bench)
-	bm.add_child(_build_items.house)
-	bm.add_child(_build_items.fireplace)
-	_build_menu = _panel(bm, Vector2(260, 0), 6)
-	br.add_child(_build_menu)
+	for m in OrderMenus.MENUS:  # Gather, Paint and Build: one menu control for all three (#93, #94)
+		var box := VBoxContainer.new()
+		box.add_theme_constant_override("separation", 2)
+		_menus[m] = box
+		var mp := _panel(box, Vector2(300, 0), 6)
+		mp.visible = false
+		_menu_panels[m] = mp
+		br.add_child(mp)
+	_build_menu = _menu_panels.build
 	_craft_box.add_theme_constant_override("separation", 8)
 	_craft_panel = _panel(_craft_box, Vector2(360, 0))
 	_craft_panel.visible = false
 	br.add_child(_craft_panel)
 	var tools := HBoxContainer.new()
 	tools.add_theme_constant_override("separation", 2)
-	for t in ["mine", "hunt", "stock", "farm", "build", "craft"]:
+	for t in ["gather", "paint", "build", "craft"]:
 		if t == "craft":  # Craft opens a panel rather than choosing an order, so it stands apart
 			var rule := ColorRect.new()
 			rule.color = Palette.SLATE_DEEP
@@ -147,8 +152,9 @@ func _order_button(t: String) -> Button:
 	icon.custom_minimum_size = Vector2(18, 18)
 	icon.size = Vector2(18, 18)
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon.draw.connect(func(): _draw_mark(icon, t))
+	icon.draw.connect(func(): _draw_mark(icon, _button_mark(t)))
 	b.add_child(icon)
+	_tool_icons[t] = icon
 	var cap := PanelContainer.new()
 	var cap_box := _box(Color(0, 0, 0, 0), 3, 0, Palette.CHALK_DIM)
 	cap_box.content_margin_left = 5
@@ -195,6 +201,15 @@ func _draw_mark(c: Control, t: String) -> void:
 		"mine":  # a red slash, like the one across a marked tree
 			c.draw_line(Vector2(4, 14), Vector2(14, 4), dark, 6)
 			c.draw_line(Vector2(4, 14), Vector2(14, 4), Palette.RED, 3)
+		"chop":  # a red slash across a trunk
+			c.draw_rect(Rect2(6, 4, 6, 13), Palette.LOG)
+			c.draw_line(Vector2(3, 14), Vector2(15, 5), dark, 6)
+			c.draw_line(Vector2(3, 14), Vector2(15, 5), Palette.RED, 3)
+		"break":  # the red X on a boulder
+			c.draw_rect(Rect2(3, 5, 12, 10), Palette.STONE)
+			for a in [[Vector2(4, 4), Vector2(14, 14)], [Vector2(14, 4), Vector2(4, 14)]]:
+				c.draw_line(a[0], a[1], dark, 5)
+				c.draw_line(a[0], a[1], Palette.RED, 2.5)
 		"hunt":  # the crosshair over a marked sheep
 			c.draw_arc(Vector2(9, 9), 6, 0, TAU, 24, dark, 4)
 			c.draw_arc(Vector2(9, 9), 6, 0, TAU, 24, Palette.RED, 2)
@@ -360,33 +375,120 @@ func _refresh_key_labels() -> void:
 	if sig == _keys_sig:
 		return
 	_keys_sig = sig
-	var names := {"mine": "Mine", "hunt": "Hunt", "stock": "Stockpile", "farm": "Farm", "build": "Build", "craft": "Craft"}
-	var tips := {"mine": "Mine trees and boulders. Drag to mark many. Boulders need a pickaxe.",
-		"hunt": "Hunt sheep for wool and mutton. Click or drag over them.",
-		"craft": "Queue crafts at the bench or the fireplace",
-		"farm": "Paint a farm plot over open grass. Residents plant and harvest wheat.",
-		"stock": "Paint a stockpile. Drag over open ground.", "build": "Build"}
+	var tips := {"gather": "Mine, chop, break and hunt", "paint": "Paint stockpiles and farm plots",
+		"build": "Place a building", "craft": "Queue crafts at the bench or the fireplace"}
 	for t in _tool_btns:
-		var key := k.first(t)
-		_set_order_label(t, names[t], key)
-		_tool_btns[t].tooltip_text = tips[t] + (" (%s)" % key if key != "" else "")
-	var subs := {"bench": "4 logs. Reserves room for a workshop", "house": "8 cobblestone, then 16 planks and 4 logs, then 12 planks, then a bed",
-		"fireplace": "6 cobblestone. Reserves room for a kitchen"}
-	var titles := {"bench": "Crafting bench", "house": "House", "fireplace": "Fireplace"}
-	for b in _build_items:
-		_build_items[b].text = "%s   %s\n%s" % [titles[b], k.first(b), subs[b]]
+		_tool_btns[t].tooltip_text = tips[t] + (" (%s)" % k.first(t) if k.first(t) != "" else "")
+	_toolbar_sig = ""
 	var speed_actions := {0: "pause", 1: "speed1", 2: "speed2", 3: "speed3"}
 	for v in _speed_btns:
 		var keytext := k.text(speed_actions[v]).replace("  ", " or ")
 		_speed_btns[v].tooltip_text = ("Pause" if v == 0 else "Speed %d×" % v) + (" (%s)" % keytext if keytext != "No key" else "")
 
 
-func _menu_item(title: String, sub: String, key: String, on_press: Callable) -> Button:
-	var b := _button("%s   %s\n%s" % [title, key, sub], on_press)
-	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	b.custom_minimum_size = Vector2(240, 52)
+## The orders toolbar's buttons and open menu (issues #93, #94). A Gather or Paint button names the
+## order that's on ("Gather: Hunt") and shows its mark; its menu lists the available orders.
+func _refresh_toolbar(sim: Sim) -> void:
+	var k: KeyBindings = game.keys
+	var on_menu := OrderMenus.menu_of(game.tool)
+	var sig := "%s|%s|%s|%s" % [game.tool, game.menu_open, _keys_sig, OrderMenus.entries("gather", sim).size()]
+	if sig != _toolbar_sig:
+		_toolbar_sig = sig
+		for t in _tool_btns:
+			var name: String = OrderMenus.MENUS[t].name if OrderMenus.MENUS.has(t) else "Craft"
+			if t != "build" and on_menu == t:
+				name += ": " + OrderMenus.entry(game.tool).name
+			elif OrderMenus.MENUS.has(t):
+				name += "  ▸"
+			_set_order_label(t, name, k.first(t))
+			_tool_icons[t].queue_redraw()
+	for t in _tool_btns:
+		var on: bool
+		match t:
+			"craft": on = game.craft_menu_open
+			"build": on = game.menu_open == "build" or game.tool == "build"
+			_: on = game.menu_open == t or on_menu == t
+		_tool_btns[t].set_pressed_no_signal(on)
+	for m in _menu_panels:
+		_menu_panels[m].visible = game.menu_open == m
+		if game.menu_open != m:
+			continue
+		var list: Array = OrderMenus.entries(m, sim)
+		_rebuild(_menus[m], "%s%s%s" % [list.map(func(e): return e.id), _keys_sig, game.tool], func(c: Container) -> void:
+			for i in list.size():
+				c.add_child(_menu_row(m, i, list[i])))
+
+
+## The mark a toolbar button shows: the active order's, or its menu's first.
+func _button_mark(t: String) -> String:
+	if OrderMenus.menu_of(game.tool) == t and t != "build":
+		return OrderMenus.entry(game.tool).mark
+	return {"gather": "mine", "paint": "stock"}.get(t, t)
+
+
+## A toolbar menu row: the order's mark, its name and a line about it, and on the right its number
+## in the menu (press it while the menu is open) and its direct key, if it has one.
+func _menu_row(menu: String, i: int, e: Dictionary) -> Button:
+	var b := _button("", func(): game.pick_order(menu, e.id))
+	b.set_meta("label", e.name)  # the row's name, for finding it (its text is drawn by labels)
+	b.toggle_mode = true
+	b.set_pressed_no_signal(game.tool == e.id or (menu == "build" and game.placing == e.id))
+	var caps := HBoxContainer.new()
+	caps.add_theme_constant_override("separation", 4)
+	caps.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var direct: String = game.keys.first(e.id)
+	var caps_w := 0.0
+	for key in ["%d" % (i + 1), direct]:
+		if key != "":
+			caps.add_child(_keycap(key))
+			caps_w += _font.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 12 + 4
+	var words := VBoxContainer.new()
+	words.add_theme_constant_override("separation", 0)
+	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	words.add_child(_label(e.name, true, Palette.CHALK, 15))
+	var sub := _label(e.sub, false, Palette.CHALK_DIM, 13, true)
+	var sub_w := MENU_W - 40 - 10 - 10 - caps_w
+	sub.custom_minimum_size.x = sub_w
+	words.add_child(sub)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(words)
+	row.add_child(caps)
+	var m := MarginContainer.new()
+	for side in [["left", 40], ["right", 10], ["top", 6], ["bottom", 6]]:
+		m.add_theme_constant_override("margin_" + side[0], side[1])
+	m.add_child(row)
+	b.add_child(m)
+	for n in [m, row, words, caps]:
+		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icon := Control.new()
+	icon.custom_minimum_size = Vector2(18, 18)
+	icon.size = Vector2(18, 18)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.draw.connect(func(): _draw_mark(icon, e.mark))
+	b.add_child(icon)
+	# A wrapped label reports its height only after layout, so measure the text for the row's height.
+	var sub_h := _font.get_multiline_string_size(e.sub, HORIZONTAL_ALIGNMENT_LEFT, sub_w, 13).y
+	b.custom_minimum_size = Vector2(MENU_W, maxf(12 + _bold.get_height(15) + sub_h + 2, 52))
+	b.resized.connect(func():
+		m.size = b.size
+		icon.position = Vector2(12, (b.size.y - 18) / 2))
+	b.tooltip_text = "%s (%d%s)" % [e.name, i + 1, ", or %s" % direct if direct != "" else ""]
 	return b
+
+
+const MENU_W := 288.0
+
+
+func _keycap(key: String) -> PanelContainer:
+	var cap := PanelContainer.new()
+	var cap_box := _box(Color(0, 0, 0, 0), 3, 0, Palette.CHALK_DIM)
+	cap_box.content_margin_left = 5
+	cap_box.content_margin_right = 5
+	cap.add_theme_stylebox_override("panel", cap_box)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cap.add_child(_label(key, false, Palette.CHALK_DIM, 13))
+	return cap
 
 
 ## The selection panel's content width at its narrowest (330 wide less its margins).
@@ -474,14 +576,7 @@ func refresh(sim: Sim) -> void:
 	_paused_label.visible = game.speed == 0
 	_refresh_stuck(sim)
 	_refresh_selection(sim)
-	for t in _tool_btns:
-		var on: bool
-		match t:
-			"build": on = game.build_menu_open or game.tool == "build"
-			"craft": on = game.craft_menu_open
-			_: on = game.tool == t
-		_tool_btns[t].set_pressed_no_signal(on)
-	_build_menu.visible = game.build_menu_open
+	_refresh_toolbar(sim)
 	_refresh_craft(sim)
 	_refresh_toasts()
 
@@ -655,12 +750,41 @@ func _tool_row(type: String, dur: int) -> VBoxContainer:
 
 
 ## Opens the Tools dropdown while the pointer is over the button or the list, while the button
-## has keyboard focus, or while it's pinned open by a click or tap.
+## has keyboard focus, or while it's pinned open by a click or tap. A click anywhere else, or Esc,
+## closes it (issue #90: it used to stay open, held by the focus a click had left on the button).
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouse:
 		_pointer = event.position
 	if event is InputEventMouseButton:
 		_held = event.pressed
+		if event.pressed and _tools_drop.visible and not _over_tools(event.position):
+			_close_tools()
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _tools_drop.visible:
+		_close_tools()
+		get_viewport().set_input_as_handled()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_MOUSE_EXIT:
+		_pointer = Vector2(-1, -1)  # the last position inside the window no longer counts as hovering
+
+
+func _close_tools() -> void:
+	_tools_pinned = false
+	_tools_btn.release_focus()
+	_tools_drop.visible = false
+
+
+## Over the Tools button, its open list, or the strip between them (not their whole bounding box).
+func _over_tools(at: Vector2) -> bool:
+	var btn := _tools_btn.get_global_rect().grow(4)
+	if btn.has_point(at):
+		return true
+	if not _tools_drop.visible:
+		return false
+	var drop := _tools_drop.get_global_rect().grow(8)
+	var gap := Rect2(Vector2(btn.position.x, btn.end.y), Vector2(btn.size.x, maxf(drop.position.y - btn.end.y, 0)))
+	return drop.has_point(at) or gap.has_point(at)
 
 
 func _process(_delta: float) -> void:
@@ -673,11 +797,7 @@ func _process(_delta: float) -> void:
 				n.text = n.get_meta("disarmed_text")
 	_place_toasts()
 	_fit_craft()
-	var mouse := _pointer
-	var btn_rect := _tools_btn.get_global_rect().grow(4)
-	var open := _tools_pinned or _tools_btn.has_focus() or btn_rect.has_point(mouse)
-	if _tools_drop.visible and not open:
-		open = btn_rect.merge(_tools_drop.get_global_rect().grow(8)).has_point(mouse)
+	var open := _tools_pinned or _tools_btn.has_focus() or _over_tools(_pointer)
 	_tools_drop.visible = open
 	if open:
 		var panel := _tools_btn.get_parent().get_parent() as Control

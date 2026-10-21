@@ -52,6 +52,19 @@ func _initialize() -> void:
 	check(b_on > 0 and t_on == 0, "Alt-drag with Mine marks boulders only (%d trees, %d boulders)" % [t_on, b_on])
 	for o in sim.trees + sim.boulders:
 		o.des = false
+	# Gather menu (issue #94): Chop trees marks only the trees in a drag
+	check(await click_button("Gather"), "click Gather in the toolbar")
+	check(await click_button("Chop trees"), "click Chop trees in the Gather menu")
+	game._hud.refresh(sim)
+	check(game.tool == "chop" and game._hud._tool_btns.gather.text == "Gather: Chop trees", "Chop trees is on, and the Gather button says so")
+	await drag(screen(at(6, 2)), screen(at(17, 17)))
+	t_on = sim.trees.filter(func(t): return t.des).size()
+	b_on = sim.boulders.filter(func(b): return b.des).size()
+	check(t_on > 0 and b_on == 0, "Chop trees marks trees only (%d trees, %d boulders)" % [t_on, b_on])
+	for o in sim.trees + sim.boulders:
+		o.des = false
+	await key(KEY_X)
+	check(game.tool == "mine", "X still switches Mine on directly")
 	await drag(screen(at(0, 8)), screen(at(8, 17)))
 	check(game._world.live_outlines.size() > 0 or true, "drag shows an outline")
 
@@ -116,8 +129,10 @@ func _initialize() -> void:
 	check(sim.stats.pick_crafted, "a wooden pickaxe is crafted")
 
 	# Stockpile and boulders
-	await key(KEY_Z)
-	check(game.tool == "stock", "Z picks Stockpile")
+	check(await click_button("Paint"), "click Paint in the toolbar")
+	check(game.menu_open == "paint", "Paint opens its menu")
+	check(await click_button("Stockpile"), "click Stockpile in the Paint menu")
+	check(game.tool == "stock" and game.menu_open == "", "Stockpile is on and the menu closes")
 	var zc := open_cell(at(12, 7), Vector2i(4, 2))
 	await drag(screen(zc), screen(zc + Vector2i(3, 1)))
 	check(sim.zone.size() >= 6, "dragging paints a stockpile (%d cells)" % sim.zone.size())
@@ -363,6 +378,24 @@ func _initialize() -> void:
 	await move(Vector2(1000, 430))
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "moving away closes the list")
+	# A click pins it open; it closes on a second click, on a click elsewhere, or on Esc (issue #90)
+	await click(tb.get_global_rect().get_center())
+	await move(Vector2(1000, 430))
+	await frames(2)
+	check(game._hud._tools_drop.visible, "a click pins the list open")
+	await click(tb.get_global_rect().get_center())
+	await move(Vector2(1000, 430))
+	await frames(2)
+	check(not game._hud._tools_drop.visible, "a second click unpins it, and moving away closes it")
+	await click(tb.get_global_rect().get_center())
+	await click(Vector2(1000, 430))  # clear of the button and the list
+	await frames(2)
+	check(not game._hud._tools_drop.visible, "pinned, a click on the world closes it")
+	await click(tb.get_global_rect().get_center())
+	await move(Vector2(1000, 430))
+	await key(KEY_ESCAPE)
+	await frames(2)
+	check(not game._hud._tools_drop.visible and not game._menu.visible, "pinned, Esc closes it (and doesn't open the menu)")
 
 	# Menu by mouse: save, load with confirmation, controls, start over
 	await key(KEY_ESCAPE)
