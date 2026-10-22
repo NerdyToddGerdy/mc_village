@@ -11,7 +11,7 @@ extends "res://tests/playtest_base.gd"
 ##   godot --headless --path . -s res://tests/playtest_slice3.gd
 
 ## Blockers a player can act on from the reason alone. Anything else in the stuck list fails the run.
-const ACTIONABLE := ["more ", "Needs a pickaxe", "No one does ", "Stockpile is full", "Starving", "Hungry",
+const ACTIONABLE := ["more ", "Needs a pickaxe", "No one is a ", "Stockpile is full", "Starving", "Hungry",
 	" broke", "Can’t reach", "No meals to pack", "No spare pickaxes to pack", "No pickaxe left",
 	"Everyone is hurt", "Investigating the vein needs", "Harvested wheat needs a stockpile",
 	"Injured: can't mine", "Track: needs"]
@@ -147,7 +147,7 @@ func _initialize() -> void:
 	# ---- Return and unloading (issue #112)
 	check(await play_until(120, func(): return sim.expedition.is_empty()), "the party gets home")
 	check(seen("Back from the old mine: ") and seen("Tomas seriously injured"), "the report says what came back and who was hurt")
-	check(await play_until(400, func(): return sim.stacks_where(func(st): return st.get("cargo", false)).is_empty() and count("iron_ore") >= 3), "the cargo is hauled to the stockpile (left %s, iron ore %d)" % [sim.stacks_where(func(st): return st.get("cargo", false)).map(func(st): return [st.type, st.n]), count("iron_ore")] + " zone %d free %s jobs %s" % [sim.zone.size(), sim.zone_dest("cobble"), sim.residents.map(func(r): return [r.name, r.map, r.job.label if r.job != null else "idle", r.jobs.haul.on])])
+	check(await play_until(400, func(): return sim.stacks_where(func(st): return st.get("cargo", false)).is_empty() and count("iron_ore") >= 3), "the cargo is hauled to the stockpile (left %s, iron ore %d)" % [sim.stacks_where(func(st): return st.get("cargo", false)).map(func(st): return [st.type, st.n]), count("iron_ore")] + " zone %d free %s jobs %s" % [sim.zone.size(), sim.zone_dest("cobble"), sim.residents.map(func(r): return [r.name, r.map, r.job.label if r.job != null else "idle", r.role])])
 	check(tomas.hurt == 2 and tomas.job != null and tomas.job.kind == "rest", "Tomas rests in bed to heal")
 
 	# ---- Smelting and an iron pickaxe (issue #104)

@@ -112,12 +112,13 @@ func _initialize() -> void:
 	await run(150)
 	check(bench.done, "Ada builds the bench")
 
-	# Make Ada the toolsmith (issue #91): only a toolsmith makes tools, and nobody starts as one
-	check(Goals.LIST[Goals.current(sim)].t == "Make Ada the toolsmith", "the checklist asks for a toolsmith next")
+	# Ada does everything (issue #134): the checklist goes straight on to the pickaxe
+	check(Goals.LIST[Goals.current(sim)].t == "Craft a pickaxe", "the checklist asks for a pickaxe next")
 	await key(KEY_F)
 	check(game.selection.get("ids", []) == [ada.id], "F selects Ada")
-	check(not ada.jobs.toolsmith.on and await click_job(ada, "toolsmith"), "J opens the jobs board; click Ada's Toolsmith cell")
-	check(ada.jobs.toolsmith.on and Goals.done(sim, 2), "Ada is the toolsmith, and the checklist moves on")
+	check(visible_label("Everything") and find_button("Job: Ada") == null, "Ada's job is Everything, with no dropdown")
+	await key(KEY_J)
+	check(game.jobs_board_open, "J opens the jobs board")
 	await key(KEY_J)
 	check(not game.jobs_board_open, "J closes the board again")
 
@@ -315,29 +316,36 @@ func _initialize() -> void:
 	check(fire != null and fire.done, "the fireplace is built")
 	check(cooked, "and its standing order cooks the hunted mutton")
 
-	# Jobs board (issues #47, #78): switch Ada's Haul off and back on, and raise Mine to priority 1
-	game.selection = {"kind": "res", "ids": [ada.id]}
-	check(await click_job(ada, "haul", true), "Shift-click Ada's Haul cell")
-	check(not ada.jobs.haul.on, "Haul is switched off")
-	check(await click_job(ada, "haul"), "click it again")
-	check(ada.jobs.haul.on and ada.jobs.haul.pri == 2, "Haul is back on, at the priority it had")
-	for i in 2:
-		await click_job(ada, "mine")
-	check(ada.jobs.mine.pri == 1, "clicking Mine's cell twice makes it priority 1 (%d)" % ada.jobs.mine.pri)
+	# Jobs (issue #134): Tomas's one job, chosen from the dropdown on his panel, then on the board
+	game.selection = {"kind": "res", "ids": [tomas.id]}
+	check(await choose_job(tomas, "farm", false), "Tomas's panel: choose Farm from his job dropdown (%s)" % tomas.role)
+	var tb: Button = await job_button(tomas, false)
+	check(tb != null and tb.text.begins_with("Farmer, level"), "his panel says he's a farmer (%s)" % (tb.text if tb else "no button"))
+	check(await choose_job(tomas, "none"), "the jobs board: choose No job from Tomas's dropdown (%s)" % tomas.role)
 	# A panel that changes between a button's press and release keeps the click
-	var pri_btn: Button = await job_cell(ada, "mine")
-	var pos := pri_btn.get_global_rect().get_center()
-	await move(pos)
-	await press(pos, true)
-	ada.jobs.farm.xp += 9  # the board's content changes mid-click
+	var jb_btn: Button = await job_button(tomas)
+	await click(jb_btn.get_global_rect().get_center())
 	game._hud.refresh(game.sim)
 	await frames(2)
-	await press(pos, false)
-	await frames(2)
-	check(ada.jobs.mine.pri == 2, "a click held across a board change still lands (%d)" % ada.jobs.mine.pri)
-	sim.set_job_priority(ada, "mine", 1)
+	var smith: Button = find_button("Job choice: Toolsmith · ")
+	check(smith != null, "the dropdown lists Toolsmith")
+	if smith != null:
+		var pos := smith.get_global_rect().get_center()
+		await move(pos)
+		await press(pos, true)
+		tomas.jobs.farm.xp += 9  # the dropdown's content changes mid-click
+		game._hud.refresh(game.sim)
+		await frames(2)
+		await press(pos, false)
+		await frames(2)
+	check(tomas.role == "toolsmith", "a click held across a dropdown change still lands (%s)" % tomas.role)
+	check(not game._hud._job_drop.visible, "choosing closes the dropdown")
 	await key(KEY_ESCAPE)
 	check(not game.jobs_board_open and not game._menu.visible, "Esc closes the jobs board first")
+	for i in 120:
+		await run(1)
+		if ["axe", "pick"].any(func(k): return not sim.tool_items(k, 0).is_empty()):
+			break
 
 	# Toolsmith (issue #49) and Equip: a spare is kept, and Ada can be told to equip it
 	var spare_kinds: Array = ["axe", "pick"].filter(func(k): return not sim.tool_items(k, 0).is_empty())

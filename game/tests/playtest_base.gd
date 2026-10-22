@@ -176,28 +176,45 @@ func open_cell(c: Vector2i, size := Vector2i.ONE) -> Vector2i:
 	return c
 
 
-## A resident's cell for a job on the Village jobs board (issue #78), opening the board if needed.
-func job_cell(r: Dictionary, job: String) -> Button:
+## A resident's level cell for a job on the Village jobs board (issue #78), opening the board if needed.
+func job_cell(r: Dictionary, job: String) -> Control:
 	if not game.jobs_board_open:
 		await key(KEY_J)
 	game._hud.refresh(game.sim)
 	await frames(2)
 	for n in _all(game._hud._board):
-		if n is Button and n.get_meta("cell", "") == "%d:%s" % [r.id, job] and not n.is_queued_for_deletion():
+		if n is Control and n.get_meta("cell", "") == "%d:%s" % [r.id, job] and not n.is_queued_for_deletion():
 			return n
 	return null
 
 
-## Clicks a jobs board cell: switches an Off job on, or cycles its priority; with Shift, switches it off.
-func click_job(r: Dictionary, job: String, shift := false) -> bool:
-	var b: Button = await job_cell(r, job)
-	if b == null:
-		printerr("     (no %s cell for %s on the jobs board)" % [job, r.name])
-		return false
-	await click(b.get_global_rect().get_center(), MOUSE_BUTTON_LEFT, shift)
+## A resident's job button (issue #134): on the Village jobs board, opened if needed, or with
+## `on_board` false on their own panel.
+func job_button(r: Dictionary, on_board := true) -> Button:
+	if on_board and not game.jobs_board_open:
+		await key(KEY_J)
 	game._hud.refresh(game.sim)
 	await frames(2)
-	return true
+	for n in _all(game._hud._board if on_board else game._hud._sel):
+		if n is Button and n.is_visible_in_tree() and n.get_meta("label", "") == "Job: %s" % r.name and not n.is_queued_for_deletion():
+			return n
+	return null
+
+
+## Opens a resident's job dropdown and chooses a job from it (issue #134): one of Defs.JOBS, or "none".
+func choose_job(r: Dictionary, role: String, on_board := true) -> bool:
+	var b: Button = await job_button(r, on_board)
+	if b == null:
+		printerr("     (no job button for %s)" % r.name)
+		return false
+	await click(b.get_global_rect().get_center())
+	game._hud.refresh(game.sim)
+	await frames(2)
+	if not await click_button("Job choice: " + ("No job" if role == "none" else Defs.JOB_NAMES[role] + " · ")):
+		return false
+	game._hud.refresh(game.sim)
+	await frames(2)
+	return r.role == role
 
 
 ## A cell or area of the original 18×18 opening, in today's map (issue #52 moved it to the middle).

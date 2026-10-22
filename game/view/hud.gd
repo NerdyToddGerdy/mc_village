@@ -23,6 +23,10 @@ var _choice_box := VBoxContainer.new()
 var _board_panel: PanelContainer
 var _board := VBoxContainer.new()
 var _tools_drop: PanelContainer
+var _job_drop: PanelContainer       ## A resident's job dropdown (issue #134), under the button it opened from.
+var _job_list := VBoxContainer.new()
+var _job_for := -1                  ## The resident whose job dropdown is open, or -1.
+var _job_anchor := Rect2()          ## The button it opened from, in global coordinates.
 var _tally_panel: PanelContainer
 var _tally_seen := {}           ## Item types that have turned up in this game; the rest stay hidden.
 var _tally_sim := 0             ## Which sim _tally_seen belongs to (it resets for a new or loaded game).
@@ -128,6 +132,11 @@ func _ready() -> void:
 	_tools_drop = _panel(_tools_list, Vector2(290, 0))
 	_tools_drop.visible = false
 	_tools_drop.top_level = true
+	_job_list.add_theme_constant_override("separation", 2)
+	_job_drop = _panel(_job_list, Vector2(250, 0), 6)
+	_job_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))  # opaque: it lies over other panels
+	_job_drop.visible = false
+	_job_drop.top_level = true
 	_goals_panel = _panel(_goals, Vector2(290, 0))
 	tl.add_child(_goals_panel)
 
@@ -191,6 +200,7 @@ func _ready() -> void:
 	_board_panel.top_level = true
 	_board_panel.visible = false
 	_root.add_child(_board_panel)
+	_root.add_child(_job_drop)
 	_choice_box.add_theme_constant_override("separation", 8)
 	_choice_box.custom_minimum_size.x = 380
 	_choice_panel = _panel(_choice_box, Vector2.ZERO, 18)
@@ -653,6 +663,7 @@ func refresh(sim: Sim) -> void:
 	_paused_label.visible = game.speed == 0 and sim.pending.is_empty()  # a choice says so itself
 	_refresh_stuck(sim)
 	_refresh_selection(sim)
+	_refresh_job_drop(sim)
 	_refresh_toolbar(sim)
 	_refresh_board(sim)
 	_refresh_craft(sim)
@@ -988,8 +999,13 @@ func _input(event: InputEvent) -> void:
 		_held = event.pressed
 		if event.pressed and _tools_drop.visible and not _over_tools(event.position):
 			_close_tools()
+		if event.pressed and _job_drop.visible and not _job_drop.get_global_rect().has_point(event.position) and not _job_anchor.has_point(event.position):
+			_close_job_drop()
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _tools_drop.visible:
 		_close_tools()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _job_drop.visible:
+		_close_job_drop()
 		get_viewport().set_input_as_handled()
 
 
@@ -1222,7 +1238,7 @@ func _refresh_selection(sim: Sim) -> void:
 		for id in sel.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s%s%s%s%d%d" % [r.jobs, r.kept, equip_kind, r.away, int(sim.back_in(r)), r.get("hurt", 0)] + "%s" % [r.get("armor", {})]
+				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s%s%s%s%s%s%d%d" % [r.jobs, r.role, _job_for == r.id, r.kept, equip_kind, r.away, int(sim.back_in(r)), r.get("hurt", 0)] + "%s" % [r.get("armor", {})]
 		for kind in ["axe", "pick"]:  # Equip appears when there's a tool to choose
 			for st in sim.tool_items(kind, 0):
 				sig += "%s%s%s" % [st.type, st.dur, st.cell]
@@ -1382,58 +1398,129 @@ func _station_tabs(sim: Sim, list: Array, current: Dictionary) -> Control:
 	return tabs
 
 
-## The resident panel's line about jobs (issue #78): how many are on and what they're best at, with
-## a button to the Village jobs board, where jobs are switched and prioritised.
+## The resident panel's line about jobs (issues #78, #134): their job and level, with the job dropdown,
+## and a button to the Village jobs board.
 func _add_jobs_summary(c: Container, sim: Sim, r: Dictionary) -> void:
-	var on: int = Defs.JOBS.filter(func(jb): return r.jobs[jb].on).size()
-	var best: String = Defs.JOBS[0]
-	for jb in Defs.JOBS:
-		if r.jobs[jb].xp > r.jobs[best].xp:
-			best = jb
-	var lv := Sim.level(r, best)
-	var line := "%d of %d jobs on. " % [on, Defs.JOBS.size()] + ("Best at %s, level %d." % [Defs.JOB_NAMES[best], lv] if lv > 1 else "Every job at level 1 so far.")
-	c.add_child(_label(line, false, Palette.CHALK_DIM, Palette.BODY, true))
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 12)
+	line.add_child(_label("Job", false, Palette.CHALK_DIM))
+	line.add_child(_job_picker(sim, r))
+	c.add_child(line)
+	if r.role == "all":
+		c.add_child(_label("%s founded the village and does any work that's waiting." % r.name, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	var key: String = game.keys.first("jobs")
 	var b := _button("Jobs board" + ("  (%s)" % key if key != "" else ""), func(): game.toggle_jobs_board(true), "Secondary")
-	b.tooltip_text = "Switch jobs on and off and set priorities for everyone"
+	b.tooltip_text = "Everyone's jobs and levels"
 	c.add_child(b)
 
 
-## The Village jobs board (issue #78): a row per resident, a column per job. A cell shows the job's
-## priority (or Off), the resident's level and a tick of progress to the next level. Clicking an Off
-## cell switches the job on at the priority it had; clicking an on cell cycles 1 → 2 → 3 → 1;
-## Shift-click switches it off. A column header counts who does the job, yellow when nobody does.
+## A resident's job (issue #134): a button that opens the job dropdown, or "Everything" for Ada,
+## who has none to choose.
+func _job_picker(sim: Sim, r: Dictionary) -> Control:
+	if r.role == "all":
+		var l := _label("Everything", false, Palette.CHALK)
+		l.tooltip_text = "%s does every job, and covers whatever nobody else's job does." % r.name
+		l.mouse_filter = Control.MOUSE_FILTER_STOP
+		return l
+	var lv := "" if r.role == "none" else ", level %d" % Sim.level(r, r.role)
+	var b := _button("%s%s  ▾" % [Sim.role_name(r), lv], func(): pass, "Secondary")
+	b.set_meta("label", "Job: %s" % r.name)
+	b.toggle_mode = true
+	b.set_pressed_no_signal(_job_for == r.id)
+	b.tooltip_text = "Choose %s's job. They do its work, and haul when there's none." % r.name
+	b.pressed.connect(func():
+		if _job_for == r.id:
+			_close_job_drop()
+		else:
+			_job_for = r.id
+			_job_anchor = b.get_global_rect()
+			_sigs.erase(_job_list.get_instance_id())
+			_refresh_job_drop(sim))
+	return b
+
+
+func _close_job_drop() -> void:
+	_job_for = -1
+	_job_anchor = Rect2()
+	_job_drop.visible = false
+
+
+## The job dropdown (issue #134): each job with the resident's level in it, best first, and how many
+## already have it, then No job. Choosing one closes it.
+func _refresh_job_drop(sim: Sim) -> void:
+	var r: Dictionary = sim.resident(_job_for) if _job_for >= 0 else {}
+	if r.is_empty() or r.role == "all" or not (game.jobs_board_open or game.selection.get("ids", []).has(r.id)):
+		_close_job_drop()
+		return
+	_job_drop.visible = true
+	_job_drop.position = Vector2(_job_anchor.position.x, _job_anchor.end.y + 4)
+	var counts := {}
+	for o in sim.residents:
+		counts[o.role] = counts.get(o.role, 0) + 1
+	var sig := "%d%s%s%s" % [r.id, r.role, r.jobs, counts]
+	_rebuild(_job_list, sig, func(c: Container) -> void:
+		var order: Array = Defs.JOBS.duplicate()
+		order.sort_custom(func(a, b): return Sim.level(r, a) > Sim.level(r, b) or (Sim.level(r, a) == Sim.level(r, b) and Defs.JOBS.find(a) < Defs.JOBS.find(b)))
+		for jb in order + ["none"]:
+			var text := "No job: haul" if jb == "none" else "%s · level %d" % [Defs.JOB_NAMES[jb], Sim.level(r, jb)]
+			var n: int = counts.get(jb, 0)
+			if jb != "none" and n > 0:
+				text += " · %d %s" % [n, _job_people(jb, n)]
+			var b := _button(text, func():
+				game.set_role(r, jb)
+				_close_job_drop(), "Secondary")
+			b.set_meta("label", "Job choice: " + text)
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.toggle_mode = true
+			b.set_pressed_no_signal(r.role == jb)
+			b.tooltip_text = "Only hauls, when there's something to carry" if jb == "none" else "%s does %s work, and hauls when there's none" % [r.name, Defs.JOB_NAMES[jb]]
+			c.add_child(b))
+
+
+## "farmer", "2 farmers".
+static func _job_people(jb: String, n: int) -> String:
+	return Defs.JOB_SKILLED[jb] + ("" if n == 1 else "s")
+
+
+## The Village jobs board (issues #78, #134): a row per resident with their job's dropdown, and a
+## column per job with their level in it and a tick of progress to the next level. Their own job's
+## cell is lit. A column header counts who has the job, yellow when nobody does (Ada aside).
 func _refresh_board(sim: Sim) -> void:
 	_board_panel.visible = game.jobs_board_open
 	_jobs_btn.set_pressed_no_signal(game.jobs_board_open)
 	if not game.jobs_board_open:
 		return
-	var sig := "%s|%s" % [game.selection, _keys_sig]
+	var sig := "%s|%s|%d" % [game.selection, _keys_sig, _job_for]
 	for r in sim.residents:
-		sig += "%d%s%s%s%s;" % [r.id, r.name, r.jobs, r.away, r.map]
+		sig += "%d%s%s%s%s%s;" % [r.id, r.name, r.role, r.jobs, r.away, r.map]
 	_rebuild(_board, sig, func(c: Container) -> void:
 		var head := HBoxContainer.new()
 		var title := _label("Village jobs", true, Palette.CHALK, Palette.HEADING)
 		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		head.add_child(title)
-		head.add_child(_label("Click: on, then priority 1 → 2 → 3.  Shift-click: off.", false, Palette.CHALK_DIM, Palette.CAPTION))
+		head.add_child(_label("One job each. Idle residents haul.", false, Palette.CHALK_DIM, Palette.CAPTION))
 		c.add_child(head)
 		var grid := GridContainer.new()
-		grid.columns = Defs.JOBS.size() + 1
+		grid.columns = Defs.JOBS.size() + 2
 		grid.add_theme_constant_override("h_separation", 3)
 		grid.add_theme_constant_override("v_separation", 3)
 		grid.add_child(Control.new())
+		var job_head := _label("Job", true, Palette.CHALK, Palette.BODY)
+		job_head.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		grid.add_child(job_head)
 		for jb in Defs.JOBS:
-			var n: int = sim.residents.filter(func(r): return r.jobs[jb].on).size()
+			var n: int = sim.residents.filter(func(r): return r.role == jb).size()
 			var col := VBoxContainer.new()
 			col.add_theme_constant_override("separation", 0)
 			var name := _label(Defs.JOB_NAMES[jb], true, Palette.CHALK, Palette.BODY)
 			name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			col.add_child(name)
-			var count := _label("nobody" if n == 0 else "%d on" % n, false, Palette.YELLOW if n == 0 else Palette.CHALK_DIM, Palette.CAPTION)
+			var nobody: bool = n == 0 and jb != "haul"  # everyone hauls when idle
+			var count := _label("nobody" if n == 0 else str(n), false, Palette.YELLOW if nobody else Palette.CHALK_DIM, Palette.CAPTION)
 			count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			col.add_child(count)
-			col.tooltip_text = "No one does %s." % Defs.JOB_NAMES[jb] if n == 0 else "%d of %d residents do %s." % [n, sim.residents.size(), Defs.JOB_NAMES[jb]]
+			var people: String = Defs.JOB_SKILLED[jb].capitalize() + "s"
+			col.tooltip_text = "%s: %s. Ada does this work when she can." % [people, "nobody" if n == 0 else str(n)] if jb != "haul" else "%s: %d. Everyone hauls when there's nothing of their own job to do." % [people, n]
 			col.mouse_filter = Control.MOUSE_FILTER_STOP
 			grid.add_child(col)
 		for r in sim.residents:
@@ -1445,40 +1532,42 @@ func _refresh_board(sim: Sim) -> void:
 			who.set_pressed_no_signal(game.selection.get("ids", []).has(r.id))
 			who.tooltip_text = "Select %s" % r.name if r.map != Road.ID else "Select %s. %s" % [r.name, _status(sim, r)]
 			grid.add_child(who)
+			var pick := _job_picker(sim, r)
+			pick.custom_minimum_size = Vector2(170, 0)
+			pick.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			grid.add_child(pick)
 			for jb in Defs.JOBS:
 				grid.add_child(_board_cell(r, jb))
 		c.add_child(grid))
 
 
-func _board_cell(r: Dictionary, jb: String) -> Button:
-	var st: Dictionary = r.jobs[jb]
+## A resident's level in a job on the board, with a tick of progress to the next; lit for their job.
+func _board_cell(r: Dictionary, jb: String) -> Control:
 	var lv := Sim.level(r, jb)
-	var b := _button("%s\nLv %d" % [str(st.pri) if st.on else "Off", lv], func(): pass)
-	b.set_meta("cell", "%d:%s" % [r.id, jb])
-	b.toggle_mode = true
-	b.set_pressed_no_signal(st.on)
-	b.custom_minimum_size = Vector2(66, 48)
-	b.add_theme_font_size_override("font_size", Palette.BODY)
-	b.add_theme_constant_override("line_spacing", -3)
-	if not st.on:
-		for k in ["font_color", "font_hover_color", "font_focus_color"]:
-			b.add_theme_color_override(k, Color(Palette.CHALK_DIM, 0.6))
-	# The click's Shift comes with the mouse event, so note it before the press lands.
-	b.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT:
-			b.set_meta("shift", ev.shift_pressed))
-	b.pressed.connect(func(): game.board_click(r, jb, b.get_meta("shift", false)))
+	var mine: bool = r.role == jb or r.role == "all"
+	var p := PanelContainer.new()
+	p.set_meta("cell", "%d:%s" % [r.id, jb])
+	p.custom_minimum_size = Vector2(66, 40)
+	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Palette.SLATE_DEEP if mine else Color(Palette.SLATE_DEEP, 0.0)
+	sb.set_corner_radius_all(3)
+	p.add_theme_stylebox_override("panel", sb)
+	var v := VBoxContainer.new()
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	var l := _label("Lv %d" % lv, mine, Palette.CHALK if mine else Palette.CHALK_DIM, Palette.BODY)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(l)
 	var bar := _bar(Sim.level_progress(r, jb), Palette.GREEN)
-	bar.custom_minimum_size = Vector2(0, 3)
+	bar.custom_minimum_size = Vector2(46, 3)
+	bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	b.add_child(bar)
-	b.resized.connect(func():
-		bar.position = Vector2(10, b.size.y - 7)
-		bar.size = Vector2(b.size.x - 20, 3))
-	var xp: int = st.get("xp", 0)
+	v.add_child(bar)
+	p.add_child(v)
+	var xp: int = r.jobs[jb].get("xp", 0)
 	var lv_text := "level %d, the top level" % lv if lv > Tuning.SKILL_LEVELS.size() else "level %d: %d of %d points to level %d" % [lv, xp, Tuning.SKILL_LEVELS[lv - 1], lv + 1]
-	b.tooltip_text = "%s, %s: %s, %s." % [r.name, Defs.JOB_NAMES[jb], "priority %d" % st.pri if st.on else "off", lv_text]
-	return b
+	p.tooltip_text = "%s, %s: %s%s." % [r.name, Defs.JOB_NAMES[jb], lv_text, ". Their job" if r.role == jb else ""]
+	return p
 
 
 ## What armor a resident wears (issue #140), and how much of the hazards' harm it turns aside.
