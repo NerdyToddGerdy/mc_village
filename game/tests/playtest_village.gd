@@ -294,6 +294,8 @@ func _initialize() -> void:
 	var coal_before := count("coal")
 	if not sim.pending.is_empty():  # someone seriously hurt at the mine: the game waits for a choice
 		check(await click_button("Retreat"), "answer the injury with Retreat")
+		await key(KEY_QUOTELEFT)  # answering carries on at speed: pause again, so only play() moves time
+		check(game.speed == 0, "~ pauses again")
 	check(await play_until(150, func(): return sim.expedition.is_empty()), "the party gets home, the hurt walking slower (%s, unloading %s)" % [sim.expedition.get("party", []).map(func(id): return [sim.resident(id).map, sim.resident(id).job.label if sim.resident(id).job != null else "idle", sim.resident(id).hurt, sim.resident(id).pos, sim.resident(id).path.size(), sim.resident(id).job.i if sim.resident(id).job != null else -1, sim.resident(id).trip, sim.cart]), sim.expedition.get("unloading", false)])
 	check(seen("Back from the old mine: ") and seen("coal"), "a toast reports what came back")
 	check(ada.map == "village" and tomas.map == "village" and not ada.away, "Ada and Tomas are back in the village")
