@@ -116,6 +116,8 @@ func _initialize() -> void:
 	check(Goals.LIST[Goals.current(sim)].t == "Craft a pickaxe", "the checklist asks for a pickaxe next")
 	await key(KEY_F)
 	check(game.selection.get("ids", []) == [ada.id], "F selects Ada")
+	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
+	await frames(2)
 	check(visible_label("Everything") and find_button("Job: Ada") == null, "Ada's job is Everything, with no dropdown")
 	await key(KEY_J)
 	check(game.jobs_board_open, "J opens the jobs board")
@@ -319,8 +321,8 @@ func _initialize() -> void:
 	# Jobs (issue #134): Tomas's one job, chosen from the dropdown on his panel, then on the board
 	game.selection = {"kind": "res", "ids": [tomas.id]}
 	check(await choose_job(tomas, "farm", false), "Tomas's panel: choose Farm from his job dropdown (%s)" % tomas.role)
-	var tb: Button = await job_button(tomas, false)
-	check(tb != null and tb.text.begins_with("Farmer, level"), "his panel says he's a farmer (%s)" % (tb.text if tb else "no button"))
+	var panel_btn: Button = await job_button(tomas, false)
+	check(panel_btn != null and panel_btn.text.begins_with("Farmer, level"), "his panel says he's a farmer (%s)" % (panel_btn.text if panel_btn else "no button"))
 	check(await choose_job(tomas, "none"), "the jobs board: choose No job from Tomas's dropdown (%s)" % tomas.role)
 	# A panel that changes between a button's press and release keeps the click
 	var jb_btn: Button = await job_button(tomas)

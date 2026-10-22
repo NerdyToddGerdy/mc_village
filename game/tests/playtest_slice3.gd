@@ -97,6 +97,13 @@ func _initialize() -> void:
 	check(await play_until(40, func(): return sim.at_site(ada) and sim.at_site(tomas)), "they reach the old mine")
 	check(sim.route_surveyed(), "walking it surveyed the road")
 	check(await click_button("Village"), "back to the village")
+	# Mira stays home: made a miner (one job each, issue #134), with the village's trees marked for her
+	check(await choose_job(mira, "mine"), "the jobs board: Mira, staying home, is made a miner (%s)" % mira.role)
+	await key(KEY_ESCAPE)
+	await look_at(Sim.rcell(mira))
+	await key(KEY_X)
+	await drag(screen(Vector2i(1, 1)), screen(Vector2i(sim.w - 2, sim.h - 2)))
+	await key(KEY_ESCAPE)
 	check(await play_until(30, func(): return mira.map == "village" and mira.job != null and mira.job.work != ""), "Mira keeps the village working (%s)" % (mira.job.label if mira.job != null else "idle"))
 
 	# ---- The party works the site (issue #109); the player marks the rubble at the tunnel's end
@@ -215,9 +222,12 @@ func _initialize() -> void:
 	check(await click_button("Old mine") and game.view_map == OldMine.ID, "show the old mine")
 	check(await click_button("Dig to the door"), "click Dig to the door in the party panel")
 	for i in 4:  # a fall or a cave-in on the way is luck: healed by command, so the door still gets tested
-		if await play_until(60, func(): return not sim.pending.is_empty() or goer.hurt > 0) and goer.hurt > 0 and sim.pending.is_empty():
-			goer.hurt = 0
-			goer.heal = 0.0
+		if await play_until(60, func(): return not sim.pending.is_empty() or goer.hurt > 0) and goer.hurt > 0:
+			if not sim.pending.is_empty() and sim.pending[0].kind == "injury":
+				sim.choose("press_on")  # a serious one too: pressed on, then healed
+			if sim.pending.is_empty():
+				goer.hurt = 0
+				goer.heal = 0.0
 	check(await play_until(60, func(): return not sim.pending.is_empty()), "the party mines its way to the door, and the game stops (%s)" % [[goer.map, goer.job.label if goer.job != null else "idle", goer.pick, goer.hurt, sim.get_map(OldMine.ID).door_state, sim.get_map(OldMine.ID).boulders.filter(func(b): return b.alive and b.des).map(func(b): return b.cell), sim.expedition.get("leg", ""), sim.expedition.get("home_why", ""), sim.pack_load()]])
 	await frames(3)
 	check(not sim.pending.is_empty() and sim.pending[0].kind == "door" and visible_label("A door down"), "a choice: the door down")

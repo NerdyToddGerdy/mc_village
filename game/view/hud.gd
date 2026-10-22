@@ -1453,7 +1453,9 @@ func _refresh_job_drop(sim: Sim) -> void:
 		_close_job_drop()
 		return
 	_job_drop.visible = true
-	_job_drop.position = Vector2(_job_anchor.position.x, _job_anchor.end.y + 4)
+	var h := _job_drop.get_combined_minimum_size().y
+	var below := _job_anchor.end.y + 4 + h <= get_viewport().get_visible_rect().size.y
+	_job_drop.position = Vector2(_job_anchor.position.x, _job_anchor.end.y + 4 if below else _job_anchor.position.y - 4 - h)  # above, when there's no room below
 	var counts := {}
 	for o in sim.residents:
 		counts[o.role] = counts.get(o.role, 0) + 1

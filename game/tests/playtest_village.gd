@@ -128,7 +128,9 @@ func _initialize() -> void:
 	check(best_cell != null and best_cell.find_children("*", "Label", true, false).any(func(l): return "Lv " in l.text), "the jobs board shows levels")
 	await key(KEY_ESCAPE)
 
-	# ---- Toolsmith: an axe is made, a spare is kept, and a broken axe is replaced from it
+	# ---- Toolsmith: Tomas takes the job, an axe is made, a spare is kept, and a broken axe is replaced from it
+	check(await choose_job(tomas, "toolsmith"), "the jobs board: make Tomas the toolsmith, so spares are kept (%s)" % tomas.role)
+	await key(KEY_ESCAPE)
 	check(await open_bench_panel(), "open the bench's Craft panel again")
 	check(await queue_recipe("Wooden axe"), "queue a wooden axe")
 	await key(KEY_ESCAPE)
