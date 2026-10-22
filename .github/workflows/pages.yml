@@ -1,0 +1,85 @@
+name: Web build
+
+# Exports the game for the browser and publishes it on GitHub Pages. Pull requests only build it,
+# so a change that breaks the export shows up before it reaches main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Export for the web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GODOT_VERSION: 4.7.2
+    defaults:
+      run:
+        working-directory: game
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot and its web templates
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64-web-templates
+
+      - name: Download Godot ${{ env.GODOT_VERSION }} and its web templates
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        working-directory: .
+        run: |
+          mkdir -p ~/godot
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          curl -fsSL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot
+          mv ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ~/godot/godot
+          chmod +x ~/godot/godot
+          # The templates archive holds every platform; only the web ones are kept.
+          curl -fsSL -o /tmp/templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          dest=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mkdir -p "$dest"
+          unzip -q -j /tmp/templates.tpz 'templates/web_*' 'templates/version.txt' -d "$dest"
+          ls "$dest"
+
+      - name: Import project
+        run: timeout 300 ~/godot/godot --headless --path . --import
+
+      - name: Export
+        run: |
+          mkdir -p ../build/web
+          timeout 300 ~/godot/godot --headless --path . --export-release "Web" ../build/web/index.html
+          test -f ../build/web/index.html && test -f ../build/web/index.pck && test -f ../build/web/index.wasm
+          ls -la ../build/web
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    name: Publish to GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
