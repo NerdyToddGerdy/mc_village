@@ -39,6 +39,7 @@ static var ITEM_COLORS := {
 	"bread": Color("#D9A35A"), "cooked_mutton": Color("#8C4A32"),
 	"leather": Color("#9A5B33"), "beef": Color("#B5473F"), "cooked_beef": Color("#6E3A26"),
 	"porkchop": Color("#E39A8E"), "cooked_porkchop": Color("#A8643F"),
+	"leather_cap": Color("#9A5B33"), "leather_tunic": Color("#9A5B33"), "leather_trousers": Color("#9A5B33"), "leather_boots": Color("#9A5B33"),
 	"log": Color("#7A5634"), "plank": Color("#C49A62"), "stick": Color("#9C7A4E"), "cobble": Color("#7F827C"),
 	"coal": Color("#34312F"), "iron_ore": Color("#C08A68"), "iron_ingot": Color("#C9D0D6"),
 	"rail": Color("#A7AFB5"), "minecart": Color("#6E777E"),

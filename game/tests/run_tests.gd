@@ -72,6 +72,8 @@ func _init() -> void:
 		"test_adventures_list",
 		"test_meadow_expedition",
 		"test_old_meadow_trips_come_home",
+		"test_pens_and_breeding",
+		"test_leather_armor",
 	]
 	for t in tests:
 		_current = t
@@ -343,11 +345,19 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.maps.has(two_id) and mine.door_state == "open" and sim.get_map(two_id).pattern == MineLevels.family(sim.seed, 2), "v%d: Level 2 and the open door survive" % v)
 			check(not sim.get_map(two_id).boulders[0].alive and sim.get_map(two_id).known, "v%d: what's mined on Level 2 stays mined" % v)
 			var mead := sim.get_map(Meadow.ID)
-			check(mead.visited and mead.regrow.get("pig", 0.0) == 60.0 and sim.herds().pig == Meadow.herd().pig - 1 and sim.herds().cow == Meadow.herd().cow - 1, "v%d: the meadow's herds and regrowth survive" % v)
+			var calves := 1 if v >= 21 else 0  # v21 adds a calf in a pen
+			check(mead.visited and mead.regrow.get("pig", 0.0) == 60.0 and sim.herds().pig == Meadow.herd().pig - 1 and sim.herds().cow == Meadow.herd().cow - 1 + calves, "v%d: the meadow's herds and regrowth survive" % v)
 		else:  # issue #132: the old mine is Level 1, its door not reached, with a boulder in front of it
 			check(mine.level == 1 and mine.door == Vector2i(15, 8) and mine.door_state == "closed" and not sim.maps.has(two_id), "v%d: the old mine gets its door, not yet reached" % v)
 			check(mine.boulders.any(func(b): return b.cell == Vector2i(14, 8)) and not sim.on_map(OldMine.ID, sim.walkable.bind(Vector2i(14, 8))) and sim.seed == Tuning.SEED, "v%d: with a boulder in front of it, and the game's seed" % v)
 			check(sim.get_map(Meadow.ID).known == mine.known, "v%d: the meadow is known if the old mine is" % v)
+		if v >= 21:  # issues #139, #140: a built pen with a fed pair and a calf, a part-built one; Mira's armor
+			var mead := sim.get_map(Meadow.ID)
+			check(mead.pens.size() == 2 and Sim.pen_done(mead.pens[0]) and mead.pens[1].built.size() == 5 and mead.gates.has(mead.pens[0].gate), "v%d: the pens and their fences survive" % v)
+			var penned: Array = mead.sheep.filter(func(a): return a.alive and a.get("pen", 0) == mead.pens[0].id)
+			check(penned.filter(func(a): return a.get("fed_at", -1) >= 0).size() == 2 and penned.filter(func(a): return a.get("young", false)).size() == 1, "v%d: the fed pair and the calf survive" % v)
+			check(Sim.armor_worn(sim.residents[2]).size() == 2 and sim.residents[2].armor.chest.dur == 5, "v%d: Mira's tunic and boots survive, with their wear" % v)
+			check(sim.stacks_where(func(st): return st.type == "leather_cap").size() == 1, "v%d: the cap lying in the village survives" % v)
 		check(sim.maps.village.sheep.all(func(a): return a.kind == "animal" and a.species == "sheep"), "v%d: the village's animals are sheep" % v)
 		if v < 17:  # issues #109-#111: nobody hurt, no choice waiting, and the mine gets its hazards
 			check(sim.residents.all(func(r): return r.hurt == 0) and sim.pending.is_empty(), "v%d: nobody is hurt and no choice waits" % v)
@@ -1466,7 +1476,7 @@ func test_mine_items_are_hauled_and_counted() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
 	for t in ["coal", "iron_ore", "iron_ingot"]:
-		check(Defs.ITEMS.has(t) and Defs.MATERIALS.has(t) and Palette.ITEM_COLORS.has(t), "%s has a definition, a tally and a colour" % t)
+		check(Defs.ITEMS.has(t) and Defs.ITEMS[t].group == "ores" and Palette.ITEM_COLORS.has(t), "%s has a definition, a tally group and a colour" % t)
 		check(ItemIcons.icon(t).get_width() == 64, "%s has an icon" % t)
 	var cols := ["coal", "iron_ore", "iron_ingot"].map(func(t): return Palette.ITEM_COLORS[t])
 	for c in cols:
@@ -1662,18 +1672,18 @@ func test_staging_and_departure() -> void:
 			check(stuck_text(sim).contains("Expedition: Waiting for"), "while packing, the wait shows: " + stuck_text(sim))
 	check(tomas_packed, "village residents pack the supplies (Haul)")
 	check(not ada_village_work, "the party only packs and waits; it takes no other village work")
-	check(sim.packed() == {"meals": 2, "picks": 1} and b.tools.size() == 1 and b.tools[0].dur == 9, "2 meals and the spare pickaxe are packed, with its wear (%s)" % [sim.packed()])
+	check(sim.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0} and b.tools.size() == 1 and b.tools[0].dur == 9, "2 meals and the spare pickaxe are packed, with its wear (%s)" % [sim.packed()])
 	check(count(sim, "bread") == 1, "packed meals leave the stockpile")
 	check(sim.at_board(ada) and Sim.staging_cells(b).has(Sim.rcell(ada)), "Ada waits at the board")
 	check(sim.depart_blocker() == "", "everything is ready: %s" % sim.depart_blocker())
 	# Saving while packed keeps it packed.
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
-	check(loaded.packed() == {"meals": 2, "picks": 1} and loaded.site(b.id).tools[0].dur == 9, "what's packed survives a save")
+	check(loaded.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0} and loaded.site(b.id).tools[0].dur == 9, "what's packed survives a save")
 	run(loaded, 10)
 	check(loaded.at_board(loaded.residents[0]), "and Ada goes back to the board after loading")
 	# Cancelling on the copy: the supplies go back through haul jobs.
 	loaded.cancel_expedition()
-	check(loaded.expedition.is_empty() and loaded.packed() == {"meals": 0, "picks": 0}, "cancelling unpacks the board")
+	check(loaded.expedition.is_empty() and loaded.packed() == {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0}, "cancelling unpacks the board")
 	run(loaded, 40)
 	var stored := loaded.stacks_where(func(st): return st.type in ["bread", "stone_pick"] and loaded.in_zone(st.cell))
 	check(stored.map(func(st): return st.type).count("stone_pick") == 1 and count(loaded, "bread") == 3, "the meals and the pickaxe are hauled back to the stockpile")
@@ -2118,7 +2128,7 @@ func test_rails_and_minecarts() -> void:
 	check(rails.inp == {"iron_ingot": 6, "stick": 1} and rails.out == {"rail": 16}, "6 iron ingots and a stick make 16 rails")
 	check(cart.inp == {"iron_ingot": 5} and cart.out == {"minecart": 1}, "5 iron ingots make a minecart")
 	check(Sim.recipe_job(rails) == "craft" and Sim.recipe_job(cart) == "craft", "both are Craft work: nobody carries them as tools")
-	check(Defs.MATERIALS.has("rail") and Defs.MATERIALS.has("minecart") and Defs.stack_cap("rail") == Tuning.STACK and Defs.stack_cap("minecart") == 1, "they're counted as materials; rails stack, a minecart has a cell to itself")
+	check(Defs.ITEMS.rail.group == "building" and Defs.ITEMS.minecart.group == "building" and Defs.stack_cap("rail") == Tuning.STACK and Defs.stack_cap("minecart") == 1, "they're counted under Building; rails stack, a minecart has a cell to itself")
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
 	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
@@ -2661,3 +2671,180 @@ func test_old_meadow_trips_come_home() -> void:
 	check(not wool.is_empty() and wool[0].n == SaveFormat.OLD_MEADOW_TAKE and not mutton.is_empty() and mutton[0].n == SaveFormat.OLD_MEADOW_TAKE, "with the 2 wool and 2 raw mutton he'd have brought back")
 	check(sim.herds().get("sheep", 0) == 5 - SaveFormat.OLD_MEADOW_TAKE, "the meadow map keeps the old meadow's sheep, less his (%d)" % sim.herds().get("sheep", 0))
 	check(not r.has("error"), "the plain v19 fixture still reads")
+
+
+## Issue #139: a pen is painted at the meadow and built by the party with packed sticks; marked
+## animals are led in; a pair fed wheat has a young one, which grows up and can't be hunted till
+## then; tending the pens hunts only what's over the herd size kept. Pens are saved.
+func test_pens_and_breeding() -> void:
+	var sim := Sim.new_game()
+	var mp := sim.get_map(Meadow.ID)
+	var rect := Rect2i(16, 16, 6, 5)
+	sim.on_map(Meadow.ID, func():
+		check(sim.pen_check(Rect2i(16, 16, 3, 5)) != "" and sim.pen_check(Rect2i(14, 14, 9, 9)) != "", "a pen is %d×%d to %d×%d" % [Tuning.PEN_MIN, Tuning.PEN_MIN, Tuning.PEN_MAX, Tuning.PEN_MAX])
+		check(sim.pen_check(Rect2i(5, 7, 5, 5)) != "", "not on the pond")
+		check(sim.paint_pen(rect) == "", "a 6×5 pen is painted on open grass")
+		check(sim.pen_check(Rect2i(18, 18, 4, 4)) != "", "pens can't overlap"))
+	check(sim.pen_check(rect) == "Pens go at the meadow", "and only at the meadow")
+	var pen: Dictionary = mp.pens[0]
+	check(pen.gate == Vector2i(21, 18) and Sim.pen_room(pen) == 12 and not Sim.pen_done(pen), "its gate faces the entrance, with room for 12 inside")
+	check(sim.fence_left() == 18 * Tuning.FENCE_STICKS, "its 18 fences need %d sticks" % sim.fence_left())
+	var cows: Array = mp.sheep.filter(func(a): return a.species == "cow").slice(0, 2)
+	sim.on_map(Meadow.ID, func():
+		for a in cows:
+			sim.designate_lead(Rect2i(a.cell, Vector2i.ONE), a))
+	check(cows.all(func(a): return a.lead and not a.des), "two cows are marked to lead into a pen")
+	# The party packs sticks and wheat, builds the pen, leads the cows in and feeds them.
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	var b := built_board(sim)
+	var plan := sim.new_plan(Meadow.ID)
+	check(plan.sticks == 18 and plan.wheat == 0, "a meadow plan packs the sticks the pens need (%d)" % plan.sticks)
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 4
+	plan.wheat = 4
+	plan.target = {"item": "pens", "n": 2}
+	check(sim.plan_problems(plan).is_empty(), "tending the pens needs no cargo room: %s" % [sim.plan_problems(plan)])
+	check(sim.plan_expedition(plan) == "", "the plan is confirmed")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(0, 2), "stick", 18)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 2), "wheat", 4)
+	b.store = {"bread": 4}
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	check(sim.packed().sticks == 18 and sim.packed().wheat == 4, "the sticks and wheat are packed at the board (%s)" % [sim.packed()])
+	check(sim.depart() == "", "the party departs")
+	check(sim.expedition.provisions == {"bread": 4} and sim.expedition.supplies == {"stick": 18, "wheat": 4}, "meals are provisions; sticks and wheat are supplies (%s)" % [sim.expedition.supplies])
+	until_at_site(sim, [ada, tomas], Tuning.MEADOW_WALK + 40)
+	var fed_at := -1
+	var why := ""
+	var saved := {}
+	for i in 600 * Tuning.TPS:
+		sim.step()
+		if fed_at < 0 and cows.all(func(a): return a.get("fed_at", -1) >= 0):
+			fed_at = sim.tick
+			saved = sim.save_state()
+		if sim.expedition.get("leg", "") == "home":
+			why = sim.expedition.home_why
+			break
+	check(Sim.pen_done(pen) and mp.gates.has(pen.gate) and mp.fences.has(Vector2i(16, 16)), "the pen is built: fences round it, a gate in front")
+	check(not sim.on_map(Meadow.ID, sim.walkable.bind(Vector2i(16, 16))) and sim.on_map(Meadow.ID, sim.walkable.bind(pen.gate)), "people walk through the gate, not the fences")
+	check(cows.all(func(a): return a.get("pen", 0) == pen.id and Sim.pen_inside(pen).has_point(a.cell)), "both cows are led into the pen")
+	check(fed_at > 0 and sim.stats.get("fed", 0) == 1, "and fed as a pair")
+	check(why == "the pens are tended", "with nothing left to do, the party heads home: %s" % why)
+	check(sim.expedition.supplies.get("wheat", 0) == 2 and not sim.expedition.supplies.has("stick"), "2 wheat fed the pair, 18 sticks built the fences (%s)" % [sim.expedition.supplies])
+	# A young one follows, grows up, and can't be hunted till then.
+	var calf: Dictionary = {}
+	for i in int(Tuning.BREED_TIME + 5) * Tuning.TPS:
+		sim.step()
+		var kids: Array = mp.sheep.filter(func(a): return a.get("young", false))
+		if not kids.is_empty():
+			calf = kids[0]
+			break
+	check(not calf.is_empty() and calf.species == "cow" and calf.pen == pen.id, "a calf is born in the pen")
+	check(sim.tick - fed_at <= int((Tuning.BREED_TIME + 0.1) * Tuning.TPS) and sim.tick - fed_at >= int(Tuning.BREED_TIME * Tuning.TPS), "%d s after they were fed" % int(Tuning.BREED_TIME))
+	check(cows.all(func(a): return a.fed_at < 0 and a.cool_until > sim.tick) and sim.on_map(Meadow.ID, sim.feed_pairs.bind(pen)).is_empty(), "the pair can't be fed again for a while")
+	sim.on_map(Meadow.ID, func(): sim.designate_hunt(Rect2i(16, 16, 6, 5)))
+	check(not calf.des and cows.all(func(a): return a.des) and not Sim.gives(calf, "beef"), "the calf can't be hunted")
+	sim.on_map(Meadow.ID, func(): sim.designate_hunt(Rect2i(16, 16, 6, 5)))
+	for a in cows:
+		a.des = false
+	var wild_cows: int = mp.sheep.filter(func(a): return a.alive and a.species == "cow" and a.get("pen", 0) == 0).size()
+	run(sim, Tuning.GROW_TIME + 1)
+	check(not calf.young and sim.on_map(Meadow.ID, sim.penned.bind(pen)).filter(func(a): return a.species == "cow").size() == 3, "it grows up in the pen")
+	check(mp.sheep.filter(func(a): return a.alive and a.species == "cow" and a.get("pen", 0) == 0).size() == wild_cows or wild_cows < Meadow.herd().cow, "the wild cows regrow apart from the pens")
+	# Saved and loaded mid-breeding: the pen, its fences and gate, the fed pair.
+	var loaded := Sim.from_state(str_to_var(var_to_str(saved)))
+	var lmp := loaded.get_map(Meadow.ID)
+	check(lmp.pens.size() == 1 and Sim.pen_done(lmp.pens[0]) and lmp.gates.has(pen.gate) and lmp.fences.has(Vector2i(16, 16)), "pens and their fences are saved")
+	check(lmp.sheep.filter(func(a): return a.get("pen", 0) == pen.id and a.get("fed_at", -1) >= 0).size() == 2, "and the fed pair")
+	for i in int(Tuning.BREED_TIME + 1) * Tuning.TPS:
+		loaded.step()
+	check(lmp.sheep.any(func(a): return a.alive and a.get("young", false)), "which has its calf after loading too")
+	# Tending the pens again: the party hunts only what's over the herd size it keeps.
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.expedition.is_empty():
+			break
+	check(sim.expedition.is_empty(), "the first trip is home and unpacked")
+	var plan2 := sim.new_plan(Meadow.ID)
+	check(plan2.sticks == 0 and plan2.wheat == 0, "with the pen built and the pair resting, a new plan packs no sticks or wheat")
+	plan2.party = [ada.id, tomas.id]
+	plan2.meals = 4
+	plan2.target = {"item": "pens", "n": 2}
+	sim.plan_expedition(plan2)
+	b.store = {"bread": 4}
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	check(sim.depart() == "", "a second party sets off to tend the pens, keeping 2 of each")
+	var wild: Array = mp.sheep.filter(func(a): return a.alive and a.species == "cow" and a.get("pen", 0) == 0)
+	why = ""
+	for i in 400 * Tuning.TPS:
+		sim.step()
+		if sim.expedition.get("leg", "") == "home":
+			why = sim.expedition.home_why
+			break
+	var in_pen: Array = sim.on_map(Meadow.ID, sim.penned.bind(pen))
+	check(in_pen.filter(func(a): return a.species == "cow").size() == 2, "it hunts the one cow over the herd size, and keeps 2")
+	check(wild.all(func(a): return a.alive), "and leaves the wild cows alone")
+	check(why == "the pens are tended" and sim.expedition.cargo.get("beef", 0) == 2 and sim.expedition.cargo.get("leather", 0) == 1, "it packs the surplus cow's beef and leather: %s %s" % [why, sim.expedition.cargo])
+
+
+## Issue #140: leather armor is crafted at the bench from leather, put on by residents like tools,
+## turns aside a share of hazard injuries (a full set also makes serious ones rarer), and wears out.
+func test_leather_armor() -> void:
+	for k in [["leather_cap", 5, "head"], ["leather_tunic", 8, "chest"], ["leather_trousers", 7, "legs"], ["leather_boots", 4, "feet"]]:
+		var rec := Defs.recipe(k[0])
+		check(rec.inp == {"leather": k[1]} and rec.out == {k[0]: 1} and Defs.ITEMS[k[0]].armor == k[2] and Sim.recipe_job(rec) == "craft", "a %s takes %d leather at the bench, as Craft work" % [Defs.ITEMS[k[0]].one, k[1]])
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "leather", 8)
+	sim.queue_add(bench, "leather_tunic")
+	run(sim, 40)
+	check(ada.armor.get("chest") != null and ada.armor.chest.type == "leather_tunic" and ada.armor.chest.dur == Tuning.ARMOR_USES, "Ada crafts a leather tunic and puts it on (%s)" % [ada.armor])
+	check(count(sim, "leather") == 0 and is_equal_approx(Sim.protection(ada), Tuning.ARMOR_GUARD.chest), "it took the 8 leather, and guards her against %d%% of hazard injuries" % roundi(Tuning.ARMOR_GUARD.chest * 100))
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(2, 0))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(0, 2), "leather_tunic", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 2), "leather_boots", 1)
+	run(sim, 20)
+	var worn: int = Sim.armor_worn(ada).size() + Sim.armor_worn(tomas).size()
+	check(worn == 3 and Sim.armor_worn(ada).has("chest") and Sim.armor_worn(tomas).has("chest"), "residents put on armor lying about for a slot they haven't filled, one piece each slot")
+	# A seeded run of hazard rolls: armor turns injuries aside, and a full set makes them less serious.
+	var bare := sim.add_resident("Mira", Sim.TRAVELERS[1][1], Vector2i(4, 4))
+	var clad := sim.add_resident("Jonas", Sim.TRAVELERS[2][1], Vector2i(5, 4))
+	sim.rng.seed = 7
+	var hurt := {"bare": 0, "clad": 0}
+	var serious := {"bare": 0, "clad": 0}
+	for i in 2000:
+		for who in [["bare", bare], ["clad", clad]]:
+			var r: Dictionary = who[1]
+			for slot in Defs.ARMOR_SLOTS:
+				if who[0] == "clad":
+					r.armor[slot] = {"type": "leather_" + {"head": "cap", "chest": "tunic", "legs": "trousers", "feet": "boots"}[slot], "dur": 99}
+			r.hurt = 0
+			sim._hazard(r, 0.5, 0.5, "a test")
+			if r.hurt > 0:
+				hurt[who[0]] += 1
+			if r.hurt == 2:
+				serious[who[0]] += 1
+	var guard := Sim.protection(clad)
+	check(is_equal_approx(guard, 0.35), "a full set guards against 35%% of hazard injuries (%.2f)" % guard)
+	check(hurt.clad < hurt.bare * 0.75 and hurt.clad > hurt.bare * 0.55, "armored, Jonas is hurt about 35%% less often (%d against %d)" % [hurt.clad, hurt.bare])
+	check(float(serious.clad) / hurt.clad < float(serious.bare) / hurt.bare * 0.7, "and a full set makes an injury serious less often (%d of %d against %d of %d)" % [serious.clad, hurt.clad, serious.bare, hurt.bare])
+	# Every hazard that strikes wears each piece a use; a piece used up wears out.
+	clad.armor = {"chest": {"type": "leather_tunic", "dur": 2}}
+	sim._hazard(clad, 1.0, 0.0, "a test")
+	check(clad.armor.chest != null and clad.armor.chest.dur == 1, "a hazard that strikes wears the tunic a use")
+	sim._hazard(clad, 1.0, 0.0, "a test")
+	check(clad.armor.chest == null and Sim.protection(clad) == 0.0 and sim.stats.get("armor_worn_out", 0) == 1, "and the tunic wears out")
+	# Saved, and old saves get no armor.
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.residents[0].armor.chest.type == "leather_tunic", "what each resident wears is saved")
+	var up := SaveFormat.upgrade(str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v20.save")))
+	check(not up.has("error") and up.data.state.residents.all(func(r): return r.armor == {}), "residents in an older save wear nothing")

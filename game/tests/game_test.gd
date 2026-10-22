@@ -69,15 +69,17 @@ func _test_drag(game: Game) -> void:
 	game.set_tool("")
 
 
-## The tally bar groups Materials, Food and Tools, and hides what hasn't turned up (issue #73).
+## The tally bar shows a total for each group of items, and hides groups nothing has turned up in
+## (issues #73, #141). Each group opens a dropdown with every item's stockpiled and loose counts, and
+## an item can be pinned to the bar on its own.
 func _test_tallies(game: Game) -> void:
 	var hud: Hud = game._hud
 	var sim := game.sim
-	var texts := func() -> Array:
+	var shown := func() -> Array:
 		hud.refresh(sim)
-		return hud._tallies.get_children().filter(func(n): return n is VBoxContainer and not n.is_queued_for_deletion()).map(func(n): return n.get_child(0).get_child(0).text)
+		return Defs.TALLY_GROUPS.map(func(g): return g[0]).filter(func(g): return hud._group_btns[g].visible)
 	for k in sim.items.keys():  # an empty map: nothing has turned up in this game yet
-		if not Defs.is_tool_item(sim.items[k].type):
+		if not Defs.wears(sim.items[k].type):
 			sim.items.erase(k)
 	hud._tally_sim = 0
 	var waiting_for := {}
@@ -88,27 +90,49 @@ func _test_tallies(game: Game) -> void:
 		for id in site.get("queue", []):
 			for t in Defs.recipe(id).inp:
 				waiting_for[t] = true
-	var shown: Array = texts.call()
-	var hidden_ok := true
-	for t in Defs.MATERIALS:
-		if shown.has(Defs.ITEMS[t].label) != waiting_for.has(t):
-			hidden_ok = false
-	check(hidden_ok, "with nothing about, the bar shows only what's being waited for (%s)" % [shown])
-	check(not shown.has("Food") and not shown.has("Mutton"), "no Food group before any food turns up")
+	var groups: Array = shown.call()
+	var expect := ["tools"]
+	for t in waiting_for:
+		if not expect.has(Defs.ITEMS[t].group):
+			expect.append(Defs.ITEMS[t].group)
+	check(groups.size() == expect.size() and expect.all(func(g): return groups.has(g)), "with nothing about, the bar shows Tools and armor, and the groups of what's being waited for (%s)" % [groups])
+	check(not groups.has("food") and not groups.has("ores"), "no Food or Ores before any turn up")
 	sim.drop_items(Sim.rcell(sim.residents[0]), "bread", 1)
-	shown = texts.call()
-	check(shown.has("Food"), "a loaf of bread brings in the Food group")
-	var food: Control = hud._tallies.get_children().filter(func(n): return n is VBoxContainer and not n.is_queued_for_deletion() and n.get_child(0).get_child(0).text == "Food")[0]
-	var count: Label = food.get_child(0).get_child(1)
-	check(count.text == "1" and "Bread 1" in food.tooltip_text, "Food counts meals and lists them on hover (%s)" % count.text)
+	sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(2, 0), "beef", 2)
+	check(shown.call().has("food"), "a loaf of bread brings in the Food group")
+	var food: Button = hud._group_btns.food
+	check(food.text.begins_with("Food  1 meal · 2 raw"), "Food counts meals on hand and raw meat to cook apart (%s)" % food.text)
 	var low := 1 < sim.residents.size()
-	check((count.get_theme_color("font_color") == Palette.YELLOW) == low, "Food is yellow only when meals are fewer than residents")
+	check((food.get_theme_color("font_color") == Palette.YELLOW) == low, "Food is yellow only when meals are fewer than residents")
 	sim.drop_items(Sim.rcell(sim.residents[0]), "wool", 2)
-	check(texts.call().has("Wool"), "wool shows once it turns up")
+	check(shown.call().has("animal") and hud._group_btns.animal.text.begins_with("Animal goods  2"), "wool brings in Animal goods")
 	for k in sim.items.keys():
 		if sim.items[k].type == "wool":
 			sim.items.erase(k)
-	check(texts.call().has("Wool") and not sim.items.values().any(func(st): return st.type == "wool"), "and stays, at 0, after it's used up")
+	check(shown.call().has("animal") and hud._group_btns.animal.text.begins_with("Animal goods  0"), "and it stays, at 0, after it's used up")
+	# Each group's dropdown lists its items with their counts (issue #141).
+	for g in ["building", "food", "tools"]:
+		hud._drop_pinned = g
+		hud._process(0.0)
+		hud.refresh(sim)
+		check(hud._tools_drop.visible and hud._drop_group == g, "the %s dropdown opens" % g)
+	hud._drop_pinned = "food"
+	hud._process(0.0)
+	hud.refresh(sim)
+	var rows := hud._tools_list.find_children("*", "Button", true, false).filter(func(b): return not b.is_queued_for_deletion() and str(b.get_meta("label", "")).begins_with("Pin "))
+	check(rows.any(func(b): return b.get_meta("label") == "Pin beef") and rows.any(func(b): return b.get_meta("label") == "Pin bread"), "the Food dropdown lists bread and raw beef, each with Pin")
+	var labels := hud._tools_list.find_children("*", "Label", true, false).filter(func(l): return not l.is_queued_for_deletion()).map(func(l): return l.text)
+	check(labels.has("Meals on hand") and labels.has("Raw meat to cook"), "and splits meals from raw meat")
+	var keys_before: Array = game.keys.pinned.duplicate()
+	game.pin_item("beef")
+	hud.refresh(sim)
+	var pinned := hud._tallies.get_children().filter(func(n): return n is VBoxContainer and not n.is_queued_for_deletion()).map(func(n): return n.get_child(0).get_child(0).text)
+	check(pinned == ["Beef"] and game.keys.pinned == ["beef"], "pinning raw beef puts it in the bar on its own (%s)" % [pinned])
+	var reread := KeyBindings.new(game.keys.path)
+	check(reread.pinned == ["beef"], "pins are kept with the key bindings, not in game saves")
+	game.pin_item("beef")
+	check(game.keys.pinned == keys_before, "unpinning takes it out again")
+	hud._close_tools()
 
 
 ## The main menu's Quit asks first; Cancel leaves the game running (issue #60). Confirming would end

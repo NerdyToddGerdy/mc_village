@@ -47,6 +47,10 @@ var seen := 0                ## Segments of the route anyone knows, from the vil
 var banks: Array = []        ## The pond's muddy bank: someone stepping onto it can slip.
 var fences := {}             ## Vector2i -> true: old fences, which nobody walks through.
 var regrow := {}             ## Species -> seconds toward its next animal, while it's below its herd.
+## Pens (issue #139): {id, rect (fences included), gate, built: {cell: true}}. A pen is done once every
+## cell round its edge is built: fences, which nobody walks through, and the gate, which only animals can't.
+var pens: Array = []
+var gates := {}              ## Vector2i -> true: built pen gates.
 
 var occ := PackedByteArray()
 var occ_dirty := true
@@ -59,7 +63,7 @@ func _init(p_w := Tuning.MAP_W, p_h := Tuning.MAP_H) -> void:
 	occ.resize(w * h)
 
 
-const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "ledges", "water", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow"]
+const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "ledges", "water", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates"]
 
 
 ## The map as plain data. Reservations and job bookkeeping aren't saved (spec §2, Saving).
@@ -98,9 +102,13 @@ static func from_save(d: Dictionary) -> SimMap:
 	m.zone = d.zone.duplicate()
 	m.farm = d.get("farm", {}).duplicate(true)
 	m.sites = d.sites.duplicate(true)
+	m.pens = d.get("pens", []).duplicate(true)
 	for o in m.trees + m.boulders + m.sheep + m.farm.values():
 		o.claim = 0
 		o.unreach_until = 0
+	for a in m.sheep:  # nobody is leading them any more (issue #139)
+		a.erase("led_by")
+		a.erase("led_to")
 	return m
 
 

@@ -84,6 +84,30 @@ static func _draw(img: Image, type: String) -> void:
 				_disc(img, p, 6, dark)
 				_disc(img, p, 4, c)
 			_ring(img, Vector2(32, 32), 11, 1.5, c.lightened(0.3))
+		"leather_cap":  # a rounded cap with a brim (issue #140)
+			_ellipse(img, Vector2(32, 34), Vector2(22, 18), dark)
+			_box(img, Rect2i(8, 34, 48, 14), dark)
+			_ellipse(img, Vector2(32, 34), Vector2(19, 15), c)
+			_box(img, Rect2i(11, 36, 42, 9), c.darkened(0.15))
+		"leather_tunic":  # a tunic: body and short sleeves
+			_box(img, Rect2i(8, 10, 48, 20), dark)
+			_box(img, Rect2i(17, 10, 30, 46), dark)
+			_box(img, Rect2i(11, 13, 42, 14), c)
+			_box(img, Rect2i(20, 13, 24, 40), c)
+			_line(img, Vector2(32, 14), Vector2(32, 50), 2, c.darkened(0.3))
+		"leather_trousers":  # two legs from a waistband
+			_box(img, Rect2i(14, 8, 36, 14), dark)
+			_box(img, Rect2i(14, 8, 16, 48), dark)
+			_box(img, Rect2i(34, 8, 16, 48), dark)
+			_box(img, Rect2i(17, 11, 30, 8), c.darkened(0.15))
+			_box(img, Rect2i(17, 19, 10, 34), c)
+			_box(img, Rect2i(37, 19, 10, 34), c)
+		"leather_boots":  # a pair of boots
+			for x in [10, 34]:
+				_box(img, Rect2i(x, 14, 14, 36), dark)
+				_box(img, Rect2i(x, 38, 22, 14), dark)
+				_box(img, Rect2i(x + 3, 17, 8, 30), c)
+				_box(img, Rect2i(x + 3, 41, 16, 8), c.darkened(0.15))
 		"beef", "cooked_beef":  # a thick steak with its fat edge
 			_ellipse(img, Vector2(32, 34), Vector2(23, 17), dark)
 			_ellipse(img, Vector2(32, 34), Vector2(20, 14), Palette.CHALK)

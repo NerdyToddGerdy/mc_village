@@ -3,51 +3,67 @@ extends RefCounted
 ## Items, recipes and building templates for Slice 1 (slice-1-spec.md §4, §6, §8).
 
 const ITEMS := {
-	"log": {"one": "log", "many": "logs", "label": "Logs"},
-	"plank": {"one": "plank", "many": "planks", "label": "Planks"},
-	"stick": {"one": "stick", "many": "sticks", "label": "Sticks"},
-	"cobble": {"one": "cobblestone", "many": "cobblestone", "label": "Cobblestone"},
-	"wool": {"one": "wool", "many": "wool", "label": "Wool"},
-	"mutton": {"one": "raw mutton", "many": "raw mutton", "label": "Mutton"},
-	"wheat": {"one": "wheat", "many": "wheat", "label": "Wheat"},
-	"berries": {"one": "berry", "many": "berries", "label": "Berries"},
-	"bread": {"one": "bread", "many": "bread", "label": "Bread"},
-	"cooked_mutton": {"one": "cooked mutton", "many": "cooked mutton", "label": "Cooked mutton"},
+	"log": {"one": "log", "many": "logs", "label": "Logs", "group": "building"},
+	"plank": {"one": "plank", "many": "planks", "label": "Planks", "group": "building"},
+	"stick": {"one": "stick", "many": "sticks", "label": "Sticks", "group": "building"},
+	"cobble": {"one": "cobblestone", "many": "cobblestone", "label": "Cobblestone", "group": "building"},
+	"wool": {"one": "wool", "many": "wool", "label": "Wool", "group": "animal"},
+	"mutton": {"one": "raw mutton", "many": "raw mutton", "label": "Mutton", "group": "food"},
+	"wheat": {"one": "wheat", "many": "wheat", "label": "Wheat", "group": "food"},
+	"berries": {"one": "berry", "many": "berries", "label": "Berries", "group": "food"},
+	"bread": {"one": "bread", "many": "bread", "label": "Bread", "group": "food"},
+	"cooked_mutton": {"one": "cooked mutton", "many": "cooked mutton", "label": "Cooked mutton", "group": "food"},
 	# Cows and pigs (issue #138).
-	"leather": {"one": "leather", "many": "leather", "label": "Leather"},
-	"beef": {"one": "raw beef", "many": "raw beef", "label": "Beef"},
-	"cooked_beef": {"one": "cooked beef", "many": "cooked beef", "label": "Cooked beef"},
-	"porkchop": {"one": "raw porkchop", "many": "raw porkchops", "label": "Porkchops"},
-	"cooked_porkchop": {"one": "cooked porkchop", "many": "cooked porkchops", "label": "Cooked porkchops"},
+	"leather": {"one": "leather", "many": "leather", "label": "Leather", "group": "animal"},
+	"beef": {"one": "raw beef", "many": "raw beef", "label": "Beef", "group": "food"},
+	"cooked_beef": {"one": "cooked beef", "many": "cooked beef", "label": "Cooked beef", "group": "food"},
+	"porkchop": {"one": "raw porkchop", "many": "raw porkchops", "label": "Porkchops", "group": "food"},
+	"cooked_porkchop": {"one": "cooked porkchop", "many": "cooked porkchops", "label": "Cooked porkchops", "group": "food"},
 	# From the old mine (issue #103). Coal is smelting fuel; iron ore is smelted into ingots (#104).
-	"coal": {"one": "coal", "many": "coal", "label": "Coal"},
-	"iron_ore": {"one": "iron ore", "many": "iron ore", "label": "Iron ore"},
-	"iron_ingot": {"one": "iron ingot", "many": "iron ingots", "label": "Iron"},
+	"coal": {"one": "coal", "many": "coal", "label": "Coal", "group": "ores"},
+	"iron_ore": {"one": "iron ore", "many": "iron ore", "label": "Iron ore", "group": "ores"},
+	"iron_ingot": {"one": "iron ingot", "many": "iron ingots", "label": "Iron", "group": "ores"},
 	# The line to the mine (Slice 4, issue #120). A minecart is one big item: one to a cell, hauled like a tool.
-	"rail": {"one": "rail", "many": "rails", "label": "Rails"},
-	"minecart": {"one": "minecart", "many": "minecarts", "label": "Minecarts", "single": true},
-	"wood_axe": {"one": "wooden axe", "many": "wooden axes", "tool": "axe", "tier": 1},
-	"wood_pick": {"one": "wooden pickaxe", "many": "wooden pickaxes", "tool": "pick", "tier": 1},
-	"stone_axe": {"one": "stone axe", "many": "stone axes", "tool": "axe", "tier": 2},
-	"stone_pick": {"one": "stone pickaxe", "many": "stone pickaxes", "tool": "pick", "tier": 2},
-	"iron_axe": {"one": "iron axe", "many": "iron axes", "tool": "axe", "tier": 3},
-	"iron_pick": {"one": "iron pickaxe", "many": "iron pickaxes", "tool": "pick", "tier": 3},
+	"rail": {"one": "rail", "many": "rails", "label": "Rails", "group": "building"},
+	"minecart": {"one": "minecart", "many": "minecarts", "label": "Minecarts", "single": true, "group": "building"},
+	"wood_axe": {"one": "wooden axe", "many": "wooden axes", "tool": "axe", "tier": 1, "group": "tools"},
+	"wood_pick": {"one": "wooden pickaxe", "many": "wooden pickaxes", "tool": "pick", "tier": 1, "group": "tools"},
+	"stone_axe": {"one": "stone axe", "many": "stone axes", "tool": "axe", "tier": 2, "group": "tools"},
+	"stone_pick": {"one": "stone pickaxe", "many": "stone pickaxes", "tool": "pick", "tier": 2, "group": "tools"},
+	"iron_axe": {"one": "iron axe", "many": "iron axes", "tool": "axe", "tier": 3, "group": "tools"},
+	"iron_pick": {"one": "iron pickaxe", "many": "iron pickaxes", "tool": "pick", "tier": 3, "group": "tools"},
+	# Leather armor (Slice 3.5, issue #140): worn, one piece to a slot, and worn out by hazards.
+	"leather_cap": {"one": "leather cap", "many": "leather caps", "label": "Leather caps", "armor": "head", "tier": 1, "group": "tools"},
+	"leather_tunic": {"one": "leather tunic", "many": "leather tunics", "label": "Leather tunics", "armor": "chest", "tier": 1, "group": "tools"},
+	"leather_trousers": {"one": "pair of leather trousers", "many": "pairs of leather trousers", "label": "Leather trousers", "armor": "legs", "tier": 1, "group": "tools"},
+	"leather_boots": {"one": "pair of leather boots", "many": "pairs of leather boots", "label": "Leather boots", "armor": "feet", "tier": 1, "group": "tools"},
 }
+
+## Where armor is worn (issue #140), head to feet, and what each slot's piece is called.
+const ARMOR_SLOTS := ["head", "chest", "legs", "feet"]
+const SLOT_NAMES := {"head": "Cap", "chest": "Tunic", "legs": "Trousers", "feet": "Boots"}
 
 ## A tool tier's name: 1 wooden, 2 stone, 3 iron (issue #104).
 const TIER_NAMES := ["Bare", "Wooden", "Stone", "Iron"]
 
-## The tally bar's Materials group, in order (issue #73). Raw mutton is counted under Food instead.
-const MATERIALS := ["log", "plank", "stick", "cobble", "coal", "iron_ore", "iron_ingot", "rail", "minecart", "wheat", "wool", "leather"]
+## The tally bar's groups (issue #141), in order. Each item names its group in ITEMS; a group's
+## dropdown lists its items in ITEMS order.
+const TALLY_GROUPS := [["building", "Building"], ["food", "Food"], ["tools", "Tools and armor"], ["animal", "Animal goods"], ["ores", "Ores"]]
+const MAX_PINNED := 4  ## Items the player can pin to the tally bar.
+
+
+## A tally group's items, in ITEMS order.
+static func group_items(group: String) -> Array:
+	return ITEMS.keys().filter(func(k): return ITEMS[k].group == group)
 
 ## Raw meat (issue #138): left for the fireplace, eaten only as a last resort.
 const RAW_MEATS := ["mutton", "beef", "porkchop"]
 
 ## The animals residents hunt (issues #42, #138). What each drops is in Tuning.ANIMAL_DROPS.
 const SPECIES := {
-	"sheep": {"name": "Sheep", "one": "sheep", "many": "sheep"},
-	"cow": {"name": "Cow", "one": "cow", "many": "cows"},
-	"pig": {"name": "Pig", "one": "pig", "many": "pigs"},
+	"sheep": {"name": "Sheep", "one": "sheep", "many": "sheep", "young": "lamb", "youngs": "lambs"},
+	"cow": {"name": "Cow", "one": "cow", "many": "cows", "young": "calf", "youngs": "calves"},
+	"pig": {"name": "Pig", "one": "pig", "many": "pigs", "young": "piglet", "youngs": "piglets"},
 }
 
 ## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.
@@ -69,6 +85,11 @@ const RECIPES := [
 	# The line to the mine (issue #120): Craft work, not Toolsmith, since nobody carries them as tools.
 	{"id": "rails", "name": "Rails", "inp": {"iron_ingot": 6, "stick": 1}, "out": {"rail": 16}, "pattern": ["I I", "ISI", "I I"]},
 	{"id": "minecart", "name": "Minecart", "inp": {"iron_ingot": 5}, "out": {"minecart": 1}, "pattern": ["   ", "I I", "III"]},
+	# Leather armor (issue #140): Craft work, like anything queued by hand. Spares aren't kept.
+	{"id": "leather_cap", "name": "Leather cap", "inp": {"leather": 5}, "out": {"leather_cap": 1}, "pattern": ["HHH", "H H", "   "]},
+	{"id": "leather_tunic", "name": "Leather tunic", "inp": {"leather": 8}, "out": {"leather_tunic": 1}, "pattern": ["H H", "HHH", "HHH"]},
+	{"id": "leather_trousers", "name": "Leather trousers", "inp": {"leather": 7}, "out": {"leather_trousers": 1}, "pattern": ["HHH", "H H", "H H"]},
+	{"id": "leather_boots", "name": "Leather boots", "inp": {"leather": 4}, "out": {"leather_boots": 1}, "pattern": ["   ", "H H", "H H"]},
 	# Fireplace recipes (issue #46). "at" says which job building makes a recipe; the default is the bench.
 	{"id": "bread", "name": "Bread", "inp": {"wheat": 3}, "out": {"bread": 1}, "at": "fireplace", "doing": "Baking bread"},
 	{"id": "cooked_mutton", "name": "Cooked mutton", "inp": {"mutton": 1, "log": 1}, "out": {"cooked_mutton": 1}, "at": "fireplace", "doing": "Cooking mutton", "fuel": "log"},
@@ -78,7 +99,7 @@ const RECIPES := [
 	{"id": "smelt_iron", "name": "Smelt iron", "inp": {"iron_ore": 1, "coal": 1}, "out": {"iron_ingot": 1}, "at": "fireplace", "doing": "Smelting iron", "fuel": "coal"},
 ]
 
-const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot"}
+const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot", "H": "leather"}
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
 const JOBS := ["mine", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
@@ -162,9 +183,18 @@ static func is_tool_item(item: String) -> bool:
 	return ITEMS[item].has("tool")
 
 
-## Items to a cell: one tool or minecart, or a stack of anything else.
+static func is_armor(item: String) -> bool:
+	return ITEMS[item].has("armor")
+
+
+## Items that wear out, each with its own uses left: tools and armor.
+static func wears(item: String) -> bool:
+	return ITEMS[item].has("tool") or ITEMS[item].has("armor")
+
+
+## Items to a cell: one tool, piece of armor or minecart, or a stack of anything else.
 static func stack_cap(item: String) -> int:
-	return 1 if ITEMS[item].has("tool") or ITEMS[item].get("single", false) else Tuning.STACK
+	return 1 if wears(item) or ITEMS[item].get("single", false) else Tuning.STACK
 
 
 static func words(item: String, n: int) -> String:

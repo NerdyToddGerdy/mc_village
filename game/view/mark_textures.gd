@@ -34,6 +34,33 @@ static func crosshair() -> ImageTexture:
 				_line(img, Vector2(32, 32) + d * 10, Vector2(32, 32) + d * 26, w, col))
 
 
+## Led to a pen (issue #139): a loop of rope with its end hanging, in build blue.
+static func lead() -> ImageTexture:
+	return _cached("lead", func(img: Image) -> void:
+		for pass_ in [[Palette.SLATE_DEEP, 12.0], [Palette.BLUE, 5.5]]:
+			var col: Color = pass_[0]
+			var w: float = pass_[1]
+			for i in 40:
+				var a0 := TAU * i / 48.0 + 0.9
+				var a1 := TAU * (i + 1) / 48.0 + 0.9
+				_line(img, Vector2(32, 26) + Vector2(cos(a0), sin(a0)) * 16, Vector2(32, 26) + Vector2(cos(a1), sin(a1)) * 16, w, col)
+			_line(img, Vector2(32, 26) + Vector2(cos(0.9), sin(0.9)) * 16, Vector2(48, 58), w, col))
+
+
+## Fed and about to have a young one (issue #139): a heart, in wheat.
+static func heart() -> ImageTexture:
+	return _cached("heart", func(img: Image) -> void:
+		for pass_ in [[Palette.SLATE_DEEP, 0.0], [Palette.WHEAT, 4.0]]:
+			var col: Color = pass_[0]
+			var inset: float = pass_[1]
+			for y in 64:
+				for x in 64:
+					var p := Vector2((x + 0.5 - 32.0) / (26.0 - inset), (34.0 - y - 0.5) / (26.0 - inset))
+					var q := p.x * p.x + p.y * p.y - 1.0
+					if q * q * q - p.x * p.x * p.y * p.y * p.y <= 0.0:
+						img.set_pixel(x, y, col))
+
+
 static func flag() -> ImageTexture:
 	return _cached("flag", func(img: Image) -> void:
 		_line(img, Vector2(12, 62), Vector2(12, 6), 7.0, Palette.SLATE_DEEP)

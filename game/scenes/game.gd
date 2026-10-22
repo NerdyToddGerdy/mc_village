@@ -217,9 +217,20 @@ func _update_live_overlays() -> void:
 					if cells.has(Vector2i(x, y)):
 						fills.append({"rect": Rect2i(x, y, 1, 1), "h": 0.02, "color": Color(Palette.RED, 0.45)})
 			hint = "Release to erase these farm plots. Anything growing on them is lost." if tool == "farm" else "Release to erase these stockpile cells. Anything on them stays and is hauled to the rest."
+			if tool == "pen":
+				hint = "Release to take this pen down. Its fences come down and its animals go free."
 			hint_col = Palette.RED
 		else:
-			outlines.append({"rect": _drag.rect, "h": 0.03, "color": {"stock": Palette.GREEN, "farm": Palette.WHEAT}.get(tool, Palette.RED), "dashed": true})
+			var col: Color = {"stock": Palette.GREEN, "farm": Palette.WHEAT, "lead": Palette.BLUE, "pen": Palette.BLUE}.get(tool, Palette.RED)
+			if tool == "pen":  # issue #139: red, with the reason, where a pen can't go
+				var why := sim.pen_check(_drag.rect)
+				if why != "":
+					col = Palette.RED
+					hint = why
+					hint_col = Palette.YELLOW
+				else:
+					hint = "Release to paint a %d×%d pen: room for %d, %s." % [_drag.rect.size.x, _drag.rect.size.y, (_drag.rect.size.x - 2) * (_drag.rect.size.y - 2), Defs.words("stick", 2 * (_drag.rect.size.x + _drag.rect.size.y) - 4)]
+			outlines.append({"rect": _drag.rect, "h": 0.03, "color": col, "dashed": true})
 	elif tool in OrderMenus.MARK_TOOLS and _hover != null:
 		outlines.append({"rect": Rect2i(_hover, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	if tool == "build" and placing != "" and _hover != null:
@@ -246,6 +257,8 @@ func _update_live_overlays() -> void:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
+	elif sel != null and sel.kind == "pen":
+		outlines.append({"rect": sel.rect, "h": 0.04, "color": Palette.CHALK, "dashed": false})
 	if hint == "" and tool in ["chop", "break"] and _hover != null and _drag.is_empty():
 		hint = "Drag to mark trees. Boulders are left alone." if tool == "chop" else "Drag to mark boulders. Trees are left alone."
 	if hint == "" and tool == "mine" and _hover != null:
@@ -258,6 +271,10 @@ func _update_live_overlays() -> void:
 		hint = "Click or drag from a stockpile cell to erase." if sim.zone.has(_hover) else "Drag over open ground to paint a stockpile. Start on a stockpile to erase instead."
 	if hint == "" and tool == "hunt" and _hover != null and _drag.is_empty():
 		hint = "Click or drag over animals to hunt them. Shift: only the kind you start on."
+	if hint == "" and tool == "lead" and _hover != null and _drag.is_empty():
+		hint = "Click or drag over animals for the party to lead into a pen with room."
+	if hint == "" and tool == "pen" and _hover != null and _drag.is_empty():
+		hint = "Click or drag from a pen to take it down." if sim.pen_at(_hover) != null else "Drag out a pen, fences included: %d×%d to %d×%d." % [Tuning.PEN_MIN, Tuning.PEN_MIN, Tuning.PEN_MAX, Tuning.PEN_MAX]
 	if hint == "" and tool == "farm" and _hover != null and _drag.is_empty():
 		var why := sim.farm_blocked(_hover)
 		if sim.farm.has(_hover):
@@ -298,6 +315,8 @@ func _update_focus(sel) -> void:
 	if sel != null:
 		if sel.kind == "site":
 			_add_rect_points(pts, Rect2i(sel.origin, sel.size), sim.site_height(sel), 0)
+		elif sel.kind == "pen":  # issue #139
+			_add_rect_points(pts, sel.rect, 0.8, 0)
 		else:
 			pts.append([Vector3(sel.cell.x + 0.5, 0.5, sel.cell.y + 0.5), sel.id])
 	_world.focus_points = pts
@@ -398,6 +417,9 @@ func selected_entity():
 			for c in sim.farm.values():
 				if c.id == selection.id:
 					return c
+		"pen":
+			var p := sim.pen(selection.id)
+			return null if p.is_empty() else p
 		"site":
 			var s := sim.site(selection.id)
 			return null if s.is_empty() else s
@@ -548,7 +570,7 @@ func _left_down(e: InputEventMouseButton) -> void:
 		return
 	if tool in OrderMenus.MARK_TOOLS and c != null:
 		# A drag that starts on a painted cell erases that zone instead (issues #63, #93).
-		var erase: bool = (tool == "stock" and sim.zone.has(c)) or (tool == "farm" and sim.farm.has(c))
+		var erase: bool = (tool == "stock" and sim.zone.has(c)) or (tool == "farm" and sim.farm.has(c)) or (tool == "pen" and sim.pen_at(c) != null)
 		_drag = {"kind": "rect", "a": c, "rect": Rect2i(c, Vector2i.ONE), "start": e.position, "erase": erase}
 		return
 	# Shift-drag box-selects residents; a plain drag pans the map; a click selects.
@@ -574,6 +596,16 @@ func _left_up(e: InputEventMouseButton) -> void:
 				sim.clear_farm(d.rect)
 			elif tool == "farm":
 				sim.paint_farm(d.rect)
+			elif tool == "pen" and d.get("erase", false):
+				var p = sim.pen_at(d.a)
+				if p != null:
+					sim.remove_pen(p)
+			elif tool == "pen":
+				if sim.paint_pen(d.rect) == "" and not e.shift_pressed:
+					set_tool("")
+			elif tool == "lead":
+				var hit = _pick(e.position, false) if small else null
+				sim.designate_lead(d.rect, hit if hit != null and hit.kind == "animal" else null)
 			elif tool == "hunt":
 				var hit = _pick(e.position, false) if small else null
 				sim.designate_hunt(d.rect, hit if hit != null and hit.kind == "animal" else null, hunt_species(d.a) if e.shift_pressed else "")
@@ -644,8 +676,10 @@ func _key(e: InputEventKey) -> void:
 		"craft": toggle_craft_menu()
 		"jobs": toggle_jobs_board()
 		"hunt": set_tool("hunt")
+		"lead": set_tool("lead")
 		"stock": set_tool("stock")
 		"farm": set_tool("farm")
+		"pen": set_tool("pen")
 		"gather": set_tool("gather")
 		"paint": set_tool("paint")
 		"build": set_tool("build")
@@ -812,11 +846,24 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["paint", "stock", "farm", "build", "bench", "house", "fireplace", "board"]
+const VILLAGE_ONLY := ["stock", "farm", "build", "bench", "house", "fireplace", "board"]
+## And at the meadow: painting pens (issue #139).
+const MEADOW_ONLY := ["pen"]
+
+
+## Whether an order or menu can be used on a map.
+static func tool_fits(t: String, map: String) -> bool:
+	if t == "paint":
+		return map in ["village", Meadow.ID]
+	if t in VILLAGE_ONLY:
+		return map == "village"
+	if t in MEADOW_ONLY:
+		return map == Meadow.ID
+	return true
 
 
 func set_tool(t: String) -> void:
-	if view_map != "village" and t in VILLAGE_ONLY:
+	if not tool_fits(t, view_map):
 		return
 	if t == "craft":
 		toggle_craft_menu()
@@ -871,6 +918,24 @@ func clear_orders(r: Dictionary) -> void:
 
 func toggle_hunt(target: Dictionary) -> void:
 	_in_view(func(): sim.designate_hunt(Rect2i(target.cell, Vector2i.ONE), target))
+
+
+## Pins an item to the tally bar, or unpins it (issue #141). At most MAX_PINNED; saved with the keys.
+func pin_item(type: String) -> void:
+	if keys.pinned.has(type):
+		keys.pinned.erase(type)
+	elif keys.pinned.size() < Defs.MAX_PINNED:
+		keys.pinned.append(type)
+	keys.save_file()
+
+
+func toggle_lead(target: Dictionary) -> void:
+	_in_view(func(): sim.designate_lead(Rect2i(target.cell, Vector2i.ONE), target))
+
+
+func remove_pen(p: Dictionary) -> void:
+	_in_view(func(): sim.remove_pen(p))
+	selection = {}
 
 
 func remove_farm_plot(crop: Dictionary) -> void:
@@ -971,6 +1036,8 @@ func plan_target(item: String) -> void:
 func plan_dest(id: String) -> void:
 	plan.dest = id
 	var items: Array = sim.plan_targets(id).map(func(x): return x.item)
+	if id == Meadow.ID:
+		items.append("pens")  # issue #139
 	if not items.has(plan.target.item) and not items.is_empty():
 		plan.target.item = items[0]
 
@@ -1154,9 +1221,9 @@ func switch_map(id: String) -> void:
 	selection = {}
 	_drag = {}
 	_hover = null
-	if tool == "build" or tool in ["stock", "farm"]:
-		set_tool("")  # paint and build orders are for the village
-	if menu_open in ["paint", "build"]:
+	if not tool_fits(tool, id):
+		set_tool("")  # paint and build orders are for the village, pens for the meadow
+	if menu_open != "" and not tool_fits(menu_open, id):
 		menu_open = ""
 
 
@@ -1220,7 +1287,7 @@ func _screenshot_scene() -> void:
 	sim.events.clear()
 	selection = {"kind": "site", "id": house.id}
 	if "--tools" in OS.get_cmdline_user_args():
-		_hud._tools_pinned = true
+		_hud._drop_pinned = "tools"
 	if "--mark-sheep" in OS.get_cmdline_user_args():
 		var near = Sim.nearest(sim.sheep.filter(func(x): return x.alive), Sim.rcell(sim.residents[0]))
 		if near != null:
@@ -1507,6 +1574,54 @@ func _screenshot_scene() -> void:
 		_cam.size = 16.0
 		_target = Vector3(mead.w / 2.0, 0, mead.h / 2.0)
 		_place_camera()
+	if "--pens" in OS.get_cmdline_user_args():  # the meadow's pens: one built with cows, a fed pair and a calf, one part-built, a cow marked to lead (issue #139)
+		var mead := sim.get_map(Meadow.ID)
+		mead.known = true
+		mead.visited = true
+		sim.on_map(Meadow.ID, func():
+			sim.paint_pen(Rect2i(16, 9, 5, 5))
+			sim.paint_pen(Rect2i(16, 16, 6, 5))
+			var built: Dictionary = mead.pens[0]
+			for c in Sim.pen_edge(built):
+				sim._put_fence(built, c)
+			var inside := Sim.pen_inside(built)
+			var cows: Array = mead.sheep.filter(func(a): return a.alive and a.species == "cow")
+			for i in 2:
+				var c := inside.position + Vector2i(i * 2, 0)
+				cows[i].cell = c
+				cows[i].pos = Vector2(c)
+				cows[i].pen = built.id
+				cows[i].fed_at = sim.tick
+			var calf := sim.add_animal(inside.position + Vector2i(1, 2), "cow")
+			calf.pen = built.id
+			calf.young = true
+			calf.grown_at = sim.tick + 9999
+			cows[2].lead = true
+			var part: Dictionary = mead.pens[1]
+			for c in Sim.pen_edge(part).slice(0, 7):
+				sim._put_fence(part, c))
+		sim.events.clear()
+		switch_map(Meadow.ID)
+		_cam.size = 11.0
+		_target = Vector3(18.5, 0, 14.0)
+		_place_camera()
+		selection = {"kind": "pen", "id": mead.pens[0].id}
+	if "--armor" in OS.get_cmdline_user_args():  # Ada in a full set of leather armor, selected; the Food dropdown open (issues #140, #141)
+		var ada: Dictionary = sim.residents[0]
+		for t in sim.trees:  # out in the open, so the armor shows rather than an x-ray through the trees
+			t.alive = false
+		sim._occ_dirty = true
+		sim.rev += 1
+		for slot in Defs.ARMOR_SLOTS:
+			var t: String = {"head": "leather_cap", "chest": "leather_tunic", "legs": "leather_trousers", "feet": "leather_boots"}[slot]
+			ada.armor[slot] = {"type": t, "dur": Tuning.ARMOR_USES - 2}
+		sim.drop_items(Sim.rcell(ada) + Vector2i(2, 1), "beef", 2)
+		sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "cooked_beef", 1)
+		selection = {"kind": "res", "ids": [ada.id]}
+		_target = Vector3(ada.pos.x + 0.5, 0, ada.pos.y + 0.5)
+		_cam.size = 8.0
+		_place_camera()
+		_hud._drop_pinned = "food"
 	if "--toast" in OS.get_cmdline_user_args():  # a short toast and one long enough to wrap (issue #71)
 		_hud.add_toast({"text": "Tomas is now level 2 at Mine.", "res_id": 0, "site_id": 0})
 		_hud.add_toast({"text": "A traveler, Mira, has arrived. She claims the new house and needs tools from the bench before she can mine.", "res_id": sim.residents[0].id, "site_id": 0})

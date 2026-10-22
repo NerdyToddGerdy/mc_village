@@ -203,6 +203,8 @@ func _build_static() -> void:
 			_outline(dark, col, Rect2i(s.origin, s.size), 0.52 if s.stage >= 1 else 0.02, Palette.BLUE, true)
 		if s.get("plot") != null:  # the reserved plot it will grow into, faint
 			_outline(dark, col, s.plot, 0.02, Color(Palette.CHALK, 0.35), true)
+	for p in sim.m.pens:
+		_add_pen_plan(ghost, dark, col, p)
 	solid.apply(_solid)
 	ghost.apply(_ghost)
 	_occluder_sig = ""
@@ -295,15 +297,56 @@ func _add_meadow_ground(b: Batch) -> void:
 		var x: float = c.x + 0.5
 		var z: float = c.y + 0.5
 		b.box(Vector3(x - 0.07, 0, z - 0.07), Vector3(x + 0.07, 0.75, z + 0.07), Palette.LOG)
-		for d in Sim.DIRS:  # rails toward each neighbouring fence
-			if mp.fences.has(c + d):
+		for d in Sim.DIRS:  # rails toward each neighbouring fence or gate
+			if mp.fences.has(c + d) or mp.gates.has(c + d):
 				var lo := Vector3(x + minf(0.0, d.x * 0.5), 0.0, z + minf(0.0, d.y * 0.5))
 				var hi := Vector3(x + maxf(0.0, d.x * 0.5), 0.0, z + maxf(0.0, d.y * 0.5))
 				for y in [0.3, 0.58]:
 					b.box(Vector3(lo.x - 0.04, y, lo.z - 0.04), Vector3(hi.x + 0.04, y + 0.08, hi.z + 0.04), Palette.LOG.lightened(0.1))
+	for c in mp.gates:
+		_add_gate(b, c, mp.fences.has(c + Vector2i(1, 0)) or mp.fences.has(c - Vector2i(1, 0)))
 	var e := mp.entrance
 	_add_end_sign(b, e + Vector2i(0, -1), 1.0, Palette.GRASS)
 	_add_packs(b, mp, Vector2(e.x - 1.2, e.y + 0.17), -1.0)
+## A pen's gate (issue #139): two posts and a plank gate between them, paler than the fences.
+func _add_gate(b: Batch, c: Vector2i, along_x: bool) -> void:
+	var x: float = c.x + 0.5
+	var z: float = c.y + 0.5
+	var a := Vector2(1, 0) if along_x else Vector2(0, 1)
+	for k in [-0.42, 0.42]:
+		var p: Vector2 = Vector2(x, z) + a * k
+		b.box(Vector3(p.x - 0.08, 0, p.y - 0.08), Vector3(p.x + 0.08, 0.85, p.y + 0.08), Palette.LOG)
+	var half := a * 0.34 + Vector2(a.y, a.x) * 0.04
+	for y in [0.22, 0.42, 0.62]:
+		b.box(Vector3(x - half.x, y, z - half.y), Vector3(x + half.x, y + 0.1, z + half.y), Palette.PLANK)
+	var lo := Vector2(x, z) - a * 0.34
+	var hi := Vector2(x, z) + a * 0.34
+	_seg_box(b, lo, hi, 0.22, 0.62, Palette.PLANK.darkened(0.15))
+
+
+## A diagonal brace on a gate, from low at one end to high at the other.
+func _seg_box(b: Batch, lo: Vector2, hi: Vector2, y0: float, y1: float, col: Color) -> void:
+	for i in 6:
+		var t := (i + 0.5) / 6.0
+		var p := lo.lerp(hi, t)
+		var y := lerpf(y0, y1, t)
+		b.box(Vector3(p.x - 0.05, y, p.y - 0.05), Vector3(p.x + 0.05, y + 0.08, p.y + 0.05), col)
+
+
+## A pen's fences still to build (issue #139): blue ghost posts round its edge, and the pen's outline.
+func _add_pen_plan(ghost: Batch, dark: Batch, col: Batch, p: Dictionary) -> void:
+	for c in Sim.pen_edge(p):
+		if p.built.has(c):
+			continue
+		var x: float = c.x + 0.5
+		var z: float = c.y + 0.5
+		var hi := 0.85 if c == p.gate else 0.75
+		ghost.box(Vector3(x - 0.08, 0, z - 0.08), Vector3(x + 0.08, hi, z + 0.08), Color(Palette.BLUE, 0.5))
+		ghost.box(Vector3(x - 0.3, 0.3, z - 0.3), Vector3(x + 0.3, 0.38, z + 0.3), Color(Palette.BLUE, 0.35))
+	if not Sim.pen_done(p):
+		_outline(dark, col, p.rect, 0.02, Palette.BLUE, true)
+
+
 static var DOOR_WOOD := Color("#6B4A2B")
 static var DOOR_IRON := Color("#3A3D40")
 static var DOORWAY := Color("#1C1E21")
@@ -539,6 +582,10 @@ func _add_item(b: Batch, s: Dictionary) -> void:
 	var cx: float = s.cell.x + 0.5
 	var cz: float = s.cell.y + 0.5
 	var color: Color = Palette.ITEM_COLORS[s.type]
+	if Defs.is_armor(s.type):  # a folded piece of leather with a darker seam (issue #140)
+		b.box(Vector3(cx - 0.24, 0, cz - 0.2), Vector3(cx + 0.24, 0.1, cz + 0.2), color)
+		b.box(Vector3(cx - 0.25, 0.02, cz - 0.03), Vector3(cx + 0.25, 0.11, cz + 0.03), color.darkened(0.3))
+		return
 	if Defs.is_tool_item(s.type):
 		b.box(Vector3(cx - 0.3, 0, cz - 0.06), Vector3(cx + 0.3, 0.08, cz + 0.06), Palette.LOG)
 		b.box(Vector3(cx + 0.12, 0, cz - 0.16), Vector3(cx + 0.3, 0.14, cz + 0.16), color)
@@ -929,13 +976,18 @@ func _make_person(r: Dictionary) -> Node3D:
 	body.name = "Body"
 	n.add_child(body)
 	var tunic := Color("#" + r.shirt)
-	_part(body, Vector3(0.26, 0.32, 0.26), 0, Palette.LEGS, tunic)
-	_part(body, Vector3(0.34, 0.46, 0.34), 0.32, tunic, tunic)
+	# Feet, legs and shirt are their own boxes, so worn armor (issue #140) can recolour each.
+	_part(body, Vector3(0.26, 0.1, 0.26), 0, Palette.LEGS, tunic).name = "Feet"
+	_part(body, Vector3(0.26, 0.22, 0.26), 0.1, Palette.LEGS, tunic).name = "Legs"
+	_part(body, Vector3(0.34, 0.46, 0.34), 0.32, tunic, tunic).name = "Shirt"
 	_part(body, Vector3(0.24, 0.32, 0.24), 0.78, Palette.SKIN, tunic)
 	var carry := _part(body, Vector3(0.28, 0.24, 0.28), 1.14, Palette.PLANK, tunic)
 	carry.name = "Carry"
 	var bandage := _part(body, Vector3(0.27, 0.08, 0.27), 0.96, Palette.CHALK, tunic)  # hurt (issue #110)
 	bandage.name = "Bandage"
+	var cap := _part(body, Vector3(0.28, 0.08, 0.28), 1.1, Palette.ITEM_COLORS.leather.darkened(0.15), tunic)  # a leather cap on top (issue #140)
+	cap.name = "Cap"
+	cap.visible = false
 	var pack := _part(body, Vector3(0.3, 0.34, 0.14), 0.38, CRATE, tunic)  # an expedition's packs (issue #108)
 	pack.name = "Pack"
 	pack.position += Vector3(0.24, 0, -0.04)
@@ -1006,6 +1058,7 @@ func _update_people() -> void:
 		carry.visible = r.carry != null
 		(n.get_node("Body/Pack") as Node3D).visible = sim.carrying_packs(r)
 		(n.get_node("Body/Bandage") as Node3D).visible = r.get("hurt", 0) > 0
+		_dress(n, r)
 		if r.carry != null:
 			carry.material_override = _person_mat(Palette.ITEM_COLORS[r.carry.type], Color("#" + r.shirt))
 		(n.get_node("Ring") as Node3D).visible = selected_ids.has(r.id)
@@ -1016,6 +1069,17 @@ func _update_people() -> void:
 		tag.position.y = 1.95 if bar.visible else 1.55
 		if bar.visible:
 			bar.texture = _bar_texture(r.progress)
+
+
+## Worn armor tints the model (issue #140): brown boots, trousers and tunic in place of the clothes,
+## and a cap on the head.
+func _dress(n: Node3D, r: Dictionary) -> void:
+	var worn := Sim.armor_worn(r)
+	var tunic := Color("#" + r.shirt)
+	var leather: Color = Palette.ITEM_COLORS.leather
+	(n.get_node("Body/Cap") as Node3D).visible = worn.has("head")
+	for p in [["Feet", "feet", Palette.LEGS, leather.darkened(0.15)], ["Legs", "legs", Palette.LEGS, leather], ["Shirt", "chest", tunic, leather]]:
+		(n.get_node("Body/" + p[0]) as MeshInstance3D).material_override = _person_mat(p[3] if worn.has(p[1]) else p[2], tunic)
 
 
 # ---------------------------------------------------------------- animals (issues #42, #138)
@@ -1067,6 +1131,10 @@ func _make_animal(species: String) -> Node3D:
 			head.position.x = 0.34
 	var mark := _sprite(MarkTextures.crosshair(), Vector3(0, 1.1 if species == "cow" else 1.0, 0), 0.6, n)
 	mark.name = "Mark"
+	var lead := _sprite(MarkTextures.lead(), Vector3(0, 1.1 if species == "cow" else 1.0, 0), 0.6, n)
+	lead.name = "Lead"
+	var heart := _sprite(MarkTextures.heart(), Vector3(0, 1.0 if species == "cow" else 0.9, 0), 0.4, n)
+	heart.name = "Heart"
 	add_child(n)
 	return n
 
@@ -1092,6 +1160,14 @@ func _update_sheep() -> void:
 			if d.length() > 0.01:
 				(n.get_node("Body") as Node3D).rotation.y = atan2(-d.y, d.x)
 		(n.get_node("Mark") as Node3D).visible = sh.des
+		(n.get_node("Lead") as Node3D).visible = sh.get("lead", false) and not sh.des
+		(n.get_node("Heart") as Node3D).visible = sh.get("fed_at", -1) >= 0
+		(n.get_node("Body") as Node3D).scale = Vector3.ONE * (0.6 if sh.get("young", false) else 1.0)  # issue #139
+		if sh.get("led_by", 0) != 0:
+			var lr := sim.resident(sh.led_by)
+			var d: Vector2 = lr.get("pos", sh.pos) - sh.pos
+			if d.length() > 0.01:
+				(n.get_node("Body") as Node3D).rotation.y = atan2(-d.y, d.x)
 	for id in _sheep_nodes:  # sheep on a map that isn't in view
 		if not here.has(id):
 			_sheep_nodes[id].visible = false
@@ -1210,6 +1286,9 @@ func pick(origin: Vector3, dir: Vector3, residents := true):
 		solid.append([{"kind": "meadow", "id": 0, "cell": sign}, AABB(Vector3(sign.x - 0.4, 0, sign.y + 0.3), Vector3(1.1, 1.8, 0.4))])
 		var road := sim.route_sign()
 		solid.append([{"kind": "route", "id": 0, "cell": road}, AABB(Vector3(road.x + 0.3, 0, road.y + 0.3), Vector3(1.1, 1.8, 0.4))])
+	for p in sim.m.pens:  # a pen is picked by its fences (issue #139)
+		for c in Sim.pen_edge(p):
+			solid.append([p, AABB(Vector3(c.x + 0.1, 0, c.y + 0.1), Vector3(0.8, 0.8, 0.8))])
 	for k in sim.farm:
 		var crop: Dictionary = sim.farm[k]
 		solid.append([crop, AABB(Vector3(crop.cell.x, 0, crop.cell.y), Vector3(1, 0.1 + 0.15 * Sim.crop_stage(crop), 1))])

@@ -161,6 +161,39 @@ func _initialize() -> void:
 			printerr("Level 1's door didn't open.")
 			quit(1)
 			return
+	if SaveFormat.VERSION >= 21:  # pens at the meadow: one built, with a fed pair of cows and a calf, one part-built; Mira in a leather tunic and boots, a cap lying in the village (#139, #140)
+		var mead := sim.get_map(Meadow.ID)
+		sim.on_map(Meadow.ID, func():
+			for r in [Rect2i(16, 16, 6, 5), Rect2i(17, 6, 5, 5)]:
+				var why := sim.paint_pen(r)
+				if why != "":
+					printerr("A pen couldn't be painted: ", why)
+			var built: Dictionary = mead.pens[0]
+			for c in Sim.pen_edge(built):
+				sim._put_fence(built, c)
+			var inside := Sim.pen_inside(built)
+			var cows: Array = mead.sheep.filter(func(a): return a.alive and a.species == "cow").slice(0, 2)
+			for i in cows.size():
+				var c := inside.position + Vector2i(i, 0)
+				cows[i].cell = c
+				cows[i].pos = Vector2(c)
+				cows[i].dest = null
+				cows[i].pen = built.id
+				cows[i].fed_at = sim.tick - 10 * Tuning.TPS
+			var calf := sim.add_animal(inside.position + Vector2i(1, 1), "cow")
+			calf.pen = built.id
+			calf.young = true
+			calf.grown_at = sim.tick + 100 * Tuning.TPS
+			var part: Dictionary = mead.pens[1]
+			for c in Sim.pen_edge(part).slice(0, 5):
+				sim._put_fence(part, c))
+		var mira: Dictionary = sim.residents[2]
+		mira.armor = {"chest": {"type": "leather_tunic", "dur": 5}, "feet": {"type": "leather_boots", "dur": Tuning.ARMOR_USES}}
+		sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(1, 0), "leather_cap", 1)
+		sim.expedition.sticks = 0
+		sim.expedition.wheat = 0
+		sim.expedition.supplies = {}
+		sim.events.clear()
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

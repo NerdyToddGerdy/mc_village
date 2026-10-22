@@ -11,10 +11,12 @@ const ACTIONS := [
 	["mine", "Orders", "Mine trees and boulders", [KEY_X]],
 	["chop", "Orders", "Chop trees only", []],
 	["break", "Orders", "Break boulders only", []],
-	["hunt", "Orders", "Hunt sheep", [KEY_G]],
+	["hunt", "Orders", "Hunt animals", [KEY_G]],
+	["lead", "Orders", "Lead animals to a pen", []],
 	["paint", "Orders", "Open the paint menu", [KEY_Z]],
 	["stock", "Orders", "Paint a stockpile", []],
 	["farm", "Orders", "Paint a farm plot", [KEY_P]],
+	["pen", "Orders", "Paint a pen, at the meadow", []],
 	["build", "Orders", "Open the build menu", [KEY_B]],
 	["craft", "Orders", "Open the craft menu", [KEY_C]],
 	["bench", "Orders", "Place a crafting bench", [KEY_T]],
@@ -45,6 +47,7 @@ const FIXED := [KEY_ESCAPE]  ## Keys that can't be bound to anything.
 
 var path := "user://settings/keys.cfg"
 var keys := {}   ## action id -> Array of key codes
+var pinned: Array = []  ## Items pinned to the tally bar (issue #141): a view preference, kept here, not in game saves.
 
 
 func _init(p_path := "") -> void:
@@ -77,6 +80,9 @@ func load_file() -> void:
 		keys.stock = []
 	for id in fresh:
 		keys[id] = keys[id].filter(func(k): return not keys.keys().any(func(o): return o != id and not fresh.has(o) and keys[o].has(k)))
+	var pins = cfg.get_value("tally", "pinned", [])
+	if pins is Array:
+		pinned = pins.filter(func(t): return t is String and Defs.ITEMS.has(t)).slice(0, Defs.MAX_PINNED)
 
 
 func save_file() -> bool:
@@ -84,6 +90,7 @@ func save_file() -> bool:
 	var cfg := ConfigFile.new()
 	for a in ACTIONS:
 		cfg.set_value("keys", a[0], keys[a[0]])
+	cfg.set_value("tally", "pinned", pinned)
 	return cfg.save(path) == OK
 
 

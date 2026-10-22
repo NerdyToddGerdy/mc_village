@@ -14,7 +14,7 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ Logs 12 Planks 4 …   Tools ▾  Jobs            ‖  1×  2×  3×  │
+│ Building 54 ▾  Food 6 meals ▾  Tools and armor 3 ▾  Jobs  ‖ 1× │
 │ The founding  3 of 11                         Stuck (2) ▴    │
 │ Next step and a hint                          ⚑ House …      │
 │                                                              │
@@ -26,7 +26,7 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- **Top left:** what's in the village. Materials and food are counted, with how much is still lying loose. **Tools** lists everyone's tools and the spares. **Jobs** opens the village jobs board.
+- **Top left:** what's in the village, in groups: **Building**, **Food**, **Tools and armor**, **Animal goods** and **Ores**. A group shows up once one of its items has. **Food** counts meals on hand and raw meat still to cook, and turns yellow when there are fewer meals than residents. Hover over a group, or click it to keep it open, for a list of each item with how much is lying loose; **Tools and armor** lists everyone's tools, armor and the spares. **Pin** an item there (up to 4) to keep its count in the bar on its own; pins are saved with your key bindings. **Jobs** opens the village jobs board.
 - **Below that:** the **goals panel**, which walks you through the founding one step at a time. Once the founding is done, it folds to a small "Founding ✓".
 - **Top right:** pause and speed, and the **stuck list**, which shows anything that can't go on and why.
 - **Bottom left:** whatever you've selected: a resident, a building, a tree, a farm plot.
@@ -134,6 +134,7 @@ The panel is laid out like a crafting table:
 | Wooden axe or pickaxe | 3 planks, 2 sticks | 1 tool, 10 uses |
 | Stone axe or pickaxe | 3 cobblestone, 2 sticks | 1 tool, 25 uses |
 | Iron axe or pickaxe | 3 iron ingots, 2 sticks | 1 tool, 60 uses |
+| Leather cap, tunic, trousers or boots | 5, 8, 7 or 4 leather | 1 piece of armor, 8 uses |
 
 Once Ada's house is finished, a bench queues the planks and sticks a recipe needs on its own.
 
@@ -141,6 +142,8 @@ Once Ada's house is finished, a bench queues the planks and sticks a recipe need
 - **With a toolsmith** (anyone with Toolsmith on), the bench keeps one spare of each tool someone uses, made from the best material on hand: iron, then stone, then wood. A resident whose tool breaks walks over and picks up the spare.
 - **Without one,** a resident whose tool breaks stops and says so, and nothing makes a new one until you switch Toolsmith on for someone. Tools you queue by hand also need a toolsmith.
 - **Equip** in the resident panel lists the tools lying about. Choose one, and the resident goes to fetch it and keeps it until it breaks.
+
+**Leather armor.** A cap, a tunic, trousers and boots, made from the meadow's leather by anyone who crafts. A resident in the village puts on any piece lying about for a slot they haven't filled, and you can see it on them in brown. Armor turns aside a share of the injuries from hazards: 5% for the cap or the boots, 10% for the trousers, 15% for the tunic, 35% for all four. A full set also makes an injury half as likely to be serious. Each piece loses a use every time a hazard strikes, and wears out after 8. The resident panel's **Armor** row shows the guard and the uses left, and the expedition planner shows the party's armor.
 
 ## Building
 
@@ -221,7 +224,13 @@ The party carries the packs to the west signpost and walks off the map, about 30
 
 **Hazards** there are mild: an **angry bull** can hurt someone hunting a cow, and the **pond bank** is slippery. Neither injury is ever serious.
 
-Each kind of animal grows back on its own, a few minutes at a time, up to the herd the meadow started with.
+Each kind of wild animal grows back on its own, a few minutes at a time, up to the herd the meadow started with.
+
+**Pens.** While you're looking at the meadow, **Paint ▸ Pen** drags out a fenced pen, from 4×4 to 8×8 with its fences, on open grass. It holds one animal for each cell inside, and its gate faces the way in. A party builds it with sticks from its packs, one stick a fence: the planner offers **Sticks for fences** and fills in what the pens need. Start a drag on a pen, or use its panel, to take it down.
+- **Gather ▸ Lead to a pen** marks animals with a blue loop. The party walks each one into a finished pen with room.
+- **Breeding:** the party feeds two grown animals of a kind in a pen a wheat each, from the **Wheat to feed pairs** you packed. A heart shows over them, and half a minute later there's a lamb, calf or piglet. The pair can be fed again after 5 minutes. Young ones are smaller, grow up in 4 minutes, and can't be hunted till then. All of this goes on whether or not anyone is there.
+- **Tend the pens** is an objective of its own: the party builds, leads and feeds, then hunts only the penned animals over the number you choose to keep of each kind, and packs their drops.
+- On any trip to the meadow, the party builds the pens and leads and feeds before it hunts, and never hunts penned animals for its objective. Wild animals regrow apart from the pens.
 
 ## The road to the mine
 
