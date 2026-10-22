@@ -29,7 +29,6 @@ func _init() -> void:
 		"test_skills_rise_and_pay_off",
 		"test_toolsmith_keeps_spares",
 		"test_equip_a_chosen_tool",
-		"test_meadow_trips",
 		"test_mine_marks_trees_and_boulders",
 		"test_save_and_load_mid_game",
 		"test_tool_breaks_and_resident_reports",
@@ -67,6 +66,12 @@ func _init() -> void:
 		"test_track_crew_and_railhead",
 		"test_stations_and_the_cart",
 		"test_ride_the_line",
+		"test_mine_levels_are_generated",
+		"test_the_door_down_and_back",
+		"test_cows_and_pigs",
+		"test_adventures_list",
+		"test_meadow_expedition",
+		"test_old_meadow_trips_come_home",
 	]
 	for t in tests:
 		_current = t
@@ -333,6 +338,17 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.cart.is_empty() and sim.station("village").is_empty(), "v%d: no cart or stations yet" % v)
 		else:  # an older save gets the road, unwalked, known if the old mine is
 			check(rd.known == mine.known and rd.seen == 1 and rd.sites.is_empty(), "v%d: the road to the mine is added, unwalked" % v)
+		var two_id := MineLevels.level_id(2)
+		if v >= 20:  # issues #132, #137: Level 2 open with a block mined; the meadow's hunted animals and regrowth
+			check(sim.maps.has(two_id) and mine.door_state == "open" and sim.get_map(two_id).pattern == MineLevels.family(sim.seed, 2), "v%d: Level 2 and the open door survive" % v)
+			check(not sim.get_map(two_id).boulders[0].alive and sim.get_map(two_id).known, "v%d: what's mined on Level 2 stays mined" % v)
+			var mead := sim.get_map(Meadow.ID)
+			check(mead.visited and mead.regrow.get("pig", 0.0) == 60.0 and sim.herds().pig == Meadow.herd().pig - 1 and sim.herds().cow == Meadow.herd().cow - 1, "v%d: the meadow's herds and regrowth survive" % v)
+		else:  # issue #132: the old mine is Level 1, its door not reached, with a boulder in front of it
+			check(mine.level == 1 and mine.door == Vector2i(15, 8) and mine.door_state == "closed" and not sim.maps.has(two_id), "v%d: the old mine gets its door, not yet reached" % v)
+			check(mine.boulders.any(func(b): return b.cell == Vector2i(14, 8)) and not sim.on_map(OldMine.ID, sim.walkable.bind(Vector2i(14, 8))) and sim.seed == Tuning.SEED, "v%d: with a boulder in front of it, and the game's seed" % v)
+			check(sim.get_map(Meadow.ID).known == mine.known, "v%d: the meadow is known if the old mine is" % v)
+		check(sim.maps.village.sheep.all(func(a): return a.kind == "animal" and a.species == "sheep"), "v%d: the village's animals are sheep" % v)
 		if v < 17:  # issues #109-#111: nobody hurt, no choice waiting, and the mine gets its hazards
 			check(sim.residents.all(func(r): return r.hurt == 0) and sim.pending.is_empty(), "v%d: nobody is hurt and no choice waits" % v)
 			check(mine.ledges == OldMine.LEDGES and mine.boulders.filter(func(b): return b.get("loose", false)).size() == OldMine.LOOSE.size(), "v%d: the old mine gets its loose ceilings and ledge" % v)
@@ -345,10 +361,13 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.residents[0].shirt == Sim.ADA_TUNIC and sim.residents[1].shirt == Sim.TRAVELERS[0][1], "v%d: residents get the new tunics" % v)
 		else:
 			check(sim.residents[0].shirt == Sim.ADA_TUNIC, "v%d: tunics survive" % v)
-		if v >= 13:
-			check(sim.meadow_sheep == 5 and sim.meadow_regrow > 0.0, "v%d: the meadow's sheep survive" % v)
+		var meadow_sheep: int = sim.get_map(Meadow.ID).sheep.filter(func(a): return a.alive and a.species == "sheep").size()
+		if v >= 20:
+			check(meadow_sheep > 0, "v%d: the meadow's herds survive" % v)
+		elif v >= 13:  # issue #137: the old off-map meadow's sheep carry over to the meadow map
+			check(meadow_sheep == 5 and sim.get_map(Meadow.ID).sheep.any(func(a): return a.species == "cow"), "v%d: the meadow's sheep survive, on the meadow map with its cows and pigs" % v)
 		else:
-			check(sim.meadow_sheep == Tuning.MEADOW_SHEEP and sim.residents.all(func(r): return not r.away), "v%d: older saves get a full meadow" % v)
+			check(meadow_sheep == SaveFormat.OLD_MEADOW_SHEEP and sim.residents.all(func(r): return not r.away), "v%d: older saves get a full meadow" % v)
 		if v >= 12:
 			check(sim.residents[0].kept.pick, "v%d: a chosen tool stays chosen" % v)
 		else:
@@ -1285,58 +1304,6 @@ func until_away(sim: Sim, r: Dictionary, seconds := 30.0) -> void:
 			return
 
 
-func test_meadow_trips() -> void:
-	var sim := Sim.new_game()
-	var ada: Dictionary = sim.residents[0]
-	check(sim.meadow_sheep == 8, "the meadow starts with 8 sheep")
-	sim.designate_mine(whole_map())
-	sim.send_to_meadow(ada)
-	run(sim, 0.1)
-	check(ada.job != null and ada.job.kind == "trip", "Send to the meadow: Ada heads for the signpost")
-	until_away(sim, ada)
-	check(ada.away, "she walks off the map and is away")
-	var hunger: float = ada.hunger
-	check(absf(sim.back_in(ada) - Tuning.MEADOW_TRIP) < 0.5, "back in about %d seconds (%.1f)" % [int(Tuning.MEADOW_TRIP), sim.back_in(ada)])
-	run(sim, 45)
-	check(ada.away and ada.job == null and ada.hunger == hunger, "while away she doesn't work or get hungry")
-	sim.direct_order(ada, null, Sim.rcell(ada) + Vector2i(1, 0))
-	check(ada.direct == null, "orders can't reach her while she's away")
-	# Saving mid-trip keeps her away.
-	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
-	var la: Dictionary = loaded.residents[0]
-	check(la.away and la.back_at == ada.back_at, "saving mid-trip keeps her away, due back at the same time")
-	run(sim, Tuning.MEADOW_TRIP - 45 + 1)
-	check(not ada.away, "she's back after the trip")
-	check(count(sim, "wool") == 2 and count(sim, "mutton") == 2, "with 2 wool and 2 raw mutton (%d, %d)" % [count(sim, "wool"), count(sim, "mutton")])
-	check(sim.meadow_sheep == 6, "the meadow has 6 sheep left")
-	run(loaded, Tuning.MEADOW_TRIP)
-	check(not la.away and loaded.meadow_sheep == 6, "the loaded game's trip comes back too")
-	# Two at once, then the meadow runs out.
-	var tomas := sim.add_resident("Tomas", "8C4F6B", Sim.rcell(ada))
-	sim.meadow_sheep = 3
-	sim.send_to_meadow(ada)
-	sim.send_to_meadow(tomas)
-	until_away(sim, tomas)
-	run(sim, Tuning.MEADOW_TRIP + 1)
-	check(sim.meadow_sheep == 0 and count(sim, "wool") == 2 + 3, "two residents bring back what the meadow had: 3 sheep (%d wool)" % count(sim, "wool"))
-	sim.meadow_regrow = 0.0
-	sim.send_to_meadow(ada)
-	run(sim, 0.5)
-	check(stuck_text(sim).contains("Meadow has no sheep left"), "planning a trip to an empty meadow says so: " + stuck_text(sim))
-	until_away(sim, ada)
-	run(sim, Tuning.MEADOW_TRIP + 1)
-	check(count(sim, "wool") == 5, "and the trip comes back with nothing")
-	# The meadow regains a sheep every 4 minutes, up to 8.
-	sim.meadow_sheep = 0
-	sim.meadow_regrow = 0.0
-	run(sim, Tuning.MEADOW_REGROW + 1)
-	check(sim.meadow_sheep == 1, "the meadow regains a sheep after %d seconds" % int(Tuning.MEADOW_REGROW))
-	sim.meadow_sheep = 8
-	run(sim, Tuning.MEADOW_REGROW + 1)
-	check(sim.meadow_sheep == 8, "and never more than 8")
-	check(sim.placement_check("bench", sim.meadow_sign()) == "The meadow signpost is in the way", "nothing can be built on the signpost")
-
-
 # ---------------------------------------------------------------- Slice 3: maps (issues #100-#103)
 
 ## A resident with a stone pickaxe, moved onto the old mine at its entrance.
@@ -1350,7 +1317,7 @@ func send_to_mine(sim: Sim, r: Dictionary) -> void:
 ## tallies leave out what lies on another map.
 func test_residents_only_work_on_their_own_map() -> void:
 	var sim := Sim.new_game()
-	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID] and sim.map_id == "village", "a new game has the village, the old mine and the road between them, with the village current")
+	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID] and sim.map_id == "village", "a new game has the village, the old mine, the road between them and the meadow, with the village current")
 	var ada: Dictionary = sim.residents[0]
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
 	check(ada.map == "village" and tomas.map == "village", "residents start on the village map")
@@ -1428,7 +1395,7 @@ func test_old_mine_layout_and_ore() -> void:
 	var ores := {}
 	for b in mine.boulders:
 		ores[b.get("ore", "stone")] = ores.get(b.get("ore", "stone"), 0) + 1
-	check(ores == {"stone": 5, "coal": 6, "iron": 4}, "5 boulders, 6 coal ore and a 4-block iron vein (%s)" % ores)
+	check(ores == {"stone": 6, "coal": 6, "iron": 4}, "6 boulders (one before the door down), 6 coal ore and a 4-block iron vein (%s)" % ores)
 	check(mine.boulders.filter(func(b): return b.get("ore", "") == "iron").all(func(b): return b.hidden), "the iron vein is hidden")
 	check(not mine.is_dark(mine.entrance + Vector2i(1, 0)) and mine.is_dark(Vector2i(13, 13)), "torches light the entrance; the deep tunnel is dark")
 	check(not sim.maps.village.is_dark(Vector2i(5, 5)), "nothing in the village is dark")
@@ -1472,7 +1439,7 @@ func test_site_report_and_depletion() -> void:
 	check(rep.hazards.is_empty() and rep.access.is_empty(), "no hazards or access notes known yet")
 	sim.get_map(OldMine.ID).visited = true
 	rep = sim.site_report(OldMine.ID)
-	check(rep.resources[0].reserve == 5 * Tuning.BOULDER_COBBLE and rep.resources[1].reserve == 6 * Tuning.ORE_YIELD.coal, "after a visit: estimated reserves (%s)" % [rep.resources])
+	check(rep.resources[0].reserve == 6 * Tuning.BOULDER_COBBLE and rep.resources[1].reserve == 6 * Tuning.ORE_YIELD.coal, "after a visit: estimated reserves (%s)" % [rep.resources])
 	check(rep.resources.size() == 3 and rep.resources[2].name == "?" and rep.resources[2].reserve == -1, "iron shows as ? until it's found")
 	check(rep.hazards.has("Dark tunnels past the torches: work there is slower") and rep.access == OldMine.ACCESS, "the dark tunnels and narrow access are reported")
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Vector2i(16, 16))
@@ -1645,12 +1612,11 @@ func test_planning_an_expedition() -> void:
 	check(sim.plan_problems(plan).has("Choose when the party comes home"), "a plan needs a return policy")
 	plan.policy.full = true
 	check(sim.plan_problems(plan).is_empty(), "a full plan has no problems: %s" % [sim.plan_problems(plan)])
-	# Away and arriving residents can't be picked, and the list says why.
-	sim.send_to_meadow(tomas)
-	until_away(sim, tomas)
-	check(sim.cant_join(tomas) == "Away at the meadow" and sim.plan_problems(plan).has("Tomas can’t go: away at the meadow"), "a resident at the meadow can't go")
-	run(sim, Tuning.MEADOW_TRIP + 1)
-	check(sim.cant_join(tomas) == "", "back from the meadow, he can")
+	# Arriving residents can't be picked, and the list says why.
+	tomas.arriving = true
+	check(sim.cant_join(tomas) == "Still walking in" and sim.plan_problems(plan).has("Tomas can’t go: still walking in"), "a resident still walking in can't go")
+	tomas.arriving = false
+	check(sim.cant_join(tomas) == "", "once he's here, he can")
 	plan.party.append(sim.add_resident("Mira", Sim.TRAVELERS[1][1], Sim.rcell(ada)).id)
 	plan.party.append(sim.add_resident("Jonas", Sim.TRAVELERS[2][1], Sim.rcell(ada)).id)
 	check(sim.plan_problems(plan).has("At most 3 can go"), "at most 3 go")
@@ -1795,10 +1761,6 @@ func test_travel_to_the_mine_and_back() -> void:
 	check(ada.map == "village" and not ada.away and Sim.manhattan(Sim.rcell(ada), sim.route_sign()) <= 1, "they come back at the village signpost")
 	run(mid, ROAD)
 	check(mid.residents[0].map == "village" and mid.expedition.is_empty(), "and the loaded game's party gets home too")
-	# The meadow trip still works as before.
-	sim.send_to_meadow(tomas)
-	until_away(sim, tomas)
-	check(tomas.trip == "meadow" and absf(sim.back_in(tomas) - Tuning.MEADOW_TRIP) < 0.1, "a meadow trip is unchanged")
 
 
 func until_on_road(sim: Sim, r: Dictionary, seconds := 30.0) -> void:
@@ -1895,7 +1857,7 @@ func test_party_works_the_site() -> void:
 	check(sim2.expedition.provisions.get("bread", 0) == 2 and p2.ada.hunger < 40.0, "the last 2 meals are the return food: Ada goes hungry rather than eat them")
 	check(sim2.spendable_meals() == 0, "nothing left to spend")
 	sim2.expedition.spend_return = true
-	run(sim2, 5)
+	run(sim2, 15)  # once she's done with the block she's on
 	check(sim2.expedition.provisions.get("bread", 0) == 1, "with Spend it chosen, she eats the return food")
 	# The policies: food runs low once only the return food is left.
 	sim2.expedition.spend_return = false
@@ -2008,7 +1970,7 @@ func test_iron_discovery() -> void:
 		check(not sim.on_map(OldMine.ID, func(): return mine.boulders.any(func(b): return b.get("ore", "") == "iron" and not b.get("hidden", false))), "the iron is hidden before it's found")
 		sim.on_map(OldMine.ID, func():
 			for b in sim.boulders:
-				b.des = not b.has("ore") and b.cell != Vector2i(12, 8)  # the stone, which opens the way to the rubble
+				b.des = not b.has("ore") and not b.cell in [Vector2i(12, 8), Vector2i(14, 8)]  # the stone, which opens the way to the rubble (not the door's)
 			)
 		for i in 300 * Tuning.TPS:
 			sim.step()
@@ -2387,3 +2349,315 @@ func test_ride_the_line() -> void:
 			check(mid.expedition.is_empty() and mid.residents[0].map == "village", "a game saved mid-ride gets home too")
 	check(times.full < times.partial and times.partial < times.walk, "riding beats walking, and a partial line is in between (%.1f s, %.1f s, %.1f s)" % [times.full, times.partial, times.walk])
 	check(absi(mining.walk - mining.full) <= 2 and absi(mining.walk - mining.partial) <= 2, "mining at the site takes the same with or without the line (%s)" % [mining])
+
+
+# ---------------------------------------------------------------- the old mine's deeper levels (issue #132)
+
+## Issue #132: every level has its door at the far end and a minable way to it, plus some ore; deeper
+## levels come from the seed, each from a pattern family the mine hasn't used yet, never the same
+## family twice in a row; deeper is richer and riskier.
+func test_mine_levels_are_generated() -> void:
+	var sim := Sim.new_game()
+	var top := sim.get_map(OldMine.ID)
+	check(top.level == 1 and top.pattern == "workings" and top.door == Vector2i(15, 8) and top.door_state == "closed", "Level 1 is the old workings, with its door at the far end")
+	check(MineLevels.minable_path(top) and not sim.on_map(OldMine.ID, sim.walkable.bind(MineLevels.door_front(top))), "a minable way runs to it, with a block of stone in front of the door")
+	var all_ok := true
+	var ore_ok := true
+	for seed in 25:
+		sim.seed = seed
+		for n in range(2, 10):
+			var lv := MineLevels.build(sim, n)
+			all_ok = all_ok and lv.entrance.x == 0 and lv.door.x == lv.w - 1 and MineLevels.minable_path(lv)
+			ore_ok = ore_ok and lv.boulders.any(func(b): return b.get("ore", "") == "coal") and lv.boulders.any(func(b): return b.get("ore", "") == "iron")
+	check(all_ok, "every generated level has the entrance on the west edge, the door on the east, and a minable way between")
+	check(ore_ok, "and some coal and iron")
+	sim.seed = Tuning.SEED
+	var a := MineLevels.layout(sim.seed, 2)
+	check(a == MineLevels.layout(sim.seed, 2) and a != MineLevels.layout(sim.seed + 1, 2), "a level comes out the same from the same seed, and differently from another")
+	var fams: Array = range(2, 7).map(func(n): return MineLevels.family(sim.seed, n))
+	var distinct := {}
+	for f in fams:
+		distinct[f] = true
+	check(distinct.size() == 5, "the first five levels down each use a different pattern family (%s)" % [fams])
+	var repeats := false
+	for n in range(3, 30):
+		repeats = repeats or MineLevels.family(sim.seed, n) == MineLevels.family(sim.seed, n - 1)
+	check(not repeats, "no two levels in a row share a family")
+	var back := MineLevels.family(sim.seed, 7)
+	var first: int = fams.find(back) + 2
+	check(MineLevels.layout(sim.seed, 7).rows != MineLevels.layout(sim.seed, first).rows, "a family that comes back (%s, on levels %d and 7) looks different" % [back, first])
+	var two := MineLevels.build(sim, 2)
+	var ores := func(mp: SimMap, ore: String) -> int: return mp.boulders.filter(func(b): return b.get("ore", "") == ore).size()
+	check(ores.call(two, "coal") > ores.call(top, "coal") and ores.call(two, "iron") > ores.call(top, "iron"), "Level 2 has more coal and iron than Level 1 (%d/%d against %d/%d)" % [ores.call(two, "coal"), ores.call(two, "iron"), ores.call(top, "coal"), ores.call(top, "iron")])
+	check(Sim.cave_in_chance(2) > Sim.cave_in_chance(1) and Sim.fall_chance(2) > Sim.fall_chance(1) and two.torches.size() < top.torches.size() + 1, "and higher cave-in and fall chances, and no more torches")
+	check(two.name == "Old mine, level 2" and two.kind == "site" and not two.known and two.found and two.discovered, "Level 2 is a site map named for its level, its ore all in plain sight")
+
+
+## Issue #132: the party mines its way to the door, the game stops for a choice, the door opens onto
+## Level 2 (made the same way from the seed), the party works it and brings its cargo home up through
+## Level 1; two levels save and load; the other choices head home or carry on.
+func test_the_door_down_and_back() -> void:
+	var sims := {}
+	for choice in ["down", "later", "keep"]:
+		var sim := Sim.new_game()
+		var zone := open_rect(sim, Vector2i(4, 3))
+		sim.paint_zone(zone)
+		var p := send_party(sim)
+		until_at_site(sim, [p.ada, p.tomas])
+		sim.expedition.policy = {"target": false, "full": false, "low": false}
+		check(sim.dig_to_door(OldMine.ID) == "" and sim.get_map(OldMine.ID).boulders.any(func(b): return b.cell == Vector2i(14, 8) and b.des), "%s: Dig to the door marks the stone in front of it" % choice)
+		for i in 200 * Tuning.TPS:
+			sim.step()
+			if not sim.pending.is_empty():
+				break
+		var mine := sim.get_map(OldMine.ID)
+		check(sim.pending.size() == 1 and sim.pending[0].kind == "door" and mine.door_state == "found", "%s: reaching the door stops the game for a choice" % choice)
+		if sim.pending.is_empty():
+			return
+		check(sim.pending[0].options.map(func(o): return o.id) == ["down", "later", "keep"] and sim.pending[0].options.all(func(o): return o.cost != ""), "Go down now, Mark it for later or Keep mining here, each with its cost")
+		var two_id := MineLevels.level_id(2)
+		check(sim.maps.has(two_id) and not sim.get_map(two_id).known, "the level below is ready, not yet on the map switcher")
+		sim.choose(choice)
+		sims[choice] = [sim, p]
+	# Mark it for later: home now, the door remembered. Keep mining: the party stays.
+	var later: Sim = sims.later[0]
+	check(later.expedition.leg == "home" and later.get_map(OldMine.ID).door_state == "found", "Mark it for later: the party heads home and the door stays marked")
+	var keep: Sim = sims.keep[0]
+	check(keep.expedition.leg == "out" and keep.expedition.dest == OldMine.ID, "Keep mining here: the party carries on with Level 1")
+	# Go down now: the door opens and the party works Level 2.
+	var sim: Sim = sims.down[0]
+	var ada: Dictionary = sims.down[1].ada
+	var tomas: Dictionary = sims.down[1].tomas
+	var two_id := MineLevels.level_id(2)
+	var two := sim.get_map(two_id)
+	check(sim.get_map(OldMine.ID).door_state == "open" and two.known and sim.expedition.dest == two_id, "Go down now: the door opens, Level 2 is on the switcher and the party is bound for it")
+	var fresh := Sim.new_game()
+	fresh.open_door(OldMine.ID)
+	var same := fresh.get_map(two_id).boulders.map(func(b): return b.cell) == two.boulders.map(func(b): return b.cell) and fresh.get_map(two_id).rock == two.rock
+	check(same and two.pattern == MineLevels.family(sim.seed, 2), "Level 2 is made from the seed: the same in any game with that seed")
+	until_at_site(sim, [ada, tomas], 60)
+	check(ada.map == two_id and tomas.map == two_id and sim.at_site(ada) and two.visited, "the party walks down through the door into Level 2")
+	check(Sim.rcell(ada).x <= 3, "in at its entrance")
+	sim.expedition.policy = {"target": true, "full": true, "low": false}
+	sim.expedition.target = {"item": "coal", "n": sim.objective_packed() + 6}  # 6 more, from Level 2
+	run(sim, 5)
+	var mid := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(mid.maps.has(two_id) and mid.get_map(two_id).pattern == two.pattern and mid.get_map(two_id).level == 2 and mid.residents[0].map == two_id, "saving with two levels keeps both, and the party down on Level 2")
+	check(mid.get_map(OldMine.ID).door_state == "open" and mid.seed == sim.seed, "with the door open and the seed")
+	check(sim.site_report(two_id).levels.size() == 2 and sim.site_report(two_id).levels[1].pattern == MineLevels.FAMILY_NAMES[two.pattern], "the site report lists both levels, with Level 2's pattern")
+	var went_up := false
+	for i in 400 * Tuning.TPS:
+		sim.step()
+		went_up = went_up or (sim.expedition.get("leg", "") == "home" and ada.map == OldMine.ID)
+		if sim.expedition.is_empty():
+			break
+	check(went_up and sim.expedition.is_empty() and ada.map == "village", "the party heads home up through Level 1 and the road")
+	var b: Dictionary = sims.down[1].board
+	check(b.report[0].begins_with("Back from the old mine, level 2: ") and "coal" in b.report[0], "the report says what came back from Level 2: %s" % [b.report])
+	run(sim, 120)
+	check(count(sim, "coal") >= 6 and sim.stacks_where(func(st): return st.type == "coal" and sim.in_zone(st.cell)).size() > 0, "Level 2's coal reaches the village, and is hauled to the stockpile (%d)" % count(sim, "coal"))
+	# Planning a trip straight to Level 2: its walk includes Level 1's.
+	var plan := sim.new_plan(two_id)
+	check(sim.site_report(two_id).travel > sim.site_report(OldMine.ID).travel and sim.plan_targets(two_id).any(func(x): return x.item == "iron_ore"), "Level 2 can be planned: a longer walk, and iron in plain sight")
+	check(plan.dest == two_id and plan.party.size() == 1, "a plan for Level 2")
+
+
+# ---------------------------------------------------------------- the meadow adventure (Slice 3.5)
+
+## Issue #138: cows and pigs are hunted like sheep, each dropping its own items; Hunt can mark one kind
+## only; beef and porkchops cook at the fireplace and are meals; raw meat is eaten only in a pinch; an
+## old save's sheep are sheep.
+func test_cows_and_pigs() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	for sh in sim.sheep:
+		sh.alive = false
+	var spot := open_rect(sim, Vector2i(4, 3))
+	var cow := sim.add_animal(spot.position, "cow")
+	var pig := sim.add_animal(spot.position + Vector2i(3, 2), "pig")
+	check(cow.kind == "animal" and cow.species == "cow" and pig.species == "pig", "cows and pigs are animals of their species")
+	sim.designate_hunt(Rect2i(0, 0, sim.w, sim.h), null, "pig")
+	check(pig.des and not cow.des, "Hunt can mark one kind only")
+	sim.designate_hunt(Rect2i(0, 0, sim.w, sim.h))
+	check(cow.des and pig.des, "and every kind at once")
+	sim.queue_order(ada, cow)
+	check(Sim.order_text(ada.orders[0]) == "Hunt a cow", "a queued hunt names the animal")
+	ada.orders.clear()
+	ada.jobs.haul.on = false
+	run(sim, 120)
+	check(not cow.alive and not pig.alive, "Ada hunts both")
+	check(count(sim, "leather") == 1 and count(sim, "beef") == 2, "a cow drops 1 leather and 2 raw beef")
+	check(count(sim, "porkchop") == 2, "a pig drops 2 raw porkchops")
+	check(Defs.drops_text("cow") == "1 leather and 2 raw beef" and Defs.drops_text("pig") == "2 raw porkchops", "their drops read in the player's words")
+	# Cooking: beef and porkchops cook with a log each, and count as meals.
+	var sim2 := Sim.new_game()
+	var a2: Dictionary = sim2.residents[0]
+	var spot2 := open_rect(sim2, Vector2i(3, 3))
+	lit_fireplace(sim2, spot2.position + Vector2i(1, 0))
+	var near := spot2.position + Vector2i(1, 3)
+	sim2.drop_items(near, "beef", 1)
+	sim2.drop_items(near + Vector2i(1, 0), "porkchop", 1)
+	sim2.drop_items(near + Vector2i(-1, 0), "log", 2)
+	var labels: Array = []
+	for i in 60 * Tuning.TPS:
+		sim2.step()
+		if a2.job != null and not labels.has(a2.job.label):
+			labels.append(a2.job.label)
+	check(labels.has("Cooking beef") and labels.has("Cooking a porkchop"), "the fireplace's standing order cooks them (%s)" % [labels])
+	check(count(sim2, "cooked_beef") == 1 and count(sim2, "cooked_porkchop") == 1 and count(sim2, "log") == 0, "a log each")
+	check(Defs.MEALS.has("cooked_beef") and Defs.MEALS.has("cooked_porkchop"), "both are meals")
+	a2.hunger = 30.0
+	var before := count(sim2, "cooked_beef") + count(sim2, "cooked_porkchop")
+	run(sim2, 15)
+	check(count(sim2, "cooked_beef") + count(sim2, "cooked_porkchop") == before - 1 and a2.hunger > 30.0 + Tuning.FOOD_VALUE.cooked_beef - 10.0, "and a hungry resident eats one (%.0f)" % a2.hunger)
+	# Raw beef and porkchops wait for the fireplace while there are berries.
+	var sim3 := Sim.new_game()
+	var a3: Dictionary = sim3.residents[0]
+	sim3.drop_items(Sim.rcell(a3) + Vector2i(1, 0), "beef", 1)
+	sim3.drop_items(Sim.rcell(a3) + Vector2i(-1, 0), "porkchop", 1)
+	a3.hunger = 35.0
+	run(sim3, 20)
+	check(count(sim3, "beef") == 1 and count(sim3, "porkchop") == 1 and a3.hunger > 50.0, "raw beef and porkchops are left for cooking while there are berries")
+	# An old save's sheep are sheep.
+	var old := SaveFormat.read("res://tests/fixtures/save_v19.save")
+	var loaded := Sim.from_state(old.data.state)
+	var animals: Array = loaded.maps.village.sheep
+	check(not animals.is_empty() and animals.all(func(x): return x.kind == "animal" and x.species == "sheep"), "an old save's animals come back as sheep (%d)" % animals.size())
+
+
+## Packs and sends a party (Ada, and Tomas unless `solo`) to `dest` with `meals` meals, for `target`.
+func send_party_to(sim: Sim, dest: String, target: Dictionary, meals := 4, solo := false) -> Dictionary:
+	var ada: Dictionary = sim.residents[0]
+	var tomas := {} if solo else sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	var b := built_board(sim)
+	var plan := sim.new_plan(dest)
+	plan.party = [ada.id] if solo else [ada.id, tomas.id]
+	plan.meals = meals
+	plan.target = target
+	var err := sim.plan_expedition(plan)
+	b.store = {"bread": meals}
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	err += sim.depart()
+	return {"ada": ada, "tomas": tomas, "board": b, "err": err}
+
+
+## Issue #136: the expedition board lists every known destination, from data, each with its travel time,
+## what's there, its hazards and its status; a signpost leads to each; while a party is out, planning is
+## locked and every row says where they are.
+func test_adventures_list() -> void:
+	var sim := Sim.new_game()
+	check(sim.adventures().is_empty(), "with no board, nobody knows of anywhere to go")
+	check(sim.sign_for(Meadow.ID) == sim.meadow_sign() and sim.meadow_sign().x == 0 and sim.sign_for(OldMine.ID) == sim.route_sign() and sim.route_sign().x == sim.w - 1, "a signpost per destination, on the matching edge: the meadow west, the mine east")
+	var b := built_board(sim)
+	var rows := sim.adventures()
+	check(rows.map(func(a): return a.id) == [OldMine.ID, Meadow.ID] and sim.get_map(Meadow.ID).known, "the board lists the old mine and the meadow")
+	check(rows.all(func(a): return a.status == "Not yet visited" and not a.locked and a.hazards.is_empty()), "neither visited yet, no hazards known")
+	check(rows[1].travel == Tuning.MEADOW_WALK and rows[0].travel == -1.0 and rows[1].what == "Sheep, cows and pigs, they say", "the meadow's walk and what's said of it; the road isn't walked yet")
+	var plan := sim.new_plan(Meadow.ID)
+	check(plan.dest == Meadow.ID and plan.target.item == "wool" and plan.picks == 0, "a plan for the meadow brings back wool and packs no pickaxes")
+	check(sim.plan_targets(Meadow.ID).map(func(x): return x.item) == ["wool", "mutton", "leather", "beef", "porkchop"], "it can bring back wool, leather or meat")
+	sim.residents[0].pick = null
+	plan.party = [sim.residents[0].id]
+	plan.meals = 2
+	sim.plan_expedition(plan)
+	rows = sim.adventures()
+	check(rows[1].status == "Packing to go" and rows[1].here and rows[0].locked and rows[0].status == "Locked: packing for the meadow", "while packing, the meadow's row says so and the mine's is locked")
+	check(sim.plan_problems(sim.new_plan(OldMine.ID)).has("One expedition at a time"), "planning is locked")
+	b.store = {"bread": 2}
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	check(sim.depart() == "", "the party departs for the meadow")
+	var ada: Dictionary = sim.residents[0]
+	until_away(sim, ada, 60)
+	check(ada.away and ada.trip == Meadow.ID and Sim.manhattan(Sim.rcell(ada), sim.meadow_sign()) <= 1, "Ada leaves by the meadow's signpost, off the west edge")
+	check(sim.adventures()[1].status == "Party on the way" and sim.adventures()[0].status == "Locked: the party is at the meadow", "every row says where the party is")
+	run(sim, Tuning.MEADOW_WALK + 2)
+	check(ada.map == Meadow.ID and sim.adventures()[1].status == "Party there now", "and once she's there, the meadow's row says so")
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.get_map(Meadow.ID).known and loaded.get_map(Meadow.ID).visited and not loaded.get_map(OldMine.ID).visited, "known destinations and visited flags are saved")
+	check(loaded.adventures()[1].what.begins_with("Cows, pigs, sheep · "), "a visited meadow's row counts its animals: %s" % loaded.adventures()[1].what)
+
+
+## Issue #137: the meadow is an expedition site with its own map: herds of sheep, cows and pigs, a pond,
+## trees and fences. A party walks there past the west signpost, hunts what's marked for its objective,
+## packs the drops and brings home a full load; each species grows back on its own; its hazards are mild.
+func test_meadow_expedition() -> void:
+	var sim := Sim.new_game()
+	var mp := sim.get_map(Meadow.ID)
+	check(mp.w == 24 and mp.h == 24 and mp.kind == "site" and mp.name == "Meadow", "the meadow is a 24×24 site map")
+	check(sim.herds() == Meadow.herd() and Meadow.herd().has("cow") and Meadow.herd().has("pig") and Meadow.herd().has("sheep"), "herds of sheep, cows and pigs (%s)" % [sim.herds()])
+	check(not mp.water.is_empty() and not sim.on_map(Meadow.ID, sim.walkable.bind(mp.water.keys()[0])), "the pond is walked around, not through")
+	check(not mp.fences.is_empty() and not sim.on_map(Meadow.ID, sim.walkable.bind(mp.fences.keys()[0])) and not mp.banks.is_empty(), "with fences, and a muddy bank around the pond")
+	check(mp.entrance.x == mp.w - 1 and not mp.trees.is_empty(), "the party arrives on the east edge, the village's side; there are trees")
+	var p := send_party_to(sim, Meadow.ID, {"item": "beef", "n": 12}, 2, true)
+	var ada: Dictionary = p.ada
+	check(p.err == "", "Ada is packed and sent off for 12 beef: %s" % p.err)
+	sim.expedition.policy = {"target": true, "full": true, "low": false}
+	until_away(sim, ada, 60)
+	check(ada.away and absf(sim.back_in(ada) - Tuning.MEADOW_WALK) < 0.5, "the walk to the meadow takes %d s" % int(Tuning.MEADOW_WALK))
+	until_at_site(sim, [ada], Tuning.MEADOW_WALK + 5)
+	check(sim.at_site(ada) and ada.map == Meadow.ID and Sim.rcell(ada) == mp.entrance, "she arrives at the meadow's entrance")
+	var hunted_cows := false
+	var hurt := 0
+	var home := false
+	for i in 600 * Tuning.TPS:
+		sim.step()
+		hunted_cows = hunted_cows or mp.sheep.any(func(a): return a.species == "cow" and not a.alive)
+		hurt = maxi(hurt, ada.hurt)
+		if sim.expedition.is_empty():
+			home = true
+			break
+	check(hunted_cows and mp.sheep.all(func(a): return a.species == "cow" or a.alive), "the party hunts the cows for the beef, and leaves the rest")
+	check(hurt <= 1 and sim.pending.is_empty(), "the meadow's hazards are mild: never a serious injury, never a stop")
+	check(home and ada.map == "village" and Sim.manhattan(Sim.rcell(ada), sim.meadow_sign()) <= 2, "she comes home by the meadow's signpost")
+	var b: Dictionary = p.board
+	check(b.report[0].begins_with("Back from the meadow: ") and "beef" in b.report[0] and "leather" in b.report[0], "with beef and leather: %s" % [b.report])
+	var cargo := 0
+	for st in sim.stacks_where(func(st): return st.get("cargo", false)):
+		cargo += st.n
+	check(cargo >= Tuning.PACK_CAPACITY - 2, "a full pack's worth, far more than the old trip's 2 wool and 2 mutton (%d)" % cargo)
+	# Each species grows back on its own, up to its herd.
+	var pigs: Array = mp.sheep.filter(func(a): return a.species == "pig")
+	for a in pigs:
+		a.alive = false
+	run(sim, Tuning.MEADOW_REGROW.pig + 1)
+	check(sim.herds().get("pig", 0) == 1, "the pigs come back one at a time (%d after %d s)" % [sim.herds().get("pig", 0), int(Tuning.MEADOW_REGROW.pig)])
+	run(sim, Tuning.MEADOW_REGROW.pig * (Meadow.herd().pig + 2))
+	check(sim.herds().pig == Meadow.herd().pig and sim.herds().sheep == Meadow.herd().sheep, "up to their herd, and no more")
+	check(sim.herds().get("cow", 0) == Meadow.herd().cow, "the cows grew back too, at their own pace")
+	# The hazards: an angry bull and the pond bank, which hurt, but never seriously.
+	sim.on_map(Meadow.ID, func():
+		var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], mp.banks[0] + Vector2i(1, 0))
+		tomas.map = Meadow.ID
+		for i in 400:
+			sim._ledge_step(tomas, mp.banks[0])
+		check(tomas.hurt == 1, "slipping on the pond bank hurts, but never seriously"))
+	check(sim.site_report(Meadow.ID).hazards.size() == 2 and sim.site_report(Meadow.ID).hazards[0].contains("bull"), "the site report lists the bull and the bank")
+
+
+## Issue #137: someone away on Slice 2's timed meadow trip in an old save comes home, with what they'd
+## have brought back; the old meadow's sheep carry over to the meadow map.
+func test_old_meadow_trips_come_home() -> void:
+	var r := SaveFormat.read("res://tests/fixtures/save_v19.save")
+	var raw: Dictionary = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v19.save"))
+	var tomas: Dictionary = raw.state.residents[1]
+	tomas.away = true
+	tomas.trip = "meadow"
+	tomas.back_at = raw.state.tick + 40 * Tuning.TPS
+	tomas.arriving = false
+	raw.state.meadow_sheep = 5
+	var up := SaveFormat.upgrade(raw)
+	check(not up.has("error"), "an old save with someone away at the meadow upgrades")
+	var sim := Sim.from_state(up.data.state)
+	var t: Dictionary = sim.residents[1]
+	check(not t.away and t.trip == "" and t.map == "village" and Sim.manhattan(Sim.rcell(t), sim.meadow_sign()) <= 1, "Tomas is home at the meadow signpost")
+	var wool := sim.stacks_where(func(st): return st.type == "wool" and Sim.manhattan(st.cell, sim.meadow_sign()) <= 4)
+	var mutton := sim.stacks_where(func(st): return st.type == "mutton" and Sim.manhattan(st.cell, sim.meadow_sign()) <= 4)
+	check(not wool.is_empty() and wool[0].n == SaveFormat.OLD_MEADOW_TAKE and not mutton.is_empty() and mutton[0].n == SaveFormat.OLD_MEADOW_TAKE, "with the 2 wool and 2 raw mutton he'd have brought back")
+	check(sim.herds().get("sheep", 0) == 5 - SaveFormat.OLD_MEADOW_TAKE, "the meadow map keeps the old meadow's sheep, less his (%d)" % sim.herds().get("sheep", 0))
+	check(not r.has("error"), "the plain v19 fixture still reads")

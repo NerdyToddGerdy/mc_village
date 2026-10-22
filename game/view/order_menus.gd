@@ -5,7 +5,7 @@ extends RefCounted
 ##
 ## Each entry: id (the tool it switches on, or the template it places), name, sub (one line under
 ## the name), mark (the icon drawn for it), and optionally `unlock`, a condition it waits for:
-##   "sheep": a live sheep exists.
+##   "animals": a live animal exists on the map in view.
 ##   "founded": the founding is done (Slice 3's expedition board, issue #105).
 
 const MENUS := {
@@ -13,7 +13,7 @@ const MENUS := {
 		{"id": "mine", "name": "Mine", "sub": "Trees and boulders. Shift: trees only. Alt: boulders only", "mark": "mine"},
 		{"id": "chop", "name": "Chop trees", "sub": "Trees only", "mark": "chop"},
 		{"id": "break", "name": "Break boulders", "sub": "Boulders only. Breaking them needs a pickaxe", "mark": "break"},
-		{"id": "hunt", "name": "Hunt", "sub": "Sheep, for wool and mutton", "mark": "hunt", "unlock": "sheep"},
+		{"id": "hunt", "name": "Hunt", "sub": "Sheep, cows and pigs, for wool, leather and meat. Shift: one kind only", "mark": "hunt", "unlock": "animals"},
 	]},
 	"paint": {"name": "Paint", "entries": [
 		{"id": "stock", "name": "Stockpile", "sub": "Where residents store what they gather", "mark": "stock"},
@@ -47,7 +47,7 @@ static func entries(menu: String, sim: Sim) -> Array:
 
 static func unlocked(e: Dictionary, sim: Sim) -> bool:
 	match e.get("unlock", ""):
-		"sheep":
+		"animals":
 			return sim.sheep.any(func(sh): return sh.alive)
 		"founded":
 			return Goals.current(sim) < 0

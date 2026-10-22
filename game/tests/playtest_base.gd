@@ -327,3 +327,10 @@ func count(type: String) -> int:
 		if game.sim.items[k].type == type:
 			n += game.sim.items[k].n
 	return n
+
+
+## Lets the HUD rebuild after a click, so the next check sees the panel it opened.
+func settle() -> void:
+	await frames(2)
+	game._hud.refresh(game.sim)
+	await frames(2)

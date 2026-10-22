@@ -48,9 +48,8 @@ func _initialize() -> void:
 		sim.set_job_on(sim.residents[0], "hunt", false)
 	if SaveFormat.VERSION >= 11:
 		sim.residents[0].jobs.build.xp = 30  # a level-3 builder
-	if SaveFormat.VERSION >= 13:  # a meadow part-way to regaining a sheep
-		sim.meadow_sheep = 5
-		sim.meadow_regrow = 60.0
+	# v13 to v19 saved a meadow part-way to regaining a sheep (meadow_sheep 5, meadow_regrow 60); from
+	# v20 the meadow is a map of its own (below).
 	if SaveFormat.VERSION >= 12 and sim.residents[0].pick != null:
 		sim.residents[0].kept.pick = true  # a pickaxe she was told to equip
 	if SaveFormat.VERSION >= 3:
@@ -140,6 +139,28 @@ func _initialize() -> void:
 		sim.station("village").done = true
 		sim.plan_station("mine")
 		sim.cart = {"at": "village", "x": Sim.station_x("village"), "state": "parked", "load": {}, "riders": [], "acc": 0.0}
+	if SaveFormat.VERSION >= 20:  # Level 2 open, a block mined there; the meadow visited, a cow and a pig hunted, pigs growing back (#132, #137, #138)
+		var mine := sim.get_map(OldMine.ID)
+		sim.on_map(OldMine.ID, sim.open_door.bind(OldMine.ID))
+		var two := sim.get_map(MineLevels.level_id(2))
+		two.visited = true
+		two.boulders[0].alive = false
+		var mead := sim.get_map(Meadow.ID)
+		mead.known = true
+		mead.visited = true
+		for sp in ["cow", "pig"]:
+			for a in mead.sheep:
+				if a.species == sp:
+					a.alive = false
+					break
+		mead.regrow = {"pig": 60.0}
+		var crop: Dictionary = sim.farm.values()[0]  # the meadow's animals change the village's random numbers: make sure wheat grows
+		if crop.grow < 0.0 and not sim.items.has(crop.cell):
+			crop.grow = 30.0
+		if mine.door_state != "open":
+			printerr("Level 1's door didn't open.")
+			quit(1)
+			return
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

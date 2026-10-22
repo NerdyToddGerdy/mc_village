@@ -17,7 +17,9 @@ const BOULDER_COBBLE := 6
 const SEED := 52                        ## Seeds the sim's random numbers (sheep wandering), so games replay exactly.
 const SHEEP_WALK := 0.6                 ## Cells per second.
 const SHEEP_PAUSE := [1.0, 4.0]         ## Seconds a sheep stands still between steps (min, max).
-const HUNT_TIME := 4.0                  ## Seconds to hunt a sheep.
+const HUNT_TIME := 4.0                  ## Seconds to hunt an animal.
+## What each animal drops when hunted (issue #138).
+const ANIMAL_DROPS := {"sheep": {"wool": 1, "mutton": 1}, "cow": {"leather": 1, "beef": 2}, "pig": {"porkchop": 2}}
 
 # Hunger (issue #44): 100 is full, 0 is starving.
 const HUNGER_EMPTY_TIME := 360.0        ## Seconds for a full resident to reach 0.
@@ -26,7 +28,8 @@ const EAT_UNTIL := 90.0                 ## At a berry bush, keep eating up to th
 const HUNGRY_BELOW := 25.0              ## Below this, work is slower.
 const HUNGRY_SPEED := 0.75              ## Work speed while hungry.
 const EAT_TIME := 1.5                   ## Seconds to eat one food item or berry.
-const FOOD_VALUE := {"berries": 15.0, "mutton": 20.0, "bread": 50.0, "cooked_mutton": 60.0}
+const FOOD_VALUE := {"berries": 15.0, "mutton": 20.0, "bread": 50.0, "cooked_mutton": 60.0,
+	"beef": 20.0, "porkchop": 20.0, "cooked_beef": 60.0, "cooked_porkchop": 60.0}
 const BUSH_MAX := 3                     ## Berries a bush holds.
 const BUSH_REGROW := 45.0               ## Seconds for a bush to grow one berry back.
 # Farms (issue #45).
@@ -34,15 +37,18 @@ const PLANT_TIME := 2.0                 ## Seconds to plant one farm cell (no se
 const HARVEST_TIME := 2.0               ## Seconds to harvest one ripe cell.
 const WHEAT_GROW := 120.0               ## Seconds from planting to ripe.
 const WHEAT_YIELD := 2                  ## Wheat per harvested cell.
-# The sheep meadow (issue #50). Regrowth is the proposed default for open decision #22.
-const MEADOW_SHEEP := 8                 ## Sheep in the meadow at the start, and the most it holds.
-const MEADOW_TRIP := 90.0               ## Seconds a resident is away on a trip.
-const MEADOW_TAKE := 2                  ## Sheep's worth each resident brings back (wool and raw mutton each).
-const MEADOW_REGROW := 240.0            ## Seconds for the meadow to regain one sheep.
+# The meadow (Slice 3.5, issues #137, #138). Its herds are laid out in game/sim/meadow.gd.
+const MEADOW_WALK := 30.0               ## Seconds walking between the west signpost and the meadow, each way.
+const MEADOW_REGROW := {"sheep": 240.0, "cow": 300.0, "pig": 180.0}  ## Seconds for a species to regain one animal.
+const BULL_CHANCE := 0.15               ## Chance hunting a cow gets the hunter hurt by an angry bull (never seriously).
+const SLIP_CHANCE := 0.03               ## Chance of a slip each time someone steps onto the pond's bank (never serious).
 
 # Site maps (Slice 3, issues #102, #103).
 const ORE_YIELD := {"coal": 3, "iron": 4}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).
 const TORCH_LIGHT := 3.0                ## Cells a torch lights; open cells further from every torch are dark.
+# The old mine's deeper levels (issue #132).
+const LEVEL_ORE := {"coal": 2, "iron": 1}  ## Ore blocks each level down adds to Level 1's 6 coal and 4 iron.
+const LEVEL_RISK := 0.25                ## Each level down raises the cave-in and fall chances by this share of Level 1's.
 # The road to the mine (Slice 4, issues #118-#121).
 const FORD_SPEED := 0.4                 ## Walking speed wading the stream, before the bridge is built.
 const RAILS_PER_SEGMENT := 2            ## Rails one segment of track takes.

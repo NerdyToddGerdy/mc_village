@@ -165,15 +165,50 @@ func _initialize() -> void:
 		await play(1)
 		check(find_button("Needs a new axe") == null, "and no \"Needs a new axe\" report is left")
 
-	# ---- The meadow: send both residents; they come back with wool and mutton
-	var wool_before := count("wool")
-	var meadow_before: int = sim.meadow_sheep
-	game.selection = {"kind": "res", "ids": [ada.id, tomas.id]}
-	check(await click_button("Send both to the meadow"), "click Send both to the meadow")
-	check(await play_until(90, func(): return ada.away and tomas.away), "both walk off to the meadow")
-	check(await play_until(Tuning.MEADOW_TRIP + 30, func(): return not ada.away and not tomas.away), "both come back")
-	check(sim.meadow_sheep == meadow_before - 2 * Tuning.MEADOW_TAKE, "the meadow has %d fewer sheep" % (2 * Tuning.MEADOW_TAKE))
-	check(count("wool") + (h3.store.get("wool", 0) if h3 != null else 0) >= wool_before + 2 * Tuning.MEADOW_TAKE - 1 or seen("back from the meadow with 2 wool"), "they bring back wool and mutton")
+	# ---- The meadow (issues #136, #137): an expedition board, then an adventure there for wool
+	check(await open_bench_panel(), "open the bench for the board's planks and sticks")
+	await queue_recipe("Planks", 2)
+	await queue_recipe("Sticks", 1)
+	await key(KEY_ESCAPE)
+	check(await click_button("Build") and await click_button("Expedition board"), "pick Expedition board in the Build menu")
+	var bp := build_spot("board", at(9, 9))
+	check(bp.x >= 0, "room for the board")
+	await look_at(bp)
+	await click(screen(bp))
+	var board = sim.site_at(bp)
+	check(await play_until(300, func(): return board != null and board.done), "the board is built")
+	await look_at(sim.meadow_sign())
+	await click(screen(sim.meadow_sign(), 1.4))
+	game._hud.refresh(sim)
+	await frames(2)
+	check(game.planner_open and game.adventure == Meadow.ID and visible_label("Meadow"), "clicking the meadow's signpost opens its adventure on the board")
+	check(await click_button("All adventures"), "back to the adventures list")
+	await settle()
+	check(find_button("Adventure: Old mine") != null and find_button("Adventure: Meadow") != null, "the board lists the old mine and the meadow")
+	check(await click_button("Adventure: Meadow"), "pick the meadow")
+	check(await click_button("Tomas"), "add Tomas")
+	check(await click_button("Wool"), "send them for wool")
+	var plan: Dictionary = game.plan
+	check(plan.dest == Meadow.ID and plan.party.size() == 2 and plan.target.item == "wool" and plan.picks == 0, "the plan: two of them to the meadow, for wool (%s)" % [plan])
+	check(await click_button("Start packing"), "click Start packing")
+	check(await play_until(240, func(): return sim.depart_blocker() == ""), "the meals are packed and the party waits at the board (%s)" % sim.depart_blocker())
+	check(await click_button("Depart"), "click Depart")
+	var party: Array = sim.expedition.get("party", []).map(func(id): return sim.resident(id))
+	check(await play_until(90, func(): return party.all(func(r): return r.away)), "they carry the packs off the west edge")
+	check(await play_until(Tuning.MEADOW_WALK + 10, func(): return party.all(func(r): return sim.at_site(r))), "they reach the meadow")
+	check(await click_button("Close") and not game.planner_open, "close the board")
+	for i in 5:
+		if game.view_map == Meadow.ID:
+			break
+		await key(KEY_TAB)
+	check(game.view_map == Meadow.ID, "Tab reaches the meadow on the map switcher")
+	game._world._update_sheep()
+	check(game._world._sheep_nodes.size() >= Meadow.herd().cow, "its herds are drawn")
+	check(await play_until(300, func(): return sim.expedition.is_empty()), "they hunt sheep for the wool and come home")
+	check(seen("Back from the meadow: ") and seen("wool"), "the report says what came back")
+	await key(KEY_TAB)
+	while game.view_map != "village":
+		await key(KEY_TAB)
 
 	# ---- The third house gets its bed, and a new traveler arrives
 	for i in 6:
@@ -201,27 +236,19 @@ func _initialize() -> void:
 	await key(KEY_ESCAPE)
 	check(await play_until(150, func(): return sim.residents.any(func(r): return r.pick != null and r.pick.type == "iron_pick") or not sim.tool_items("pick", 2).is_empty()), "an iron pickaxe is made")
 
-	# ---- The expedition board (issue #105): built from the Build menu once the founding is done
-	check(await open_bench_panel(), "open the bench for the board's planks and sticks")
-	await queue_recipe("Planks", 2)
-	await queue_recipe("Sticks", 1)
-	await key(KEY_ESCAPE)
-	check(await click_button("Build") and await click_button("Expedition board"), "pick Expedition board in the Build menu")
-	var bp := build_spot("board", at(9, 9))
-	check(bp.x >= 0, "room for the board and its map room plot")
-	await look_at(bp)
-	await click(screen(bp))
-	var board = sim.site_at(bp)
-	check(board != null and board.tpl == "board" and board.plot != null, "the board is placed with its map room plot reserved")
-	check(await play_until(240, func(): return board != null and board.done), "the board is built")
-	check(seen("expedition board is up") and game.known_maps().has(OldMine.ID), "it brings word of the old mine, which the switcher now shows")
+	# ---- The expedition board (issue #105), built for the meadow above, with its map room plot
+	check(board != null and board.tpl == "board" and board.plot != null, "the board has its map room plot reserved")
+	check(seen("expedition board is up") and game.known_maps().has(OldMine.ID), "it brought word of the old mine, which the switcher shows")
 
-	# ---- Planning (issue #106): select the board, read the site report, and fill in the plan
+	# ---- Planning (issue #106): select the board, pick the old mine, read its site report, and fill in the plan
 	await look_at(bp)
 	await click(screen(bp, 1.0))
 	game._hud.refresh(sim)
 	await frames(2)
-	check(game.planner_open and visible_label("Old mine"), "selecting the board opens the planner with the old mine's report")
+	check(game.planner_open and find_button("Adventure: Old mine") != null, "selecting the board opens the adventures list")
+	check(await click_button("Adventure: Old mine"), "pick the old mine")
+	await settle()
+	check(game.adventure == OldMine.ID and visible_label("Old mine"), "its report and planner open")
 	check(visible_label("“%s”" % OldMine.TOLD), "the report says what the village has been told")
 	check(await click_button("Tomas"), "add Tomas to the party")
 	check(await click_button("Coal"), "send them for coal")
@@ -260,11 +287,14 @@ func _initialize() -> void:
 	check(sim.expedition.get("leg", "") == "home", "the party heads home")
 	await key(KEY_TAB)
 	await key(KEY_TAB)
-	check(game.view_map == "village", "Tab, past the road, back to the village")
+	await key(KEY_TAB)
+	check(game.view_map == "village", "Tab, past the road and the meadow, back to the village")
 
 	# ---- Return and unloading (issue #112): the cargo is set down at the signpost and hauled away
 	var coal_before := count("coal")
-	check(await play_until(70, func(): return sim.expedition.is_empty()), "the party gets home")
+	if not sim.pending.is_empty():  # someone seriously hurt at the mine: the game waits for a choice
+		check(await click_button("Retreat"), "answer the injury with Retreat")
+	check(await play_until(150, func(): return sim.expedition.is_empty()), "the party gets home, the hurt walking slower (%s, unloading %s)" % [sim.expedition.get("party", []).map(func(id): return [sim.resident(id).map, sim.resident(id).job.label if sim.resident(id).job != null else "idle", sim.resident(id).hurt, sim.resident(id).pos, sim.resident(id).path.size(), sim.resident(id).job.i if sim.resident(id).job != null else -1, sim.resident(id).trip, sim.cart]), sim.expedition.get("unloading", false)])
 	check(seen("Back from the old mine: ") and seen("coal"), "a toast reports what came back")
 	check(ada.map == "village" and tomas.map == "village" and not ada.away, "Ada and Tomas are back in the village")
 	if true:  # room for the cargo: the stockpile is nearly full by now, so paint more, as a player would
