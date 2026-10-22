@@ -79,6 +79,7 @@ var pending: Array = []
 ##    load: {item: n} (cargo in it), riders: [resident ids], acc (items toward the next one loaded)}
 var cart := {}
 var stuck: Array = []        ## {who, why, map, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
+var _fence_claims := {}      ## Vector2i -> the resident putting up that pen fence (issue #139). Not saved.
 var _stuck_since := {}       ## A stuck entry's key -> the tick it first showed, to order the list (issue #77). Not saved.
 var events: Array = []       ## {type: "toast", text, res_id, site_id, map}
 var rev := 0
@@ -209,7 +210,7 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null,
 		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false,
 		"orders": [], "hunger": 100.0, "jobs": default_jobs(), "kept": {"axe": false, "pick": false},
-		"away": false, "back_at": 0, "trip": "", "map": map_id, "hurt": 0, "heal": 0.0}
+		"away": false, "back_at": 0, "trip": "", "map": map_id, "hurt": 0, "heal": 0.0, "armor": {}}
 	residents.append(r)
 	return r
 
@@ -437,6 +438,8 @@ static func nearest(list: Array, c: Vector2i):
 
 ## Uses a new tool of this type has.
 static func full_uses(type: String) -> int:
+	if Defs.is_armor(type):
+		return Tuning.ARMOR_USES
 	return Tuning.DURABILITY[Defs.ITEMS[type].tier]
 
 
@@ -457,7 +460,7 @@ func drop_items(c: Vector2i, type: String, n: int, uses := -1) -> void:
 			if s == null:
 				var put := mini(n, cap)
 				m.items[cur] = {"cell": cur, "type": type, "n": put, "res": 0}
-				if Defs.is_tool_item(type):
+				if Defs.wears(type):
 					m.items[cur].dur = full_uses(type) if uses < 0 else uses
 				n -= put
 			elif s.type == type and s.n < cap:
@@ -1102,6 +1105,13 @@ func _release(r: Dictionary, j: Job) -> void:
 			"claim":
 				if hd.ent.claim == r.id:
 					hd.ent.claim = 0
+			"lead":
+				if hd.ent.get("led_by", 0) in [0, r.id]:
+					hd.ent.led_by = 0
+					hd.ent.led_to = 0
+			"fence":
+				if _fence_claims.get(hd.cell, 0) == r.id:
+					_fence_claims.erase(hd.cell)
 			"builder":
 				if hd.site.builder == r.id:
 					hd.site.builder = 0
@@ -1226,6 +1236,22 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			r.carry = {"type": s.type, "n": st.n}
 			if s.has("dur"):
 				r.carry.dur = s.dur
+			rev += 1
+			return true
+		"pickup_armor":  # put on a piece of armor (issue #140)
+			var s = m.items.get(st.stack.cell)
+			if not is_same(s, st.stack) or s.n < 1:
+				return "gone"
+			s.n -= 1
+			s.res -= 1
+			j.holds.erase(st.hold)
+			if s.n <= 0:
+				m.items.erase(s.cell)
+			var slot: String = Defs.ITEMS[s.type].armor
+			var old = r.armor.get(slot)
+			if old != null:
+				drop_items(s.cell, old.type, 1, old.dur)
+			r.armor[slot] = {"type": s.type, "dur": s.dur}
 			rev += 1
 			return true
 		"pickup_tool":
@@ -1365,13 +1391,56 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				if r.carry.n <= 0:
 					r.carry = null
 					return true
-			if Defs.MEALS.has(r.carry.type):
+			if r.carry.type in PEN_SUPPLIES:  # sticks or wheat set down at the meadow (issue #139)
+				if not expedition.has("supplies"):
+					expedition.supplies = {}
+				expedition.supplies[r.carry.type] = expedition.supplies.get(r.carry.type, 0) + r.carry.n
+			elif Defs.MEALS.has(r.carry.type):
 				expedition.provisions[r.carry.type] = expedition.provisions.get(r.carry.type, 0) + r.carry.n
 			elif r.carry.has("dur"):
 				expedition.tools.append({"type": r.carry.type, "dur": r.carry.dur})
 			else:
 				expedition.cargo[r.carry.type] = expedition.cargo.get(r.carry.type, 0) + r.carry.n
 			r.carry = null
+			rev += 1
+			return true
+		"take_supply":  # sticks or wheat out of the packs, for the pens (issue #139)
+			var sup: Dictionary = expedition.get("supplies", {})
+			var n: int = mini(st.n, sup.get(st.type, 0))
+			if n <= 0:
+				return "gone"
+			sup[st.type] -= n
+			if sup[st.type] <= 0:
+				sup.erase(st.type)
+			r.carry = {"type": st.type, "n": n}
+			rev += 1
+			return true
+		"put_back":  # what's left of them goes back into the packs
+			if r.carry != null and r.carry.type == st.type:
+				expedition.supplies[st.type] = expedition.supplies.get(st.type, 0) + r.carry.n
+				r.carry = null
+				rev += 1
+			return true
+		"leash":  # the animal follows its leader to the pen
+			if not st.target.alive:
+				return "gone"
+			st.target.led_by = r.id
+			j.label = st.label
+			return true
+		"pen_in":
+			var a: Dictionary = st.target
+			var pn: Dictionary = st.pen
+			if not a.alive or not m.pens.any(func(x): return is_same(x, pn)):
+				return "gone"
+			var inside := pen_inside(pn)
+			var to := Vector2i(clampi(rcell(r).x, inside.position.x, inside.end.x - 1), clampi(rcell(r).y, inside.position.y, inside.end.y - 1))
+			a.pen = pn.id
+			a.lead = false
+			a.led_by = 0
+			a.led_to = 0
+			a.cell = to
+			a.pos = Vector2(to)
+			a.dest = null
 			rev += 1
 			return true
 		"take_tool":  # the best spare pickaxe in the packs
@@ -1466,6 +1535,10 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.EAT_TIME
 		"survey":
 			return Tuning.SURVEY_TIME
+		"fence":
+			return Tuning.FENCE_TIME
+		"feed":
+			return Tuning.FEED_TIME
 		_:
 			match st.get("recipe", {}).get("id", ""):
 				"bread": return Tuning.BAKE_TIME
@@ -1493,8 +1566,8 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				drop_items(t.cell, "cobble", Tuning.BOULDER_COBBLE + skill_bonus(r, "mine"))
 				stats.broken_boulders += 1
 			_wear(r, st.tool)
-			if t.get("loose", false) and _roll(cave_in_chance(m.level)):  # issue #110
-				injure(r, 2 if _roll(Tuning.CAVE_IN_SERIOUS) else 1, "a cave-in")
+			if t.get("loose", false):  # issue #110
+				_hazard(r, cave_in_chance(m.level), Tuning.CAVE_IN_SERIOUS, "a cave-in")
 			_check_find(t.cell)  # issue #111
 		"eat":
 			if r.carry == null:
@@ -1522,8 +1595,8 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			if sh.species == "sheep":
 				stats.sheep_hunted = stats.get("sheep_hunted", 0) + 1
 			stats.hunted = stats.get("hunted", 0) + 1
-			if sh.species == "cow" and m.id == Meadow.ID and _roll(Tuning.BULL_CHANCE):  # issue #137: never serious
-				injure(r, 1, "an angry bull")
+			if sh.species == "cow" and m.id == Meadow.ID:  # issue #137: never serious
+				_hazard(r, Tuning.BULL_CHANCE, 0.0, "an angry bull")
 			rev += 1
 		"plant":
 			var crop: Dictionary = st.target
@@ -1546,6 +1619,26 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			survey(map_id)
 			expedition.survey = false
 			_toast("%s surveyed the vein: about %d iron ore. Iron can be an expedition's target now." % [r.name, ore_left(map_id, "iron") * Tuning.ORE_YIELD.iron], r.id)
+		"fence":  # issue #139
+			var pn: Dictionary = st.pen
+			if not m.pens.any(func(x): return is_same(x, pn)) or pn.built.has(st.cell) or r.carry == null or r.carry.type != "stick" or r.carry.n < Tuning.FENCE_STICKS:
+				return "gone"
+			r.carry.n -= Tuning.FENCE_STICKS
+			if r.carry.n <= 0:
+				r.carry = null
+			_fence_claims.erase(st.cell)
+			_put_fence(pn, st.cell)
+		"feed":
+			var pair: Array = st.pair
+			if r.carry == null or r.carry.type != "wheat" or r.carry.n < 2 * Tuning.FEED_WHEAT or not pair.all(func(a): return a.alive and a.get("pen", 0) == pair[0].pen):
+				return "gone"
+			r.carry.n -= 2 * Tuning.FEED_WHEAT
+			if r.carry.n <= 0:
+				r.carry = null
+			for a in pair:
+				a.fed_at = tick
+			stats.fed = stats.get("fed", 0) + 1
+			rev += 1
 		"build":
 			if st.site.tpl == "track":
 				_lay_rail(st.site)
@@ -1627,6 +1720,10 @@ func _claim(r: Dictionary) -> void:
 		return
 	if resting(r):  # hurt: rest in bed until healed (issue #110)
 		r.job = _rest_job(r)
+		return
+	var dj = _dress_job(r, c)  # armor lying about for a slot they haven't filled (issue #140)
+	if dj != null:
+		r.job = dj
 		return
 	if auto_craft:
 		expand_queues()
@@ -1831,6 +1928,8 @@ func _step_map() -> void:
 			_step_sheep(sh)
 	if m.id == Meadow.ID:
 		_regrow_herds()
+	if not m.pens.is_empty():
+		_step_pens()
 	for r in residents:
 		if r.map != map_id:
 			continue
@@ -1858,9 +1957,34 @@ func _step_map() -> void:
 				_mark_obstacles(s)
 
 
+## Where an animal may wander (issue #139): never through a gate; a penned one stays inside its pen,
+## and a wild one keeps out of pens it isn't already in.
+func _grazes(a: Dictionary, n: Vector2i) -> bool:
+	if m.pens.is_empty():
+		return true
+	if m.gates.has(n):
+		return false
+	if a.get("pen", 0) != 0:
+		var p := pen(a.pen)
+		return p.is_empty() or pen_inside(p).has_point(n)
+	var at = pen_at(n)
+	return at == null or Rect2i(at.rect).has_point(a.cell)
+
+
 ## Sheep wander one cell at a time with pauses, staying on walkable ground. A sheep being hunted
 ## stands still once its hunter is next to it.
 func _step_sheep(sh: Dictionary) -> void:
+	if sh.get("led_by", 0) != 0:  # led to a pen: it follows a step behind (issue #139)
+		var lr := resident(sh.led_by)
+		if lr.is_empty() or lr.map != map_id or lr.job == null or lr.job.kind != "lead":
+			sh.led_by = 0
+			return
+		var gap: Vector2 = lr.pos - sh.pos
+		if gap.length() > 1.0:
+			sh.pos += gap.normalized() * minf(gap.length() - 1.0, Tuning.WALK * Tuning.DT)
+			sh.cell = Vector2i(roundi(sh.pos.x), roundi(sh.pos.y))
+		sh.dest = null
+		return
 	if sh.claim != 0:
 		var hunter := resident(sh.claim)
 		if not hunter.is_empty() and hunter.pos.distance_to(sh.pos) <= 1.5:
@@ -1877,7 +2001,7 @@ func _step_sheep(sh: Dictionary) -> void:
 			dirs[k] = tmp
 		for d in dirs:
 			var n: Vector2i = sh.cell + d
-			if walkable(n):
+			if walkable(n) and _grazes(sh, n):
 				sh.dest = n
 				break
 		if sh.dest == null:
@@ -1943,7 +2067,7 @@ func sign_for(dest: String) -> Vector2i:
 func _regrow_herds() -> void:
 	var herd := Meadow.herd()
 	for sp in herd:
-		var alive: int = m.sheep.filter(func(a): return a.alive and a.species == sp).size()
+		var alive: int = m.sheep.filter(func(a): return a.alive and a.species == sp and a.get("pen", 0) == 0).size()  # pens don't count (issue #139)
 		if alive >= herd[sp]:
 			m.regrow.erase(sp)
 			continue
@@ -1972,6 +2096,379 @@ func herds(id := Meadow.ID) -> Dictionary:
 ## Seconds until an away resident is back.
 func back_in(r: Dictionary) -> float:
 	return maxf(0.0, float(r.back_at - tick) / Tuning.TPS)
+
+
+# ---------------------------------------------------------------- pens and breeding (issue #139)
+
+## What the party packs for the pens: sticks for fences, wheat to feed pairs.
+const PEN_SUPPLIES := ["stick", "wheat"]
+
+
+## The cells round a pen's edge: its fences and its gate.
+static func pen_edge(p: Dictionary) -> Array:
+	var r: Rect2i = p.rect
+	var out: Array = []
+	for y in range(r.position.y, r.end.y):
+		for x in range(r.position.x, r.end.x):
+			if x == r.position.x or y == r.position.y or x == r.end.x - 1 or y == r.end.y - 1:
+				out.append(Vector2i(x, y))
+	return out
+
+
+## The cells inside a pen's fences.
+static func pen_inside(p: Dictionary) -> Rect2i:
+	return Rect2i(p.rect).grow(-1)
+
+
+## Whether every fence and the gate are up.
+static func pen_done(p: Dictionary) -> bool:
+	return p.built.size() >= pen_edge(p).size()
+
+
+## How many animals a pen holds: one for each cell inside it.
+static func pen_room(p: Dictionary) -> int:
+	return pen_inside(p).get_area()
+
+
+func pen(id: int) -> Dictionary:
+	for p in m.pens:
+		if p.id == id:
+			return p
+	return {}
+
+
+## The pen whose fences or inside cover a cell, or null.
+func pen_at(c: Vector2i):
+	for p in m.pens:
+		if Rect2i(p.rect).has_point(c):
+			return p
+	return null
+
+
+## The animals in a pen.
+func penned(p: Dictionary) -> Array:
+	return m.sheep.filter(func(a): return a.alive and a.get("pen", 0) == p.id)
+
+
+## Room left in a pen, less the animals on their way in.
+func pen_free(p: Dictionary) -> int:
+	var n := penned(p).size()
+	for a in m.sheep:
+		if a.alive and a.get("led_to", 0) == p.id:
+			n += 1
+	return pen_room(p) - n
+
+
+## Why a pen can't be painted over `rect`, or "" when it can.
+func pen_check(rect: Rect2i) -> String:
+	if m.id != Meadow.ID:
+		return "Pens go at the meadow"
+	if mini(rect.size.x, rect.size.y) < Tuning.PEN_MIN:
+		return "A pen needs at least %d×%d, fences included" % [Tuning.PEN_MIN, Tuning.PEN_MIN]
+	if maxi(rect.size.x, rect.size.y) > Tuning.PEN_MAX:
+		return "A pen is at most %d×%d" % [Tuning.PEN_MAX, Tuning.PEN_MAX]
+	for y in range(rect.position.y, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			var c := Vector2i(x, y)
+			if not m.in_bounds(c):
+				return "Pens go on the meadow, not past its edge"
+			if m.water.has(c) or m.banks.has(c):
+				return "Pens can't go on the pond"
+			if m.fences.has(c) and pen_at(c) == null:
+				return "Pens can't go on the old fences"
+			if m.trees.any(func(t): return t.alive and t.cell == c):
+				return "Pens can't go on a tree"
+			if c == m.entrance:
+				return "Pens can't go on the way in"
+			if pen_at(c) != null:
+				return "Pens can't overlap"
+	return ""
+
+
+## Paints a pen (issue #139): fences round the edge, with the gate in the middle of the side nearest
+## the entrance. The party builds it with the sticks it packs. Returns why it can't, or "".
+func paint_pen(rect: Rect2i) -> String:
+	var why := pen_check(rect)
+	if why != "":
+		return why
+	var mid := rect.position + rect.size / 2
+	var gates := [Vector2i(rect.end.x - 1, mid.y), Vector2i(mid.x, rect.position.y), Vector2i(mid.x, rect.end.y - 1), Vector2i(rect.position.x, mid.y)]
+	var gate: Vector2i = gates[0]
+	for g in gates:
+		if manhattan(g, m.entrance) < manhattan(gate, m.entrance):
+			gate = g
+	m.pens.append({"id": _id(), "kind": "pen", "rect": rect, "gate": gate, "built": {}})
+	rev += 1
+	return ""
+
+
+## Takes a pen down: its fences come down and its animals go free.
+func remove_pen(p: Dictionary) -> void:
+	for r in residents:
+		if r.job != null and r.map == map_id and (is_same(r.job.target, p) or r.job.steps.any(func(s): return is_same(s.get("pen"), p))):
+			fail_job(r)
+	for c in p.built:
+		m.fences.erase(c)
+		m.gates.erase(c)
+	for a in m.sheep:
+		if a.get("pen", 0) == p.id:
+			a.pen = 0
+	m.pens.erase(p)
+	_occ_dirty = true
+	rev += 1
+
+
+## Sticks still needed for the fences of the pens painted on a map.
+func fence_left(id := Meadow.ID) -> int:
+	if not maps.has(id):
+		return 0
+	var n := 0
+	for p in maps[id].pens:
+		n += pen_edge(p).size() - p.built.size()
+	return n * Tuning.FENCE_STICKS
+
+
+## Pairs in a pen that can be fed now: two grown animals of a kind, neither fed nor resting from
+## breeding, with room in the pen for the young one.
+func feed_pairs(p: Dictionary) -> Array:
+	var out: Array = []
+	if not pen_done(p):
+		return out
+	var by := {}
+	var fed := 0
+	for a in penned(p):
+		if a.get("fed_at", -1) >= 0:
+			fed += 1
+		elif not a.get("young", false) and a.get("cool_until", 0) <= tick and not a.des and a.claim == 0:
+			if not by.has(a.species):
+				by[a.species] = []
+			by[a.species].append(a)
+	var free := pen_free(p) - (fed + 1) / 2
+	for sp in by:
+		var l: Array = by[sp]
+		var i := 0
+		while i + 1 < l.size() and out.size() < free:
+			out.append([l[i], l[i + 1]])
+			i += 2
+	return out
+
+
+## Wheat to feed every pair that could be fed in a map's pens now.
+func wheat_wanted(id := Meadow.ID) -> int:
+	if not maps.has(id):
+		return 0
+	return on_map(id, func():
+		var n := 0
+		for p in m.pens:
+			n += feed_pairs(p).size()
+		return n * 2 * Tuning.FEED_WHEAT)
+
+
+## Whether the party is tending the pens (issue #139) rather than bringing something back.
+func tending() -> bool:
+	return expedition.get("target", {}).get("item", "") == "pens"
+
+
+## How much of the objective is still to pack: none when tending the pens.
+func objective_left() -> int:
+	return 0 if tending() else maxi(0, expedition.target.n - objective_packed())
+
+
+## Penned animals over the herd size the party keeps of each kind, when tending the pens: grown ones
+## that aren't waiting to breed.
+func pen_surplus() -> Array:
+	var by := {}
+	for a in m.sheep:
+		if a.alive and a.get("pen", 0) != 0:
+			if not by.has(a.species):
+				by[a.species] = []
+			by[a.species].append(a)
+	var out: Array = []
+	for sp in by:
+		var grown: Array = by[sp].filter(func(a): return not a.get("young", false) and a.get("fed_at", -1) < 0)
+		out.append_array(grown.slice(0, maxi(0, by[sp].size() - expedition.target.n)))
+	return out
+
+
+## Whether the party can still do something for the pens: build a fence with the sticks it has, lead
+## a marked animal into a pen with room, or feed a pair with the wheat it has.
+func pen_work() -> bool:
+	var sup: Dictionary = expedition.get("supplies", {})
+	if sup.get("stick", 0) >= Tuning.FENCE_STICKS and m.pens.any(func(p): return not pen_done(p)):
+		return true
+	if m.sheep.any(func(a): return a.alive and a.get("lead", false) and a.get("pen", 0) == 0) and m.pens.any(func(p): return pen_done(p) and pen_free(p) > 0):
+		return true
+	return sup.get("wheat", 0) >= 2 * Tuning.FEED_WHEAT and m.pens.any(func(p): return not feed_pairs(p).is_empty())
+
+
+## Marks animals to be led into a pen (the Lead order), or unmarks them. Penned animals are left alone.
+func designate_lead(rect: Rect2i, single = null) -> void:
+	var hit: Array = [single] if single != null else m.sheep.filter(func(a): return a.alive and rect.has_point(a.cell))
+	hit = hit.filter(func(a): return a.get("pen", 0) == 0)
+	var all_on := not hit.is_empty() and hit.all(func(a): return a.get("lead", false))
+	for a in hit:
+		a.lead = not (single != null and all_on)
+		a.unreach_until = 0
+		if a.lead and a.des:
+			a.des = false
+			if a.claim != 0:
+				var r := resident(a.claim)
+				if not r.is_empty() and r.job != null and r.job.kind == "gather" and is_same(r.job.target, a):
+					fail_job(r)
+	rev += 1
+
+
+## Building a pen's fences: sticks from the packs at the entrance, then a fence at a time, nearest
+## first, and any sticks left over back into the packs.
+func _fence_job(r: Dictionary, c: Vector2i):
+	var have: int = expedition.get("supplies", {}).get("stick", 0)
+	var n := mini(carry_cap(r), have / Tuning.FENCE_STICKS)
+	if n <= 0:
+		return null
+	var todo: Array = []
+	for p in m.pens:
+		for e in pen_edge(p):
+			if not p.built.has(e) and not _fence_claims.has(e):
+				todo.append({"cell": e, "pen": p})
+	if todo.is_empty():
+		return null
+	var picked: Array = []
+	var at := m.entrance
+	while picked.size() < n and not todo.is_empty():
+		var best := 0
+		for i in todo.size():
+			if manhattan(todo[i].cell, at) < manhattan(todo[best].cell, at):
+				best = i
+		at = todo[best].cell
+		picked.append(todo.pop_at(best))
+	var j := Job.new("fence", "Building a pen", "the pen")
+	j.target = picked[0].pen
+	j.work = "build"
+	j.step(_goto([m.entrance], false))
+	j.step({"op": "take_supply", "type": "stick", "n": picked.size() * Tuning.FENCE_STICKS})
+	for t in picked:
+		_fence_claims[t.cell] = r.id
+		j.hold({"t": "fence", "cell": t.cell})
+		j.step(_goto([t.cell], true))
+		j.step({"op": "work", "what": "fence", "pen": t.pen, "cell": t.cell, "label": "Building a pen"})
+	j.step(_goto([m.entrance], false))
+	j.step({"op": "put_back", "type": "stick"})
+	return j
+
+
+## A fence or the gate goes up. Any animal standing there steps aside; once the last one is up, the
+## animals inside are penned.
+func _put_fence(p: Dictionary, c: Vector2i) -> void:
+	p.built[c] = true
+	if c == p.gate:
+		m.gates[c] = true
+	else:
+		m.fences[c] = true
+	_occ_dirty = true
+	var inside := pen_inside(p)
+	for a in m.sheep:
+		if a.alive and a.cell == c:
+			var to := c
+			for d in DIRS:
+				var n: Vector2i = c + d
+				if walkable(n) and not m.gates.has(n) and (inside.has_point(n) or to == c):
+					to = n
+			a.cell = to
+			a.pos = Vector2(to)
+			a.dest = null
+	if pen_done(p):
+		for a in m.sheep:
+			if a.alive and a.get("pen", 0) == 0 and inside.has_point(a.cell):
+				a.pen = p.id
+				a.lead = false
+		stats.pens = stats.get("pens", 0) + 1
+		_toast("A pen is finished, with room for %d animals." % pen_room(p))
+	rev += 1
+
+
+## Leading a marked animal into a pen with room (issue #139): catch it, walk it to the gate, and let
+## it in.
+func _lead_job(r: Dictionary, c: Vector2i):
+	var leads := m.sheep.filter(func(a): return a.alive and a.get("lead", false) and a.get("pen", 0) == 0 and a.claim == 0 and not _cooling(a))
+	if leads.is_empty():
+		return null
+	var a: Dictionary = nearest(leads, c)
+	var pens := m.pens.filter(func(p): return pen_done(p) and pen_free(p) > 0)
+	if pens.is_empty():
+		return null
+	pens.sort_custom(func(x, y): return manhattan(x.gate, a.cell) < manhattan(y.gate, a.cell))
+	var p: Dictionary = pens[0]
+	var one: String = Defs.SPECIES[a.species].one
+	var j := Job.new("lead", "Going to lead a %s to the pen" % one, "this %s" % one)
+	j.work = "hunt"
+	j.target = a
+	a.claim = r.id
+	a.led_to = p.id
+	j.hold({"t": "claim", "ent": a})
+	j.hold({"t": "lead", "ent": a})
+	j.step({"op": "chase", "target": a, "planned_for": null})
+	j.step({"op": "leash", "target": a, "label": "Leading a %s to the pen" % one})
+	j.step(_goto([p.gate], false))
+	j.step({"op": "pen_in", "target": a, "pen": p})
+	return j
+
+
+## Feeding a pair in a pen (issue #139): wheat from the packs, one for each, and a young one follows.
+func _feed_job(r: Dictionary, c: Vector2i):
+	if expedition.get("supplies", {}).get("wheat", 0) < 2 * Tuning.FEED_WHEAT:
+		return null
+	var pens: Array = m.pens.duplicate()
+	pens.sort_custom(func(x, y): return manhattan(x.gate, c) < manhattan(y.gate, c))
+	for p in pens:
+		var pairs := feed_pairs(p)
+		if pairs.is_empty():
+			continue
+		var pair: Array = pairs[0]
+		var many: String = Defs.SPECIES[pair[0].species].many
+		var j := Job.new("feed", "Going to feed a pair of %s" % many, "the pen")
+		j.work = "farm"
+		j.target = pair[0]
+		for a in pair:
+			a.claim = r.id
+			j.hold({"t": "claim", "ent": a})
+		j.step(_goto([m.entrance], false))
+		j.step({"op": "take_supply", "type": "wheat", "n": 2 * Tuning.FEED_WHEAT})
+		j.step({"op": "chase", "target": pair[0], "planned_for": null})
+		j.step({"op": "work", "what": "feed", "pair": pair, "label": "Feeding the %s" % many})
+		return j
+	return null
+
+
+## Each tick on a map with pens: fed pairs have their young, and the young grow up.
+func _step_pens() -> void:
+	for a in m.sheep:
+		if a.alive and a.get("young", false) and tick >= a.grown_at:
+			a.young = false
+			rev += 1
+	for p in m.pens:
+		var ready := {}
+		for a in penned(p):
+			if a.get("fed_at", -1) >= 0 and tick >= a.fed_at + int(Tuning.BREED_TIME * Tuning.TPS):
+				if not ready.has(a.species):
+					ready[a.species] = []
+				ready[a.species].append(a)
+		for sp in ready:
+			var l: Array = ready[sp]
+			for i in range(0, l.size() - 1, 2):
+				_breed(p, l[i], l[i + 1])
+
+
+func _breed(p: Dictionary, a: Dictionary, b: Dictionary) -> void:
+	for x in [a, b]:
+		x.fed_at = -1
+		x.cool_until = tick + int(Tuning.BREED_COOLDOWN * Tuning.TPS)
+	var kid := add_animal(a.cell, a.species)
+	kid.pen = p.id
+	kid.young = true
+	kid.grown_at = tick + int(Tuning.GROW_TIME * Tuning.TPS)
+	stats.bred = stats.get("bred", 0) + 1
+	rev += 1
+	_toast("A %s was born in the pen." % Defs.SPECIES[a.species].young)
 
 
 ## Travelers, in the order they arrive. The first is always Tomas.
@@ -2260,10 +2757,17 @@ func designate_mine(rect: Rect2i, single = null, kinds := ["tree", "boulder"]) -
 ## kind. A single click on an already-marked one (pass it as `single`) unmarks it instead.
 func designate_hunt(rect: Rect2i, single = null, species := "") -> void:
 	var hit: Array = [single] if single != null else m.sheep.filter(func(sh): return sh.alive and rect.has_point(sh.cell) and (species == "" or sh.species == species))
+	hit = hit.filter(func(sh): return not sh.get("young", false))  # the young can't be hunted (issue #139)
 	var all_on := not hit.is_empty() and hit.all(func(o): return o.des)
 	for o in hit:
 		o.des = not (single != null and all_on)
 		o.unreach_until = 0
+		if o.des and o.get("lead", false):
+			o.lead = false
+			if o.claim != 0:
+				var lr := resident(o.claim)
+				if not lr.is_empty() and lr.job != null and lr.job.kind == "lead":
+					fail_job(lr)
 		if not o.des and o.claim != 0:
 			var r := resident(o.claim)
 			if not r.is_empty() and r.job != null and is_same(r.job.target, o):
@@ -2661,7 +3165,10 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 			party.append(r.id)
 			break
 	var meadow := dest == Meadow.ID  # issue #137: wool, and no pickaxes, for the meadow
+	var sticks := fence_left() if meadow else 0  # issue #139: what the pens need
+	var wheat := wheat_wanted() if meadow else 0
 	return {"dest": dest, "party": party, "target": {"item": "wool" if meadow else "coal", "n": 6 if meadow else 8}, "meals": 3, "picks": 0 if meadow else 1,
+		"sticks": sticks, "wheat": wheat,
 		"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": cart_adds_room()}
 
 
@@ -2670,9 +3177,9 @@ static func pack_capacity(plan: Dictionary) -> int:
 	return plan.party.size() * Tuning.PACK_CAPACITY + (Tuning.CART_CAPACITY if plan.get("cart_cap", false) else 0)
 
 
-## Room the supplies take: a meal or a spare pickaxe is one item each.
+## Room the supplies take: a meal, a spare pickaxe, a stick or a wheat is one item each.
 static func plan_supplies(plan: Dictionary) -> int:
-	return plan.meals + plan.picks
+	return plan.meals + plan.picks + plan.get("sticks", 0) + plan.get("wheat", 0)
 
 
 ## Room left in the packs for what the party brings back.
@@ -2722,7 +3229,7 @@ func plan_problems(plan: Dictionary) -> Array:
 		var room := cargo_room(plan)
 		if room < 1:
 			out.append("The supplies fill the packs. Take fewer, or more people")
-		elif plan.target.n > room:
+		elif plan.target.n > room and plan.target.item != "pens":
 			out.append("The packs only have room for %s" % Defs.words(plan.target.item, room))
 	if not plan.policy.values().has(true):
 		out.append("Choose when the party comes home")
@@ -2747,7 +3254,7 @@ func plan_expedition(plan: Dictionary) -> String:
 
 ## Meals and spare pickaxes at the board so far, plus those on their way there when `incoming`.
 func packed(incoming := false) -> Dictionary:
-	var out := {"meals": 0, "picks": 0}
+	var out := {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0}
 	var b := site(expedition.get("board", 0))
 	if b.is_empty():
 		return out
@@ -2757,15 +3264,20 @@ func packed(incoming := false) -> Dictionary:
 				out.meals += src[k]
 			elif Defs.ITEMS[k].get("tool", "") == "pick":
 				out.picks += src[k]
+			elif k == "wheat":
+				out.wheat += src[k]
+			elif k == "stick":
+				out.sticks += src[k]
 	return out
 
 
-## What's still to be packed, less what's on its way: {meals, picks}.
+## What's still to be packed, less what's on its way: {meals, picks, wheat, sticks}.
 func pack_needs() -> Dictionary:
 	if expedition.get("state", "") != "staging":
-		return {"meals": 0, "picks": 0}
+		return {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0}
 	var p := packed(true)
-	return {"meals": maxi(0, expedition.meals - p.meals), "picks": maxi(0, expedition.picks - p.picks)}
+	return {"meals": maxi(0, expedition.meals - p.meals), "picks": maxi(0, expedition.picks - p.picks),
+		"wheat": maxi(0, expedition.get("wheat", 0) - p.wheat), "sticks": maxi(0, expedition.get("sticks", 0) - p.sticks)}
 
 
 ## A delivery of supplies to the board (issue #107): meals first, then spare pickaxes, the best first.
@@ -2786,6 +3298,12 @@ func _pack_job(r: Dictionary, c: Vector2i):
 		if not picks.is_empty():
 			picks.sort_custom(func(a, x): return Defs.ITEMS[a.type].tier > Defs.ITEMS[x.type].tier or (a.type == x.type and a.dur > x.dur))
 			return _deliver_job(b, picks[0].type, 1, picks[0])
+	for k in [["wheat", "wheat"], ["sticks", "stick"]]:  # for the pens (issue #139)
+		if need[k[0]] > 0:
+			var src := stacks_where(func(st): return st.type == k[1] and avail(st) > 0)
+			if not src.is_empty():
+				var st: Dictionary = nearest(src, c)
+				return _deliver_job(b, st.type, mini(mini(need[k[0]], carry_cap(r)), avail(st)), st)
 	return null
 
 
@@ -2814,6 +3332,10 @@ func depart_blocker() -> String:
 	var picks: int = expedition.picks - p.picks
 	if picks > 0:
 		return "Waiting for %d spare %s to pack" % [picks, "pickaxe" if picks == 1 else "pickaxes"]
+	for k in [["wheat", "wheat"], ["sticks", "stick"]]:
+		var n: int = expedition.get(k[0], 0) - p[k[0]]
+		if n > 0:
+			return "Waiting for %s to pack" % Defs.words(k[1], n)
 	for id in expedition.party:
 		var r := resident(id)
 		if not at_board(r):
@@ -2839,7 +3361,10 @@ func depart() -> String:
 	expedition.cart = cart_ready()  # the party rides the line if there's a cart at the village station (issue #124)
 	expedition.cart_cap = cart_adds_room()
 	expedition.broken = 0
-	expedition.provisions = expedition.packed.duplicate()  # the meals in the packs (issue #109)
+	expedition.provisions = {}  # the meals in the packs (issue #109)
+	expedition.supplies = {}  # sticks and wheat for the pens (issue #139)
+	for k in expedition.packed:
+		expedition["provisions" if Defs.MEALS.has(k) else "supplies"][k] = expedition.packed[k]
 	expedition.cargo = {}
 	expedition.hurt = {}
 	var names: Array = []
@@ -3044,8 +3569,9 @@ func _start_unloading() -> void:
 	if not ex.get("cargo_unloaded", false):
 		for k in ex.get("cargo", {}):
 			left[k] = left.get(k, 0) + ex.cargo[k]
-	for k in ex.get("provisions", {}):
-		left[k] = left.get(k, 0) + ex.provisions[k]
+	for src in [ex.get("provisions", {}), ex.get("supplies", {})]:
+		for k in src:
+			left[k] = left.get(k, 0) + src[k]
 	ex.unpack = left
 	ex.unpack_tools = ex.get("tools", []).duplicate(true)
 	ex.unloading = true
@@ -3793,7 +4319,7 @@ func at_site(r: Dictionary) -> bool:
 ## The packs: what's in them, against what they hold. Meals and spare pickaxes count, as does cargo.
 func pack_load() -> int:
 	var n: int = expedition.get("tools", []).size()
-	for src in [expedition.get("provisions", {}), expedition.get("cargo", {})]:
+	for src in [expedition.get("provisions", {}), expedition.get("cargo", {}), expedition.get("supplies", {})]:
 		for k in src:
 			n += src[k]
 	return n
@@ -3837,8 +4363,8 @@ static func block_yield(item: String) -> int:
 ## Whether a block gives the objective's resource (stone, coal or iron ore), or an animal does when
 ## it's hunted (wool, leather or meat).
 static func gives(b: Dictionary, item: String) -> bool:
-	if b.get("kind", "") == "animal":
-		return Tuning.ANIMAL_DROPS[b.species].has(item)
+	if b.get("kind", "") == "animal":  # the young can't be hunted, nor can one being led to a pen (issue #139)
+		return Tuning.ANIMAL_DROPS[b.species].has(item) and not b.get("young", false) and not b.get("lead", false)
 	match item:
 		"cobble": return not b.has("ore")
 		"coal": return b.get("ore", "") == "coal"
@@ -3868,14 +4394,9 @@ func _site_job(r: Dictionary):
 		w.step(_goto([m.entrance], false))
 		w.step({"op": "rest_site"})
 		return w
+	if m.id == Meadow.ID:
+		return _meadow_job(r, c)
 	var can_mine: bool = r.get("hurt", 0) == 0
-	var prey := m.sheep.filter(func(a): return a.alive and a.des and a.claim == 0 and not _cooling(a))
-	if not prey.is_empty() and m.boulders.is_empty():  # the meadow: hunt what's marked, then pack it (issue #137)
-		var pk = _stow_job(r, c)
-		if pk != null and (pk.target.type == expedition.target.item and objective_packed() < expedition.target.n or pack_load() + 4 >= pack_capacity(expedition)):
-			return pk
-		_drop_unused(r, pk)
-		return _tagged(_hunt_job(r, nearest(prey, c)), "hunt")
 	if can_mine and r.pick == null and not expedition.get("tools", []).is_empty():
 		var t := Job.new("equip", "Taking a spare pickaxe from the packs", "the packs")
 		t.step(_goto([m.entrance], false))
@@ -3904,6 +4425,24 @@ func _site_job(r: Dictionary):
 	return pj
 
 
+## What a party member does at the meadow (issues #137, #139): pack what the objective still needs,
+## build the pens, lead marked animals in, feed pairs, hunt what's marked, then pack the rest.
+func _meadow_job(r: Dictionary, c: Vector2i):
+	var pk = _stow_job(r, c)
+	if pk != null and ((pk.target.type == expedition.target.item and objective_left() > 0) or pack_load() + 4 >= pack_capacity(expedition)):
+		return pk
+	for f in [_fence_job, _lead_job, _feed_job]:
+		var j = f.call(r, c)
+		if j != null:
+			_drop_unused(r, pk)
+			return j
+	var prey := m.sheep.filter(func(a): return a.alive and a.des and a.claim == 0 and not _cooling(a))
+	if not prey.is_empty():
+		_drop_unused(r, pk)
+		return _tagged(_hunt_job(r, nearest(prey, c)), "hunt")
+	return pk
+
+
 ## A job that was drawn up but not taken: what it reserved is free again.
 func _drop_unused(r: Dictionary, j) -> void:
 	if j != null:
@@ -3914,7 +4453,7 @@ func _drop_unused(r: Dictionary, j) -> void:
 ## there's room, anything else only in the room the rest of the objective doesn't need.
 func _stowable() -> bool:
 	var item: String = expedition.target.item
-	var spare := pack_room() - maxi(0, expedition.target.n - objective_packed())
+	var spare := pack_room() - objective_left()
 	return not stacks_where(func(s): return avail(s) > 0 and ((s.type == item and pack_room() > 0) or spare > 0)).is_empty()
 
 
@@ -3926,7 +4465,7 @@ func _stow_job(r: Dictionary, c: Vector2i):
 	# The objective's resource until there's enough of it, then anything else mined, then more of it,
 	# but only once nothing else is marked to mine, so the packs keep room for what's still to come.
 	var item: String = expedition.target.item
-	var short: bool = objective_packed() < expedition.target.n
+	var short: bool = objective_left() > 0
 	var working := m.boulders.any(func(b): return b.alive and b.des) or m.sheep.any(func(a): return a.alive and a.des)
 	var loose := stacks_where(func(s): return avail(s) > 0 and (short or s.type != item or not working))
 	if loose.is_empty():
@@ -3936,7 +4475,7 @@ func _stow_job(r: Dictionary, c: Vector2i):
 	var st: Dictionary = loose[0]
 	var n: int = mini(mini(avail(st), carry_cap(r)), room)
 	if st.type != item:  # the packs keep room for the rest of the objective; anything else takes what's spare
-		n = mini(n, room - maxi(0, expedition.target.n - objective_packed()))
+		n = mini(n, room - objective_left())
 		if n <= 0:
 			return null
 	var j := Job.new("stow", "Packing %s" % Defs.ITEMS[st.type].many, "the packs")
@@ -3955,6 +4494,13 @@ func _stow_job(r: Dictionary, c: Vector2i):
 ## what's packed, lying about and marked will make the target (issue #109). Blocks under a known
 ## loose ceiling are left for the player to choose.
 func _mark_objective() -> void:
+	if tending():  # the penned animals over the herd size kept (issue #139)
+		for a in pen_surplus():
+			if not a.des:
+				a.des = true
+				a.unreach_until = 0
+				rev += 1
+		return
 	var item: String = expedition.target.item
 	var have := objective_packed()
 	for st in m.items.values():
@@ -3964,7 +4510,7 @@ func _mark_objective() -> void:
 		var hunted := m.sheep.filter(func(a): return a.alive and a.des and gives(a, item))
 		if have + hunted.size() * block_yield(item) >= expedition.target.n or hunted.size() >= expedition.party.size():
 			return
-		var herd := m.sheep.filter(func(a): return a.alive and not a.des and gives(a, item))
+		var herd := m.sheep.filter(func(a): return a.alive and not a.des and a.get("pen", 0) == 0 and gives(a, item))  # pens are the player's (issue #139)
 		if not herd.is_empty():
 			var a: Dictionary = nearest(herd, m.entrance)
 			a.des = true
@@ -4032,18 +4578,22 @@ func policy_met() -> String:
 	var ex := expedition
 	if not pending.is_empty():
 		return ""
-	if ex.policy.get("target", false) and objective_packed() >= ex.target.n:
+	if ex.policy.get("target", false) and not tending() and objective_packed() >= ex.target.n:
 		return "target reached"
 	if ex.policy.get("full", false) and pack_room() <= 0:
 		return "packs full"
 	if ex.policy.get("low", false) and spendable_meals() <= 0:
 		return "provisions low"
 	var party: Array = ex.party.map(func(id): return resident(id))
-	var busy := party.any(func(r): return r.job != null and r.job.kind in ["gather", "stow", "survey", "eat", "equip", "door"])
+	var busy := party.any(func(r): return r.job != null and r.job.kind in ["gather", "stow", "survey", "eat", "equip", "door", "fence", "lead", "feed"])
 	var to_mine := m.boulders.any(func(b): return b.alive and not b.get("hidden", false) and ((b.des and not _cooling(b)) or (not b.get("loose", false) and gives(b, ex.target.item) and not _way_through(b.cell).is_empty())))
-	to_mine = to_mine or m.sheep.any(func(a): return a.alive and ((a.des and not _cooling(a)) or gives(a, ex.target.item)))
+	to_mine = to_mine or m.sheep.any(func(a): return a.alive and ((a.des and not _cooling(a)) or (a.get("pen", 0) == 0 and gives(a, ex.target.item))))
+	if m.id == Meadow.ID and tending():  # issue #139
+		to_mine = to_mine or pen_work() or not pen_surplus().is_empty()
 	var loose := _stowable()
 	if not busy and not to_mine and not loose and not ex.get("survey", false):
+		if tending():
+			return "the pens are tended"
 		return "nothing left to hunt" if m.id == Meadow.ID else "nothing left to mine"
 	return ""
 
@@ -4090,6 +4640,11 @@ func _stuck_site() -> void:
 		_add_stuck(m.name, "The packs are full", at, 1.6, "", 0, false, true)
 	if expedition.get("survey", false) and not party.any(func(r): return r.pick != null and r.get("hurt", 0) == 0):
 		_add_stuck(m.name, "Investigating the vein needs someone with a pickaxe", at, 1.6, "", 0)
+	var sticks: int = expedition.get("supplies", {}).get("stick", 0)
+	if fence_left(map_id) > 0 and sticks < Tuning.FENCE_STICKS and not party.any(func(r): return r.job != null and r.job.kind == "fence"):
+		_add_stuck(m.name, "The pens need %s more. Pack them next time" % Defs.words("stick", fence_left(map_id)), at, 1.6, "", 0, false, true)
+	if m.sheep.any(func(a): return a.alive and a.get("lead", false) and a.get("pen", 0) == 0) and not m.pens.any(func(p): return pen_done(p) and pen_free(p) > 0):
+		_add_stuck(m.name, "No finished pen has room for the animals marked to lead", at, 1.6, "", 0, false, true)
 
 
 # ---------------------------------------------------------------- choices that stop the game (issues #110, #111)
@@ -4170,12 +4725,84 @@ func _roll(chance: float) -> bool:
 	return rng.randf() < chance
 
 
+## A hazard strikes someone with `chance` (issues #110, #140). Armor takes the blow and wears, and
+## turns some injuries aside; a full set makes a serious one less likely. `serious` is the chance an
+## injury is serious, 0 for one that never is.
+func _hazard(r: Dictionary, chance: float, serious: float, cause: String) -> void:
+	if not _roll(chance):
+		return
+	var guard := protection(r)
+	var full := armor_worn(r).size() == Defs.ARMOR_SLOTS.size()
+	if guard > 0.0:
+		_wear_armor(r)
+		if _roll(guard):
+			stats.turned_aside = stats.get("turned_aside", 0) + 1
+			_toast("%s's armor turned aside %s." % [r.name, cause], r.id)
+			return
+	var level := 1
+	if serious > 0.0 and _roll(serious * (Tuning.FULL_SET_SERIOUS if full else 1.0)):
+		level = 2
+	injure(r, level, cause)
+
+
+## The armor someone has on: slot -> {type, dur}.
+static func armor_worn(r: Dictionary) -> Dictionary:
+	var out := {}
+	for slot in r.get("armor", {}):
+		if r.armor[slot] != null:
+			out[slot] = r.armor[slot]
+	return out
+
+
+## The share of hazard injuries someone's armor turns aside (issue #140).
+static func protection(r: Dictionary) -> float:
+	var g := 0.0
+	for slot in armor_worn(r):
+		g += Tuning.ARMOR_GUARD[slot]
+	return g
+
+
+## Every piece worn takes the blow: a use each, and one used up wears out.
+func _wear_armor(r: Dictionary) -> void:
+	for slot in armor_worn(r):
+		var a: Dictionary = r.armor[slot]
+		a.dur -= 1
+		if a.dur <= 0:
+			r.armor[slot] = null
+			stats.armor_worn_out = stats.get("armor_worn_out", 0) + 1
+			_toast("%s's %s wore out." % [r.name, Defs.ITEMS[a.type].one], r.id)
+	rev += 1
+
+
+## Putting on armor lying about (issue #140): the nearest piece for a slot they haven't filled.
+## Like tools, residents take it themselves; only in the village.
+func _dress_job(r: Dictionary, c: Vector2i):
+	if map_id != "village":
+		return null
+	var pieces := stacks_where(func(s): return Defs.is_armor(s.type) and avail(s) > 0 and r.get("armor", {}).get(Defs.ITEMS[s.type].armor) == null)
+	if pieces.is_empty():
+		return null
+	return _dress(r, nearest(pieces, c))
+
+
+func _dress(r: Dictionary, stack: Dictionary) -> Job:
+	if not r.has("armor"):
+		r.armor = {}
+	var it: Dictionary = Defs.ITEMS[stack.type]
+	var j := Job.new("dress", "Going to put on the %s" % it.one, "the %s" % it.one)
+	stack.res += 1
+	var hd := j.hold({"t": "stack", "stack": stack, "n": 1})
+	j.step(_goto([stack.cell], false))
+	j.step({"op": "pickup_armor", "stack": stack, "hold": hd})
+	return j
+
+
 ## Stepping onto a ledge in the dark can be a fall.
 func _ledge_step(r: Dictionary, c: Vector2i) -> void:
-	if c in m.ledges and m.is_dark(c) and _roll(fall_chance(m.level)):
-		injure(r, 2 if _roll(Tuning.FALL_SERIOUS) else 1, "a fall in the dark")
-	elif c in m.banks and _roll(Tuning.SLIP_CHANCE):  # the meadow's pond bank (issue #137): never serious
-		injure(r, 1, "a slip on the pond bank")
+	if c in m.ledges and m.is_dark(c):
+		_hazard(r, fall_chance(m.level), Tuning.FALL_SERIOUS, "a fall in the dark")
+	elif c in m.banks:  # the meadow's pond bank (issue #137): never serious
+		_hazard(r, Tuning.SLIP_CHANCE, 0.0, "a slip on the pond bank")
 
 
 ## The chance a loose ceiling comes down, and of a fall from a ledge in the dark: higher on each level
@@ -4474,6 +5101,10 @@ func adventures() -> Array:
 			for k in hs:
 				n += hs[k]
 			what = "Cows, pigs, sheep · %d animals" % n if rep.visited else "Sheep, cows and pigs, they say"
+			var pens: Array = maps[id].pens
+			if not pens.is_empty():  # issue #139
+				var penned: int = maps[id].sheep.filter(func(a): return a.alive and a.get("pen", 0) != 0).size()
+				what += " · %d %s, %d penned" % [pens.size(), "pen" if pens.size() == 1 else "pens", penned]
 		else:
 			var names: Array = rep.resources.filter(func(x): return x.known).map(func(x): return x.name)
 			what = ", ".join(names)

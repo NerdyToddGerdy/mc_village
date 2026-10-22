@@ -42,6 +42,20 @@ const MEADOW_WALK := 30.0               ## Seconds walking between the west sign
 const MEADOW_REGROW := {"sheep": 240.0, "cow": 300.0, "pig": 180.0}  ## Seconds for a species to regain one animal.
 const BULL_CHANCE := 0.15               ## Chance hunting a cow gets the hunter hurt by an angry bull (never seriously).
 const SLIP_CHANCE := 0.03               ## Chance of a slip each time someone steps onto the pond's bank (never serious).
+# Leather armor (Slice 3.5, issue #140).
+const ARMOR_GUARD := {"head": 0.05, "chest": 0.15, "legs": 0.1, "feet": 0.05}  ## Share of hazard injuries each piece turns aside.
+const FULL_SET_SERIOUS := 0.5           ## A full set multiplies the chance an injury is serious by this.
+const ARMOR_USES := 8                   ## Hazards a leather piece takes before it wears out.
+# Pens and breeding (Slice 3.5, issue #139).
+const PEN_MIN := 4                      ## A pen's smallest side, fences included (2 cells inside).
+const PEN_MAX := 8                      ## A pen's largest side, fences included.
+const FENCE_STICKS := 1                 ## Sticks for each fence or gate cell of a pen.
+const FENCE_TIME := 2.0                 ## Seconds to put up one fence or the gate.
+const FEED_WHEAT := 1                   ## Wheat each animal of a pair eats when it's fed.
+const FEED_TIME := 2.0                  ## Seconds to feed a pair.
+const BREED_TIME := 30.0                ## Seconds from feeding a pair to its young one.
+const BREED_COOLDOWN := 300.0           ## Seconds before a pair that bred can be fed again.
+const GROW_TIME := 240.0                ## Seconds for a young animal to grow up; till then it can't be hunted.
 
 # Site maps (Slice 3, issues #102, #103).
 const ORE_YIELD := {"coal": 3, "iron": 4}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).

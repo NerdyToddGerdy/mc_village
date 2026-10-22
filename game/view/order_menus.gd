@@ -7,6 +7,8 @@ extends RefCounted
 ## the name), mark (the icon drawn for it), and optionally `unlock`, a condition it waits for:
 ##   "animals": a live animal exists on the map in view.
 ##   "founded": the founding is done (Slice 3's expedition board, issue #105).
+##   "village": the map in view is the village; "meadow": it's the meadow (issue #139).
+##   "pens": a pen is painted on the map in view (issue #139).
 
 const MENUS := {
 	"gather": {"name": "Gather", "entries": [
@@ -14,10 +16,12 @@ const MENUS := {
 		{"id": "chop", "name": "Chop trees", "sub": "Trees only", "mark": "chop"},
 		{"id": "break", "name": "Break boulders", "sub": "Boulders only. Breaking them needs a pickaxe", "mark": "break"},
 		{"id": "hunt", "name": "Hunt", "sub": "Sheep, cows and pigs, for wool, leather and meat. Shift: one kind only", "mark": "hunt", "unlock": "animals"},
+		{"id": "lead", "name": "Lead to a pen", "sub": "Animals the party walks into a pen with room", "mark": "lead", "unlock": "pens"},
 	]},
 	"paint": {"name": "Paint", "entries": [
-		{"id": "stock", "name": "Stockpile", "sub": "Where residents store what they gather", "mark": "stock"},
-		{"id": "farm", "name": "Farm plot", "sub": "Open grass where residents grow wheat", "mark": "farm"},
+		{"id": "stock", "name": "Stockpile", "sub": "Where residents store what they gather", "mark": "stock", "unlock": "village"},
+		{"id": "farm", "name": "Farm plot", "sub": "Open grass where residents grow wheat", "mark": "farm", "unlock": "village"},
+		{"id": "pen", "name": "Pen", "sub": "A fenced pen for animals. The party builds it, a stick a fence", "mark": "pen", "unlock": "meadow"},
 	]},
 	"build": {"name": "Build", "entries": [
 		{"id": "bench", "name": "Crafting bench", "sub": "4 logs. Reserves room for a workshop", "mark": "build"},
@@ -28,7 +32,7 @@ const MENUS := {
 }
 
 ## The tools a Gather or Paint entry switches on: they mark or paint by dragging over the map.
-const MARK_TOOLS := ["mine", "chop", "break", "hunt", "stock", "farm"]
+const MARK_TOOLS := ["mine", "chop", "break", "hunt", "lead", "stock", "farm", "pen"]
 
 
 ## The menu an order tool belongs to, or "".
@@ -51,6 +55,12 @@ static func unlocked(e: Dictionary, sim: Sim) -> bool:
 			return sim.sheep.any(func(sh): return sh.alive)
 		"founded":
 			return Goals.current(sim) < 0
+		"village":
+			return sim.map_id == "village"
+		"meadow":
+			return sim.map_id == Meadow.ID
+		"pens":
+			return not sim.m.pens.is_empty()
 	return true
 
 

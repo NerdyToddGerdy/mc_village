@@ -13,7 +13,7 @@ Tracking issue: #144. Decisions settled with the owner (2026-10-21), and recorde
 | Leather armor | **Reduces injuries** from expedition hazards. Later, Protection enchantments build on it. |
 | Adventures | The expedition board lists every destination. |
 
-Issues not built yet carry their own rules, and add their section here when they're built: #139 (pens and breeding), #140 (leather armor), #141 (grouped inventory in the tally bar) and #142 (the Slice 3.5 playtests).
+Every issue of the slice has its section here: the adventures list (#136), the meadow (#137), cows and pigs (#138), pens and breeding (#139), leather armor (#140), the grouped tally bar (#141) and the playtests (#142).
 
 ## 1. Scope and done criteria
 
@@ -50,7 +50,7 @@ From a Slice 3 village, a player can:
 - **Water** on a site map can't be walked through: the pond is walked around. Only the road's stream (Slice 4) is forded.
 - **Fences** stand like rock: nobody walks through them.
 
-**Herds.** Sheep, cows and pigs wander it (§4): 9 sheep, 6 cows and 6 pigs at the start, the most it holds of each.
+**Herds.** Sheep, cows and pigs wander it (§4): 9 sheep, 6 cows and 6 pigs at the start, the most it holds of each in the wild. Pens (§5) can hold more.
 
 **Going there.** An expedition like the old mine's: plan the party, provisions and objective at the board; pack, stage and depart. The party carries the packs to the **meadow signpost** on the village's west edge and walks off the map for `MEADOW_WALK`. They're away: not drawn, not working and not getting hungry, and their panels say "On the way to the meadow, N s". The way home is the same walk back, to the same signpost, where they unpack.
 
@@ -71,7 +71,7 @@ An injured resident hunts on, slower, and heals in bed at home.
 
 **The site report.** Before anyone has been there as an expedition: "A meadow a short walk west, with sheep, cows and pigs." Once visited: what all the animals would give if hunted (wool, mutton, leather, beef, porkchops), the herds, the two hazards, and "Open grass: room for the whole party".
 
-**Regrowth.** Each species grows back on its own, one animal every `MEADOW_REGROW` for that species, up to its starting herd. New animals wander in at the far west edge. This replaces Slice 2's "the meadow regains 1 sheep every 4 minutes" (#22). Pens and breeding (#139) will beat it.
+**Regrowth.** Each species grows back on its own, one animal every `MEADOW_REGROW` for that species, up to its starting herd. Only wild animals count toward the herd; penned ones don't. New animals wander in at the far west edge. This replaces Slice 2's "the meadow regains 1 sheep every 4 minutes" (#22). Pens and breeding (§5) are how the player gets more.
 
 **Replacing the old trip.** "Send to the meadow" is gone from the resident panel, along with the "Meadow has no sheep left" reason. Wool for more beds comes from the clearing's sheep, then from the meadow adventure.
 
@@ -93,14 +93,73 @@ The species are told apart by shape as well as colour. An animal's panel says wh
 
 **Items.** Leather, raw beef, cooked beef, raw porkchop and cooked porkchop, each with a palette colour, a drawing and a tally entry. Leather is a material.
 
-## 5. Saving
+## 5. Pens and breeding (#139)
+
+**Painting a pen.** The **Pen** order, in the Paint menu, is for the meadow only (the Paint menu's Stockpile and Farm plot are for the village only). Dragging paints a pen, fences included: from `PEN_MIN`×`PEN_MIN` to `PEN_MAX`×`PEN_MAX`, on open grass: not on the pond or its bank, an old fence, a tree, the way in or another pen. The drag's outline goes red, with the reason, where a pen can't go; otherwise the hint gives its size, room and sticks. The **gate** is the middle of the side nearest the entrance. Starting a drag on a pen takes it down: its fences come down and its animals go free. The pen's panel shows its fences built, what's in it and how breeding works, with **Take the pen down**.
+
+**Building it.** The pen is a blueprint of blue ghost posts round its edge. Each fence, and the gate, takes `FENCE_STICKS` sticks and `FENCE_TIME` of Build work. Only a party at the meadow builds it, with sticks from its packs: a member takes as many sticks as they can carry at the entrance, puts up the nearest fences, and puts what's left back in the packs. A fence stands like rock; the gate lets people through but never animals. When the last one is up, "A pen is finished" and any animal inside is penned. Room is one animal for each cell inside.
+
+**Leading animals in.** The **Lead to a pen** order, in the Gather menu once a pen is painted on the map in view, marks animals with a blue loop (a click or a drag; clicking a marked one unmarks it). Hunting a marked animal unmarks its lead, and the other way round. A party member at the meadow catches a marked animal, walks it to the gate of the nearest finished pen with room, and lets it in. Penned animals stay inside; wild ones keep out.
+
+**Breeding.** Two grown animals of one kind in a pen, fed `FEED_WHEAT` wheat each from the packs, have a young one after `BREED_TIME` (a wheat-coloured heart shows over each until then), if the pen has room. A pair that bred can't be fed again for `BREED_COOLDOWN`. The young (lamb, calf, piglet) are drawn smaller, grow up in `GROW_TIME`, and **can't be hunted** till then. Breeding and growing go on whether or not anyone is there.
+
+**The party's order of work** at the meadow, under any objective: pack what the objective still needs, build fences, lead marked animals in, feed pairs, hunt what's marked, then pack the rest. The objective's own hunting leaves penned animals alone.
+
+**Tend the pens.** A second kind of meadow objective, offered once a pen is painted: **Tend the pens**, with **Keep N of each** instead of a number to bring back. The party builds, leads and feeds as above, and hunts only the penned animals over N of each kind (grown ones not waiting to breed), packing their drops. It comes home, "the pens are tended", when nothing's left to do. Tending needs no cargo room.
+
+**Packing for the pens.** The meadow planner adds **Sticks for fences** and **Wheat to feed pairs**, filled in with what the pens need now ("the pens need 12 sticks", "1 pair can be fed now, for 2 wheat"). Sticks and wheat are packed at the board like meals, take pack room like any supplies, and are carried as the expedition's **supplies**, apart from the meals. What's left comes home and is unpacked.
+
+**Stuck reasons** at the meadow, in the dim Waiting tier: "The pens need 12 sticks more. Pack them next time" and "No finished pen has room for the animals marked to lead".
+
+## 6. Leather armor (#140)
+
+**Pieces**, made at the bench from leather, as **Craft** work like anything queued by hand (in line with #134). The Toolsmith's spares don't cover armor.
+
+| Piece | Leather | Slot | Guard |
+|---|---|---|---|
+| Leather cap | 5 | head | 5% |
+| Leather tunic | 8 | chest | 15% |
+| Leather trousers | 7 | legs | 10% |
+| Leather boots | 4 | feet | 5% |
+
+**Wearing it.** Each resident has one slot per piece. A resident in the village with a slot empty walks to the nearest piece for it lying about or stockpiled and puts it on, like picking up a tool. Each piece is one to a cell, with its uses, like a tool. The resident panel's **Armor** row gives the guard ("20% guard", ", full set") and each piece's uses; the Tools and armor dropdown (§7) lists it too. Worn armor tints the model: brown boots, trousers, a tunic over the shirt and a cap.
+
+**What it does.** When a hazard strikes someone (a cave-in, a fall, an angry bull, a slip):
+- each piece worn takes the blow and loses a use; a piece used up wears out ("Ada's leather tunic wore out.");
+- the armor turns aside its guard's share of injuries (the guards add up, 35% for a full set): "Ada's armor turned aside a cave-in.";
+- a **full set** also multiplies the chance an injury is serious by `FULL_SET_SERIOUS`.
+
+**The planner** shows the party's armor against the hazards: "Armor against the hazards: Ada 15%, Tomas none. It turns aside that share of injuries."
+
+**Later:** iron armor and Protection enchantments (brief §9) build on this.
+
+## 7. The tally bar's groups (#141)
+
+The tally bar shows a total per **group**, each a button: **Building** (logs, planks, sticks, cobblestone, rails, minecarts), **Food** (meals, raw meat, wheat, berries), **Tools and armor**, **Animal goods** (wool, leather) and **Ores** (coal, iron ore, iron). Each item names its group in `defs.gd`. A group shows once one of its items has turned up (or a building or recipe waits for one); Tools and armor always shows.
+- **Food** reads "Food  6 meals · 2 raw": meals on hand (bread and every cooked meat) and raw meat to cook, apart. It's yellow when there are fewer meals than residents.
+- **Hovering or clicking a group** opens its dropdown under it, listing each item with its count and how many lie loose, and a **Pin** button. Food's adds meals on hand, raw meat to cook and berries on bushes. Tools and armor's is Slice 1's Tools dropdown, with what each resident wears and spare armor. The dropdowns open and close like Slice 1's Tools list (#90): a click pins one open; a click elsewhere or Esc closes it.
+- **Pinned items** (up to `MAX_PINNED`) show in the bar on their own, before the groups. Pins are a view preference, kept with the key bindings, not in game saves.
+
+## 8. The playtests (#142)
+
+**The bot**, `tests/playtest_slice35.gd`, plays from a Slice 3 village (`tests/fixtures/slice3_village.save`) through pushed input: it opens each tally group's dropdown and checks its counts, pins logs, paints a pen at the meadow and marks two cows to lead, picks the meadow from the adventures list, plans a trip for beef with the pen's sticks and 2 wheat, packs and departs. At the meadow it marks a pig to hunt; the party builds the pen, leads the cows in, feeds them and hunts; a calf is born. Home, it unloads, cooks beef, crafts a leather tunic and sees it worn, then plans a mine trip, checks the planner's protection line, and runs it. Every stall must name its fix.
+
+**The hand playtest** is a checklist like #51's, on #142: every item of §1 by hand, and every stall understood from its on-screen reason alone.
+
+## 9. Saving
 
 Save format **v20** (shared with Slice 3's deeper levels, #132):
 - **Animals** carry their species. Older saves' animals are all sheep.
 - **The meadow** is a map of its own, with its animals and each species' regrowth time. An older save gets the meadow when it loads, known if the old mine is. What was left of Slice 2's off-map meadow carries over: the new map keeps that many sheep.
 - **Anyone away on Slice 2's timed meadow trip** is home at the meadow signpost, with the wool and raw mutton they'd have brought back set down beside it.
 
-## 6. Tuning table (provisional)
+Save format **v21** (#139, #140):
+- **Pens** are saved with their map: each pen's edge, gate and the fences built, and the map's fences and gates. Penned animals carry their pen; fed ones when they were fed; those resting from breeding when they can be fed again; the young when they grow up. Who's leading which animal isn't saved: the party catches it again.
+- **Armor** each resident wears, with its uses; armor lying about keeps its uses, like tools.
+- **An expedition** carries the sticks and wheat it planned and its supplies.
+- **Older saves:** no pens, nobody wears armor, and an expedition already planned or out packs no sticks or wheat.
+
+## 10. Tuning table (provisional)
 
 | Name | Value | Meaning |
 |---|---|---|
@@ -113,3 +172,16 @@ Save format **v20** (shared with Slice 3's deeper levels, #132):
 | `ANIMAL_DROPS` | sheep 1 wool + 1 mutton; cow 1 leather + 2 beef; pig 2 porkchops | What each animal drops when hunted. |
 | `FOOD_VALUE` | raw beef 20, raw porkchop 20, cooked beef 60, cooked porkchop 60 | Hunger a food restores. |
 | Cooked beef, cooked porkchop | 1 raw meat + 1 log | At the fireplace, in `COOK_TIME` (3 s). |
+| `PEN_MIN`, `PEN_MAX` | 4, 8 | A pen's smallest and largest side, fences included. |
+| `FENCE_STICKS` | 1 | Sticks for each fence or the gate. |
+| `FENCE_TIME` | 2 s | Build work to put one up. |
+| `FEED_WHEAT` | 1 | Wheat each animal of a pair eats when fed. |
+| `FEED_TIME` | 2 s | To feed a pair. |
+| `BREED_TIME` | 30 s | From feeding a pair to its young one. |
+| `BREED_COOLDOWN` | 300 s | Before a pair that bred can be fed again. |
+| `GROW_TIME` | 240 s | For a young animal to grow up. |
+| Leather armor | cap 5, tunic 8, trousers 7, boots 4 leather | At the bench, as Craft work. |
+| `ARMOR_GUARD` | head 0.05, chest 0.15, legs 0.1, feet 0.05 | Share of hazard injuries each piece turns aside. |
+| `FULL_SET_SERIOUS` | 0.5 | A full set multiplies the chance an injury is serious by this. |
+| `ARMOR_USES` | 8 | Hazards a piece takes before it wears out. |
+| `MAX_PINNED` | 4 | Items pinned to the tally bar. |

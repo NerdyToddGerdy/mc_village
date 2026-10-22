@@ -28,7 +28,9 @@ var _tally_seen := {}           ## Item types that have turned up in this game; 
 var _tally_sim := 0             ## Which sim _tally_seen belongs to (it resets for a new or loaded game).
 var _goals_panel: PanelContainer
 var _tools_list := VBoxContainer.new()
-var _tools_pinned := false
+var _drop_pinned := ""          ## The tally group whose dropdown a click pinned open, or "" (issue #141).
+var _drop_group := ""           ## The tally group whose dropdown is open, or "".
+var _group_btns := {}           ## Tally group id -> its button in the tally bar.
 var _pointer := Vector2(-1, -1)
 var _goals := VBoxContainer.new()
 var _speed_btns := {}
@@ -80,12 +82,18 @@ func _ready() -> void:
 	tally_row.add_theme_constant_override("separation", 18)
 	_tallies.add_theme_constant_override("separation", 18)
 	tally_row.add_child(_tallies)
-	_tools_btn = _button("Tools  0  ▾", func():
-		_tools_pinned = not _tools_pinned
-		_tools_btn.release_focus())  # a click pins; only keyboard focus should hold it open (#90)
-	_tools_btn.toggle_mode = true
-	_tools_btn.custom_minimum_size = Vector2(0, 36)
-	tally_row.add_child(_tools_btn)
+	for g in Defs.TALLY_GROUPS:  # one button per group, each opening its dropdown (issue #141)
+		var gb := _button(g[1] + "  ▾", func(): pass)
+		gb.pressed.connect(func():
+			_drop_pinned = "" if _drop_pinned == g[0] else g[0]
+			gb.release_focus())  # a click pins; only keyboard focus should hold it open (#90)
+		gb.set_meta("label", "tally:" + g[0])  # what tests find it by; "Building" alone would match the toolbar's "Build"
+		gb.set_meta("name", g[1])
+		gb.toggle_mode = true
+		gb.custom_minimum_size = Vector2(0, 36)
+		tally_row.add_child(gb)
+		_group_btns[g[0]] = gb
+	_tools_btn = _group_btns.tools
 	_jobs_btn = _button("Jobs", func(): game.toggle_jobs_board())
 	_jobs_btn.toggle_mode = true
 	_jobs_btn.custom_minimum_size = Vector2(0, 36)
@@ -269,6 +277,16 @@ func _draw_mark(c: Control, t: String) -> void:
 			c.draw_arc(Vector2(9, 9), 6, 0, TAU, 24, Palette.RED, 2)
 			for d in [Vector2(1, 0), Vector2(0, 1)]:
 				c.draw_line(Vector2(9, 9) - d * 9, Vector2(9, 9) + d * 9, Palette.RED, 2)
+		"lead":  # a loop of rope, in build blue
+			c.draw_arc(Vector2(9, 8), 5, 0.9, 0.9 + TAU * 0.85, 20, dark, 4)
+			c.draw_arc(Vector2(9, 8), 5, 0.9, 0.9 + TAU * 0.85, 20, Palette.BLUE, 2)
+			c.draw_line(Vector2(12, 12), Vector2(15, 17), dark, 4)
+			c.draw_line(Vector2(12, 12), Vector2(15, 17), Palette.BLUE, 2)
+		"pen":  # posts and rails round a square, in build blue
+			for x in [2.0, 9.0, 16.0]:
+				c.draw_line(Vector2(x, 4), Vector2(x, 16), Palette.LOG, 2.5)
+			for y in [7.0, 12.0]:
+				c.draw_line(Vector2(1, y), Vector2(17, y), Palette.BLUE, 1.5)
 		"stock":  # a green hatched patch
 			c.draw_rect(Rect2(2, 2, 14, 14), Palette.GREEN, false, 1.5)
 			for a in [[Vector2(2, 9), Vector2(9, 2)], [Vector2(2, 16), Vector2(16, 2)], [Vector2(9, 16), Vector2(16, 9)]]:
@@ -447,9 +465,9 @@ func _refresh_toolbar(sim: Sim) -> void:
 	var on_menu := OrderMenus.menu_of(game.tool)
 	var gather: Array = sim.on_map(game.view_map, OrderMenus.entries.bind("gather", sim))
 	var village: bool = game.view_map == "village"
-	_tool_btns.paint.visible = village  # stockpiles, farms and buildings are for the village
+	_tool_btns.paint.visible = village or game.view_map == Meadow.ID  # stockpiles and farms in the village, pens at the meadow
 	_tool_btns.build.visible = village
-	var sig := "%s|%s|%s|%s" % [game.tool, game.menu_open, _keys_sig, gather.size()]
+	var sig := "%s|%s|%s|%s|%s" % [game.tool, game.menu_open, _keys_sig, gather.size(), game.view_map]
 	if sig != _toolbar_sig:
 		_toolbar_sig = sig
 		for t in _tool_btns:
@@ -481,7 +499,7 @@ func _refresh_toolbar(sim: Sim) -> void:
 func _button_mark(t: String) -> String:
 	if OrderMenus.menu_of(game.tool) == t and t != "build":
 		return OrderMenus.entry(game.tool).mark
-	return {"gather": "mine", "paint": "stock"}.get(t, t)
+	return {"gather": "mine", "paint": "pen" if game.view_map == Meadow.ID else "stock"}.get(t, t)
 
 
 ## A toolbar menu row: the order's mark, its name and a line about it, and on the right its number
@@ -646,17 +664,16 @@ func refresh(sim: Sim) -> void:
 func _refresh_tallies(sim: Sim) -> void:
 	var totals := {}
 	var loose := {}
-	var tools := 0
 	for k in sim.items:
 		var s: Dictionary = sim.items[k]
-		if Defs.is_tool_item(s.type):
-			tools += s.n
-			continue
 		totals[s.type] = totals.get(s.type, 0) + s.n
 		if not sim.in_zone(s.cell):
 			loose[s.type] = loose.get(s.type, 0) + s.n
+	var gear := 0  # tools and armor, worn and spare
+	for t in Defs.group_items("tools"):
+		gear += totals.get(t, 0)
 	for r in sim.residents:
-		tools += int(r.axe != null) + int(r.pick != null)
+		gear += int(r.axe != null) + int(r.pick != null) + Sim.armor_worn(r).size()
 	if _tally_sim != sim.get_instance_id():
 		_tally_sim = sim.get_instance_id()
 		_tally_seen.clear()
@@ -672,33 +689,38 @@ func _refresh_tallies(sim: Sim) -> void:
 	var meals := 0
 	for t in Defs.MEALS:
 		meals += totals.get(t, 0)
-	var berries := 0
-	for b in sim.bushes:
-		berries += b.berries
+	var raw := 0
+	for t in Defs.RAW_MEATS:
+		raw += totals.get(t, 0)
 	var low := meals < sim.residents.size()
-	_rebuild(_tallies, "%s%s%s%d%d" % [totals, loose, _tally_seen.keys(), berries, sim.residents.size()], func(c: Container) -> void:
-		for t in Defs.MATERIALS:
-			if _tally_seen.has(t):  # zero counts stay hidden until the item first turns up
-				c.add_child(_tally(Defs.ITEMS[t].label, totals.get(t, 0), loose.get(t, 0)))
-		if _tally_seen.has("mutton") or Defs.MEALS.any(func(t): return _tally_seen.has(t)):
-			c.add_child(_divider())
-			var loose_meals := 0
-			for t in Defs.MEALS:
-				loose_meals += loose.get(t, 0)
-			var food := _tally("Food", meals, loose_meals, Palette.YELLOW if low else Palette.CHALK)
-			var lines := PackedStringArray()
-			for t in Defs.MEALS:
-				lines.append("%s %d" % [Defs.ITEMS[t].label, totals.get(t, 0)])
-			var tip := "Meals: %s.\nRaw mutton %d, berries on bushes %d." % [", ".join(lines), totals.get("mutton", 0), berries]
-			if low:
-				tip += "\nFewer meals than residents. Cooks need wheat, or mutton and logs."
-			food.tooltip_text = tip
-			food.mouse_filter = Control.MOUSE_FILTER_STOP
-			c.add_child(food)
-		if c.get_child_count() > 0:
+	var pins: Array = game.keys.pinned
+	_rebuild(_tallies, "%s%s%s" % [totals, loose, pins], func(c: Container) -> void:
+		for t in pins:  # pinned items, each on its own (issue #141)
+			c.add_child(_tally(Defs.ITEMS[t].get("label", Defs.ITEMS[t].many.capitalize()), totals.get(t, 0), loose.get(t, 0)))
+		if not pins.is_empty():
 			c.add_child(_divider()))
-	_tools_btn.text = "Tools  %d  ▾" % tools
-	_refresh_tools(sim)
+	for g in _group_btns:
+		var b: Button = _group_btns[g]
+		var items: Array = Defs.group_items(g)
+		b.visible = g == "tools" or items.any(func(t): return _tally_seen.has(t))  # a group shows once one of its items turns up
+		var n := 0
+		for t in items:
+			n += totals.get(t, 0)
+		var name: String = b.get_meta("name")
+		match g:
+			"food":
+				b.text = "Food  %d %s%s  ▾" % [meals, "meal" if meals == 1 else "meals", " · %d raw" % raw if raw > 0 else ""]
+				for k in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
+					if low:
+						b.add_theme_color_override(k, Palette.YELLOW)
+					else:
+						b.remove_theme_color_override(k)
+				b.tooltip_text = "Fewer meals than residents. Cooks need wheat, or raw meat and logs." if low else ""
+			"tools":
+				b.text = "%s  %d  ▾" % [name, gear]
+			_:
+				b.text = "%s  %d  ▾" % [name, n]
+	_refresh_drop(sim, totals, loose, meals, raw)
 
 
 ## The map switcher (issue #101), shown once a site map is known, and a dim line for residents at
@@ -838,46 +860,107 @@ func _swatch(color) -> TextureRect:
 	return t
 
 
-## The Tools dropdown (spec §12): each resident's tools with uses left, broken tools, and spares.
-func _refresh_tools(sim: Sim) -> void:
-	var sig := ""
-	for r in sim.residents:
-		sig += "%s%s%s%s;" % [r.name, r.axe, r.pick, r.broken]
-	var spare: Array = sim.stacks_where(func(st): return Defs.is_tool_item(st.type))
-	for st in spare:
-		sig += "%s%s%s" % [st.type, st.get("dur", -1), sim.in_zone(st.cell)]
-	_rebuild(_tools_list, sig, func(c: Container) -> void:
+## The open tally group's dropdown (issue #141): each item with its stockpiled and loose counts and
+## a Pin button; Food splits meals from raw meat; Tools and armor lists what everyone carries and wears.
+func _refresh_drop(sim: Sim, totals: Dictionary, loose: Dictionary, meals: int, raw: int) -> void:
+	var g := _drop_group
+	if g == "":
+		return
+	var sig := "%s%s%s%s" % [g, totals, loose, game.keys.pinned]
+	if g == "tools":
 		for r in sim.residents:
-			var g := VBoxContainer.new()
-			g.add_theme_constant_override("separation", 6)
-			g.add_child(_label(r.name, true))
-			var any := false
-			for k in ["axe", "pick"]:
-				if r[k] != null:
-					any = true
-					g.add_child(_tool_row(r[k].type, r[k].dur))
-				elif r.broken[k]:
-					any = true
-					g.add_child(_reason("Axe broke" if k == "axe" else "Pickaxe broke"))
-			if not any:
-				g.add_child(_label("Bare hands", false, Palette.CHALK_DIM, Palette.BODY))
-			c.add_child(g)
-		if not spare.is_empty():
-			var g := VBoxContainer.new()
-			g.add_theme_constant_override("separation", 6)
-			g.add_child(_label("Spare", true))
-			var stored := spare.filter(func(st): return sim.in_zone(st.cell)).size()
-			var loose := spare.size() - stored
-			var where: PackedStringArray = []
-			if stored:
-				where.append("%d in the stockpile" % stored)
-			if loose:
-				where.append("%d lying loose" % loose)
-			g.add_child(_label(", ".join(where), false, Palette.CHALK_DIM, Palette.CAPTION))
-			for st in spare:
-				g.add_child(_tool_row(st.type, st.get("dur", Sim.full_uses(st.type))))
-			c.add_child(g)
-		c.add_child(_label("Craft tools at the bench. Residents pick up a better tool when a job needs one.", false, Palette.CHALK_DIM, Palette.CAPTION, true)))
+			sig += "%s%s%s%s%s;" % [r.name, r.axe, r.pick, r.broken, r.get("armor", {})]
+		for st in sim.stacks_where(func(st): return Defs.wears(st.type)):
+			sig += "%s%s%s" % [st.type, st.get("dur", -1), sim.in_zone(st.cell)]
+	_rebuild(_tools_list, sig, func(c: Container) -> void:
+		if g == "tools":
+			_fill_tools(c, sim)
+			return
+		var title := _label([["building", "Building"], ["food", "Food"], ["animal", "Animal goods"], ["ores", "Ores"]].filter(func(x): return x[0] == g)[0][1], true, Palette.CHALK, Palette.HEADING)
+		c.add_child(title)
+		if g == "food":
+			c.add_child(_row("Meals on hand", "%d" % meals))
+			c.add_child(_row("Raw meat to cook", "%d" % raw))
+			var berries := 0
+			for b in sim.bushes:
+				berries += b.berries
+			c.add_child(_label("Berries on bushes: %d. Meals are bread and cooked meat; raw meat waits for the fireplace." % berries, false, Palette.CHALK_DIM, Palette.CAPTION, true))
+		for t in Defs.group_items(g):
+			if _tally_seen.has(t):
+				c.add_child(_drop_row(t, totals.get(t, 0), loose.get(t, 0)))
+		c.add_child(_label("Pin an item to keep it in the bar (up to %d)." % Defs.MAX_PINNED, false, Palette.CHALK_DIM, Palette.CAPTION, true)))
+
+
+## One item in a tally dropdown: its name, how many, how many lie loose, and Pin.
+func _drop_row(t: String, n: int, n_loose: int) -> HBoxContainer:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	h.add_child(_swatch(Palette.ITEM_COLORS.get(t, Palette.CHALK)))
+	var name := _label(Defs.ITEMS[t].get("label", Defs.ITEMS[t].many.capitalize()), false, Palette.CHALK, Palette.BODY)
+	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(name)
+	h.add_child(_label("%d" % n, true, Palette.CHALK, Palette.BODY))
+	var l := _label("%d loose" % n_loose if n_loose > 0 else "", false, Palette.CHALK_DIM, Palette.CAPTION)
+	l.custom_minimum_size.x = 56
+	h.add_child(l)
+	var pinned: bool = game.keys.pinned.has(t)
+	var pin := _button("Unpin" if pinned else "Pin", func(): game.pin_item(t), "Secondary")
+	pin.add_theme_font_size_override("font_size", Palette.CAPTION)
+	pin.set_meta("label", "Pin " + t)
+	pin.disabled = not pinned and game.keys.pinned.size() >= Defs.MAX_PINNED
+	pin.tooltip_text = "Show it in the tally bar" if not pinned else "Take it out of the tally bar"
+	h.add_child(pin)
+	return h
+
+
+## The Tools and armor dropdown (spec §12, issues #140, #141): each resident's tools with uses left,
+## broken tools, the armor they wear, and spares.
+func _fill_tools(c: Container, sim: Sim) -> void:
+	var spare: Array = sim.stacks_where(func(st): return Defs.is_tool_item(st.type))
+	for r in sim.residents:
+		var g := VBoxContainer.new()
+		g.add_theme_constant_override("separation", 6)
+		g.add_child(_label(r.name, true))
+		var any := false
+		for k in ["axe", "pick"]:
+			if r[k] != null:
+				any = true
+				g.add_child(_tool_row(r[k].type, r[k].dur))
+			elif r.broken[k]:
+				any = true
+				g.add_child(_reason("Axe broke" if k == "axe" else "Pickaxe broke"))
+		if not any:
+			g.add_child(_label("Bare hands", false, Palette.CHALK_DIM, Palette.BODY))
+		var worn := Sim.armor_worn(r)
+		if not worn.is_empty():
+			var parts: PackedStringArray = []
+			for slot in Defs.ARMOR_SLOTS:
+				if worn.has(slot):
+					parts.append("%s %d" % [Defs.SLOT_NAMES[slot].to_lower(), worn[slot].dur])
+			g.add_child(_label("Armor, uses left: %s. %d%% guard." % [", ".join(parts), roundi(Sim.protection(r) * 100.0)], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+		c.add_child(g)
+	if not spare.is_empty():
+		var g := VBoxContainer.new()
+		g.add_theme_constant_override("separation", 6)
+		g.add_child(_label("Spare", true))
+		var stored := spare.filter(func(st): return sim.in_zone(st.cell)).size()
+		var loose := spare.size() - stored
+		var where: PackedStringArray = []
+		if stored:
+			where.append("%d in the stockpile" % stored)
+		if loose:
+			where.append("%d lying loose" % loose)
+		g.add_child(_label(", ".join(where), false, Palette.CHALK_DIM, Palette.CAPTION))
+		for st in spare:
+			g.add_child(_tool_row(st.type, st.get("dur", Sim.full_uses(st.type))))
+		c.add_child(g)
+	var armor: Array = sim.stacks_where(func(st): return Defs.is_armor(st.type))
+	if not armor.is_empty():
+		var names: PackedStringArray = []
+		for st in armor:
+			names.append(Defs.ITEMS[st.type].one)
+		c.add_child(_label("Spare armor: %s. Whoever lacks that piece puts it on." % ", ".join(names), false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	c.add_child(_label("Craft tools and armor at the bench. Residents pick up a better tool when a job needs one.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
 
 
 func _tool_row(type: String, dur: int) -> VBoxContainer:
@@ -894,9 +977,10 @@ func _tool_row(type: String, dur: int) -> VBoxContainer:
 	return v
 
 
-## Opens the Tools dropdown while the pointer is over the button or the list, while the button
-## has keyboard focus, or while it's pinned open by a click or tap. A click anywhere else, or Esc,
-## closes it (issue #90: it used to stay open, held by the focus a click had left on the button).
+## Opens a tally group's dropdown (issue #141; the Tools one before it) while the pointer is over its
+## button or the list, while the button has keyboard focus, or while it's pinned open by a click or
+## tap. A click anywhere else, or Esc, closes it (issue #90: it used to stay open, held by the focus a
+## click had left on the button).
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouse:
 		_pointer = event.position
@@ -915,17 +999,22 @@ func _notification(what: int) -> void:
 
 
 func _close_tools() -> void:
-	_tools_pinned = false
-	_tools_btn.release_focus()
+	_drop_pinned = ""
+	for g in _group_btns:
+		_group_btns[g].release_focus()
+	_drop_group = ""
 	_tools_drop.visible = false
 
 
-## Over the Tools button, its open list, or the strip between them (not their whole bounding box).
-func _over_tools(at: Vector2) -> bool:
-	var btn := _tools_btn.get_global_rect().grow(4)
+## Over the open group's button, its list, or the strip between them (not their whole bounding box).
+func _over_tools(at: Vector2, group := "") -> bool:
+	var g := group if group != "" else _drop_group
+	if g == "":
+		return false
+	var btn: Rect2 = _group_btns[g].get_global_rect().grow(4)
 	if btn.has_point(at):
 		return true
-	if not _tools_drop.visible:
+	if not _tools_drop.visible or g != _drop_group:
 		return false
 	var drop := _tools_drop.get_global_rect().grow(8)
 	var gap := Rect2(Vector2(btn.position.x, btn.end.y), Vector2(btn.size.x, maxf(drop.position.y - btn.end.y, 0)))
@@ -951,12 +1040,25 @@ func _process(_delta: float) -> void:
 	if _stuck_gives_way:
 		_stuck_panel.visible = false
 	_goals_panel.visible = not game.jobs_board_open and (not _sel_panel.visible or _sel_panel.get_global_rect().position.y > _goals_panel.get_global_rect().position.y + _goals_panel.get_combined_minimum_size().y + 8)
-	var open := _tools_pinned or _tools_btn.has_focus() or _over_tools(_pointer)
-	_tools_drop.visible = open
-	if open:
-		var panel := _tools_btn.get_parent().get_parent() as Control
-		_tools_drop.position = Vector2(_tools_btn.global_position.x - 12, panel.get_global_rect().end.y + 6)
-	_tools_btn.set_pressed_no_signal(_tools_pinned)
+	var open := _drop_pinned
+	for g in _group_btns:
+		if open == "" and _group_btns[g].has_focus():
+			open = g
+	if open == "" and _drop_group != "" and _over_tools(_pointer):
+		open = _drop_group
+	for g in _group_btns:
+		if open == "" and _group_btns[g].is_visible_in_tree() and _group_btns[g].get_global_rect().grow(4).has_point(_pointer):
+			open = g
+	if open != _drop_group:
+		_drop_group = open
+		_sigs.erase(_tools_list.get_instance_id())
+	_tools_drop.visible = open != ""
+	if open != "":
+		var b: Button = _group_btns[open]
+		var panel := b.get_parent().get_parent() as Control
+		_tools_drop.position = Vector2(b.global_position.x - 12, panel.get_global_rect().end.y + 6)
+	for g in _group_btns:
+		_group_btns[g].set_pressed_no_signal(_drop_pinned == g)
 
 
 func _refresh_goals(sim: Sim) -> void:
@@ -975,8 +1077,11 @@ func _refresh_goals(sim: Sim) -> void:
 			c.add_child(chip)
 			return
 		c.add_child(_row("The founding", "%d of %d" % [n_done, Goals.LIST.size()], false))
-		c.add_child(_label("%d  %s" % [cur + 1, Goals.LIST[cur].t], true, Palette.CHALK, Palette.BODY, true))
-		c.add_child(_label(Goals.LIST[cur].h, false, Palette.CHALK_DIM, Palette.CAPTION, true)))
+		# Wrapped at the panel's own width, so they measure right even when built while the panel is
+		# hidden; otherwise they'd wrap at nothing, stand thousands of pixels tall and keep it hidden.
+		for l in [_label("%d  %s" % [cur + 1, Goals.LIST[cur].t], true, Palette.CHALK, Palette.BODY, true), _label(Goals.LIST[cur].h, false, Palette.CHALK_DIM, Palette.CAPTION, true)]:
+			l.custom_minimum_size.x = 290 - 24
+			c.add_child(l))
 
 
 ## The stuck list (issue #77) has two tiers. Blockers, work that can't go on, get a yellow flag,
@@ -1117,7 +1222,7 @@ func _refresh_selection(sim: Sim) -> void:
 		for id in sel.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s%s%s%s%d%d" % [r.jobs, r.kept, equip_kind, r.away, int(sim.back_in(r)), r.get("hurt", 0)]
+				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s%s%s%s%d%d" % [r.jobs, r.kept, equip_kind, r.away, int(sim.back_in(r)), r.get("hurt", 0)] + "%s" % [r.get("armor", {})]
 		for kind in ["axe", "pick"]:  # Equip appears when there's a tool to choose
 			for st in sim.tool_items(kind, 0):
 				sig += "%s%s%s" % [st.type, st.dur, st.cell]
@@ -1128,6 +1233,8 @@ func _refresh_selection(sim: Sim) -> void:
 		sig += "%s%s%s" % [sim.herds(), sim.adventures(), sim.expedition_board().is_empty()]
 	elif target != null and target.kind == "crop":
 		sig += "%d %d %d" % [Sim.crop_stage(target), int(target.grow / Tuning.WHEAT_GROW * 20.0), target.claim]
+	elif target != null and target.kind in ["pen", "animal"]:  # issue #139: counts and timers
+		sig += "%s%d%s" % [target, sim.tick / Tuning.TPS, sim.on_map(game.view_map, func(): return sim.m.sheep.map(func(a): return [a.alive, a.get("pen", 0), a.get("young", false), a.get("fed_at", -1)]))]
 	elif target != null:
 		sig += "%s" % [target]
 	for s in sim.stuck:
@@ -1163,6 +1270,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			return
 		_add_tool_row(c, sim, r, "axe")
 		_add_tool_row(c, sim, r, "pick")
+		_add_armor_row(c, r)
 		c.add_child(_row("Carrying", Defs.words(r.carry.type, r.carry.n) if r.carry != null else "Nothing"))
 		c.add_child(_row("Food", _mood(r)))
 		if r.get("hurt", 0) > 0:  # issue #110
@@ -1214,10 +1322,9 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			c.add_child(_label("Wheat takes %d minutes to grow and gives %d when harvested." % [int(Tuning.WHEAT_GROW / 60.0), Tuning.WHEAT_YIELD], false, Palette.CHALK_DIM, Palette.BODY, true))
 			c.add_child(_destructive("Remove this plot", "Click again to remove the plot", "plot:%d" % target.id, func(): game.remove_farm_plot(target)))
 		"animal":
-			c.add_child(_head(Defs.SPECIES[target.species].name, "Drops " + Defs.drops_text(target.species)))
-			if target.claim != 0:
-				c.add_child(_label("%s is hunting it." % sim.resident(target.claim).get("name", "Someone"), false, Palette.CHALK_DIM))
-			c.add_child(_button("Cancel hunt" if target.des else "Hunt", func(): game.toggle_hunt(target), "Secondary" if target.des else "Primary"))
+			_fill_animal(c, sim, target)
+		"pen":
+			_fill_pen(c, sim, target)
 		"boulder":
 			var drops := Defs.words("cobble", Tuning.BOULDER_COBBLE)
 			if target.has("ore"):
@@ -1374,6 +1481,20 @@ func _board_cell(r: Dictionary, jb: String) -> Button:
 	return b
 
 
+## What armor a resident wears (issue #140), and how much of the hazards' harm it turns aside.
+func _add_armor_row(c: Container, r: Dictionary) -> void:
+	var worn := Sim.armor_worn(r)
+	if worn.is_empty():
+		c.add_child(_row("Armor", "None"))
+		return
+	c.add_child(_row("Armor", "%d%% guard" % roundi(Sim.protection(r) * 100.0) + (", full set" if worn.size() == Defs.ARMOR_SLOTS.size() else "")))
+	var parts: PackedStringArray = []
+	for slot in Defs.ARMOR_SLOTS:
+		if worn.has(slot):
+			parts.append("%s, %d %s" % [Defs.SLOT_NAMES[slot], worn[slot].dur, "use" if worn[slot].dur == 1 else "uses"])
+	c.add_child(_label("%s. Turns aside that share of injuries from hazards, and wears a use each time one strikes." % "; ".join(parts), false, Palette.CHALK_DIM, Palette.CAPTION, true))
+
+
 ## A resident's axe or pickaxe, with Equip to choose another one (lying about or stockpiled).
 func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
 	var t = r[kind]
@@ -1432,6 +1553,71 @@ static func _road_text(sim: Sim, r: Dictionary) -> String:
 	if r.trip == "village":
 		return "On the %s home, %d s" % ["way" if meadow else "road", ceili(sim.back_in(r))]
 	return "On the %s to the %s, %d s" % ["way" if meadow else "road", sim.get_map(r.trip).name.to_lower(), ceili(sim.back_in(r))]
+
+
+## An animal (issues #42, #138, #139): what it drops, whether it's penned, fed or young, and the
+## Hunt and Lead buttons.
+func _fill_animal(c: Container, sim: Sim, a: Dictionary) -> void:
+	var sp: Dictionary = Defs.SPECIES[a.species]
+	var secs := func(at: int) -> int: return maxi(1, ceili(float(at - sim.tick) / Tuning.TPS))
+	if a.get("young", false):
+		c.add_child(_head(sp.young.capitalize(), "Grows up in %d s" % secs.call(a.grown_at)))
+		c.add_child(_label("Young ones can't be hunted. Grown, it drops %s." % Defs.drops_text(a.species), false, Palette.CHALK_DIM, Palette.BODY, true))
+	else:
+		c.add_child(_head(sp.name, "Drops " + Defs.drops_text(a.species)))
+	var pens: bool = sim.on_map(game.view_map, func(): return not sim.m.pens.is_empty())
+	if a.get("pen", 0) != 0:
+		var note := "In a pen."
+		if a.get("fed_at", -1) >= 0:
+			note = "In a pen, fed: a young one in about %d s, once its mate is fed too." % secs.call(a.fed_at + int(Tuning.BREED_TIME * Tuning.TPS))
+		elif a.get("cool_until", 0) > sim.tick:
+			note = "In a pen. It can be fed again in %d s." % secs.call(a.cool_until)
+		elif not a.get("young", false):
+			note = "In a pen. Fed wheat with another %s, it has a young one." % sp.one
+		c.add_child(_label(note, false, Palette.CHALK_DIM, Palette.BODY, true))
+	if a.claim != 0:
+		var who: Dictionary = sim.resident(a.claim)
+		var doing := "hunting it"
+		if who.get("job") != null:
+			doing = {"lead": "leading it to a pen", "feed": "feeding it"}.get(who.job.kind, doing)
+		c.add_child(_label("%s is %s." % [who.get("name", "Someone"), doing], false, Palette.CHALK_DIM))
+	elif a.get("lead", false):
+		c.add_child(_label("Marked to lead into a pen. The party does it at the meadow.", false, Palette.CHALK_DIM, Palette.BODY, true))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	if not a.get("young", false):
+		row.add_child(_button("Cancel hunt" if a.des else "Hunt", func(): game.toggle_hunt(a), "Secondary" if a.des else "Primary"))
+	if pens and a.get("pen", 0) == 0:
+		row.add_child(_button("Don't lead" if a.get("lead", false) else "Lead to a pen", func(): game.toggle_lead(a), "Secondary"))
+	if row.get_child_count() > 0:
+		c.add_child(row)
+
+
+## A pen (issue #139): its fences, or what's in it, and how breeding works.
+func _fill_pen(c: Container, sim: Sim, p: Dictionary) -> void:
+	var edge := Sim.pen_edge(p).size()
+	c.add_child(_head("Pen", "%d×%d, room for %d" % [p.rect.size.x, p.rect.size.y, Sim.pen_room(p)]))
+	if not Sim.pen_done(p):
+		var left: int = (edge - p.built.size()) * Tuning.FENCE_STICKS
+		c.add_child(_row("Fences built", "%d / %d" % [p.built.size(), edge]))
+		c.add_child(_bar(float(p.built.size()) / edge, Palette.BLUE))
+		c.add_child(_label("A party builds it with sticks from its packs: %s more. Plan a meadow trip with sticks." % Defs.words("stick", left), false, Palette.CHALK_DIM, Palette.BODY, true))
+	else:
+		var animals: Array = sim.on_map(game.view_map, sim.penned.bind(p))
+		var parts: PackedStringArray = []
+		for sp in ["cow", "pig", "sheep"]:
+			var grown := animals.filter(func(a): return a.species == sp and not a.get("young", false)).size()
+			var young := animals.filter(func(a): return a.species == sp and a.get("young", false)).size()
+			if grown > 0:
+				parts.append(Defs.animals(sp, grown))
+			if young > 0:
+				parts.append("%d %s" % [young, Defs.SPECIES[sp].young if young == 1 else Defs.SPECIES[sp].youngs])
+		c.add_child(_label(", ".join(parts) + "." if not parts.is_empty() else "Empty. Mark animals with Gather ▸ Lead to a pen, and the party walks them in.", false, Palette.CHALK, Palette.BODY, true))
+		var fed := animals.filter(func(a): return a.get("fed_at", -1) >= 0).size()
+		if fed > 0:
+			c.add_child(_label("%d fed, a young one on the way." % fed, false, Palette.WHEAT, Palette.BODY))
+		c.add_child(_label("A pair of one kind fed %s each has a young one after %d s, and can be fed again after %d min. Young ones grow up in %d min." % [Defs.words("wheat", Tuning.FEED_WHEAT), roundi(Tuning.BREED_TIME), roundi(Tuning.BREED_COOLDOWN / 60.0), roundi(Tuning.GROW_TIME / 60.0)], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	c.add_child(_destructive("Take the pen down", "Click again to take it down. Its animals go free", "pen:%d" % p.id, func(): game.remove_pen(p)))
 
 
 ## A signpost to an adventure (issue #136): what's past it, and the way to plan a trip there.
@@ -2029,6 +2215,9 @@ func _add_party_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
 
 ## The objective, provisions, spare pickaxes, the packs they share, the return policy, and Start packing.
 func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
+	var tend: bool = plan.target.item == "pens"
+	if not plan.party.is_empty():  # issue #140: the party's armor against the hazards
+		c.add_child(_label(_protection_text(sim, plan.party), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	c.add_child(_label("Bring back", true))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
@@ -2040,8 +2229,26 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(gap)
-	row.add_child(_stepper("%d" % plan.target.n, "target"))
+	if not tend:
+		row.add_child(_stepper("%d" % plan.target.n, "target"))
 	c.add_child(row)
+	var meadow: bool = plan.dest == Meadow.ID and not sim.get_map(Meadow.ID).pens.is_empty()
+	if meadow:  # issue #139: or tend the pens
+		var pr := HBoxContainer.new()
+		pr.add_theme_constant_override("separation", 6)
+		var tb := _button("Tend the pens", func(): game.plan_target("pens"), "Secondary")
+		tb.toggle_mode = true
+		tb.set_pressed_no_signal(tend)
+		pr.add_child(tb)
+		var pg := Control.new()
+		pg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pr.add_child(pg)
+		if tend:
+			pr.add_child(_label("Keep of each", false, Palette.CHALK_DIM, Palette.CAPTION))
+			pr.add_child(_stepper("%d" % plan.target.n, "target"))
+		c.add_child(pr)
+		if tend:
+			c.add_child(_label("Build the pens, lead marked animals in, feed pairs, and hunt only what's over %d of each kind." % plan.target.n, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	c.add_child(_stepper_row("Meals to take", plan.meals, "meals"))
 	var keep := Sim.return_meals(plan)
 	var mins := Sim.site_minutes(plan)
@@ -2061,7 +2268,21 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 	spend.tooltip_text = "Let the party eat the meals kept for the walk home, to stay longer"
 	food_row.add_child(spend)
 	c.add_child(food_row)
-	c.add_child(_stepper_row("Spare pickaxes", plan.picks, "picks"))
+	if plan.dest != Meadow.ID or plan.picks > 0:
+		c.add_child(_stepper_row("Spare pickaxes", plan.picks, "picks"))
+	if plan.dest == Meadow.ID and not sim.get_map(Meadow.ID).pens.is_empty():  # issue #139
+		c.add_child(_stepper_row("Sticks for fences", plan.get("sticks", 0), "sticks"))
+		c.add_child(_stepper_row("Wheat to feed pairs", plan.get("wheat", 0), "wheat"))
+		var need: PackedStringArray = []
+		var fl := sim.fence_left()
+		var wh := sim.wheat_wanted()
+		if fl > 0:
+			need.append("the pens need %s" % Defs.words("stick", fl))
+		if wh > 0:
+			need.append("%d %s can be fed now, for %s" % [wh / (2 * Tuning.FEED_WHEAT), "pair" if wh == 2 * Tuning.FEED_WHEAT else "pairs", Defs.words("wheat", wh)])
+		if not need.is_empty():
+			var t := ", ".join(need)
+			c.add_child(_label(t[0].to_upper() + t.substr(1) + ".", false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	_add_packs(c, plan)
 	var home := _label("Come home when", true)
 	home.tooltip_text = "Any of the chosen ones brings them home. A serious injury always does, and stops the game for you."
@@ -2086,6 +2307,36 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 	c.add_child(go)
 
 
+## "Armor: Ada turns aside 35% of hazard injuries (full set), Tomas none." (issue #140)
+func _protection_text(sim: Sim, party: Array) -> String:
+	var parts: PackedStringArray = []
+	for id in party:
+		var r := sim.resident(id)
+		if r.is_empty():
+			continue
+		var g := Sim.protection(r)
+		var full := Sim.armor_worn(r).size() == Defs.ARMOR_SLOTS.size()
+		parts.append("%s %s" % [r.name, "none" if g <= 0.0 else "%d%%" % roundi(g * 100.0) + (", full set" if full else "")])
+	return "Armor against the hazards: %s. It turns aside that share of injuries." % ", ".join(parts)
+
+
+## The meadow's pens in a line (issue #139): fences to build, animals penned, young ones.
+func _pens_text(sim: Sim) -> String:
+	var mp := sim.get_map(Meadow.ID)
+	var parts: PackedStringArray = []
+	var fl := sim.fence_left()
+	if fl > 0:
+		parts.append("%d %s to build" % [fl / Tuning.FENCE_STICKS, "fence" if fl == Tuning.FENCE_STICKS else "fences"])
+	var penned := mp.sheep.filter(func(a): return a.alive and a.get("pen", 0) != 0)
+	var young := penned.filter(func(a): return a.get("young", false)).size()
+	parts.append("%d penned" % penned.size() + (", %d young" % young if young > 0 else ""))
+	var lead := mp.sheep.filter(func(a): return a.alive and a.get("lead", false) and a.get("pen", 0) == 0).size()
+	if lead > 0:
+		parts.append("%d to lead in" % lead)
+	var t := ", ".join(parts)
+	return t[0].to_upper() + t.substr(1) + "."
+
+
 ## The packs, shared (brief §5): supplies in yellow, the cargo target in blue, room left dim.
 func _add_packs(c: Container, plan: Dictionary) -> void:
 	var cap := Sim.pack_capacity(plan)
@@ -2098,7 +2349,7 @@ func _add_packs(c: Container, plan: Dictionary) -> void:
 		return
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 1)
-	var cargo: int = mini(plan.target.n, room)
+	var cargo: int = 0 if plan.target.item == "pens" else mini(plan.target.n, room)
 	for seg in [[mini(sup, cap), Palette.YELLOW], [cargo, Palette.BLUE], [room - cargo, Palette.SLATE_DEEP]]:
 		if seg[0] <= 0:
 			continue
@@ -2145,12 +2396,17 @@ func _stepper(value: String, key: String) -> HBoxContainer:
 func _fill_staging(c: Container, sim: Sim) -> void:
 	var ex: Dictionary = sim.expedition
 	var p := sim.packed()
-	c.add_child(_label("Packing for the %s, to bring back %s" % [sim.get_map(ex.dest).name.to_lower(), Defs.words(ex.target.item, ex.target.n)], false, Palette.CHALK, Palette.BODY, true))
+	var aim := "to tend the pens" if ex.target.item == "pens" else "to bring back %s" % Defs.words(ex.target.item, ex.target.n)
+	c.add_child(_label("Packing for the %s, %s" % [sim.get_map(ex.dest).name.to_lower(), aim], false, Palette.CHALK, Palette.BODY, true))
 	c.add_child(_row("Meals", "%d / %d" % [p.meals, ex.meals]))
 	c.add_child(_bar(float(p.meals) / maxi(ex.meals, 1)))
 	if ex.picks > 0:
 		c.add_child(_row("Spare pickaxes", "%d / %d" % [p.picks, ex.picks]))
 		c.add_child(_bar(float(p.picks) / ex.picks))
+	for k in [["sticks", "Sticks"], ["wheat", "Wheat"]]:  # issue #139
+		if ex.get(k[0], 0) > 0:
+			c.add_child(_row(k[1], "%d / %d" % [p[k[0]], ex[k[0]]]))
+			c.add_child(_bar(float(p[k[0]]) / ex[k[0]]))
 	c.add_child(_label("Party", true))
 	for id in ex.party:
 		var r := sim.resident(id)
@@ -2369,9 +2625,15 @@ func _fill_party(c: Container, sim: Sim) -> void:
 		meals += ex.provisions[k]
 	var spares: int = ex.get("tools", []).size()
 	var keep := "" if ex.get("spend_return", false) else ", %d kept for the walk home" % mini(meals, Sim.return_meals(ex))
-	c.add_child(_label("Meals: %d%s. Spare pickaxes: %d." % [meals, keep, spares], false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	c.add_child(_row("Bring back %s" % Defs.ITEMS[ex.target.item].many, "%d / %d" % [sim.objective_packed(), ex.target.n]))
-	c.add_child(_bar(float(sim.objective_packed()) / maxi(ex.target.n, 1), Palette.GREEN))
+	var sup: Dictionary = ex.get("supplies", {})
+	var pen_sup := "" if sup.is_empty() else " Sticks: %d. Wheat: %d." % [sup.get("stick", 0), sup.get("wheat", 0)]
+	c.add_child(_label("Meals: %d%s. Spare pickaxes: %d.%s" % [meals, keep, spares, pen_sup], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	if ex.target.item == "pens":  # issue #139
+		c.add_child(_row("Tend the pens", "keep %d of each" % ex.target.n))
+		c.add_child(_label(_pens_text(sim), false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	else:
+		c.add_child(_row("Bring back %s" % Defs.ITEMS[ex.target.item].many, "%d / %d" % [sim.objective_packed(), ex.target.n]))
+		c.add_child(_bar(float(sim.objective_packed()) / maxi(ex.target.n, 1), Palette.GREEN))
 	var when: PackedStringArray = []
 	for k in [["target", "the target is reached"], ["full", "the packs are full"], ["low", "food runs low"]]:
 		if ex.policy.get(k[0], false):
