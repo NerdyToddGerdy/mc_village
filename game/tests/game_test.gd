@@ -680,42 +680,54 @@ func _test_station_tabs(game: Game, f: Dictionary) -> void:
 	check(_walk(hud._craft_box).filter(func(n): return n is GridContainer and n.columns == 3).is_empty(), "and no crafting grid")
 
 
-## The resident panel's Jobs grid switches jobs and cycles priorities (issue #47).
+## Issue #134: the resident panel's job line and the Village jobs board, with a job dropdown per
+## resident and Ada doing everything.
 func _test_jobs_grid(game: Game) -> void:
 	game.restart()
 	var sim := game.sim
 	var hud: Hud = game._hud
 	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	sim.set_role(tomas, "farm")
+	tomas.jobs.cook.xp = 30  # level 3 at cooking
 	game.selection = {"kind": "res", "ids": [ada.id]}
 	hud.refresh(sim)
 	await process_frame
-	var summary: Array = _walk(hud._sel).filter(func(n): return n is Label and n.text.begins_with("7 of 8 jobs on"))
-	check(summary.size() == 1, "the resident panel sums up Ada's jobs in a line")
+	check(_walk(hud._sel).any(func(n): return n is Label and n.text == "Everything"), "Ada's panel says her job is Everything")
+	check(not _walk(hud._sel).any(func(n): return n is Button and n.get_meta("label", "") == "Job: Ada"), "with no dropdown")
 	var open_btn: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text.begins_with("Jobs board"))
 	check(open_btn.size() == 1, "with a button to the jobs board")
 	open_btn[0].pressed.emit()
 	hud.refresh(sim)
 	await process_frame
 	check(game.jobs_board_open and hud._board_panel.visible and hud._jobs_btn.button_pressed, "it opens the board, and the Jobs button shows it")
-	var cell := func(jb: String) -> Button:
-		return _walk(hud._board).filter(func(n): return n is Button and n.get_meta("cell", "") == "%d:%s" % [ada.id, jb] and not n.is_queued_for_deletion()).front()
-	check(_walk(hud._board).filter(func(n): return n is Button and n.has_meta("cell")).size() == 8 * sim.residents.size(), "a cell per resident and job")
-	check(cell.call("haul").text == "2\nLv 1" and cell.call("toolsmith").text.begins_with("Off"), "a cell shows the priority (or Off) and the level")
-	var counts: Array = _walk(hud._board).filter(func(n): return n is Label and n.text == "nobody")
-	check(counts.size() == 1 and counts[0].get_theme_color("font_color") == Palette.YELLOW, "the Toolsmith column says nobody does it, in yellow")
-	game.board_click(ada, "haul", true)
-	check(not ada.jobs.haul.on, "Shift-click switches a job off")
-	game.board_click(ada, "haul")
-	check(ada.jobs.haul.on and ada.jobs.haul.pri == 2, "a click switches it back on at its priority")
-	game.board_click(ada, "mine")
-	check(ada.jobs.mine.pri == 3, "a click on an on job cycles its priority to 3")
-	game.board_click(ada, "mine")
-	check(ada.jobs.mine.pri == 1, "and round to 1")
-	ada.jobs.farm.xp = 30
+	check(_walk(hud._board).filter(func(n): return n.has_meta("cell") and not n.is_queued_for_deletion()).size() == 8 * sim.residents.size(), "a level cell per resident and job")
+	var nobody: Array = _walk(hud._board).filter(func(n): return n is Label and n.text == "nobody" and not n.is_queued_for_deletion())
+	check(nobody.filter(func(l): return l.get_theme_color("font_color") == Palette.YELLOW).size() == 6, "the six jobs nobody has say so in yellow, Haul aside (%d)" % nobody.size())
+	var pick := func() -> Button:
+		return _walk(hud._board).filter(func(n): return n is Button and n.get_meta("label", "") == "Job: Tomas" and not n.is_queued_for_deletion()).front()
+	check(pick.call().text.begins_with("Farmer, level 1"), "Tomas's row shows his job and level (%s)" % pick.call().text)
+	pick.call().pressed.emit()
 	hud.refresh(sim)
 	await process_frame
-	check(cell.call("farm").text.ends_with("Lv 3"), "a level-3 farmer shows Lv 3")
-	check(cell.call("mine").text.begins_with("1"), "the board shows the new priority")
+	var choices: Array = _walk(hud._job_list).filter(func(n): return n is Button and not n.is_queued_for_deletion())
+	check(hud._job_drop.visible and choices.size() == 9, "his dropdown lists every job and No job (%d)" % choices.size())
+	check(choices[0].text.begins_with("Cook · level 3"), "best level first (%s)" % choices[0].text)
+	check(choices.any(func(b): return b.text == "Farm · level 1 · 1 farmer" and b.button_pressed), "his own job is lit, with how many have it")
+	choices.filter(func(b): return b.text.begins_with("Toolsmith"))[0].pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	check(tomas.role == "toolsmith" and not hud._job_drop.visible, "choosing Toolsmith gives him the job and closes the dropdown")
+	check(pick.call().text.begins_with("Toolsmith, level 1"), "and his row says so")
+	pick.call().pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	check(hud._job_drop.visible, "it opens again")
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	hud._input(esc)  # the HUD sees keys before the game does
+	check(not hud._job_drop.visible and game.jobs_board_open, "Esc closes the dropdown, and leaves the board open")
 	_key(game, KEY_J)
 	check(not game.jobs_board_open, "J closes the board")
 	_key(game, KEY_J)
@@ -818,7 +830,8 @@ func _test_stuck_list(game: Game) -> void:
 	bench.stage = 1
 	bench.done = true
 	ada.pick = {"type": "wood_pick", "tier": 1, "dur": 5}
-	ada.jobs.toolsmith.on = true  # a toolsmith keeps spares (issue #91)
+	var smith := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-2, 0)))
+	sim.set_role(smith, "toolsmith")  # a toolsmith keeps spares (issues #91, #134)
 	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "cobble", 3)
 	for i in Tuning.TPS:
 		sim.step()
@@ -933,7 +946,6 @@ func _test_after_the_founding(game: Game) -> void:
 	sim.stats.houses = 2
 	sim.stats.traveler_home = true
 	sim.stats.division = true
-	sim.residents[0].jobs.toolsmith.on = true
 	sim.zone[sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(2, 2))] = true
 	var bench := sim.place_site("bench", sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(4, -3)))
 	bench.stage = 1

@@ -951,24 +951,9 @@ func release_kept_tool(r: Dictionary, kind: String) -> void:
 	sim.release_kept_tool(r, kind)
 
 
-func toggle_job(r: Dictionary, job: String) -> void:
-	sim.set_job_on(r, job, not r.jobs[job].on)
-
-
-## Priority 1 → 2 → 3 → 1.
-func cycle_job_priority(r: Dictionary, job: String) -> void:
-	sim.set_job_priority(r, job, r.jobs[job].pri % 3 + 1)
-
-
-## A click on a jobs board cell (issue #78): an Off job switches on at its priority; an on job's
-## priority cycles; Shift-click switches it off.
-func board_click(r: Dictionary, job: String, shift := false) -> void:
-	if shift:
-		sim.set_job_on(r, job, false)
-	elif not r.jobs[job].on:
-		sim.set_job_on(r, job, true)
-	else:
-		cycle_job_priority(r, job)
+## A resident's one job, from the job dropdown (issue #134): one of Defs.JOBS, or "none".
+func set_role(r: Dictionary, role: String) -> void:
+	sim.set_role(r, role)
 
 
 func toggle_jobs_board(open = null) -> void:
@@ -1268,7 +1253,6 @@ func _screenshot_menu() -> void:
 ## `godot --path . -- --screenshot` plays a short scripted opening, saves a frame to
 ## user://screenshot.png and quits. Used to check the view without clicking through it.
 func _screenshot_scene() -> void:
-	sim.residents[0].jobs.toolsmith.on = true  # as the checklist asks (issue #91)
 	sim.designate_mine(area(0, 8, 9, 10))
 	var bench := sim.place_site("bench", at(8, 10))
 	for i in 120 * Tuning.TPS:
@@ -1392,10 +1376,19 @@ func _screenshot_scene() -> void:
 			sim.compute_stuck()
 			_hud.refresh(sim)  # what's stuck now counts as seen, so it stays folded
 			_hud.stuck_open = false
-	if "--jobs" in OS.get_cmdline_user_args():  # the Village jobs board (issue #78); add --village for more rows
+	if "--jobs" in OS.get_cmdline_user_args():  # the Village jobs board (issues #78, #134); add --village for more rows
 		sim.residents[0].jobs.mine.xp = 30
-		sim.residents[0].jobs.toolsmith.on = true
+		for i in range(1, sim.residents.size()):
+			sim.set_role(sim.residents[i], ["farm", "cook"][i % 2])
 		jobs_board_open = true
+		if "--job-menu" in OS.get_cmdline_user_args() and sim.residents.size() > 1:  # with Tomas's job dropdown open
+			for i in 5:
+				await get_tree().process_frame
+			_hud.refresh(sim)
+			await get_tree().process_frame
+			for n in _hud._board.find_children("*", "Button", true, false):
+				if n.get_meta("label", "") == "Job: " + sim.residents[1].name:
+					n.pressed.emit()
 	if "--board" in OS.get_cmdline_user_args():  # the expedition board and its planner (issues #105-#107); --packing while packing
 		for k in 2:  # Tomas and Mira, to choose a party from
 			var who: Array = Sim.TRAVELERS[k]

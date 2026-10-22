@@ -5,7 +5,6 @@ extends RefCounted
 const LIST := [
 	{"t": "Chop a tree", "h": "Choose Gather, then Mine (or press X), and click a tree. Ada fells it by hand, slowly."},
 	{"t": "Build a crafting bench", "h": "Choose Build, then Crafting bench, and click open ground."},
-	{"t": "Make Ada the toolsmith", "h": "Select Ada and switch Toolsmith on in her Jobs. Only a toolsmith makes tools."},
 	{"t": "Craft a pickaxe", "h": "Select the bench. Queue planks, sticks, then a wooden pickaxe."},
 	{"t": "Paint a stockpile", "h": "Choose Paint, then Stockpile, and drag over open ground."},
 	{"t": "Break a boulder", "h": "Choose Gather, then Mine (or press X), and click a boulder. Ada uses her pickaxe."},
@@ -21,14 +20,13 @@ static func done(sim: Sim, i: int) -> bool:
 	match i:
 		0: return sim.stats.felled > 0
 		1: return sim.sites.any(func(s): return s.tpl == "bench" and s.done)
-		2: return sim.has_toolsmith() or sim.stats.pick_crafted  # stays done once a pickaxe is made (issue #91)
-		3: return sim.stats.pick_crafted
-		4: return not sim.zone.is_empty()
-		5: return sim.stats.broken_boulders > 0
-		6: return sim.stats.get("sheep_hunted", 0) > 0
-		7: return sim.stats.houses >= 1
-		8: return sim.stats.houses >= 2
-		9: return sim.stats.traveler_home
+		2: return sim.stats.pick_crafted
+		3: return not sim.zone.is_empty()
+		4: return sim.stats.broken_boulders > 0
+		5: return sim.stats.get("sheep_hunted", 0) > 0
+		6: return sim.stats.houses >= 1
+		7: return sim.stats.houses >= 2
+		8: return sim.stats.traveler_home
 		_: return sim.stats.division
 
 

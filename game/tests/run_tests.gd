@@ -25,7 +25,7 @@ func _init() -> void:
 		"test_farm_plots_need_open_grass",
 		"test_fireplace_reserves_a_kitchen_plot",
 		"test_fireplace_cooks_and_keeps_meals_stocked",
-		"test_jobs_on_off_and_priorities",
+		"test_one_job_each",
 		"test_skills_rise_and_pay_off",
 		"test_toolsmith_keeps_spares",
 		"test_equip_a_chosen_tool",
@@ -43,7 +43,7 @@ func _init() -> void:
 		"test_erasing_stockpile_cells",
 		"test_standing_orders_wait_rather_than_block",
 		"test_craft_patterns_match_their_recipes",
-		"test_toolsmith_is_employed_by_switching_it_on",
+		"test_spares_need_a_resident_toolsmith",
 		"test_residents_only_work_on_their_own_map",
 		"test_save_and_load_two_maps",
 		"test_old_mine_layout_and_ore",
@@ -116,7 +116,6 @@ func stuck_text(sim: Sim) -> String:
 
 ## Plays the founding moment the way a player would, end to end.
 func play_opening(sim: Sim) -> Dictionary:
-	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	sim.designate_mine(area(0, 0, 10, 18))
 	sim.designate_hunt(whole_map())  # wool for the two beds
 	var bench := sim.place_site("bench", at(8, 10))
@@ -160,7 +159,6 @@ func test_full_opening() -> void:
 
 func test_bench_skips_blocked_recipes_and_comes_before_building() -> void:
 	var sim := Sim.new_game()
-	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	sim.designate_mine(area(0, 0, 10, 18))
 	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
@@ -187,7 +185,6 @@ func test_bench_skips_blocked_recipes_and_comes_before_building() -> void:
 
 func test_auto_ingredients_unlock_with_first_house() -> void:
 	var sim := Sim.new_game()
-	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	sim.designate_mine(area(0, 0, 10, 18))
 	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
@@ -250,7 +247,6 @@ func test_mine_marks_trees_and_boulders() -> void:
 
 func test_save_and_load_mid_game() -> void:
 	var sim := Sim.new_game()
-	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	sim.designate_mine(area(0, 0, 10, 18))
 	sim.designate_hunt(whole_map())
 	var bench := sim.place_site("bench", at(8, 10))
@@ -285,7 +281,7 @@ func test_tool_breaks_and_resident_reports() -> void:
 	run(sim, 30)
 	check(not t.alive, "tree felled")
 	check(ada.axe == null and ada.broken.axe, "axe broke after its last use")
-	check(stuck_text(sim).contains("Axe broke. Craft one at the bench, or switch Toolsmith on for someone"), "with no toolsmith, the report says how to fix it: " + stuck_text(sim))
+	check(stuck_text(sim).contains("Axe broke. Craft one at the bench, or make someone the toolsmith"), "with no toolsmith, the report says how to fix it: " + stuck_text(sim))
 	sim.designate_mine(Rect2i(sim.trees[0].cell, Vector2i.ONE))
 	run(sim, 5)
 	check(ada.job == null or ada.job.kind != "gather", "resident stops chopping until a new axe exists")
@@ -386,10 +382,14 @@ func test_every_save_fixture_still_loads() -> void:
 			check(Sim.level(sim.residents[0], "build") == 3, "v%d: skills survive" % v)
 		else:
 			check(sim.residents[0].jobs.values().all(func(j): return j.xp == 0 or v >= 11), "v%d: older saves start at level 1" % v)
-		if v >= 10:
-			check(sim.residents[0].jobs.haul.pri == 1 and not sim.residents[0].jobs.hunt.on, "v%d: job toggles and priorities survive" % v)
-		else:
-			check(sim.residents.all(func(r): return r.jobs == Sim.default_jobs()), "v%d: residents get every job on at priority 2" % v)
+		check(sim.residents[0].role == "all" and sim.residents.slice(1).all(func(r): return r.role in Defs.JOBS), "v%d: Ada does everything, and everyone else has one job" % v)
+		check(sim.residents.all(func(r): return r.jobs.values().all(func(j): return j.keys() == ["xp"])), "v%d: the job switches and priorities are gone" % v)
+		if v >= 22:
+			check(sim.residents[1].role == "farm", "v%d: a resident's job survives" % v)
+		elif sim.residents.size() >= 2:  # every job on at priority 2: the best level wins, then the first job
+			var t: Dictionary = sim.residents[1]
+			var skilled: Array = Defs.JOBS.filter(func(jb): return t.jobs[jb].xp > 0)
+			check(t.role == (skilled[0] if not skilled.is_empty() else "mine"), "v%d: Tomas gets the job he's best at (%s)" % [v, t.role])
 		var fires: Array = sim.sites.filter(func(s): return s.tpl == "fireplace")
 		if v >= 9:
 			check(fires.size() == 1 and fires[0].plot is Rect2i, "v%d: the fireplace and its reserved plot survive" % v)
@@ -431,6 +431,7 @@ func test_dropped_tools_keep_their_wear() -> void:
 	worn = loaded.stacks_where(func(s): return s.type == "wood_axe")
 	check(worn.size() == 1 and worn[0].dur == 3, "wear survives a save and load")
 	var bo := loaded.add_resident("Bo", "8C4F6B", at(1, 1))
+	loaded.set_role(bo, "mine")
 	loaded.designate_mine(Rect2i(0, 0, loaded.w, loaded.h))
 	for b in loaded.boulders:
 		b.des = false
@@ -460,52 +461,12 @@ func test_craft_patterns_match_their_recipes() -> void:
 			check(not rec.has("fuel") or rec.inp.has(rec.fuel), "%s's fuel is one of its inputs" % rec.name)
 
 
-## Issue #91: nobody is a toolsmith until the player switches it on, so no spares are made unasked;
-## a traveler skilled at it arrives with it on; hand-queued tools wait for a toolsmith.
-func test_toolsmith_is_employed_by_switching_it_on() -> void:
-	var sim := Sim.new_game()
-	var ada: Dictionary = sim.residents[0]
-	check(not ada.jobs.toolsmith.on and ada.jobs.craft.on and ada.jobs.mine.on, "Ada starts with every job on but Toolsmith")
-	check(Sim.default_jobs().values().filter(func(j): return not j.on).size() == 1, "Toolsmith is the only job off by default")
-	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
-	bench.stage = 1
-	bench.done = true
-	ada.axe = {"type": "wood_axe", "tier": 1, "dur": 5}
-	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "plank", 6)
-	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "stick", 4)
-	run(sim, 2)
-	check(not bench.autoq.has("toolsmith"), "with no toolsmith, no spare is queued (%s)" % [bench.queue])
-	check(Goals.current(sim) <= 2, "the checklist asks for a toolsmith before the pickaxe")
-	sim.queue_add(bench, "wood_pick")
-	run(sim, 10)
-	check(bench.queue.has("wood_pick") and stuck_text(sim).contains("No one does Toolsmith"), "a pickaxe queued by hand waits, and says why: " + stuck_text(sim))
-	sim.set_job_on(ada, "toolsmith", true)
-	run(sim, 2)
-	check(bench.autoq.has("toolsmith"), "once someone is toolsmith, a spare axe is queued (%s)" % [bench.queue])
-	check(Goals.done(sim, 2), "and the checklist's toolsmith step is done")
-	run(sim, 60)
-	check(sim.stats.pick_crafted, "the toolsmith makes the hand-queued pickaxe")
-	# A traveler who arrives skilled as a toolsmith starts with it on.
-	var found := false
-	for seed in 40:
-		var t := Sim.new_game()
-		t.rng.seed = seed
-		t._arrive()
-		var tr: Dictionary = t.residents.back()
-		if tr.jobs.toolsmith.xp > 0:
-			found = true
-			check(tr.jobs.toolsmith.on, "a skilled toolsmith arrives with Toolsmith on")
-			break
-		check(not tr.jobs.toolsmith.on or tr.jobs.toolsmith.xp > 0, "an arrival with another skill has Toolsmith off")
-	check(found, "some seed brings a skilled toolsmith")
-
-
 ## Issue #77: a standing order short of materials is listed as waiting, not stuck, and every entry
 ## remembers when it first showed, so the list can put the longest-stuck first.
 func test_standing_orders_wait_rather_than_block() -> void:
 	var sim := Sim.new_game()
-	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	var ada: Dictionary = sim.residents[0]
+	hire_toolsmith(sim)
 	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
 	bench.stage = 1
 	bench.done = true
@@ -540,7 +501,6 @@ func test_erasing_stockpile_cells() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
 	ada.hunger = 100.0
-	sim.residents[0].jobs.mine.on = false
 	var rect := open_rect(sim, Vector2i(4, 1))
 	sim.paint_zone(rect)
 	check(sim.zone.size() == 4, "a 4-cell stockpile")
@@ -744,7 +704,8 @@ func test_beds_and_free_bed_arrivals() -> void:
 	var s := play_opening(sim)
 	check(s.h1.stage == 4 and s.h2.stage == 4, "both opening houses got their beds")
 	check(sim.stats.get("sheep_hunted", 0) == 6, "the six sheep were hunted for wool")
-	check(Goals.LIST[6].t == "Hunt sheep for wool" and Goals.done(sim, 6), "the founding goals include hunting for wool")
+	var wool: int = Goals.LIST.map(func(g): return g.t).find("Hunt sheep for wool")
+	check(wool >= 0 and Goals.done(sim, wool), "the founding goals include hunting for wool")
 	# A house with no wool for its bed: finished up to the roof, never done, and nobody comes.
 	var bench: Dictionary = s.bench
 	for k in sim.items.keys():
@@ -1027,75 +988,95 @@ func test_fireplace_cooks_and_keeps_meals_stocked() -> void:
 	check(count(sim2, "mutton") == 1 and a2.hunger > 50.0, "a hungry resident eats berries and leaves raw mutton for cooking")
 
 
-func test_jobs_on_off_and_priorities() -> void:
+## Issue #134: every resident but Ada has one job. They claim only its work, and haul when there's
+## none. Ada does everything.
+func test_one_job_each() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
-	check(ada.jobs == Sim.default_jobs() and ada.jobs.size() == 8, "Ada starts with all 8 jobs on at priority 2")
-	# Haul off: loose logs are never hauled, and the stuck list says no one does it.
+	check(ada.role == "all" and ada.jobs == Sim.default_jobs(), "Ada does everything, at level 1 in each job")
+	sim.set_role(ada, "farm")
+	check(ada.role == "all", "Ada's job can't be changed")
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	check(tomas.role == "none" and Sim.role_name(tomas) == "No job", "a resident added by hand has no job")
+	sim.set_role(tomas, "farm")
 	sim.paint_zone(open_rect(sim, Vector2i(2, 1)))
-	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "log", 4)
-	sim.set_job_on(ada, "haul", false)
+	sim.drop_items(Sim.rcell(tomas) + Vector2i(1, 0), "log", 4)
+	sim.designate_mine(whole_map())
+	var mined := false
 	var hauled := false
-	for i in 20 * Tuning.TPS:
+	for i in 10 * Tuning.TPS:
 		sim.step()
-		if ada.job != null and ada.job.kind == "haul":
-			hauled = true
-	check(not hauled and count(sim, "log") == 4, "with Haul off, Ada never hauls")
-	check(stuck_text(sim).contains("No one does Haul"), "and the stuck list says no one does Haul: " + stuck_text(sim))
-	sim.set_job_on(ada, "haul", true)
-	run(sim, 20)
-	check(sim.items.values().all(func(it): return sim.in_zone(it.cell)), "Haul back on: the logs are hauled")
-	check(not stuck_text(sim).contains("No one does"), "and the reason goes away")
-	# Priority 1 work comes before priority 2, against Slice 1's order (mining before hauling).
-	var sim2 := Sim.new_game()
-	var a2: Dictionary = sim2.residents[0]
-	sim2.paint_zone(open_rect(sim2, Vector2i(2, 1)))
-	sim2.drop_items(Sim.rcell(a2) + Vector2i(0, 1), "cobble", 4)
-	sim2.designate_mine(whole_map())
-	run(sim2, 1)
-	check(a2.job != null and a2.job.work == "mine", "at equal priorities, mining comes before hauling (%s)" % (a2.job.work if a2.job else "idle"))
-	sim2.set_job_priority(a2, "haul", 1)
-	check(a2.job != null and a2.job.work == "mine", "changing a priority doesn't interrupt the current job")
-	sim2.fail_job(a2)
-	run(sim2, 0.1)
-	check(a2.job != null and a2.job.work == "haul", "with Haul at priority 1, she hauls first (%s)" % (a2.job.work if a2.job else "idle"))
-	# Switching off the job she's doing stops it.
-	sim2.set_job_on(a2, "haul", false)
-	check(a2.job == null or a2.job.work != "haul", "switching a job off stops it")
-	# Direct orders still work with every job off.
-	for jb in Defs.JOBS:
-		sim2.set_job_on(a2, jb, false)
-	run(sim2, 2)
-	check(a2.job == null, "with every job off, she claims nothing")
-	var tree: Dictionary = Sim.nearest(sim2.trees.filter(func(t): return t.alive and t.claim == 0), Sim.rcell(a2))
-	sim2.direct_order(a2, tree)
-	run(sim2, 1)
-	check(a2.job != null and is_same(a2.job.target, tree), "a direct order still works with every job off")
-	check(stuck_text(sim2).contains("No one does Mine"), "and the other marked trees say no one mines: " + stuck_text(sim2))
-	# Eating comes before jobs, and is never switched off.
-	a2.hunger = 30.0
-	sim2.fail_job(a2)
-	run(sim2, 0.1)
-	check(a2.job != null and a2.job.kind == "eat", "a hungry resident eats even with every job off")
-	# Station work is split by job: with Toolsmith off, Ada makes planks but not the pickaxe.
-	var sim3 := Sim.new_game()
-	var a3: Dictionary = sim3.residents[0]
-	var bench := sim3.place_site("bench", open_rect(sim3, Vector2i(3, 3)).position + Vector2i(1, 0))
+		if tomas.job != null:
+			mined = mined or tomas.job.work == "mine"
+			hauled = hauled or tomas.job.work == "haul"
+	check(not mined and hauled, "a farmer with nothing to farm never mines marked trees, and hauls instead")
+	# A new job takes over, and stops work of the old one.
+	sim.set_role(tomas, "mine")
+	sim.fail_job(tomas)
+	run(sim, 0.1)
+	check(tomas.job != null and tomas.job.work == "mine", "made a miner, he mines (%s)" % (tomas.job.work if tomas.job else "idle"))
+	sim.set_role(tomas, "cook")
+	check(tomas.job == null or tomas.job.work != "mine", "a new job stops work of the old one")
+	check(Sim.job_list(tomas) == ["haul", "cook"] and Sim.job_list(ada) == Defs.JOBS, "his work is his job and hauling; Ada's is everything")
+	# No job: hauls only. Direct orders still work, and eating comes first.
+	sim.set_role(tomas, "none")
+	var tree: Dictionary = Sim.nearest(sim.trees.filter(func(t): return t.alive and t.claim == 0), Sim.rcell(tomas))
+	sim.direct_order(tomas, tree)
+	run(sim, 1)
+	check(tomas.job != null and is_same(tomas.job.target, tree), "a direct order works whatever the job")
+	tomas.hunger = 30.0
+	sim.fail_job(tomas)
+	run(sim, 0.1)
+	check(tomas.job != null and tomas.job.kind == "eat", "a hungry resident eats first")
+	# "No one is a miner" once nobody has the job and Ada can't see to it.
+	sim.compute_stuck()
+	check(not stuck_text(sim).contains("No one is a"), "while Ada's about, nothing is unstaffed: " + stuck_text(sim))
+	ada.away = true
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("No one is a miner"), "with Ada away, marked trees say no one is a miner: " + stuck_text(sim))
+	sim.set_role(tomas, "mine")
+	sim.compute_stuck()
+	check(not stuck_text(sim).contains("No one is a miner"), "and the reason goes once someone is: " + stuck_text(sim))
+	ada.away = false
+	# Jobs survive a save.
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.residents[0].role == "all" and loaded.residents[1].role == "mine", "jobs survive a save")
+
+
+## Issue #134 (and #91): Ada makes tools queued by hand, but spare tools are made only while a
+## resident's job is Toolsmith. A traveler arrives with the job they're skilled in.
+func test_spares_need_a_resident_toolsmith() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
 	bench.stage = 1
 	bench.done = true
-	sim3.drop_items(Sim.rcell(a3) + Vector2i(1, 0), "log", 4)
-	sim3.set_job_on(a3, "toolsmith", false)
-	for r in ["planks", "planks", "sticks", "wood_pick"]:
-		sim3.queue_add(bench, r)
-	run(sim3, 60)
-	check(bench.queue == ["wood_pick"], "with Toolsmith off, the pickaxe waits (%s)" % [bench.queue])
-	check(stuck_text(sim3).contains("No one does Toolsmith"), "and says why: " + stuck_text(sim3))
-	sim3.set_job_on(a3, "toolsmith", true)
-	run(sim3, 20)
-	check(sim3.stats.pick_crafted, "Toolsmith on: the pickaxe is made")
-	# Jobs survive a save.
-	var loaded := Sim.from_state(str_to_var(var_to_str(sim2.save_state())))
-	check(loaded.residents[0].jobs == a2.jobs, "job settings survive a save")
+	ada.axe = {"type": "wood_axe", "tier": 1, "dur": 5}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "plank", 6)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "stick", 4)
+	run(sim, 2)
+	check(not bench.autoq.has("toolsmith") and not sim.has_toolsmith(), "Ada alone queues no spares (%s)" % [bench.queue])
+	sim.queue_add(bench, "wood_pick")
+	run(sim, 30)
+	check(sim.stats.pick_crafted, "Ada makes a pickaxe queued by hand")
+	check(Goals.LIST.all(func(g): return not g.t.contains("toolsmith")), "the checklist no longer asks for a toolsmith")
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	sim.set_role(tomas, "toolsmith")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(0, 1), "plank", 6)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(0, 2), "stick", 4)
+	run(sim, 2)
+	check(sim.has_toolsmith() and bench.autoq.has("toolsmith"), "with a resident toolsmith, a spare is queued (%s)" % [bench.queue])
+	# Travelers arrive at work in the job they're skilled in.
+	var seen := {}
+	for seed in 40:
+		var t := Sim.new_game()
+		t.rng.seed = seed
+		t._arrive()
+		var tr: Dictionary = t.residents.back()
+		var skill: String = Defs.JOBS.filter(func(jb): return tr.jobs[jb].xp > 0)[0]
+		check(tr.role == skill, "an arrival skilled at %s has that job (%s)" % [skill, tr.role])
+		seen[skill] = true
+	check(seen.has("toolsmith"), "some seed brings a skilled toolsmith")
 
 
 ## Experience that puts a resident at `lv` in a job.
@@ -1105,7 +1086,6 @@ func set_level(r: Dictionary, job: String, lv: int) -> void:
 
 func test_skills_rise_and_pay_off() -> void:
 	var sim := Sim.new_game()
-	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	var ada: Dictionary = sim.residents[0]
 	# Levels rise at 8, 25, 50 and 90 points and stop at 5.
 	check(Sim.level(ada, "mine") == 1, "everyone starts at level 1")
@@ -1168,7 +1148,6 @@ func test_skills_rise_and_pay_off() -> void:
 	var a6: Dictionary = sim6.residents[0]
 	set_level(a6, "craft", 4)
 	set_level(a6, "toolsmith", 2)
-	a6.jobs.toolsmith.on = true
 	var bench := sim6.place_site("bench", open_rect(sim6, Vector2i(3, 3)).position + Vector2i(1, 0))
 	bench.stage = 1
 	bench.done = true
@@ -1201,16 +1180,25 @@ func test_skills_rise_and_pay_off() -> void:
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim7.save_state())))
 	check(Sim.level(loaded.residents[0], "haul") == 3, "skills survive a save")
 	var t8: Dictionary = Sim.nearest(sim2.trees.filter(func(t): return t.alive), Sim.rcell(a2))
-	sim2.direct_order(a2, t8)
+	var bo := sim2.add_resident("Bo", Sim.TRAVELERS[0][1], sim2.nearest_walkable(Sim.rcell(a2) + Vector2i(1, 0)))
+	sim2.set_role(bo, "mine")
+	sim2.direct_order(bo, t8)
 	run(sim2, 0.1)
-	sim2.set_job_on(a2, "mine", false)
-	check(a2.job != null and is_same(a2.job.target, t8), "switching Mine off doesn't cancel a direct mining order")
+	sim2.set_role(bo, "cook")
+	check(bo.job != null and is_same(bo.job.target, t8), "a new job doesn't cancel a direct mining order")
+
+
+## A resident whose job is Toolsmith, so spare tools are kept (issues #91, #134). Ada doesn't count.
+func hire_toolsmith(sim: Sim) -> Dictionary:
+	var t := sim.add_resident("Bram", Sim.TRAVELERS[4][1], sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(0, 3)))
+	sim.set_role(t, "toolsmith")
+	return t
 
 
 func test_toolsmith_keeps_spares() -> void:
 	var sim := Sim.new_game()
-	sim.residents[0].jobs.toolsmith.on = true  # the player makes Ada the toolsmith (issue #91)
 	var ada: Dictionary = sim.residents[0]
+	hire_toolsmith(sim)
 	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
 	bench.stage = 1
 	bench.done = true
@@ -1236,11 +1224,11 @@ func test_toolsmith_keeps_spares() -> void:
 	run(sim, 20)
 	check(ada.axe != null and not ada.broken.axe, "she picks up the spare (%s)" % [ada.axe])
 	check(not stuck_text(sim).contains("Axe broke"), "and the report clears: " + stuck_text(sim))
-	check(bench.queue.has("wood_axe"), "the toolsmith queues the next spare")
+	check(bench.queue.has("wood_axe") or sim.tool_items("axe", 0).size() == 1, "the toolsmith queues the next spare, or has made it (%s)" % [bench.queue])
 	# The best tier the bench can make: stone once there's cobblestone.
 	var sim2 := Sim.new_game()
 	var a2: Dictionary = sim2.residents[0]
-	a2.jobs.toolsmith.on = true
+	hire_toolsmith(sim2)
 	var b2 := sim2.place_site("bench", open_rect(sim2, Vector2i(3, 3)).position + Vector2i(1, 0))
 	b2.stage = 1
 	b2.done = true
@@ -1255,7 +1243,6 @@ func test_toolsmith_keeps_spares() -> void:
 	var b3 := sim3.place_site("bench", open_rect(sim3, Vector2i(3, 3)).position + Vector2i(1, 0))
 	b3.stage = 1
 	b3.done = true
-	sim3.set_job_on(a3, "toolsmith", false)
 	a3.axe = {"type": "wood_axe", "tier": 1, "dur": 1}
 	sim3.drop_items(Sim.rcell(a3) + Vector2i(1, 0), "plank", 6)
 	sim3.drop_items(Sim.rcell(a3) + Vector2i(-1, 0), "stick", 4)
@@ -1263,7 +1250,7 @@ func test_toolsmith_keeps_spares() -> void:
 	sim3.direct_order(a3, t3)
 	run(sim3, 30)
 	check(b3.queue.is_empty(), "with no toolsmith, no spares are queued")
-	check(a3.axe == null and stuck_text(sim3).contains("Axe broke. Craft one at the bench, or switch Toolsmith on for someone"), "and a broken axe stops and reports: " + stuck_text(sim3))
+	check(a3.axe == null and stuck_text(sim3).contains("Axe broke. Craft one at the bench, or make someone the toolsmith"), "and a broken axe stops and reports: " + stuck_text(sim3))
 
 
 func test_equip_a_chosen_tool() -> void:
@@ -1318,6 +1305,7 @@ func until_away(sim: Sim, r: Dictionary, seconds := 30.0) -> void:
 
 ## A resident with a stone pickaxe, moved onto the old mine at its entrance.
 func send_to_mine(sim: Sim, r: Dictionary) -> void:
+	sim.set_role(r, "mine")  # one job each (issue #134): the one sent to dig is a miner
 	r.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
 	sim.get_map(OldMine.ID).visited = true
 	sim.move_to_map(r, OldMine.ID, sim.get_map(OldMine.ID).entrance)
@@ -1431,7 +1419,6 @@ func test_old_mine_layout_and_ore() -> void:
 	check(not sim.on_map(OldMine.ID, sim.walkable.bind(Vector2i(14, 13))), "the hidden vein is solid rock")
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Vector2i(16, 16))
 	send_to_mine(sim, tomas)
-	tomas.jobs.haul.on = false
 	run(sim, 120)
 	check(sim.stats.get("ore_mined", 0) > 0 and sim.on_map(OldMine.ID, func(): return count(sim, "coal")) >= Tuning.ORE_YIELD.coal, "mining coal ore drops coal")
 	check(sim.on_map(OldMine.ID, func(): return count(sim, "iron_ore")) == 0, "no iron before the vein is found")
@@ -1525,7 +1512,6 @@ func test_smelting_and_iron_tools() -> void:
 	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
 	bench.stage = 1
 	bench.done = true
-	sim.residents[0].jobs.toolsmith.on = true
 	sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 1), "iron_ingot", 1)
 	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "stick", 2)
 	sim.queue_add(bench, "iron_pick")
@@ -1535,7 +1521,7 @@ func test_smelting_and_iron_tools() -> void:
 	# The toolsmith's spare is iron when there are ingots, before stone and wood.
 	var sim2 := Sim.new_game()
 	var a2: Dictionary = sim2.residents[0]
-	a2.jobs.toolsmith.on = true
+	hire_toolsmith(sim2)
 	var b2 := sim2.place_site("bench", open_rect(sim2, Vector2i(3, 3)).position + Vector2i(1, 0))
 	b2.stage = 1
 	b2.done = true
@@ -2081,6 +2067,7 @@ func test_survey_and_obstacles() -> void:
 	var walk_before := sim.route_walk_time()
 	check(sim.plan_bridge() == "" and sim.plan_bridge() != "", "Build the bridge places one blueprint")
 	var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], sim.route_sign() + Vector2i(-3, 0))
+	sim.set_role(mira, "build")
 	mira.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
 	sim.drop_items(sim.route_sign() + Vector2i(-4, 2), "plank", 12)
 	var labels: Array = []
@@ -2228,11 +2215,10 @@ func test_track_crew_and_railhead() -> void:
 	sim.plan_line()
 	sim.compute_stuck()
 	check(sim.stuck.any(func(x): return x.why == "Track: needs 12 more rails"), "with no rails, the track says how many it needs: %s" % stuck_text(sim))
-	for r in sim.residents:
-		r.jobs.build.on = false
+	ada.away = true
 	sim.compute_stuck()
-	check(sim.stuck.any(func(x): return x.why == "Track: no one with Build on"), "and that nobody lays track with Build off")
-	ada.jobs.build.on = true
+	check(sim.stuck.any(func(x): return x.why == "Track: no one is a builder"), "and, with Ada away and no builder, that nobody lays track")
+	ada.away = false
 	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "rail", 12)
 	var labels: Array = []
 	var half := false
@@ -2493,7 +2479,6 @@ func test_cows_and_pigs() -> void:
 	sim.queue_order(ada, cow)
 	check(Sim.order_text(ada.orders[0]) == "Hunt a cow", "a queued hunt names the animal")
 	ada.orders.clear()
-	ada.jobs.haul.on = false
 	run(sim, 120)
 	check(not cow.alive and not pig.alive, "Ada hunts both")
 	check(count(sim, "leather") == 1 and count(sim, "beef") == 2, "a cow drops 1 leather and 2 raw beef")
