@@ -55,11 +55,12 @@ There's no single-test runner. To focus on one test, temporarily trim the `tests
   - `hud.gd` builds the slate-and-chalk HUD from one code-built `Theme`. Panels rebuild only when their content changes, and never while a mouse button is held over them, so clicks aren’t lost to a rebuild.
 - `game/view/key_bindings.gd`: rebindable keys, and the tally bar's pinned items (a view preference, kept out of game saves). Input goes through `keys.action_for(event)`; never match raw keycodes in `game.gd`. Tests set `game.keys_path` before adding the game, so they always run with default keys.
 - `game/scenes/game.gd`: ticks the sim at 20 Hz times the current speed, owns the camera and selection, and turns input into sim commands. It also saves and loads slots, storing `Sim.save_state()` with `var_to_str`. The HUD and the menu (`view/game_menu.gd`) call its public methods.
-- **Changing what's saved:** follow `game/sim/save_format.gd`.
+- **Changing what's saved:** follow `game/sim/save_format.gd`. **Owner rule: every save must keep loading in every newer version of the game.** A rework never breaks old saves. Its upgrade step carries the player's progress over sensibly. If a change seems to need a break, raise it with the owner first.
   - Bump `SaveFormat.VERSION`.
   - Add an upgrade step from the previous version to `SaveFormat.upgrades()`.
   - Generate the new fixture with `tests/fixtures/make_save_fixture.gd`.
   - Never regenerate or delete an old fixture: `run_tests.gd` loads every fixture, which proves players' old saves still load.
+  - Keep old upgrade steps, and `make_save_fixture.gd`'s old-version branches, working as the code changes. Read fields that later versions dropped with `.get()` and a default.
 - Avoid naming methods after built-in `Object`/`Script` methods. `_get` and `is_tool` both broke compilation here.
 
 ## Technical decisions
