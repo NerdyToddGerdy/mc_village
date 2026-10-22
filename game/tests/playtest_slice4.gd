@@ -128,6 +128,8 @@ func trip(sim: Sim, ada: Dictionary, by_cart := false) -> Dictionary:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(game.planner_open, "selecting the board opens the planner")
+	check(await click_button("Adventure: Old mine"), "pick the old mine from the adventures list")
+	await settle()
 	game.plan = sim.new_plan()
 	game._hud.refresh(sim)
 	await frames(2)

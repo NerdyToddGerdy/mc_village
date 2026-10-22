@@ -17,7 +17,9 @@ var trees: Array = []        ## {id, kind:"tree", cell, logs, alive, des, claim,
 ## "iron") for an ore block, `hidden` for one nobody has found yet, which stands as plain rock, and
 ## `loose` for one under a loose ceiling (issue #110).
 var boulders: Array = []
-var sheep: Array = []        ## {id, kind:"sheep", pos, cell, dest, wait, alive, des, claim, unreach_until}
+## The animals (issues #42, #138): sheep, and cows and pigs at the meadow. The field keeps its first name.
+##   {id, kind:"animal", species, pos, cell, dest, wait, alive, des, claim, unreach_until}
+var sheep: Array = []
 var bushes: Array = []       ## {id, kind:"bush", cell, berries, regrow}: berry bushes (issue #44)
 var items := {}              ## Vector2i -> {cell, type, n, res}
 var zone := {}               ## Vector2i -> true: stockpile cells
@@ -33,9 +35,18 @@ var visited := false         ## Someone has been there, so its site report has r
 var found := false           ## Its hidden find (the old mine's iron) has been found (issue #111).
 var discovered := false      ## And surveyed, so it's a known resource with an estimate.
 var ledges: Array = []       ## Cells with a drop someone can fall from in the dark (issue #110).
+# The old mine's levels (issue #132).
+var level := 0               ## 1 for the old mine, 2 and on for the levels below it; 0 for any other map.
+var pattern := ""            ## The level's pattern family (MineLevels.FAMILIES, or "workings" for Level 1).
+var door := Vector2i(-1, -1) ## The door down at the far end: a rock cell the party opens from the cell in front.
+var door_state := ""         ## "closed" until the party reaches it, "found" once it has, "open" once it's opened.
 # Route maps (Slice 4, issues #118, #119).
 var water := {}              ## Vector2i -> true: a stream, forded slowly until it's bridged.
 var seen := 0                ## Segments of the route anyone knows, from the village end; the rest is fog.
+# The meadow (Slice 3.5, issue #137).
+var banks: Array = []        ## The pond's muddy bank: someone stepping onto it can slip.
+var fences := {}             ## Vector2i -> true: old fences, which nobody walks through.
+var regrow := {}             ## Species -> seconds toward its next animal, while it's below its herd.
 
 var occ := PackedByteArray()
 var occ_dirty := true
@@ -48,7 +59,7 @@ func _init(p_w := Tuning.MAP_W, p_h := Tuning.MAP_H) -> void:
 	occ.resize(w * h)
 
 
-const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "ledges", "water", "seen"]
+const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "ledges", "water", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow"]
 
 
 ## The map as plain data. Reservations and job bookkeeping aren't saved (spec §2, Saving).

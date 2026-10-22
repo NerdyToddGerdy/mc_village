@@ -32,7 +32,7 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 - **Bottom left:** whatever you've selected: a resident, a building, a tree, a farm plot.
 - **Bottom right:** the **orders toolbar**, and the Craft panel when it's open.
 
-**Other maps.** Expeditions go to places off the map, such as an old mine. Once the village knows of one, a switcher in the top bar shows **Village** and **Old mine** (Tab switches), and a dim line under it says what a party there is doing, or how long until it gets there. Each map keeps its own view. Stockpiles, farms and buildings stay in the village.
+**Other maps.** Expeditions go to places off the map, such as an old mine and a meadow. Once the village knows of one, a switcher in the top bar shows **Village**, **Old mine** and the rest (Tab switches), and a dim line under it says what a party there is doing, or how long until it gets there. Each map keeps its own view. Stockpiles, farms and buildings stay in the village.
 
 Marks drawn on the world show what's been ordered. Chalk-white means selected, red means mine or hunt, green hatching is a stockpile, wheat rows are a farm, a blue dashed outline is a blueprint, and a yellow flag means something is stuck.
 
@@ -63,7 +63,7 @@ There are two ways to get work done.
 | **Gather** (E) | Mine (X) | Fell trees and break boulders. Shift-drag marks only trees, Alt-drag (Option on a Mac) only boulders |
 | | Chop trees | Trees only |
 | | Break boulders | Boulders only. Breaking them needs a pickaxe |
-| | Hunt (G) | Sheep. Shows while there are sheep in the clearing |
+| | Hunt (G) | Sheep, cows and pigs. Shift-drag marks only the kind you start on. Shows while there are animals about |
 | **Paint** (Z) | Stockpile | Ground where residents store what they gather |
 | | Farm plot (P) | Open grass where residents grow wheat |
 | **Build** (B) | Crafting bench (T), House (H), Fireplace (K) | Place a blueprint. R turns it |
@@ -73,7 +73,7 @@ While a toolbar menu is open, **1 to 9** pick its rows, so Z then 1 paints a sto
 
 **To erase** stockpile cells or farm plots, switch that Paint order on and start a drag on a painted cell. The cells that will go show in red. Items on an erased stockpile cell stay where they are and get carried to the rest of the stockpile. Wheat growing on an erased farm plot is lost.
 
-**Order someone directly.** Select a resident and **right-click** a tree, boulder or sheep to send them to it, or right-click the ground to send them there. **Shift + right-click** adds the order to the end of their list. Direct orders come before everything else, whatever their jobs are set to. They still work while a Gather or Paint order is on.
+**Order someone directly.** Select a resident and **right-click** a tree, boulder or animal to send them to it, or right-click the ground to send them there. **Shift + right-click** adds the order to the end of their list. Direct orders come before everything else, whatever their jobs are set to. They still work while a Gather or Paint order is on.
 
 ## Residents
 
@@ -167,27 +167,26 @@ Residents get hungry. A full resident empties in about 6 minutes of game time.
 | Food | Fills | Where it comes from |
 |---|---|---|
 | Berries | 15 | Six berry bushes around the clearing. Each holds 3 berries, and a berry grows back every 45 seconds |
-| Raw mutton | 20 | Hunting sheep. Residents eat it only when there's nothing else |
+| Raw mutton, beef or porkchop | 20 | Hunting sheep, cows and pigs. Residents eat raw meat only when there's nothing else |
 | Bread | 50 | The fireplace, from 3 wheat |
-| Cooked mutton | 60 | The fireplace, from 1 raw mutton and 1 log of fuel |
+| Cooked mutton, beef or porkchop | 60 | The fireplace, from 1 raw meat and 1 log of fuel |
 
 **Farming.** Paint farm plots over open grass. Residents with **Farm** on plant each cell, the wheat ripens in 2 minutes, and a harvest gives 2 wheat. A plot is replanted only after its wheat has been carried away, so a farm needs a stockpile.
 
-**The fireplace** cooks whatever you queue. It also smelts: **Smelt iron** turns 1 iron ore and 1 coal into an iron ingot, for iron tools. It also has a standing order, **Keep 6 meals in stock**, which is on by default: while fewer than 6 bread and cooked mutton are stored, cooks make whatever the wheat, mutton and logs allow.
+**The fireplace** cooks whatever you queue. It also smelts: **Smelt iron** turns 1 iron ore and 1 coal into an iron ingot, for iron tools. It also has a standing order, **Keep 6 meals in stock**, which is on by default: while fewer than 6 bread and cooked meats are stored, cooks make whatever the wheat, raw meat and logs allow.
 
-**Sheep.** Six sheep roam the clearing at the start, enough wool for the first two beds. After that, there are more at the **sheep meadow**, off the map past the signpost on the left edge.
-- Select one or two residents and choose **Send to the meadow**. They're away for 90 seconds, then come back with 2 wool and 2 raw mutton each.
-- The meadow starts with 8 sheep and regains one every 4 minutes. Click the signpost to see how many are left.
-- While residents are away, they don't work in the village and don't get hungry.
+**Animals.** Six sheep roam the clearing at the start, enough wool for the first two beds. Each gives 1 wool and 1 raw mutton. After that, there are more at the **meadow**, off the map past the signpost on the left edge, with **cows** (1 leather and 2 raw beef each) and **pigs** (2 raw porkchops each) too. Getting there is an adventure: build an expedition board and plan a trip (see Expeditions).
 
 ## Expeditions
 
-The **expedition board** is where expeditions are planned. Once it's built, the village has word of an **old mine** a short walk east, with stone and coal. Select the board to open the planner.
+The **expedition board** is where expeditions are planned. Once it's built, the village has word of an **old mine** a short walk east, with stone and coal, and a **meadow** a short walk west, with sheep, cows and pigs.
 
-**The site report** (left) says what the village knows about the old mine: what it has been told, the walk there, and what can be mined. Until someone has been, there are no estimates and no known hazards.
+**The adventures list.** Select the board and it opens on a list of everywhere the village knows of: each place's walk, what's there, its known hazards and whether anyone has been. Choose one to open its site report and planner; **All adventures** goes back. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open its adventure, or the old mine's for **Plan a trip to the old mine**. Only one expedition goes at a time, so while one is packing or out, the list says where the party is and nothing else can be planned.
+
+**The site report** (left) says what the village knows about the place: what it has been told, the walk there, and what can be gathered. Until someone has been, there are no estimates and no known hazards.
 
 **Planning:**
-- **Party:** choose 1 to 3 residents. Each shows their Mine level, pickaxe and hunger. Anyone who can't go, such as someone at the meadow, says why.
+- **Party:** choose 1 to 3 residents. Each shows their Mine level, pickaxe and hunger. Anyone who can't go, such as someone still walking in, says why.
 - **Bring back:** what to gather and how much.
 - **Meals to take** and **spare pickaxes.** One meal each is kept for the walk home, unless you choose **Spend it**.
 - **Packs:** each member carries 15 items. Supplies (yellow) and cargo (blue) share that room, so more food leaves less room for what they bring back.
@@ -211,6 +210,18 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 **Injuries.** An injured resident wears a white bandage, walks and works slower, and can't mine. Someone **seriously hurt** can't work, and the game stops for you to choose: **Retreat** (everyone heads home now) or **Press on** (they wait at the entrance while the rest keep working). Ada can be hurt, but never seriously. At home, the hurt rest in their own bed until they've healed: 2 minutes for an injury, 5 for a serious one, and slower without a bed of their own.
 
 **The discovery.** There's something else in the old mine. When the party finds it, the game stops with three choices, each with its cost: **Keep mining**, **Investigate** (someone spends time and pickaxe uses surveying it, and you can send parties for it from then on), or **Mark it and return later** (the party heads home now). The find is remembered either way.
+
+**Deeper levels.** At the far end of the old mine, a heavy wooden door is set in the rock, with a block of stone in front of it. **Dig to the door**, in the party's panel, marks the way. When someone reaches it, the game stops: **Go down now** (the door opens and the party works the level below instead), **Mark it for later** (the party heads home now) or **Keep mining here**. Every level has a door at its far end to the next one, and every floor is laid out differently: a winding cave, a hall of pillars, a maze of tunnels, a cavern split by a stream, a field of rubble. Deeper levels have more coal and iron, but they're darker, and cave-ins and falls are more likely. Once there's more than one level, the planner has a **Work level** row, and the site report lists every level with what's left and its door. The party walks down through each level above to get there, and carries its cargo back up the same way. A level's ore never comes back once mined.
+
+## The meadow
+
+The **meadow** is a short walk west, past the signpost on the village's left edge: open grass around a pond, with trees, a few old fences, and herds of sheep, cows and pigs. Plan a trip there from the adventures list, for wool, leather or meat. No spare pickaxes are needed.
+
+The party carries the packs to the west signpost and walks off the map, about 30 seconds each way. At the meadow they hunt the animals that give what they were sent for, nearest first, follow them as they wander, and pack the drops. Once they have enough, they pack anything else lying about, such as the leather from the cows they hunted for beef. A full party brings back as much as its packs hold. You can mark more animals with Hunt while you're looking at the meadow.
+
+**Hazards** there are mild: an **angry bull** can hurt someone hunting a cow, and the **pond bank** is slippery. Neither injury is ever serious.
+
+Each kind of animal grows back on its own, a few minutes at a time, up to the herd the meadow started with.
 
 ## The road to the mine
 
@@ -264,7 +275,7 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | Shift + right-click | Queue an order after their current one |
 | J | Village jobs board |
 | F / N | Next resident, next stuck item |
-| Tab | Switch between the village, the old mine and the road to it, once they're known |
+| Tab | Switch between the village, the old mine (and its levels), the road to it and the meadow, once they're known |
 | Drag, W A S D, arrow keys | Pan |
 | Mouse wheel, + / − | Zoom |
 | Space / ~ | Pause or resume, pause |

@@ -12,12 +12,73 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 19
+const VERSION := 20
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20}
+
+
+## v20: the old mine's deeper levels (issue #132), and cows and pigs (issue #138). The game keeps its
+## seed, which deeper levels are made from. The old mine is Level 1, with its door at the far end,
+## behind a block of stone the party has to mine; nobody has reached it yet. Every animal so far is a
+## sheep.
+static func _v19_to_v20(d: Dictionary) -> Dictionary:
+	var st: Dictionary = d.state
+	if not st.has("seed"):
+		st.seed = Tuning.SEED
+	_meadow_trips_home(st)
+	for id in st.maps:  # issue #138: the animals so far are all sheep
+		for sh in st.maps[id].get("sheep", []):
+			sh.kind = "animal"
+			if not sh.has("species"):
+				sh.species = "sheep"
+	var mine: Dictionary = st.maps.get(OldMine.ID, {})
+	if not mine.is_empty() and not mine.has("door"):
+		mine.level = 1
+		mine.pattern = "workings"
+		mine.door = Vector2i(15, 8)
+		mine.door_state = "closed"
+		mine.rock[mine.door] = true
+		mine.rock.erase(Vector2i(13, 7))  # a way round the loose ceiling at (12, 8) to the door
+		var front := Vector2i(14, 8)
+		if mine.rock.has(front):
+			mine.rock.erase(front)
+			mine.boulders.append({"id": st.next_id, "kind": "boulder", "cell": front, "alive": true, "des": false, "claim": 0, "unreach_until": 0})
+			st.next_id += 1
+	return d
+
+
+## Slice 2's timed meadow trip is gone (issue #137): anyone away on one is home at the meadow signpost,
+## with the wool and raw mutton they'd have brought back, set down beside it. What's left of the old
+## meadow's sheep (`meadow_sheep`) stays in the save, and the new meadow map keeps that many when it's
+## made on loading.
+static func _meadow_trips_home(st: Dictionary) -> void:
+	var village: Dictionary = st.maps.village
+	var sign := Vector2i(0, int(village.h) / 2)
+	var taken := {}
+	for o in village.trees + village.boulders:
+		if o.alive:
+			taken[o.cell] = true
+	for r in st.residents:
+		if not r.get("away", false) or not r.get("trip", "") in ["", "meadow"]:
+			continue
+		r.away = false
+		r.trip = ""
+		r.back_at = 0
+		r.pos = Vector2(sign)
+		var take := mini(OLD_MEADOW_TAKE, int(st.get("meadow_sheep", OLD_MEADOW_SHEEP)))
+		st.meadow_sheep = st.get("meadow_sheep", OLD_MEADOW_SHEEP) - take
+		if take <= 0:
+			continue
+		st.stats.meadow_trips = st.stats.get("meadow_trips", 0) + 1
+		for type in ["wool", "mutton"]:
+			var c := sign + Vector2i(1, 0)
+			while village.items.has(c) or taken.has(c):
+				c.x += 1
+			village.items[c] = {"cell": c, "type": type, "n": take, "res": 0}
+	st.erase("meadow_regrow")
 
 
 ## v19: the track crew, stations and the cart (issues #122-#124). No cart is on the line yet, and a
@@ -30,6 +91,12 @@ static func _v18_to_v19(d: Dictionary) -> Dictionary:
 		if st.tpl == "track" and not st.has("laid"):
 			st.laid = Tuning.RAILS_PER_SEGMENT if st.done else 0
 	return d
+
+
+## Slice 2's off-map meadow (v19 and earlier): the sheep it held, and the sheep's worth of wool and raw
+## mutton each resident brought back from a trip.
+const OLD_MEADOW_SHEEP := 8
+const OLD_MEADOW_TAKE := 2
 
 
 ## The walk between the village and the old mine in v17 and earlier, a timer off the map.
@@ -140,7 +207,7 @@ static func _v13_to_v14(d: Dictionary) -> Dictionary:
 ## v13: the sheep meadow (issue #50). Older saves get a full meadow, and nobody is away.
 static func _v12_to_v13(d: Dictionary) -> Dictionary:
 	if not d.state.has("meadow_sheep"):
-		d.state.meadow_sheep = Tuning.MEADOW_SHEEP
+		d.state.meadow_sheep = OLD_MEADOW_SHEEP
 		d.state.meadow_regrow = 0.0
 	for r in d.state.residents:
 		if not r.has("away"):

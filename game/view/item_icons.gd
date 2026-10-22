@@ -77,6 +77,23 @@ static func _draw(img: Image, type: String) -> void:
 				_disc(img, p, 13, dark)
 			for p in [Vector2(22, 30), Vector2(36, 24), Vector2(44, 36), Vector2(28, 42), Vector2(38, 44)]:
 				_disc(img, p, 10, c)
+		"leather":  # a hide, stretched out, with a stitched edge
+			_ellipse(img, Vector2(32, 32), Vector2(24, 19), dark)
+			_ellipse(img, Vector2(32, 32), Vector2(21, 16), c)
+			for p in [Vector2(14, 22), Vector2(50, 22), Vector2(14, 42), Vector2(50, 42)]:
+				_disc(img, p, 6, dark)
+				_disc(img, p, 4, c)
+			_ring(img, Vector2(32, 32), 11, 1.5, c.lightened(0.3))
+		"beef", "cooked_beef":  # a thick steak with its fat edge
+			_ellipse(img, Vector2(32, 34), Vector2(23, 17), dark)
+			_ellipse(img, Vector2(32, 34), Vector2(20, 14), Palette.CHALK)
+			_ellipse(img, Vector2(30, 33), Vector2(17, 11), c)
+		"porkchop", "cooked_porkchop":  # a chop: a round of meat and a short bone
+			_line(img, Vector2(36, 40), Vector2(52, 52), 9, dark)
+			_line(img, Vector2(36, 40), Vector2(52, 52), 4, Palette.CHALK)
+			_disc(img, Vector2(28, 28), 18, dark)
+			_disc(img, Vector2(28, 28), 15, c)
+			_disc(img, Vector2(24, 24), 5, c.lightened(0.25))
 		"mutton", "cooked_mutton":  # a joint on the bone
 			_line(img, Vector2(20, 46), Vector2(48, 18), 10, dark)
 			_line(img, Vector2(20, 46), Vector2(48, 18), 5, Palette.CHALK)

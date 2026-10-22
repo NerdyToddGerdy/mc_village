@@ -164,7 +164,9 @@ func _build_static() -> void:
 	var ghost := Batch.new()
 	var dark := Batch.new()
 	var col := Batch.new()
-	if sim.m.kind == "site":
+	if sim.m.id == Meadow.ID:
+		_add_meadow_ground(solid)
+	elif sim.m.kind == "site":
 		_add_site_ground(solid)
 	elif sim.m.kind == "route":
 		_add_route_ground(solid)
@@ -225,8 +227,15 @@ func _add_site_ground(b: Batch) -> void:
 		for y in mp.h:
 			var c := Vector2i(x, y)
 			var v := 0.94 + _hash(x, y) * 0.1
+			if c == mp.door:
+				_add_door(b, c, mp.door_state == "open", MINE_ROCK * Color(v, v, v))
+				continue
 			if mp.rock.has(c) or (sim.boulders.any(func(o): return o.alive and o.get("hidden", false) and o.cell == c)):
 				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.7, y + 1), MINE_ROCK * Color(v, v, v))
+				continue
+			if mp.water.has(c):  # an underground stream (issue #132), below the floor
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.45, y + 1), MINE_FLOOR.darkened(0.3))
+				b.box(Vector3(x, -0.45, y), Vector3(x + 1, -0.3, y + 1), (WATER * Color(v, v, v)).darkened(0.25 if mp.is_dark(c) else 0.0))
 				continue
 			var floor_col := MINE_FLOOR * Color(v, v, v)
 			if mp.is_dark(c):  # unlit: darker and a little cold, but still read as floor, not a hole
@@ -241,23 +250,89 @@ func _add_site_ground(b: Batch) -> void:
 		var z: float = t.y + 0.5
 		b.box(Vector3(x - 0.06, 0.7, z - 0.06), Vector3(x + 0.06, 1.1, z + 0.06), Palette.LOG)
 		b.box(Vector3(x - 0.1, 1.1, z - 0.1), Vector3(x + 0.1, 1.3, z + 0.1), TORCH_FLAME)
-	# The way back to the village: a timber frame over the entrance, and the party's packs beside it
-	# while it works the site (issue #109): a crate for every 3 items in them.
+	# The way back to the village: a timber frame over the entrance, and the party's packs beside it.
 	var e := mp.entrance
-	if sim.expedition.get("state", "") == "out" and sim.expedition.dest == mp.id and sim.expedition.party.any(func(id): return sim.at_site(sim.resident(id))):
-		var crates := mini(9, ceili(sim.pack_load() / 3.0))
-		for i in crates:
-			var px: float = e.x + 1.2 + float(i % 3) * 0.3  # along the tunnel wall just inside
-			var pz: float = e.y + 0.17
-			var py := float(i / 3) * 0.26
-			b.box(Vector3(px - 0.13, py, pz - 0.13), Vector3(px + 0.13, py + 0.26, pz + 0.13), CRATE)
-			b.box(Vector3(px - 0.135, py + 0.1, pz - 0.135), Vector3(px + 0.135, py + 0.14, pz + 0.135), Palette.LOG)
+	_add_packs(b, mp, Vector2(e.x + 1.2, e.y + 0.17), 1.0)
 	b.box(Vector3(e.x, 0, e.y - 0.05), Vector3(e.x + 0.15, 1.4, e.y + 0.1), Palette.LOG)
 	b.box(Vector3(e.x, 0, e.y + 0.9), Vector3(e.x + 0.15, 1.4, e.y + 1.05), Palette.LOG)
 	b.box(Vector3(e.x - 0.05, 1.4, e.y - 0.1), Vector3(e.x + 0.2, 1.6, e.y + 1.1), Palette.LOG)
 
 
 static var WATER := Color("#4E7EA3")
+static var MEADOW_GRASS := Color("#7FA055")
+static var MUD := Color("#6E5A3E")
+
+
+## The party's packs while it works a site (issue #109): a crate for every 3 items in them, in rows of
+## three from `at` along x (`dir` 1 east, -1 west).
+func _add_packs(b: Batch, mp: SimMap, at: Vector2, dir: float) -> void:
+	if not (sim.expedition.get("state", "") == "out" and sim.expedition.dest == mp.id and sim.expedition.party.any(func(id): return sim.at_site(sim.resident(id)))):
+		return
+	for i in mini(9, ceili(sim.pack_load() / 3.0)):
+		var px: float = at.x + dir * float(i % 3) * 0.3
+		var pz: float = at.y
+		var py := float(i / 3) * 0.26
+		b.box(Vector3(px - 0.13, py, pz - 0.13), Vector3(px + 0.13, py + 0.26, pz + 0.13), CRATE)
+		b.box(Vector3(px - 0.135, py + 0.1, pz - 0.135), Vector3(px + 0.135, py + 0.14, pz + 0.135), Palette.LOG)
+
+
+## The meadow (issue #137): bright open grass, the pond set below its muddy bank, and old fences of
+## posts and rails. A signpost by the entrance on the east edge points home, with the party's packs.
+func _add_meadow_ground(b: Batch) -> void:
+	var mp := sim.m
+	for x in mp.w:
+		for y in mp.h:
+			var c := Vector2i(x, y)
+			var v := 0.95 + _hash(x, y) * 0.1
+			if mp.water.has(c):
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.4, y + 1), MUD.darkened(0.2))
+				b.box(Vector3(x, -0.4, y), Vector3(x + 1, -0.22, y + 1), WATER * Color(v, v, v))
+				continue
+			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT)
+			var top := MUD * Color(v, v, v) if c in mp.banks else MEADOW_GRASS * Color(v, v, v)
+			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), top)
+	for c in mp.fences:
+		var x: float = c.x + 0.5
+		var z: float = c.y + 0.5
+		b.box(Vector3(x - 0.07, 0, z - 0.07), Vector3(x + 0.07, 0.75, z + 0.07), Palette.LOG)
+		for d in Sim.DIRS:  # rails toward each neighbouring fence
+			if mp.fences.has(c + d):
+				var lo := Vector3(x + minf(0.0, d.x * 0.5), 0.0, z + minf(0.0, d.y * 0.5))
+				var hi := Vector3(x + maxf(0.0, d.x * 0.5), 0.0, z + maxf(0.0, d.y * 0.5))
+				for y in [0.3, 0.58]:
+					b.box(Vector3(lo.x - 0.04, y, lo.z - 0.04), Vector3(hi.x + 0.04, y + 0.08, hi.z + 0.04), Palette.LOG.lightened(0.1))
+	var e := mp.entrance
+	_add_end_sign(b, e + Vector2i(0, -1), 1.0, Palette.GRASS)
+	_add_packs(b, mp, Vector2(e.x - 1.2, e.y + 0.17), -1.0)
+static var DOOR_WOOD := Color("#6B4A2B")
+static var DOOR_IRON := Color("#3A3D40")
+static var DOORWAY := Color("#1C1E21")
+
+
+## The door down to the next level (issue #132): a heavy plank door with iron bands, standing in a
+## timber frame taller than the rock around it, at the far end of the level. The camera looks at it
+## from outside the level, so its planks, bands and frame are drawn on the faces it sees. Open, it
+## stands swung back against the frame over a dark doorway.
+func _add_door(b: Batch, c: Vector2i, open: bool, rock: Color) -> void:
+	var x := float(c.x)
+	var z := float(c.y)
+	b.box(Vector3(x, -0.6, z), Vector3(x + 1, 0, z + 1), rock.darkened(0.15))
+	for k in [0.0, 0.84]:  # the frame: two posts and a lintel
+		b.box(Vector3(x + 0.1, 0, z + k), Vector3(x + 0.9, 1.55, z + k + 0.16), Palette.LOG)
+	b.box(Vector3(x + 0.05, 1.4, z - 0.04), Vector3(x + 0.95, 1.62, z + 1.04), Palette.LOG.darkened(0.1))
+	if open:
+		b.box(Vector3(x + 0.15, 0, z + 0.16), Vector3(x + 0.85, 1.4, z + 0.84), DOORWAY)
+		b.box(Vector3(x + 0.12, 0, z + 0.7), Vector3(x + 0.88, 1.3, z + 0.82), DOOR_WOOD)  # swung back against the frame
+		return
+	b.box(Vector3(x + 0.18, 0, z + 0.16), Vector3(x + 0.82, 1.4, z + 0.84), DOOR_WOOD)
+	for k in 3:  # the planks' seams
+		var px := x + 0.34 + k * 0.16
+		b.box(Vector3(px - 0.01, 1.4, z + 0.16), Vector3(px + 0.01, 1.41, z + 0.84), DOOR_WOOD.darkened(0.3))
+	for y in [0.25, 1.0]:  # iron bands round it, and a ring
+		b.box(Vector3(x + 0.16, y, z + 0.14), Vector3(x + 0.84, y + 0.12, z + 0.86), DOOR_IRON)
+	b.box(Vector3(x + 0.84, 0.55, z + 0.4), Vector3(x + 0.9, 0.75, z + 0.6), DOOR_IRON)
+
+
 static var TRODDEN := Color("#8C7B58")
 static var FOG := Color("#A9B3AF")
 static var SLEEPER := Color("#6A4A2E")
@@ -943,31 +1018,61 @@ func _update_people() -> void:
 			bar.texture = _bar_texture(r.progress)
 
 
-# ---------------------------------------------------------------- sheep (issue #42)
+# ---------------------------------------------------------------- animals (issues #42, #138)
 
 static var SHEEP_WOOL := Color("#EEEBE3")
 static var SHEEP_FACE := Color("#5A4E44")
+static var COW_HIDE := Color("#6B4429")
+static var COW_PATCH := Color("#EDE6DA")
+static var HORN := Color("#D8CDB4")
+static var PIG_SKIN := Color("#E8A2A0")
+static var PIG_SNOUT := Color("#D07C80")
 var _sheep_nodes := {}
 
 
-func _make_sheep() -> Node3D:
+## An animal made of boxes, told apart by shape as well as colour: a sheep is a woolly block on a dark
+## face, a cow is tall and long, brown with white patches and horns, a pig is low and pink with a snout.
+func _make_animal(species: String) -> Node3D:
 	var n := Node3D.new()
 	var body := Node3D.new()
 	body.name = "Body"
 	n.add_child(body)
-	_part(body, Vector3(0.44, 0.16, 0.30), 0.0, SHEEP_FACE)     # legs, as one dark block
-	_part(body, Vector3(0.56, 0.34, 0.42), 0.14, SHEEP_WOOL)     # woolly body
-	var head := _part(body, Vector3(0.2, 0.22, 0.2), 0.3, SHEEP_FACE)
-	head.name = "Head"
-	head.position.x = 0.34
-	var mark := _sprite(MarkTextures.crosshair(), Vector3(0, 1.0, 0), 0.6, n)
+	match species:
+		"cow":
+			_part(body, Vector3(0.58, 0.26, 0.34), 0.0, COW_HIDE.darkened(0.3))  # legs
+			var hide := _part(body, Vector3(0.74, 0.36, 0.44), 0.24, COW_HIDE)
+			hide.name = "Hide"
+			var patch := _part(body, Vector3(0.28, 0.37, 0.45), 0.24, COW_PATCH)  # a white patch round its middle
+			patch.position.x = -0.1
+			var head := _part(body, Vector3(0.24, 0.26, 0.26), 0.4, COW_HIDE)
+			head.position.x = 0.46
+			var muzzle := _part(body, Vector3(0.08, 0.12, 0.2), 0.42, COW_PATCH)
+			muzzle.position.x = 0.61
+			for z in [-0.17, 0.17]:
+				var horn := _part(body, Vector3(0.06, 0.1, 0.06), 0.66, HORN)
+				horn.position.x = 0.46
+				horn.position.z = z
+		"pig":
+			_part(body, Vector3(0.38, 0.1, 0.26), 0.0, PIG_SNOUT.darkened(0.2))  # short legs
+			_part(body, Vector3(0.5, 0.26, 0.36), 0.08, PIG_SKIN)
+			var head := _part(body, Vector3(0.2, 0.2, 0.24), 0.12, PIG_SKIN)
+			head.position.x = 0.32
+			var snout := _part(body, Vector3(0.06, 0.1, 0.14), 0.16, PIG_SNOUT)
+			snout.position.x = 0.44
+		_:
+			_part(body, Vector3(0.44, 0.16, 0.30), 0.0, SHEEP_FACE)     # legs, as one dark block
+			_part(body, Vector3(0.56, 0.34, 0.42), 0.14, SHEEP_WOOL)     # woolly body
+			var head := _part(body, Vector3(0.2, 0.22, 0.2), 0.3, SHEEP_FACE)
+			head.name = "Head"
+			head.position.x = 0.34
+	var mark := _sprite(MarkTextures.crosshair(), Vector3(0, 1.1 if species == "cow" else 1.0, 0), 0.6, n)
 	mark.name = "Mark"
 	add_child(n)
 	return n
 
 
-## Sheep move every tick, so they're drawn like residents rather than as static blocks. A marked
-## sheep carries a red crosshair that follows it.
+## Animals move every tick, so they're drawn like residents rather than as static blocks. A marked
+## one carries a red crosshair that follows it.
 func _update_sheep() -> void:
 	var here := {}
 	for sh in sim.sheep:
@@ -978,7 +1083,7 @@ func _update_sheep() -> void:
 				_sheep_nodes.erase(sh.id)
 			continue
 		if not _sheep_nodes.has(sh.id):
-			_sheep_nodes[sh.id] = _make_sheep()
+			_sheep_nodes[sh.id] = _make_animal(sh.get("species", "sheep"))
 		var n: Node3D = _sheep_nodes[sh.id]
 		n.visible = true
 		n.position = Vector3(sh.pos.x + 0.5, 0, sh.pos.y + 0.5)

@@ -37,6 +37,8 @@ static var STICK := Color("#9C7A4E")
 static var ITEM_COLORS := {
 	"wool": Color("#ECEAE2"), "mutton": Color("#C2645A"), "berries": Color("#B23A5A"), "wheat": Color("#D8B65A"),
 	"bread": Color("#D9A35A"), "cooked_mutton": Color("#8C4A32"),
+	"leather": Color("#9A5B33"), "beef": Color("#B5473F"), "cooked_beef": Color("#6E3A26"),
+	"porkchop": Color("#E39A8E"), "cooked_porkchop": Color("#A8643F"),
 	"log": Color("#7A5634"), "plank": Color("#C49A62"), "stick": Color("#9C7A4E"), "cobble": Color("#7F827C"),
 	"coal": Color("#34312F"), "iron_ore": Color("#C08A68"), "iron_ingot": Color("#C9D0D6"),
 	"rail": Color("#A7AFB5"), "minecart": Color("#6E777E"),

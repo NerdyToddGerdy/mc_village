@@ -111,6 +111,8 @@ Preparation → outbound travel → work / adventure → return travel → unloa
 
 Supply, equipment, and cargo compete for carrying capacity. Longer provisioned missions have less room available for recovered materials.
 
+**Core decision (Slice 3.5):** expeditions have **more than one destination**. The expedition board opens on an **adventures list**, one row per known destination: the old mine and the meadow. Choosing a row opens that destination's site report and planner. Later destinations, such as the Nether or an outpost, are new rows.
+
 ### Party composition
 
 Proposed specialties include scout, miner, guard, builder, porter, and trader. These are skills rather than mandatory rigid classes. A party does not need every specialty.
@@ -244,6 +246,7 @@ These apply to every expedition, not only the Nether.
 - **A serious injury** triggers the retreat return policy.
 - **Injuries heal over time** in the resident's own bed at home.
 - **The PC is protected:** they can be hurt, but never seriously, and the party always gets them home. Death stays open (§14).
+- **Leather armor (Slice 3.5)** reduces injuries from expedition hazards. It's made from the meadow's leather. Later, Protection enchantments (§9) build on it.
 
 ### Return policies
 
@@ -295,7 +298,7 @@ Enchantments specialize individual equipment used either at home or on expeditio
 | Efficiency | Faster chopping, breaking, or expedition extraction. |
 | Unbreaking | Slower equipment wear. |
 | Fortune | Improved yields from selected resources. |
-| Protection | Reduced encounter injuries. |
+| Protection | Reduced encounter injuries. Builds on leather armor (Slice 3.5, §8). |
 | Feather Falling | Helps with height-related hazards. |
 | Fire-focused protection | Mitigates relevant environmental harm. |
 
@@ -433,7 +436,7 @@ One PC with bare hands, trees, boulders, a crafting bench, wooden and stone tool
 Add job designation, simple food production, a toolsmith job that keeps residents supplied with replacement tools, more residents, and understandable bottlenecks. Implementation detail: `slice-2-spec.md`.
 - **Jobs:** every resident has a level in every job that rises with practice, plus on/off switches and priorities.
 - **Food:** wheat farms and a kitchen for bread, and sheep hunted for mutton. Hunger is the only need.
-- **Beds and wool:** beds make arrivals possible, so wool comes from sheep in the clearing and on a short trip to a meadow off the map.
+- **Beds and wool:** beds make arrivals possible, so wool comes from sheep in the clearing and on a short trip to a meadow off the map. Slice 3.5 replaces that trip with the meadow adventure.
 
 ### Slice 3 — The first expedition
 
@@ -442,6 +445,15 @@ One nearby destination, a small party, provisions, carrying limits, one meaningf
 - **Depth:** the old mine stays reusable through deeper levels, each its own map, reached through a door at the far end of the level above (#130, built in #132).
 - **Discovery:** iron. Iron ore smelted at the fireplace with coal gives iron ingots, which make iron tools at the bench.
 - **Danger:** hazards that injure (§8). No mobs or combat.
+
+### Slice 3.5 — The meadow adventure
+
+The sheep meadow becomes an expedition destination like the old mine, for better farming and bigger hauls. It comes after Slice 3, which stays at one destination. Implementation detail: `slice-3.5-spec.md`.
+- **Adventures list:** the expedition board lists every destination (§5).
+- **The meadow:** an expedition site with its own map, replacing Slice 2's timed meadow trip. Its hazards are few and mild.
+- **Animals:** cows, pigs and sheep, for more meat and leather.
+- **Farming:** pens and breeding, fed with wheat from the village farms, so the herds last.
+- **Leather armor:** reduces injuries from expedition hazards (§8).
 
 ### Slice 4 — Route investment
 
@@ -466,7 +478,7 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 - Combat presentation and degree of player control.
 - Death, rescue, and difficulty settings.
 - Terrain modification, building customization beyond fixed templates, verticality, and camera rotation.
-- Resource regeneration and deposit depletion rules. (Partly resolved, #22: hunting grounds such as the sheep meadow regain their animals over time, and a mine level's ore doesn't come back once mined, while deeper levels keep the old mine useful (#130). Tree regrowth, and depletion elsewhere, are still open.)
+- Resource regeneration and deposit depletion rules. (Partly resolved, #22: hunting grounds such as the meadow regain their animals over time, each species on its own, and from Slice 3.5 pens and breeding restock them faster than regrowth alone. A mine level's ore doesn't come back once mined, while deeper levels keep the old mine useful (#130). Tree regrowth, and depletion elsewhere, are still open.)
 - Exact party sizes, costs, durations, capacities, and balance values. (Resolved for Slice 3, #23: parties of 1–3, PC eligible. Every number stays provisional.)
 - Recruitment beyond free beds, such as requests or an inn. (Resolved for Slice 2, #24: a traveler arrives for each free bed.)
 - How often expeditions require intervention and how many can run simultaneously. (Resolved for Slice 3, #25: one expedition at a time, and the game stops for the player only at a discovery and at a serious injury, plus a door down once mines have deeper levels, #130.)

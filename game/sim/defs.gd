@@ -13,6 +13,12 @@ const ITEMS := {
 	"berries": {"one": "berry", "many": "berries", "label": "Berries"},
 	"bread": {"one": "bread", "many": "bread", "label": "Bread"},
 	"cooked_mutton": {"one": "cooked mutton", "many": "cooked mutton", "label": "Cooked mutton"},
+	# Cows and pigs (issue #138).
+	"leather": {"one": "leather", "many": "leather", "label": "Leather"},
+	"beef": {"one": "raw beef", "many": "raw beef", "label": "Beef"},
+	"cooked_beef": {"one": "cooked beef", "many": "cooked beef", "label": "Cooked beef"},
+	"porkchop": {"one": "raw porkchop", "many": "raw porkchops", "label": "Porkchops"},
+	"cooked_porkchop": {"one": "cooked porkchop", "many": "cooked porkchops", "label": "Cooked porkchops"},
 	# From the old mine (issue #103). Coal is smelting fuel; iron ore is smelted into ingots (#104).
 	"coal": {"one": "coal", "many": "coal", "label": "Coal"},
 	"iron_ore": {"one": "iron ore", "many": "iron ore", "label": "Iron ore"},
@@ -32,7 +38,17 @@ const ITEMS := {
 const TIER_NAMES := ["Bare", "Wooden", "Stone", "Iron"]
 
 ## The tally bar's Materials group, in order (issue #73). Raw mutton is counted under Food instead.
-const MATERIALS := ["log", "plank", "stick", "cobble", "coal", "iron_ore", "iron_ingot", "rail", "minecart", "wheat", "wool"]
+const MATERIALS := ["log", "plank", "stick", "cobble", "coal", "iron_ore", "iron_ingot", "rail", "minecart", "wheat", "wool", "leather"]
+
+## Raw meat (issue #138): left for the fireplace, eaten only as a last resort.
+const RAW_MEATS := ["mutton", "beef", "porkchop"]
+
+## The animals residents hunt (issues #42, #138). What each drops is in Tuning.ANIMAL_DROPS.
+const SPECIES := {
+	"sheep": {"name": "Sheep", "one": "sheep", "many": "sheep"},
+	"cow": {"name": "Cow", "one": "cow", "many": "cows"},
+	"pig": {"name": "Pig", "one": "pig", "many": "pigs"},
+}
 
 ## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.
 const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}}
@@ -56,6 +72,8 @@ const RECIPES := [
 	# Fireplace recipes (issue #46). "at" says which job building makes a recipe; the default is the bench.
 	{"id": "bread", "name": "Bread", "inp": {"wheat": 3}, "out": {"bread": 1}, "at": "fireplace", "doing": "Baking bread"},
 	{"id": "cooked_mutton", "name": "Cooked mutton", "inp": {"mutton": 1, "log": 1}, "out": {"cooked_mutton": 1}, "at": "fireplace", "doing": "Cooking mutton", "fuel": "log"},
+	{"id": "cooked_beef", "name": "Cooked beef", "inp": {"beef": 1, "log": 1}, "out": {"cooked_beef": 1}, "at": "fireplace", "doing": "Cooking beef", "fuel": "log"},
+	{"id": "cooked_porkchop", "name": "Cooked porkchop", "inp": {"porkchop": 1, "log": 1}, "out": {"cooked_porkchop": 1}, "at": "fireplace", "doing": "Cooking a porkchop", "fuel": "log"},
 	# Smelting (issue #104): coal is the fuel. It's Cook work, like everything at the fireplace.
 	{"id": "smelt_iron", "name": "Smelt iron", "inp": {"iron_ore": 1, "coal": 1}, "out": {"iron_ingot": 1}, "at": "fireplace", "doing": "Smelting iron", "fuel": "coal"},
 ]
@@ -71,7 +89,21 @@ const JOB_SKILLED := {"mine": "miner", "haul": "hauler", "build": "builder", "cr
 	"farm": "farmer", "cook": "cook", "hunt": "hunter"}
 
 ## Meals the fireplace's standing order keeps in stock.
-const MEALS := ["bread", "cooked_mutton"]
+const MEALS := ["bread", "cooked_mutton", "cooked_beef", "cooked_porkchop"]
+
+
+## "2 cows", "1 sheep".
+static func animals(species: String, n: int) -> String:
+	var sp: Dictionary = SPECIES[species]
+	return "%d %s" % [n, sp.one if n == 1 else sp.many]
+
+
+## What a hunted animal drops, as text: "1 leather and 2 raw beef".
+static func drops_text(species: String) -> String:
+	var parts: PackedStringArray = []
+	for k in Tuning.ANIMAL_DROPS[species]:
+		parts.append(words(k, Tuning.ANIMAL_DROPS[species][k]))
+	return " and ".join(parts)
 
 ## Job buildings ("station") have a crafting queue. Those with a "plot" reserve the 3×3 they'll need
 ## to grow into it later (slice-2-spec.md §8).

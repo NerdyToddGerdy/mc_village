@@ -54,9 +54,8 @@ var _occ_dirty: bool:
 
 var tick := 0
 var next_id := 1
-var meadow_sheep := Tuning.MEADOW_SHEEP  ## Sheep left in the meadow off the map (issue #50).
-var meadow_regrow := 0.0     ## Seconds toward the meadow's next sheep.
 var rng := RandomNumberGenerator.new()  ## Seeded and saved, so a game replays exactly.
+var seed := Tuning.SEED      ## The game's seed: the old mine's deeper levels are generated from it (issue #132).
 var residents: Array = []    ## Everyone, on every map; each has the `map` they're on.
 var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafted": false,
 	"houses": 0, "traveler_home": false, "division": false}
@@ -112,7 +111,7 @@ func get_map(id: String) -> SimMap:
 	return maps[id]
 
 
-## Residents on the current map, not counting anyone away on a meadow trip.
+## Residents on the current map, not counting anyone away on the walk to or from the meadow.
 func here() -> Array:
 	return residents.filter(func(r): return r.map == map_id and not r.away)
 
@@ -177,6 +176,9 @@ func _add_site_maps() -> void:
 	if not maps.has(Road.ID):  # the road becomes known with the mine (issue #118)
 		maps[Road.ID] = Road.build(self)
 		road().known = maps[OldMine.ID].known
+	if not maps.has(Meadow.ID):  # so does the meadow, an adventure from the same board (issue #137)
+		maps[Meadow.ID] = Meadow.build(self)
+		maps[Meadow.ID].known = maps[OldMine.ID].known
 
 
 func add_bush(cell: Vector2i) -> Dictionary:
@@ -186,7 +188,12 @@ func add_bush(cell: Vector2i) -> Dictionary:
 
 
 func add_sheep(cell: Vector2i) -> Dictionary:
-	var sh := {"id": _id(), "kind": "sheep", "pos": Vector2(cell), "cell": cell, "dest": null, "wait": rng.randf_range(Tuning.SHEEP_PAUSE[0], Tuning.SHEEP_PAUSE[1]),
+	return add_animal(cell, "sheep")
+
+
+## An animal of a species (issue #138) standing at `cell`.
+func add_animal(cell: Vector2i, species: String) -> Dictionary:
+	var sh := {"id": _id(), "kind": "animal", "species": species, "pos": Vector2(cell), "cell": cell, "dest": null, "wait": rng.randf_range(Tuning.SHEEP_PAUSE[0], Tuning.SHEEP_PAUSE[1]),
 		"alive": true, "des": false, "claim": 0, "unreach_until": 0}
 	m.sheep.append(sh)
 	return sh
@@ -313,6 +320,11 @@ func _recompute_occ() -> void:
 	occ.fill(0)
 	for c in m.rock:
 		occ[c.y * m.w + c.x] = 1
+	for c in m.fences:
+		occ[c.y * m.w + c.x] = 1
+	if m.kind != "route":  # a pond or an underground stream is gone around; only the road's stream is forded
+		for c in m.water:
+			occ[c.y * m.w + c.x] = 1
 	for t in m.trees:
 		if t.alive:
 			occ[t.cell.y * m.w + t.cell.x] = 1
@@ -678,7 +690,7 @@ func _clear_footprint(s: Dictionary) -> void:
 			var p = nearest_walkable(c)
 			if p != null:
 				r.pos = Vector2(p)
-				if r.kind == "sheep":
+				if r.kind == "animal":
 					r.cell = p
 					r.dest = null
 				else:
@@ -704,10 +716,11 @@ func _on_site_done(s: Dictionary) -> void:
 		else:
 			_toast("Track is laid along %s." % Road.SEGMENTS[s.seg].name.to_lower(), 0, s.id)
 		return
-	if s.tpl == "board":  # it has word of the old mine, which the map switcher now shows (issue #105)
+	if s.tpl == "board":  # it has word of the old mine and the meadow, which the map switcher now shows (issues #105, #136)
 		maps[OldMine.ID].known = true
 		road().known = true
-		_toast("The expedition board is up, with word of an old mine to the east. Select it to plan an expedition.", 0, s.id)
+		maps[Meadow.ID].known = true
+		_toast("The expedition board is up, with word of an old mine to the east and a meadow to the west. Select it to plan an adventure.", 0, s.id)
 		return
 	stats.houses += 1
 	var ada: Dictionary = residents[0]
@@ -901,7 +914,7 @@ func _nearest_food(c: Vector2i) -> Dictionary:
 		var s: Dictionary = m.items[k]
 		if not Tuning.FOOD_VALUE.has(s.type) or avail(s) <= 0:
 			continue
-		if s.type == "mutton":  # raw mutton is for the fireplace; eaten only in a pinch
+		if Defs.RAW_MEATS.has(s.type):  # raw meat is for the fireplace; eaten only in a pinch
 			if raw.is_empty() or manhattan(s.cell, c) < manhattan(raw.stack.cell, c):
 				raw = {"kind": "stack", "stack": s}
 			continue
@@ -922,7 +935,7 @@ func food_available() -> bool:
 ## Go and eat (issue #44): pick up the nearest food and eat it, or eat berries off a bush until
 ## nearly full or the bush is bare.
 func _eat_job(r: Dictionary):
-	if at_site(r) or on_road(r):
+	if at_site(r) or on_road(r) or (expedition.get("state", "") == "out" and expedition.party.has(r.id) and r.map != "village"):
 		return _ration_job(r)
 	var f := _nearest_food(rcell(r))
 	if f.is_empty():
@@ -990,13 +1003,14 @@ static func crop_stage(crop: Dictionary) -> int:
 
 ## Walk to a sheep, following it if it wanders, then hunt it.
 func _hunt_job(r: Dictionary, target: Dictionary) -> Job:
-	var j := Job.new("gather", "Going to hunt a sheep", "this sheep")
+	var one: String = Defs.SPECIES[target.species].one
+	var j := Job.new("gather", "Going to hunt a %s" % one, "this %s" % one)
 	j.work = "hunt"
 	j.target = target
 	target.claim = r.id
 	j.hold({"t": "claim", "ent": target})
 	j.step({"op": "chase", "target": target, "planned_for": null})
-	j.step({"op": "work", "what": "hunt", "target": target, "label": "Hunting a sheep"})
+	j.step({"op": "work", "what": "hunt", "target": target, "label": "Hunting a %s" % one})
 	return j
 
 
@@ -1250,9 +1264,9 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
 			r.carry = null
 			return true
-		"depart":  # off the edge of the map: to the meadow (issue #50), or onto the road map (#118)
-			var to: String = st.get("to", "meadow")
-			if to != "meadow":
+		"depart":  # off the edge of the map: onto the road map (#118), or the walk to or from the meadow (#137)
+			var to: String = st.to
+			if expedition.get("dest", "") != Meadow.ID:
 				_onto_road(r, to)
 				return true
 			r.away = true
@@ -1261,6 +1275,20 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			r.path = []
 			r.progress = -1.0
 			rev += 1
+			return true
+		"descend":  # through the door to the level below (issue #132)
+			if m.door_state != "open":
+				open_door(map_id)
+			_enter_level(r, MineLevels.level_id(m.level + 1))
+			return true
+		"ascend":  # up from a level's entrance to the door of the level above
+			var up := MineLevels.level_id(m.level - 1)
+			var at = on_map(up, nearest_walkable.bind(MineLevels.door_front(maps[up])))
+			move_to_map(r, up, at if at != null else maps[up].entrance)
+			return true
+		"at_door":  # the party has reached the door at the end of the level
+			if m.door_state == "closed":
+				_find_door(r)
 			return true
 		"railhead_drop":  # rails set down at the railhead pile (issue #122)
 			if r.carry == null:
@@ -1441,7 +1469,7 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 		_:
 			match st.get("recipe", {}).get("id", ""):
 				"bread": return Tuning.BAKE_TIME
-				"cooked_mutton": return Tuning.COOK_TIME
+				"cooked_mutton", "cooked_beef", "cooked_porkchop": return Tuning.COOK_TIME
 				"smelt_iron": return Tuning.SMELT_TIME
 			return Tuning.CRAFT_TIME
 
@@ -1465,7 +1493,7 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				drop_items(t.cell, "cobble", Tuning.BOULDER_COBBLE + skill_bonus(r, "mine"))
 				stats.broken_boulders += 1
 			_wear(r, st.tool)
-			if t.get("loose", false) and _roll(Tuning.CAVE_IN_CHANCE):  # issue #110
+			if t.get("loose", false) and _roll(cave_in_chance(m.level)):  # issue #110
 				injure(r, 2 if _roll(Tuning.CAVE_IN_SERIOUS) else 1, "a cave-in")
 			_check_find(t.cell)  # issue #111
 		"eat":
@@ -1489,9 +1517,13 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				return "gone"
 			sh.alive = false
 			sh.des = false
-			drop_items(sh.cell, "wool", 1)
-			drop_items(sh.cell, "mutton", 1)
-			stats.sheep_hunted = stats.get("sheep_hunted", 0) + 1
+			for k in Tuning.ANIMAL_DROPS[sh.species]:  # issue #138
+				drop_items(sh.cell, k, Tuning.ANIMAL_DROPS[sh.species][k])
+			if sh.species == "sheep":
+				stats.sheep_hunted = stats.get("sheep_hunted", 0) + 1
+			stats.hunted = stats.get("hunted", 0) + 1
+			if sh.species == "cow" and m.id == Meadow.ID and _roll(Tuning.BULL_CHANCE):  # issue #137: never serious
+				injure(r, 1, "an angry bull")
 			rev += 1
 		"plant":
 			var crop: Dictionary = st.target
@@ -1577,7 +1609,7 @@ func _claim(r: Dictionary) -> void:
 		return
 	if expedition.get("unloading", false) and expedition.party.has(r.id) and r.map == "village":
 		var u := Job.new("unload", "Unloading the packs", "the signpost")
-		u.step(_goto([route_sign()], true))
+		u.step(_goto([sign_for(expedition.dest)], true))
 		u.step({"op": "unload_wait"})
 		r.job = u
 		return
@@ -1664,7 +1696,7 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 						targets.append(sh)
 			if not targets.is_empty():
 				var t: Dictionary = nearest(targets, c)
-				return _tagged(_hunt_job(r, t), "hunt") if t.kind == "sheep" else _tagged(_gather_job(r, t), "mine")
+				return _tagged(_hunt_job(r, t), "hunt") if t.kind == "animal" else _tagged(_gather_job(r, t), "mine")
 			var rj = _road_claim(r, "gather", jobs)
 			if rj != null:
 				return _tagged(rj, "mine")
@@ -1759,13 +1791,8 @@ func step() -> void:
 	for r in residents:
 		if not r.get("away", false):
 			r.hunger = maxf(0.0, r.hunger - hunger_drop)
-	if meadow_sheep < Tuning.MEADOW_SHEEP:
-		meadow_regrow += Tuning.DT
-		if meadow_regrow >= Tuning.MEADOW_REGROW:
-			meadow_regrow = 0.0
-			meadow_sheep += 1
 	var prev := map_id
-	for id in maps:  # every map ticks, whether or not anyone is looking at it
+	for id in maps.keys():  # every map ticks, whether or not anyone is looking at it
 		use_map(id)
 		_step_map()
 	use_map("village")
@@ -1802,14 +1829,14 @@ func _step_map() -> void:
 	for sh in m.sheep:
 		if sh.alive:
 			_step_sheep(sh)
+	if m.id == Meadow.ID:
+		_regrow_herds()
 	for r in residents:
 		if r.map != map_id:
 			continue
 		if r.away:
 			if tick >= r.back_at:
-				if r.get("trip", "meadow") in ["", "meadow"]:
-					_return_from_meadow(r)
-				elif r.trip == "village":
+				if r.trip == "village":
 					_arrive_home(r)
 				else:
 					_arrive_at_site(r)
@@ -1898,46 +1925,48 @@ func _step_resident(r: Dictionary) -> void:
 		fail_job(r, res)
 
 
-# ---------------------------------------------------------------- the sheep meadow (issue #50)
+# ---------------------------------------------------------------- the meadow (issues #50, #137)
 
-## The signpost at the map's left edge, where trips to the meadow leave and come back.
+## The signpost on the village's west edge, where the walk to the meadow starts and ends.
 func meadow_sign() -> Vector2i:
-	return Vector2i(0, h / 2)
+	return Vector2i(0, maps.village.h / 2)
 
 
-## Sends a resident to the meadow: they walk to the signpost, then are away for the trip.
-func send_to_meadow(r: Dictionary) -> void:
-	if r.map != map_id:
-		on_map(r.map, send_to_meadow.bind(r))
-		return
-	if r.arriving or r.away:
-		return
-	if r.job != null:
-		fail_job(r)
-	r.note = null
-	r.orders.clear()
-	var j := Job.new("trip", "Heading to the meadow", "the meadow signpost")
-	j.ordered = true
-	j.step(_goto([meadow_sign()], true))
-	j.step({"op": "depart"})
-	r.direct = j
+## The signpost a destination's party leaves from and comes home to: west for the meadow, east for
+## the old mine (issue #136).
+func sign_for(dest: String) -> Vector2i:
+	return meadow_sign() if dest == Meadow.ID else route_sign()
 
 
-func _return_from_meadow(r: Dictionary) -> void:
-	r.away = false
-	var c = nearest_walkable(meadow_sign())
-	r.pos = Vector2(c if c != null else meadow_sign())
-	r.path = []
-	var take := mini(Tuning.MEADOW_TAKE, meadow_sheep)
-	meadow_sheep -= take
-	if take > 0:
-		drop_items(rcell(r), "wool", take)
-		drop_items(rcell(r), "mutton", take)
-		stats.meadow_trips = stats.get("meadow_trips", 0) + 1
-		_toast("%s is back from the meadow with %d wool and %d raw mutton." % [r.name, take, take], r.id)
-	else:
-		_toast("%s is back from the meadow with nothing: no sheep were left." % r.name, r.id)
-	rev += 1
+## Each species at the meadow grows back on its own, one animal at a time, up to its herd (issue #137).
+## New animals wander in at the far west edge.
+func _regrow_herds() -> void:
+	var herd := Meadow.herd()
+	for sp in herd:
+		var alive: int = m.sheep.filter(func(a): return a.alive and a.species == sp).size()
+		if alive >= herd[sp]:
+			m.regrow.erase(sp)
+			continue
+		m.regrow[sp] = m.regrow.get(sp, 0.0) + Tuning.DT
+		if m.regrow[sp] < Tuning.MEADOW_REGROW[sp]:
+			continue
+		m.regrow[sp] = 0.0
+		for i in 20:
+			var c := Vector2i(rng.randi_range(0, 2), rng.randi_range(1, m.h - 2))
+			if walkable(c):
+				m.sheep = m.sheep.filter(func(a): return a.alive or a.claim != 0)  # the hunted are gone for good
+				add_animal(c, sp)
+				rev += 1
+				break
+
+
+## What's at the meadow now: animals of each species, alive.
+func herds(id := Meadow.ID) -> Dictionary:
+	var out := {}
+	for a in maps[id].sheep:
+		if a.alive:
+			out[a.species] = out.get(a.species, 0) + 1
+	return out
 
 
 ## Seconds until an away resident is back.
@@ -2027,7 +2056,7 @@ static var _DIGITS := RegEx.create_from_string("\\d+")
 func compute_stuck() -> void:
 	stuck = []
 	var prev := map_id
-	for id in maps:
+	for id in maps.keys():
 		use_map(id)
 		_stuck_on_map()
 	use_map(prev)
@@ -2108,11 +2137,6 @@ func _stuck_on_map() -> void:
 	_stuck_unstaffed()
 	_stuck_expedition()
 	_stuck_site()
-	if meadow_sheep == 0:
-		for r in on_here:
-			if r.job != null and r.job.kind == "trip":
-				_add_stuck("Meadow", "Meadow has no sheep left", Vector2(meadow_sign()) + Vector2(0.5, 0.5), 1.4, "res", r.id)
-				break
 	var has_food: bool = food_available() if m.kind != "route" else on_map("village", food_available)  # the road eats from home
 	for r in on_here:
 		var at: Vector2 = r.pos + Vector2(0.5, 0.5)
@@ -2232,10 +2256,10 @@ func designate_mine(rect: Rect2i, single = null, kinds := ["tree", "boulder"]) -
 	rev += 1
 
 
-## Marks sheep in `rect` to be hunted (Hunt order, issue #42). A single click on an already-marked
-## sheep (pass it as `single`) unmarks it instead.
-func designate_hunt(rect: Rect2i, single = null) -> void:
-	var hit: Array = [single] if single != null else m.sheep.filter(func(sh): return sh.alive and rect.has_point(sh.cell))
+## Marks animals in `rect` to be hunted (Hunt order, issues #42, #138); `species` limits it to one
+## kind. A single click on an already-marked one (pass it as `single`) unmarks it instead.
+func designate_hunt(rect: Rect2i, single = null, species := "") -> void:
+	var hit: Array = [single] if single != null else m.sheep.filter(func(sh): return sh.alive and rect.has_point(sh.cell) and (species == "" or sh.species == species))
 	var all_on := not hit.is_empty() and hit.all(func(o): return o.des)
 	for o in hit:
 		o.des = not (single != null and all_on)
@@ -2492,7 +2516,7 @@ func direct_order(r: Dictionary, target = null, cell = null) -> void:
 			return
 		r.direct = _gather_job(r, target)
 		r.direct.ordered = true
-	elif target != null and target.kind == "sheep":
+	elif target != null and target.kind == "animal":
 		target.des = true
 		target.unreach_until = 0
 		rev += 1
@@ -2519,11 +2543,11 @@ func queue_order(r: Dictionary, target = null, cell = null) -> void:
 		target.unreach_until = 0
 		rev += 1
 		r.orders.append({"kind": "mine", "target_kind": target.kind, "id": target.id})
-	elif target != null and target.kind == "sheep":
+	elif target != null and target.kind == "animal":
 		target.des = true
 		target.unreach_until = 0
 		rev += 1
-		r.orders.append({"kind": "hunt", "id": target.id})
+		r.orders.append({"kind": "hunt", "id": target.id, "species": target.species})
 	elif cell != null and walkable(cell):
 		r.orders.append({"kind": "move", "cell": cell})
 
@@ -2564,7 +2588,7 @@ static func order_text(o: Dictionary) -> String:
 	if o.kind == "move":
 		return "Walk to a spot"
 	if o.kind == "hunt":
-		return "Hunt a sheep"
+		return "Hunt a %s" % Defs.SPECIES[o.get("species", "sheep")].one
 	return "Mine a tree" if o.target_kind == "tree" else "Mine a boulder"
 
 
@@ -2619,7 +2643,7 @@ func cant_join(r: Dictionary) -> String:
 	if r.arriving:
 		return "Still walking in"
 	if r.away:
-		return "Away at the meadow" if r.get("trip", "meadow") in ["", "meadow"] else "On the road"
+		return "On the way to or from the meadow" if expedition.get("dest", "") == Meadow.ID else "On the road"
 	if r.get("hurt", 0) > 0:
 		return "Injured, resting" if r.hurt == 1 else "Seriously hurt, resting"
 	if expedition.get("state", "") == "out" and expedition.party.has(r.id):
@@ -2636,7 +2660,8 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 		if cant_join(r) == "":
 			party.append(r.id)
 			break
-	return {"dest": dest, "party": party, "target": {"item": "coal", "n": 8}, "meals": 3, "picks": 1,
+	var meadow := dest == Meadow.ID  # issue #137: wool, and no pickaxes, for the meadow
+	return {"dest": dest, "party": party, "target": {"item": "wool" if meadow else "coal", "n": 6 if meadow else 8}, "meals": 3, "picks": 0 if meadow else 1,
 		"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": cart_adds_room()}
 
 
@@ -2840,15 +2865,23 @@ static func names_text(names: Array) -> String:
 ## A party member at the end of the road: they appear at the site's entrance, with the packs.
 func _arrive_at_site(r: Dictionary) -> void:
 	var id: String = r.trip
-	var mp: SimMap = maps[id]
+	if MineLevels.level_of(id) > 1:  # bound for a deeper level: in at the top, then down (issue #132)
+		id = OldMine.ID
 	r.away = false
 	r.trip = ""
+	_enter_level(r, id)
+
+
+## A party member comes into a site map at its entrance: the end of the road, or through a door from
+## the level above. The first of the party into the one they're bound for says so.
+func _enter_level(r: Dictionary, id: String) -> void:
+	var mp: SimMap = maps[id]
 	move_to_map(r, id, mp.entrance)
 	mp.known = true
 	mp.visited = true
-	if expedition.get("dest", "") != id or expedition.get("unpacked", false):
+	if id != expedition.get("dest", "") or expedition.get("reached", "") == id:
 		return
-	expedition.unpacked = true
+	expedition.reached = id
 	var prev := use_map(id)
 	_toast("The party reached the %s." % mp.name.to_lower(), r.id)
 	use_map(prev)
@@ -2918,9 +2951,9 @@ func route_sign() -> Vector2i:
 	return Vector2i(v.w - 1, v.h / 2)
 
 
-## Seconds on the road to `to`, and back: the meadow's trip, or the walk to and from a site.
+## Seconds on the way to `to`, or home from it: the walk to the meadow, or the road to the mine.
 func trip_time(to: String) -> float:
-	return Tuning.MEADOW_TRIP if to in ["", "meadow"] else route_walk_time()
+	return Tuning.MEADOW_WALK if to == Meadow.ID or (to == "village" and expedition.get("dest", "") == Meadow.ID) else route_walk_time()
 
 
 ## Whether a party member is on their way: walking to the signpost to leave the village, or to the
@@ -2928,14 +2961,14 @@ func trip_time(to: String) -> float:
 func on_the_way(r: Dictionary) -> bool:
 	if expedition.get("state", "") != "out" or not expedition.party.has(r.id) or r.away:
 		return false
-	if expedition.get("leg", "out") == "out":
-		return r.map == "village"
-	return r.map == expedition.dest
+	if expedition.get("leg", "out") == "out":  # in the village, or on a level above the one they're bound for (issue #132)
+		return r.map == "village" or (MineLevels.level_of(r.map) > 0 and MineLevels.level_of(r.map) < MineLevels.level_of(expedition.dest))
+	return r.map == expedition.dest or MineLevels.level_of(r.map) > 0
 
 
 ## Whether a party member is carrying the packs through the village, on the way out (drawn as packs).
 func carrying_packs(r: Dictionary) -> bool:
-	return (on_the_way(r) and r.map == "village") or on_road(r)
+	return (on_the_way(r) and r.map != expedition.dest) or on_road(r)
 
 
 ## The walk to where the road starts: the village signpost, or the site's entrance on the way home.
@@ -2943,11 +2976,20 @@ func _road_job() -> Job:
 	if map_id == "village":
 		var dest: String = expedition.dest
 		var j := Job.new("road", "Heading for the %s" % maps[dest].name.to_lower(), "the signpost")
-		j.step(_goto([route_sign()], true))
+		j.step(_goto([sign_for(dest)], true))
 		j.step({"op": "depart", "to": dest})
 		return j
+	if expedition.get("leg", "out") == "out":  # down through the door to the level below (issue #132)
+		var d := Job.new("road", "Heading down to level %d" % (m.level + 1), "the door")
+		d.step(_goto([m.door], true))
+		d.step({"op": "descend"})
+		return d
 	var h := Job.new("road", "Heading home", "the entrance")
 	h.step(_goto([m.entrance], false))
+	if m.level > 1:  # up to the level above, then on up
+		h.label = "Heading up to level %d" % (m.level - 1) if m.level > 2 else "Heading up to the old mine"
+		h.step({"op": "ascend"})
+		return h
 	h.step({"op": "depart", "to": "village"})
 	return h
 
@@ -2987,8 +3029,9 @@ func call_home() -> String:
 func _arrive_home(r: Dictionary) -> void:
 	r.away = false
 	r.trip = ""
-	var spot = on_map("village", nearest_walkable.bind(route_sign()))
-	move_to_map(r, "village", spot if spot != null else route_sign())
+	var sign := sign_for(expedition.get("dest", ""))
+	var spot = on_map("village", nearest_walkable.bind(sign))
+	move_to_map(r, "village", spot if spot != null else sign)
 	if expedition.party.all(func(id): return resident(id).map == "village" and not resident(id).away):
 		_start_unloading()
 
@@ -3018,8 +3061,8 @@ func _step_unload() -> void:
 		return
 	var hands: int = ex.party.filter(func(id): return resident(id).map == "village").size()
 	ex.unload_acc += Tuning.HAND_RATE * maxi(1, hands) * Tuning.DT
-	var spot = nearest_walkable(route_sign())
-	spot = spot if spot != null else route_sign()
+	var spot = nearest_walkable(sign_for(ex.dest))
+	spot = spot if spot != null else sign_for(ex.dest)
 	while ex.unload_acc >= 1.0:
 		ex.unload_acc -= 1.0
 		if not ex.unpack.is_empty():
@@ -3071,7 +3114,7 @@ func expedition_report(ex: Dictionary) -> Array:
 	for k in ex.get("provisions", {}):
 		meals_back += ex.provisions[k]
 	var name: String = maps[ex.dest].name.to_lower()
-	var lines: Array = ["Back from the %s: %s" % [name, ", ".join(got)] if not got.is_empty() else "Back from the %s with nothing mined" % name]
+	var lines: Array = ["Back from the %s: %s" % [name, ", ".join(got)] if not got.is_empty() else "Back from the %s with nothing %s" % [name, "hunted" if ex.dest == Meadow.ID else "mined"]]
 	var meals_packed := 0
 	for k in ex.get("packed", {}):
 		if Defs.MEALS.has(k):
@@ -3783,13 +3826,19 @@ func objective_packed() -> int:
 	return expedition.get("cargo", {}).get(expedition.target.item, 0)
 
 
-## Items a block of this resource gives when mined.
+## Items a block of this resource gives when mined, or an animal when it's hunted (issue #138).
 static func block_yield(item: String) -> int:
+	for sp in Tuning.ANIMAL_DROPS:
+		if Tuning.ANIMAL_DROPS[sp].has(item):
+			return Tuning.ANIMAL_DROPS[sp][item]
 	return {"cobble": Tuning.BOULDER_COBBLE, "coal": Tuning.ORE_YIELD.coal, "iron_ore": Tuning.ORE_YIELD.iron}.get(item, 1)
 
 
-## Whether a block gives the objective's resource: stone, coal or iron ore.
+## Whether a block gives the objective's resource (stone, coal or iron ore), or an animal does when
+## it's hunted (wool, leather or meat).
 static func gives(b: Dictionary, item: String) -> bool:
+	if b.get("kind", "") == "animal":
+		return Tuning.ANIMAL_DROPS[b.species].has(item)
 	match item:
 		"cobble": return not b.has("ore")
 		"coal": return b.get("ore", "") == "coal"
@@ -3820,6 +3869,13 @@ func _site_job(r: Dictionary):
 		w.step({"op": "rest_site"})
 		return w
 	var can_mine: bool = r.get("hurt", 0) == 0
+	var prey := m.sheep.filter(func(a): return a.alive and a.des and a.claim == 0 and not _cooling(a))
+	if not prey.is_empty() and m.boulders.is_empty():  # the meadow: hunt what's marked, then pack it (issue #137)
+		var pk = _stow_job(r, c)
+		if pk != null and (pk.target.type == expedition.target.item and objective_packed() < expedition.target.n or pack_load() + 4 >= pack_capacity(expedition)):
+			return pk
+		_drop_unused(r, pk)
+		return _tagged(_hunt_job(r, nearest(prey, c)), "hunt")
 	if can_mine and r.pick == null and not expedition.get("tools", []).is_empty():
 		var t := Job.new("equip", "Taking a spare pickaxe from the packs", "the packs")
 		t.step(_goto([m.entrance], false))
@@ -3831,12 +3887,35 @@ func _site_job(r: Dictionary):
 	if can_mine and r.pick != null and expedition.get("survey", false) and not residents.any(func(o): return o.job != null and o.job.kind == "survey"):
 		var sj = _survey_job(r)
 		if sj != null:
+			_drop_unused(r, pj)
 			return sj
+	if m.door_state == "closed" and walkable(MineLevels.door_front(m)) and not residents.any(func(o): return o.job != null and o.job.kind == "door"):
+		var dj := Job.new("door", "Going to the door", "the door")  # the way is open: someone goes to look (issue #132)
+		dj.step(_goto([m.door], true))
+		dj.step({"op": "at_door"})
+		if find_path(c, adj_set([m.door])) != null:
+			_drop_unused(r, pj)
+			return dj
 	if can_mine and r.pick != null:
 		var targets := m.boulders.filter(func(b): return b.alive and b.des and b.claim == 0 and not _cooling(b))
 		if not targets.is_empty():
+			_drop_unused(r, pj)
 			return _tagged(_gather_job(r, nearest(targets, c)), "mine")
 	return pj
+
+
+## A job that was drawn up but not taken: what it reserved is free again.
+func _drop_unused(r: Dictionary, j) -> void:
+	if j != null:
+		_release(r, j)
+
+
+## Whether anything lying at the site can still go into the packs: the objective's resource while
+## there's room, anything else only in the room the rest of the objective doesn't need.
+func _stowable() -> bool:
+	var item: String = expedition.target.item
+	var spare := pack_room() - maxi(0, expedition.target.n - objective_packed())
+	return not stacks_where(func(s): return avail(s) > 0 and ((s.type == item and pack_room() > 0) or spare > 0)).is_empty()
 
 
 ## Carrying a loose stack at the site into the packs at the entrance.
@@ -3848,7 +3927,7 @@ func _stow_job(r: Dictionary, c: Vector2i):
 	# but only once nothing else is marked to mine, so the packs keep room for what's still to come.
 	var item: String = expedition.target.item
 	var short: bool = objective_packed() < expedition.target.n
-	var working := m.boulders.any(func(b): return b.alive and b.des)
+	var working := m.boulders.any(func(b): return b.alive and b.des) or m.sheep.any(func(a): return a.alive and a.des)
 	var loose := stacks_where(func(s): return avail(s) > 0 and (short or s.type != item or not working))
 	if loose.is_empty():
 		return null
@@ -3856,6 +3935,10 @@ func _stow_job(r: Dictionary, c: Vector2i):
 	loose.sort_custom(func(a, b): return rank.call(a) < rank.call(b) or (rank.call(a) == rank.call(b) and manhattan(a.cell, c) < manhattan(b.cell, c)))
 	var st: Dictionary = loose[0]
 	var n: int = mini(mini(avail(st), carry_cap(r)), room)
+	if st.type != item:  # the packs keep room for the rest of the objective; anything else takes what's spare
+		n = mini(n, room - maxi(0, expedition.target.n - objective_packed()))
+		if n <= 0:
+			return null
 	var j := Job.new("stow", "Packing %s" % Defs.ITEMS[st.type].many, "the packs")
 	j.target = st
 	j.work = "haul"
@@ -3877,10 +3960,22 @@ func _mark_objective() -> void:
 	for st in m.items.values():
 		if st.type == item:
 			have += st.n
+	if m.sheep.any(func(a): return a.alive and gives(a, item)):  # the meadow: the animals that give it (issue #137)
+		var hunted := m.sheep.filter(func(a): return a.alive and a.des and gives(a, item))
+		if have + hunted.size() * block_yield(item) >= expedition.target.n or hunted.size() >= expedition.party.size():
+			return
+		var herd := m.sheep.filter(func(a): return a.alive and not a.des and gives(a, item))
+		if not herd.is_empty():
+			var a: Dictionary = nearest(herd, m.entrance)
+			a.des = true
+			a.unreach_until = 0
+			rev += 1
+		return
 	var marked := m.boulders.filter(func(b): return b.alive and b.des and gives(b, item))
 	if have + marked.size() * block_yield(item) >= expedition.target.n or marked.size() >= expedition.party.size():
 		return
-	var free := m.boulders.filter(func(b): return b.alive and not b.des and not b.get("hidden", false) and not b.get("loose", false) and gives(b, item))
+	var door := MineLevels.door_front(m) if m.door_state == "closed" else Vector2i(-1, -1)  # digging to the door is the player's call (#132)
+	var free := m.boulders.filter(func(b): return b.alive and not b.des and not b.get("hidden", false) and not b.get("loose", false) and gives(b, item) and b.cell != door)
 	if free.is_empty():
 		return
 	var b: Dictionary = nearest(free, m.entrance)
@@ -3896,7 +3991,7 @@ func _mark_objective() -> void:
 ## The way from the entrance to a block, as the blocks to mine to get there: the first boulder in
 ## the way and so on, ending with the block itself. Empty when rock or a loose ceiling bars it, or
 ## another marked block is already being mined toward it.
-func _way_through(to: Vector2i) -> Array:
+func _way_through(to: Vector2i, allow_loose := false) -> Array:
 	var blocks := {}
 	for b in m.boulders:
 		if b.alive and not b.get("hidden", false):
@@ -3914,15 +4009,17 @@ func _way_through(to: Vector2i) -> Array:
 				if blocks.has(p):
 					path.push_front(blocks[p])
 				p = prev[p]
+			if path.is_empty():
+				return []
 			var first: Dictionary = path[0]
-			if first.get("loose", false) or (first.des and first.cell != to):
+			if (first.get("loose", false) and not allow_loose) or (first.des and first.cell != to):
 				return []
 			return path
 		for d in DIRS:
 			var n: Vector2i = c + d
 			if prev.has(n) or not m.in_bounds(n) or m.rock.has(n):
 				continue
-			if blocks.has(n) and n != to and blocks[n].get("loose", false):
+			if blocks.has(n) and n != to and blocks[n].get("loose", false) and not allow_loose:
 				continue
 			prev[n] = c
 			queue.append(n)
@@ -3942,11 +4039,12 @@ func policy_met() -> String:
 	if ex.policy.get("low", false) and spendable_meals() <= 0:
 		return "provisions low"
 	var party: Array = ex.party.map(func(id): return resident(id))
-	var busy := party.any(func(r): return r.job != null and r.job.kind in ["gather", "stow", "survey", "eat", "equip"])
+	var busy := party.any(func(r): return r.job != null and r.job.kind in ["gather", "stow", "survey", "eat", "equip", "door"])
 	var to_mine := m.boulders.any(func(b): return b.alive and not b.get("hidden", false) and ((b.des and not _cooling(b)) or (not b.get("loose", false) and gives(b, ex.target.item) and not _way_through(b.cell).is_empty())))
-	var loose := not stacks_where(func(s): return avail(s) > 0).is_empty() and pack_room() > 0
+	to_mine = to_mine or m.sheep.any(func(a): return a.alive and ((a.des and not _cooling(a)) or gives(a, ex.target.item)))
+	var loose := _stowable()
 	if not busy and not to_mine and not loose and not ex.get("survey", false):
-		return "nothing left to mine"
+		return "nothing left to hunt" if m.id == Meadow.ID else "nothing left to mine"
 	return ""
 
 
@@ -4022,6 +4120,13 @@ func choose(option: String) -> void:
 		["discovery", "return"]:
 			if expedition.get("leg", "out") == "out":
 				_head_home("the iron is marked to come back for")
+		["door", "down"]:
+			go_down()
+		["door", "later"]:
+			if expedition.get("leg", "out") == "out":
+				_head_home("the door is marked for another trip")
+		["door", "keep"]:
+			pass  # the door stays marked; the next trip can be planned for the level below
 	use_map(prev)
 	rev += 1
 
@@ -4067,8 +4172,20 @@ func _roll(chance: float) -> bool:
 
 ## Stepping onto a ledge in the dark can be a fall.
 func _ledge_step(r: Dictionary, c: Vector2i) -> void:
-	if c in m.ledges and m.is_dark(c) and _roll(Tuning.FALL_CHANCE):
+	if c in m.ledges and m.is_dark(c) and _roll(fall_chance(m.level)):
 		injure(r, 2 if _roll(Tuning.FALL_SERIOUS) else 1, "a fall in the dark")
+	elif c in m.banks and _roll(Tuning.SLIP_CHANCE):  # the meadow's pond bank (issue #137): never serious
+		injure(r, 1, "a slip on the pond bank")
+
+
+## The chance a loose ceiling comes down, and of a fall from a ledge in the dark: higher on each level
+## down (issue #132).
+static func cave_in_chance(level: int) -> float:
+	return minf(0.95, Tuning.CAVE_IN_CHANCE * (1.0 + Tuning.LEVEL_RISK * maxi(0, level - 1)))
+
+
+static func fall_chance(level: int) -> float:
+	return minf(0.95, Tuning.FALL_CHANCE * (1.0 + Tuning.LEVEL_RISK * maxi(0, level - 1)))
 
 
 ## How much slower a resident walks and works: injured, and (for work) in the dark.
@@ -4147,6 +4264,102 @@ func survey(id: String) -> void:
 	rev += 1
 
 
+# ---------------------------------------------------------------- the old mine's levels (issue #132)
+
+## The old mine's levels that exist so far, top down: "old_mine", "old_mine_2", ...
+func mine_levels() -> Array:
+	var out: Array = []
+	var n := 1
+	while maps.has(MineLevels.level_id(n)):
+		out.append(MineLevels.level_id(n))
+		n += 1
+	return out
+
+
+## The level a map is on, or 0 for a map that isn't part of the old mine.
+func level_of(id: String) -> int:
+	return maps[id].level if maps.has(id) else 0
+
+
+## Someone has reached the door at the end of the level: it's marked, the level below is made ready
+## (unknown until it's opened), and, with the party working here, the game stops for the player.
+func _find_door(r: Dictionary) -> void:
+	m.door_state = "found"
+	var below := MineLevels.level_id(m.level + 1)
+	if not maps.has(below):
+		maps[below] = MineLevels.build(self, m.level + 1)
+	rev += 1
+	_toast("%s reached the door at the end of the %s." % [r.name, m.name.to_lower()], r.id)
+	if not at_site(r):
+		return
+	_ask("door", "%s reached a heavy door at the far end of the %s. Below it lies level %d." % [r.name, m.name.to_lower(), m.level + 1], [
+		{"id": "down", "label": "Go down now", "cost": "The party opens it and works level %d instead: richer and riskier. What they mine comes back up the same way." % (m.level + 1)},
+		{"id": "later", "label": "Mark it for later", "cost": "The party heads home now, with what it has packed. Level %d can be planned at the board." % (m.level + 1)},
+		{"id": "keep", "label": "Keep mining here", "cost": "Carry on for %s. The door stays marked." % Defs.words(expedition.target.item, expedition.target.n)},
+	], r.id)
+
+
+## Opens a level's door: the level below appears on the map switcher.
+func open_door(id: String) -> void:
+	var mp: SimMap = maps[id]
+	var below := MineLevels.level_id(mp.level + 1)
+	if not maps.has(below):
+		maps[below] = MineLevels.build(self, mp.level + 1)
+	mp.door_state = "open"
+	maps[below].known = true
+	rev += 1
+
+
+## Go down now: the party at the door's level takes it, and works the level below from now on. Their
+## packs go with them. Returns why it can't, or "".
+func go_down() -> String:
+	var ex := expedition
+	if ex.get("state", "") != "out" or ex.get("leg", "out") != "out" or level_of(ex.dest) == 0:
+		return "The party isn't working the old mine"
+	var mp: SimMap = maps[ex.dest]
+	if mp.door_state == "closed":
+		return "Nobody has reached the door yet"
+	var prev := use_map(ex.dest)
+	open_door(ex.dest)
+	ex.dest = MineLevels.level_id(mp.level + 1)
+	for id in ex.party:
+		fail_job(resident(id))
+	_toast("The party opens the door and heads down to level %d." % (mp.level + 1), ex.party[0])
+	use_map(prev)
+	return ""
+
+
+## Marks the blocks between the party and the door on a level, so they mine their way to it. Loose
+## ceilings on the way are marked too: the player chose the way. Returns why it can't, or "".
+func dig_to_door(id: String) -> String:
+	var mp: SimMap = maps[id]
+	if mp.door_state != "closed":
+		return "The door is already reached"
+	var prev := use_map(id)
+	var way := _way_through(MineLevels.door_front(mp), true)
+	if way.is_empty() and walkable(MineLevels.door_front(mp)):
+		use_map(prev)
+		return "The way to the door is open"
+	for b in way:
+		b.des = true
+		b.unreach_until = 0
+	rev += 1
+	use_map(prev)
+	return "" if not way.is_empty() else "There's no way through to the door"
+
+
+## Seconds to walk down through the levels above this one: entrance to door on each (issue #132).
+func level_walk(id: String) -> float:
+	var t := 0.0
+	for n in range(1, level_of(id)):
+		var mp: SimMap = maps[MineLevels.level_id(n)]
+		var prev := use_map(mp.id)
+		var p = find_path(mp.entrance, adj_set([mp.door]))
+		use_map(prev)
+		t += (p.size() if p != null else Sim.manhattan(mp.entrance, mp.door)) / Tuning.WALK
+	return t
+
+
 # ---------------------------------------------------------------- site maps (issue #102)
 
 ## "Boulder", "Coal ore" or "Iron ore".
@@ -4166,6 +4379,8 @@ func ore_left(id: String, ore: String) -> int:
 ## the report has only what the village has been told: names, no estimates and no known hazards.
 ## The iron shows as "?" until it's found, and has no estimate until it's surveyed (issue #111).
 func site_report(id: String) -> Dictionary:
+	if id == Meadow.ID:
+		return _meadow_report()
 	var mp: SimMap = maps[id]
 	var stone := mp.boulders.filter(func(b): return b.alive and not b.has("ore")).size()
 	var res: Array = [
@@ -4189,15 +4404,99 @@ func site_report(id: String) -> Dictionary:
 					dark += 1
 		if dark > 0:
 			hazards.append("Dark tunnels past the torches: work there is slower")
+		var deeper := " (likelier this deep)" if mp.level > 1 else ""
 		if mp.boulders.any(func(b): return b.alive and b.get("loose", false)):
-			hazards.append("Loose ceilings: mining under one can bring it down")
-		if not mp.ledges.is_empty():
-			hazards.append("A ledge in the dark: someone could fall")
+			hazards.append("Loose ceilings: mining under one can bring it down" + deeper)
+		if mp.ledges.size() == 1:
+			hazards.append("A ledge in the dark: someone could fall" + deeper)
+		elif mp.ledges.size() > 1:
+			hazards.append("%d ledges in the dark: someone could fall%s" % [mp.ledges.size(), deeper])
 	var finds: Array = []
 	if mp.found and not mp.discovered:
 		finds.append("Iron vein found, not surveyed")
-	return {"name": mp.name, "told": OldMine.TOLD, "visited": mp.visited, "travel": route_walk_time() if route_surveyed() else -1.0,
-		"resources": res, "hazards": hazards, "access": OldMine.ACCESS.duplicate() if mp.visited else [], "finds": finds}
+	if mp.water.size() > 0 and mp.visited:
+		hazards.append("An underground stream: the way goes around it")
+	var told: String = OldMine.TOLD if mp.level <= 1 else "Behind the door at the far end of level %d. Nobody has been down." % (mp.level - 1)
+	if mp.level > 1 and mp.level - 1 == 1:
+		told = "Behind the door at the far end of the old mine. Nobody has been down."
+	var levels: Array = []
+	for lid in mine_levels():  # every level known so far (issue #132)
+		var lm: SimMap = maps[lid]
+		var left: int = lm.boulders.filter(func(b): return b.alive and b.has("ore") and (lm.discovered or not b.get("hidden", false))).size()
+		var door: String = {"open": "door open", "found": "door found"}.get(lm.door_state, "door not reached")
+		levels.append({"id": lid, "level": lm.level, "pattern": MineLevels.FAMILY_NAMES.get(lm.pattern, ""), "ore": left if lm.visited else -1, "door": door, "visited": lm.visited})
+	var travel := route_walk_time() + level_walk(id) if route_surveyed() else -1.0
+	return {"name": mp.name, "told": told, "visited": mp.visited, "travel": travel, "level": mp.level, "pattern": MineLevels.FAMILY_NAMES.get(mp.pattern, ""),
+		"resources": res, "hazards": hazards, "access": MineLevels.ACCESS.get(mp.pattern, []).duplicate() if mp.visited else [], "finds": finds,
+		"levels": levels if mp.level > 0 else [], "door": mp.door_state}
+
+
+## The meadow's site report (issue #137): what each herd would give if it were all hunted, the herds
+## themselves, and its mild hazards.
+func _meadow_report() -> Dictionary:
+	var mp: SimMap = maps[Meadow.ID]
+	var res: Array = []
+	for item in ["wool", "mutton", "leather", "beef", "porkchop"]:
+		var n := 0
+		for a in mp.sheep:
+			if a.alive:
+				n += Tuning.ANIMAL_DROPS[a.species].get(item, 0)
+		res.append({"item": item, "name": Defs.ITEMS[item].label, "reserve": n if mp.visited else -1, "known": true})
+	var hazards: Array = []
+	if mp.visited:
+		hazards = ["An angry bull: hunting a cow can get someone hurt", "A slippery pond bank: someone can slip and get hurt"]
+	return {"name": mp.name, "told": Meadow.TOLD, "visited": mp.visited, "travel": Tuning.MEADOW_WALK, "level": 0, "pattern": "",
+		"resources": res, "hazards": hazards, "access": Meadow.ACCESS.duplicate() if mp.visited else [], "finds": [], "levels": [],
+		"door": "", "herds": herds() if mp.visited else {}}
+
+
+# ---------------------------------------------------------------- the adventures list (issue #136)
+
+## The destinations the expedition board offers, in order. A later one (the Nether, an outpost) is a
+## new row here.
+const ADVENTURES := [OldMine.ID, Meadow.ID]
+
+
+## The adventures list: one row per known destination, with where it is, what's there, its hazards
+## and what's happening there. While a party is out, planning is locked and every row says where they are.
+##   [{id, name, travel, what, hazards: [text], status, here (the party's destination), locked}]
+func adventures() -> Array:
+	var out: Array = []
+	var ex := expedition
+	for id in ADVENTURES:
+		if not maps.has(id) or not maps[id].known:
+			continue
+		var rep := site_report(id)
+		var what := ""
+		if id == Meadow.ID:
+			var hs: Dictionary = rep.herds
+			var n := 0
+			for k in hs:
+				n += hs[k]
+			what = "Cows, pigs, sheep · %d animals" % n if rep.visited else "Sheep, cows and pigs, they say"
+		else:
+			var names: Array = rep.resources.filter(func(x): return x.known).map(func(x): return x.name)
+			what = ", ".join(names)
+			var open := mine_levels().filter(func(l): return level_of(l) > 1 and maps[l].known)
+			if not open.is_empty():
+				what += " · Level %d open" % level_of(open[-1])
+		var here: bool = not ex.is_empty() and (ex.dest == id or (id == OldMine.ID and level_of(ex.dest) > 0))
+		var status := "Not yet visited" if not rep.visited else "Visited"
+		if here:
+			status = {"staging": "Packing to go"}.get(ex.state, "")
+			if status == "":
+				var party: Array = ex.party.map(func(rid): return resident(rid))
+				if ex.get("leg", "out") == "home":
+					status = "Party heading home"
+				elif party.all(func(r): return at_site(r)):
+					status = "Party there now"
+				else:
+					status = "Party on the way"
+		elif not ex.is_empty():
+			status = "Locked: the party is at the %s" % maps[ex.dest].name.to_lower() if ex.get("state", "") == "out" else "Locked: packing for the %s" % maps[ex.dest].name.to_lower()
+		out.append({"id": id, "name": rep.name if id != OldMine.ID else OldMine.NAME, "travel": rep.travel, "what": what,
+			"hazards": rep.hazards if rep.visited else [], "status": status, "here": here, "locked": not ex.is_empty()})
+	return out
 
 
 ## Reveals and surveys a site's hidden find at once, without a party there (for tests and setup).
@@ -4221,7 +4520,7 @@ func save_state() -> Dictionary:
 		maps_out[id] = maps[id].save()
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
 		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
-		"rng_state": rng.state, "meadow_sheep": meadow_sheep, "meadow_regrow": meadow_regrow,
+		"rng_state": rng.state, "seed": seed,
 		"expedition": expedition.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true)}
 
 
@@ -4230,7 +4529,12 @@ static func from_state(d: Dictionary) -> Sim:
 	s.tick = d.tick
 	s.next_id = d.next_id
 	s.maps = {}
-	for id in ["village"] + d.maps.keys().filter(func(k): return k != "village"):  # the village ticks first
+	# Maps tick in the order a game makes them, so a loaded game replays as the saved one would have:
+	# the village, the old mine, the road, the meadow, then the levels below the mine as they opened.
+	var order := ["village", OldMine.ID, Road.ID, Meadow.ID]
+	var ids: Array = d.maps.keys()
+	ids.sort_custom(func(a, b): return [order.find(a) if a in order else 9, MineLevels.level_of(a)] < [order.find(b) if b in order else 9, MineLevels.level_of(b)])
+	for id in ids:
 		s.maps[id] = SimMap.from_save(d.maps[id])
 	s.use_map("village")
 	s.stats = d.stats.duplicate()
@@ -4247,12 +4551,20 @@ static func from_state(d: Dictionary) -> Sim:
 				return false
 		return true)
 	s.rng.state = d.rng_state
-	s.meadow_sheep = d.meadow_sheep
-	s.meadow_regrow = d.meadow_regrow
+	s.seed = d.get("seed", Tuning.SEED)
 	s.expedition = d.get("expedition", {}).duplicate(true)
 	s.pending = d.get("pending", []).duplicate(true)
 	s.cart = d.get("cart", {}).duplicate(true)
+	var new_meadow := not s.maps.has(Meadow.ID)
 	s._add_site_maps()
+	if new_meadow and d.has("meadow_sheep"):  # an older save's off-map meadow: its sheep count carries over (issue #137)
+		var left: int = d.meadow_sheep
+		for a in s.maps[Meadow.ID].sheep:
+			if a.species == "sheep":
+				a.alive = left > 0
+				left -= 1
+		s.maps[Meadow.ID].sheep = s.maps[Meadow.ID].sheep.filter(func(a): return a.alive)
+		s.maps[Meadow.ID].visited = d.stats.get("meadow_trips", 0) > 0
 	for rd in d.residents:
 		var r: Dictionary = rd.duplicate(true)
 		r.job = null

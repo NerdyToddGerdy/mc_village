@@ -22,6 +22,7 @@ var jobs_board_open := false            ## The Village jobs board (issue #78).
 var planner_open := false               ## The expedition planner above the toolbar (issue #106).
 var line_preview := false                ## The route panel shows the line's cost before it's planned (issue #121).
 var plan := {}                          ## The plan being drawn up in the planner; the sim's once confirmed.
+var adventure := ""                     ## The adventure the planner shows (issue #136); "" shows the list.
 var selection := {}                     ## {} | {kind:"res", ids:[...]} | {kind:"tree"/"boulder"/"site", id}
 ## The map in view (issue #101): "village" or a site map. The sim stays on the village between
 ## frames; input and drawing switch it to this map while they work, then back.
@@ -241,7 +242,7 @@ func _update_live_overlays() -> void:
 			var turns := {"house": "the door", "bench": "its workshop plot", "fireplace": "its kitchen plot", "board": "its map room plot"}
 			hint = "Place %s." % names[placing] + (" %s turns %s." % [turn, turns[placing]] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
-	if sel != null and sel.kind in ["tree", "boulder", "sheep", "bush", "crop", "meadow", "route"]:
+	if sel != null and sel.kind in ["tree", "boulder", "animal", "bush", "crop", "meadow", "route"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
@@ -256,7 +257,7 @@ func _update_live_overlays() -> void:
 	if hint == "" and tool == "stock" and _hover != null and _drag.is_empty():
 		hint = "Click or drag from a stockpile cell to erase." if sim.zone.has(_hover) else "Drag over open ground to paint a stockpile. Start on a stockpile to erase instead."
 	if hint == "" and tool == "hunt" and _hover != null and _drag.is_empty():
-		hint = "Click or drag over sheep to hunt them."
+		hint = "Click or drag over animals to hunt them. Shift: only the kind you start on."
 	if hint == "" and tool == "farm" and _hover != null and _drag.is_empty():
 		var why := sim.farm_blocked(_hover)
 		if sim.farm.has(_hover):
@@ -270,7 +271,7 @@ func _update_live_overlays() -> void:
 		var hit = _pick(_mouse, false)
 		if hit != null and hit.kind in ["tree", "boulder"]:
 			hint = "Right-click: Mine. Shift queues it."
-		elif hit != null and hit.kind == "sheep":
+		elif hit != null and hit.kind == "animal":
 			hint = "Right-click: Hunt. Shift queues it."
 	_world.live_outlines = outlines
 	_world.live_fills = fills
@@ -319,6 +320,12 @@ static func _add_rect_points(pts: Array, r: Rect2i, h: float, ignore: int) -> vo
 			Vector2(r.position.x + 0.5, r.end.y - 0.5), Vector2(r.end.x - 0.5, r.position.y + 0.5),
 			(Vector2(r.position) + Vector2(r.end)) / 2.0]:
 		pts.append([Vector3(p.x, h, p.y), ignore])
+
+
+## The kind of animal a Shift-drag with Hunt marks (issue #138): the one nearest where the drag began.
+func hunt_species(c: Vector2i) -> String:
+	var near = Sim.nearest(sim.sheep.filter(func(x): return x.alive), c)
+	return near.species if near != null else ""
 
 
 ## What a Mine drag marks: Shift limits it to trees, Alt (Option on a Mac) to boulders (issue #7).
@@ -371,7 +378,7 @@ func selected_entity():
 			for b in sim.boulders:
 				if b.id == selection.id and b.alive:
 					return b
-		"sheep":
+		"animal":
 			for sh in sim.sheep:
 				if sh.id == selection.id and sh.alive:
 					return sh
@@ -408,7 +415,10 @@ func _select(hit) -> void:
 		if hit.kind == "site" and Sim.is_station(hit) and hit.done:
 			open_craft_menu(hit)
 		elif hit.kind == "site" and hit.tpl == "board" and hit.done:
+			adventure = ""
 			open_planner()
+		elif hit.kind == "meadow":  # the meadow's signpost opens its adventure on the board (issue #136)
+			open_adventure(Meadow.ID)
 
 
 ## Opens the Craft panel on a particular bench (selecting a bench does this).
@@ -513,12 +523,12 @@ func _right_click(e: InputEventMouseButton) -> void:
 		if r.is_empty():
 			continue
 		if r.away:
-			_hud.add_toast({"text": "%s is %s." % [r.name, "away at the meadow" if r.get("trip", "meadow") in ["", "meadow"] else "on the road"], "res_id": r.id, "site_id": 0})
+			_hud.add_toast({"text": "%s is %s." % [r.name, "on the way with the party"], "res_id": r.id, "site_id": 0})
 			continue
 		if r.get("hunger", 100.0) <= 0.0:
 			_hud.add_toast({"text": "%s is starving and won’t work until fed." % r.name, "res_id": r.id, "site_id": 0})
 			continue
-		var target = hit if hit != null and hit.kind in ["tree", "boulder", "sheep"] else null
+		var target = hit if hit != null and hit.kind in ["tree", "boulder", "animal"] else null
 		if e.shift_pressed:
 			sim.queue_order(r, target, cell)
 		else:
@@ -566,7 +576,7 @@ func _left_up(e: InputEventMouseButton) -> void:
 				sim.paint_farm(d.rect)
 			elif tool == "hunt":
 				var hit = _pick(e.position, false) if small else null
-				sim.designate_hunt(d.rect, hit if hit != null and hit.kind == "sheep" else null)
+				sim.designate_hunt(d.rect, hit if hit != null and hit.kind == "animal" else null, hunt_species(d.a) if e.shift_pressed else "")
 			else:
 				var hit = _pick(e.position, false) if small else null
 				sim.designate_mine(d.rect, hit if hit != null and hit.kind in ["tree", "boulder"] else null, order_kinds(e.shift_pressed, e.alt_pressed))
@@ -868,13 +878,6 @@ func remove_farm_plot(crop: Dictionary) -> void:
 	selection = {}
 
 
-func send_to_meadow(ids: Array) -> void:
-	for id in ids:
-		var r := sim.resident(id)
-		if not r.is_empty():
-			sim.send_to_meadow(r)
-
-
 func equip_tool(r: Dictionary, stack: Dictionary) -> void:
 	sim.equip_order(r, stack)
 
@@ -920,8 +923,24 @@ func open_planner() -> void:
 	planner_open = true
 	craft_menu_open = false
 	menu_open = ""
-	if plan.is_empty() or not sim.expedition.is_empty():
-		plan = sim.new_plan()
+	if not sim.expedition.is_empty():
+		adventure = ""
+	if plan.is_empty() or not sim.expedition.is_empty() or plan.dest != adventure:
+		plan = sim.new_plan(adventure if adventure != "" else OldMine.ID)
+
+
+## Opens the expedition board on one adventure (issue #136): its site report and planner. A signpost
+## opens its own.
+func open_adventure(id: String) -> void:
+	if sim.expedition_board().is_empty():
+		return
+	adventure = id if sim.expedition.is_empty() else ""
+	open_planner()
+
+
+## Back to the adventures list.
+func close_adventure() -> void:
+	adventure = ""
 
 
 func close_planner() -> void:
@@ -946,6 +965,23 @@ func plan_step(key: String, by: int) -> void:
 
 func plan_target(item: String) -> void:
 	plan.target.item = item
+
+
+## Which level of the old mine the plan is for (issue #132). The objective stays if the level has it.
+func plan_dest(id: String) -> void:
+	plan.dest = id
+	var items: Array = sim.plan_targets(id).map(func(x): return x.item)
+	if not items.has(plan.target.item) and not items.is_empty():
+		plan.target.item = items[0]
+
+
+## The door at the end of the level the party is working (issue #132).
+func dig_to_door() -> String:
+	return sim.dig_to_door(sim.expedition.get("dest", OldMine.ID))
+
+
+func go_down() -> String:
+	return sim.go_down()
 
 
 func plan_policy(key: String) -> void:
@@ -982,6 +1018,7 @@ func answer(option: String) -> void:
 
 func cancel_expedition() -> void:
 	sim.cancel_expedition()
+	adventure = ""
 	plan = sim.new_plan()
 
 
@@ -1087,7 +1124,15 @@ func _next_stuck() -> void:
 
 ## The maps the switcher offers: the village, and each site map once it's known.
 func known_maps() -> Array:
-	return sim.maps.keys().filter(func(id): return sim.maps[id].known)
+	var out: Array = sim.maps.keys().filter(func(id): return sim.maps[id].known)
+	var rank := func(id: String) -> float:  # the village, the old mine and its levels in order, then the rest
+		if id == "village":
+			return 0.0
+		if sim.maps[id].level > 0:
+			return 1.0 + sim.maps[id].level / 100.0
+		return 2.0 + Sim.ADVENTURES.find(id) / 10.0 if id in Sim.ADVENTURES else 2.0
+	out.sort_custom(func(a, b2): return rank.call(a) < rank.call(b2))
+	return out
 
 
 ## Shows another map. Each map keeps its own camera position and zoom; a map seen for the first
@@ -1236,14 +1281,8 @@ func _screenshot_scene() -> void:
 		craft_menu_open = true
 	if "--select-ada" in OS.get_cmdline_user_args():
 		selection = {"kind": "res", "ids": [sim.residents[0].id]}
-	if "--meadow" in OS.get_cmdline_user_args():  # the signpost selected, with Ada away on a trip
+	if "--meadow" in OS.get_cmdline_user_args():  # the meadow signpost selected, before there's a board (issue #136)
 		var sign := sim.meadow_sign()
-		var ada: Dictionary = sim.residents[0]
-		sim.fail_job(ada)
-		ada.away = true
-		ada.back_at = sim.tick + 50 * Tuning.TPS
-		sim.meadow_sheep = 6
-		sim.meadow_regrow = 100.0
 		selection = {"kind": "meadow", "id": 0}
 		_target = Vector3(sign.x + 4.0, 0, sign.y + 0.5)
 		_place_camera()
@@ -1304,6 +1343,11 @@ func _screenshot_scene() -> void:
 		sim._on_site_done(b)
 		sim.rev += 1
 		_select(b)
+		if "--plan" in OS.get_cmdline_user_args():  # past the adventures list, planning for the old mine (issue #136)
+			open_adventure(OldMine.ID)
+		elif "--plan-meadow" in OS.get_cmdline_user_args():  # planning for the meadow (issue #137)
+			sim.get_map(Meadow.ID).visited = true
+			open_adventure(Meadow.ID)
 		plan.party.append(sim.residents[1].id)
 		if "--packing" in OS.get_cmdline_user_args():
 			sim.drop_items(area(10, 7, 4, 2).position, "bread", 4)
@@ -1377,9 +1421,14 @@ func _screenshot_scene() -> void:
 				_cam.size = 10.0 if "--walking" in args else 13.0
 				sim.events.clear()
 			if "--arrived" in OS.get_cmdline_user_args():  # the party at work in the old mine, seen from there
+				if "--door" in OS.get_cmdline_user_args():  # they stay, with pickaxes, until they reach the door
+					sim.expedition.policy = {"target": false, "full": false, "low": false}
+					for id in sim.expedition.party:
+						sim.resident(id).pick = {"type": "stone_pick", "tier": 2, "dur": 25}
 				for i in int((sim.route_walk_time() + 30) * Tuning.TPS):
 					sim.step()
-				sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16)))
+				if not "--door" in OS.get_cmdline_user_args():
+					sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16)))
 				for i in 10 * Tuning.TPS:
 					sim.step()
 				selection = {}
@@ -1389,6 +1438,16 @@ func _screenshot_scene() -> void:
 					sim.on_map(OldMine.ID, sim._check_find.bind(Vector2i(12, 12)))
 				if "--hurt" in OS.get_cmdline_user_args():  # a serious injury's choice (issue #110)
 					sim.on_map(OldMine.ID, sim.injure.bind(sim.residents[1], 2, "a cave-in"))
+				if "--door" in OS.get_cmdline_user_args():  # the door down's choice (issue #132)
+					sim.on_map(OldMine.ID, func():
+						for bl in sim.boulders:
+							bl.des = false)
+					sim.dig_to_door(OldMine.ID)
+					for i in 200 * Tuning.TPS:
+						sim.step()
+						if not sim.pending.is_empty():
+							break
+					_target = Vector3(12.0, 0, 8.5)
 				sim.events.clear()
 		else:
 			_target = Vector3(b.origin.x + 4.5, 0, b.origin.y - 1.5)  # the board left of the planner
@@ -1412,6 +1471,42 @@ func _screenshot_scene() -> void:
 		_place_camera()
 		if "--village-view" in OS.get_cmdline_user_args():  # back home, with the party line showing
 			switch_map("village")
+	var li := OS.get_cmdline_user_args().find("--level")
+	if li >= 0:  # a level of the old mine, by number, to check each pattern family looks its own (issue #132)
+		var n := int(OS.get_cmdline_user_args()[li + 1])
+		sim.get_map(OldMine.ID).known = true
+		for k in range(1, n):
+			sim.open_door(MineLevels.level_id(k))
+		var lv := sim.get_map(MineLevels.level_id(n))
+		lv.visited = true
+		var ada: Dictionary = sim.residents[0]
+		sim.move_to_map(ada, lv.id, lv.entrance)
+		sim.rev += 1
+		selection = {}
+		switch_map(lv.id)
+		_cam.size = 15.0
+		_target = Vector3(lv.w / 2.0, 0, lv.h / 2.0)
+		_place_camera()
+		print("level %d: %s" % [n, lv.pattern])
+	if "--meadow-site" in OS.get_cmdline_user_args():  # the meadow, with a few animals marked to hunt (issue #137)
+		var mead := sim.get_map(Meadow.ID)
+		mead.known = true
+		mead.visited = true
+		var ada: Dictionary = sim.residents[0]
+		sim.move_to_map(ada, Meadow.ID, mead.entrance + Vector2i(-2, 0))
+		for sp in ["cow", "pig", "sheep"]:
+			for a in mead.sheep:
+				if a.species == sp:
+					a.des = true
+					break
+		for i in 3 * Tuning.TPS:
+			sim.step()
+		sim.events.clear()
+		selection = {}
+		switch_map(Meadow.ID)
+		_cam.size = 16.0
+		_target = Vector3(mead.w / 2.0, 0, mead.h / 2.0)
+		_place_camera()
 	if "--toast" in OS.get_cmdline_user_args():  # a short toast and one long enough to wrap (issue #71)
 		_hud.add_toast({"text": "Tomas is now level 2 at Mine.", "res_id": 0, "site_id": 0})
 		_hud.add_toast({"text": "A traveler, Mira, has arrived. She claims the new house and needs tools from the bench before she can mine.", "res_id": sim.residents[0].id, "site_id": 0})

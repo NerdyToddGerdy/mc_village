@@ -731,7 +731,9 @@ func _test_equip(game: Game) -> void:
 	check(ada.pick != null and ada.pick.type == "stone_pick" and ada.kept.pick, "she equips it and keeps it")
 
 
-## The signpost shows the meadow; Send to the meadow sends a resident off the map (issue #50).
+## The meadow's signpost (issues #136, #137): with no board it says one would know what's past it;
+## with one, clicking it opens the meadow's adventure on the board, and the board opens on the
+## adventures list. Nobody is sent off the map from their own panel any more.
 func _test_meadow(game: Game) -> void:
 	game.restart()
 	var sim := game.sim
@@ -744,25 +746,32 @@ func _test_meadow(game: Game) -> void:
 	game._select(hit)
 	hud.refresh(sim)
 	await process_frame
-	check(_walk(hud._sel).any(func(n): return n is Label and n.text == "8 of 8 sheep"), "its panel shows the meadow's sheep")
+	check(_walk(hud._sel).any(func(n): return n is Label and n.text.begins_with("An expedition board would have word")), "with no board, its panel says a board would know what's past it")
+	check(not game.planner_open, "and there's no planner to open")
 	game._select(ada)
 	hud.refresh(sim)
 	await process_frame
-	var send: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text == "Send to the meadow")
-	check(send.size() == 1, "Ada's panel has Send to the meadow")
-	if send.is_empty():
-		return
-	send[0].pressed.emit()
-	for i in 40 * Tuning.TPS:
-		sim.step()
-		if ada.away:
-			break
+	check(not _walk(hud._sel).any(func(n): return n is Button and n.text.contains("to the meadow")), "Ada's panel has no Send to the meadow")
+	var spot := Vector2i(sim.w / 2 + 3, sim.h / 2 + 3)
+	var b := sim.place_site("board", spot)
+	b.stage = 1
+	b.done = true
+	sim._on_site_done(b)
+	sim.rev += 1
+	game._select(game._pick(p))
 	hud.refresh(sim)
-	game._world._update_people()
 	await process_frame
-	check(ada.away and not game._world._people[ada.id].visible, "she leaves the map and isn't drawn")
-	check(_walk(hud._sel).any(func(n): return n is Label and n.text.begins_with("At the meadow, back in")), "her panel says when she'll be back")
-	check(game._pick(game._cam.unproject_position(Vector3(ada.pos.x + 0.5, 0.5, ada.pos.y + 0.5))) == null or game._pick(game._cam.unproject_position(Vector3(ada.pos.x + 0.5, 0.5, ada.pos.y + 0.5))).kind != "res", "she can't be clicked while away")
+	check(game.planner_open and game.adventure == Meadow.ID and game.plan.dest == Meadow.ID, "with a board, clicking the signpost opens the meadow's adventure")
+	check(_walk(hud._plan_box).any(func(n): return n is Label and n.text == "Meadow"), "its site report and planner")
+	var back: Array = _walk(hud._plan_box).filter(func(n): return n is Button and n.text == "All adventures")
+	check(back.size() == 1, "with a way back to the adventures list")
+	if back.is_empty():
+		return
+	back[0].pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	var rows: Array = _walk(hud._plan_box).filter(func(n): return n is Button and n.has_meta("label"))
+	check(rows.map(func(n): return n.get_meta("label")) == ["Adventure: Old mine", "Adventure: Meadow"], "the board lists both adventures (%s)" % [rows.map(func(n): return n.get_meta("label"))])
 
 
 func _frames(n := 3) -> void:

@@ -339,26 +339,6 @@ func _initialize() -> void:
 	await key(KEY_ESCAPE)
 	check(not game.jobs_board_open and not game._menu.visible, "Esc closes the jobs board first")
 
-	# The sheep meadow (issue #50): send Tomas off the map; he comes back with wool and mutton
-	if not tomas.is_empty():
-		game.selection = {"kind": "res", "ids": [tomas.id]}
-		var meadow_before: int = sim.meadow_sheep
-		check(await click_button("Send to the meadow"), "click Send to the meadow for Tomas")
-		var went := false
-		for i in 60:
-			await run(1)
-			if tomas.away:
-				went = true
-				break
-		check(went, "Tomas walks off the map to the meadow")
-		check(visible_label("At the meadow, back in"), "his panel says when he'll be back")
-		for i in int(Tuning.MEADOW_TRIP) + 5:
-			await run(1)
-			if not tomas.away:
-				break
-		check(not tomas.away and sim.meadow_sheep == meadow_before - Tuning.MEADOW_TAKE, "he comes back, and the meadow has %d fewer sheep" % Tuning.MEADOW_TAKE)
-		check(visible_label("back from the meadow with 2 wool"), "a toast says what he brought")
-
 	# Toolsmith (issue #49) and Equip: a spare is kept, and Ada can be told to equip it
 	var spare_kinds: Array = ["axe", "pick"].filter(func(k): return not sim.tool_items(k, 0).is_empty())
 	check(not spare_kinds.is_empty(), "the toolsmith keeps a spare tool in stock")

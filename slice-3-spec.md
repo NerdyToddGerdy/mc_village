@@ -57,8 +57,9 @@ Slice 3 is done when, from a Slice 2 village, a player can:
 **The map** is hand-laid, **16×16**, with:
 - the **entrance** on the west edge, where a party arrives and leaves, under a timber frame;
 - **rock walls**, which can't be mined;
-- **5 boulders** (cobblestone) and **6 coal ore** blocks;
-- an **iron vein** of 4 blocks, hidden behind rubble at the end of the deepest tunnel.
+- **6 boulders** (cobblestone) and **6 coal ore** blocks;
+- an **iron vein** of 4 blocks, hidden behind rubble at the end of the deepest tunnel;
+- the **door down** to Level 2 on the east edge, behind a boulder (§13a, #132), reached by a way round the loose ceiling in the east tunnel.
 
 **Mining** works as in the village: the Mine and Break orders mark boulders and ore, and residents with a pickaxe break them. Ore blocks drop their ore (§4).
 
@@ -247,6 +248,41 @@ It's the only discovery in Slice 3.
 
 **Saving.** Save format **v17** saves each resident's injury and healing time, the pending choices, the expedition's packs, the old mine's `found` and `ledges`, and its blocks' `loose`. Older saves upgrade with nobody hurt and no choice waiting, and the old mine gets its hazards. A party already out keeps its meals in the packs; one that had set its supplies down at the entrance finds them there and packs them again.
 
+## 13a. Deeper levels (#132)
+
+The old mine stays useful through **deeper levels**. Each level depletes; the mine as a whole doesn't (brief §13, #130).
+
+**Levels.** The old mine is **Level 1**, the hand-laid old workings. Each level below it is a site map of its own, `old_mine_2`, `old_mine_3` and so on, about 16×16, named "Old mine, level 2". It appears on the map switcher once its door is opened.
+
+**The door down.** Every level has a **door at its far end**, on the east edge, opposite the entrance on the west. On deeper levels the entrance is the way back up. The door is drawn from the start as a heavy plank door with iron bands in a timber frame, set in the rock, and there's always a block of stone in front of it, so the party has to mine its way there.
+- **Dig to the door** (the party panel) marks the blocks between the party and the door, loose ceilings included: the player chose the way. The party never digs to the door by itself: marking blocks for its objective, it leaves the block in front of the door alone.
+- Once the way is open, a party member walks to the door. **The game stops** with three choices, each with its cost, through the same pending-choice dialog as the discovery and serious injuries:
+  - **Go down now:** the door opens and the party works the level below instead. The objective carries over.
+  - **Mark it for later:** the party heads home now. The door stays marked.
+  - **Keep mining here:** the party carries on with this level. The door stays marked.
+- Reaching the door makes the level below ready. Opening it puts the level on the map switcher. A party bound for a level below a marked door opens it on the way down.
+
+**A different pattern on every floor.** Level 1 is the old workings: straight tunnels with timber supports. Deeper levels are generated from the game's **seed** and the level number, so a level always comes out the same for a seed. Each comes from a **pattern family** (`game/sim/mine_levels.gd`):
+- **Winding cave:** one meandering passage, a cell or two wide, with pockets off it.
+- **Pillared hall:** a wide room broken by a grid of stone pillars.
+- **Branching tunnels:** a maze of narrow tunnels, with ore in the dead ends.
+- **Underground stream:** a cavern split by water that runs most of the way across. Water can't be walked through on a site map, so the way goes around it.
+- **Collapsed chamber:** a field of rubble, with many loose ceilings.
+
+The first five levels down use each family once, in an order the seed picks. After that, families come back with other settings (size, mirroring and where the ore lies), never the same family twice in a row. Every level keeps a minable way from the entrance to the door, and some coal and iron. Ore is set into the walls beside the floor, iron furthest in. Deeper levels' ore is in plain sight: there's no hidden vein below Level 1.
+
+**Going down and up.** The party walks: through the road and Level 1's entrance, across each level to its door, and down through it, so each level down adds a walk across the level above. Coming home, the party walks to each level's entrance and up into the level above, in front of its door, then on to the road. Cargo comes back up the same way, in the packs. Rail ends at the mine entrance (Slice 4).
+
+**Room for the objective.** Digging through a level gives stone the party didn't come for. The packs keep room for the rest of the objective: anything else is packed only into the room left over (this applies at every site).
+
+**Deeper is richer and riskier.** Each level down adds `LEVEL_ORE` coal and iron blocks to Level 1's 6 coal and 4 iron, and has fewer torches (`5 − level`, at least 1), so more of it is dark. The cave-in and fall chances rise by `LEVEL_RISK` of Level 1's for each level down, and there are more loose ceilings and ledges.
+
+**The site report** names the level's pattern and, for any level of the old mine, lists every level known so far: its pattern, the ore blocks left (once visited) and whether its door is open, found or not reached. Before anyone has been down, a level's report says "Behind the door at the far end of the old mine. Nobody has been down." Its travel time adds the walk across the levels above to the road's.
+
+**Planning.** Once there's more than one level, the planner has a **Work level** row, a button per level. The objective, reserves and travel time are that level's.
+
+**Saving.** Save format **v20** saves the seed and each level's map (its pattern, door and door state, and what's been mined), like any other map. Older saves get the seed, and the old mine gets its door with a boulder in front of it, not yet reached, and the opening beside it that avoids the loose ceiling.
+
 ## 14. The Slice 3 playtests (#113)
 
 **The bot** (`tests/playtest_slice3.gd`) starts from a Slice 2 village saved in `tests/fixtures/slice2_village.save`, made once by `tests/fixtures/make_slice2_fixture.gd`. Through input, it builds the board, plans Ada and Tomas for 10 cobblestone, packs and departs, keeps the village working, marks the rubble, answers the discovery with Investigate, marks iron and coal, answers a serious injury (triggered by the test) with Retreat, watches the return and unloading, smelts iron and crafts an iron pickaxe. It fails on any blocker in the stuck list that doesn't name something the player can do.
@@ -290,3 +326,9 @@ It's the only discovery in Slice 3.
 | `SURVEY_TIME` | 15 s | Investigating the vein. |
 | `SURVEY_USES` | 3 | Pickaxe uses investigating takes. |
 | Loose ceilings, ledge | 3 blocks, 1 cell | Placed in `game/sim/old_mine.gd`. |
+| Deeper level size | about 16×16 | 15–18 by 14–17 for a family that comes back (#132). |
+| `LEVEL_ORE` | coal 2, iron 1 | Ore blocks each level down adds to Level 1's 6 coal and 4 iron. |
+| `LEVEL_RISK` | 0.25 | Each level down raises the cave-in and fall chances by this share of Level 1's. |
+| Torches on a level | 5 − level, at least 1 | Fewer the deeper it is. |
+| Loose ceilings on a level | 2 + level | Plus 6 in a collapsed chamber. |
+| Ledges on a level | 1 + level ÷ 2 | In the dark. |

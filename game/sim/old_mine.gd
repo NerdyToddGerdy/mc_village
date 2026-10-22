@@ -11,6 +11,7 @@ const NAME := "Old mine"
 ## One row per line, west to east. The party arrives at E, on the west edge.
 ##   # rock wall (can't be mined)   t rock with a torch on it   . open floor   E the entrance
 ##   o boulder (cobblestone)        c coal ore                   i iron ore, hidden until discovered
+##   D the door down to Level 2 (issue #132), set in the rock at the far end
 const LAYOUT := [
 	"################",
 	"#####c...c######",
@@ -19,8 +20,8 @@ const LAYOUT := [
 	"########.#######",
 	"###c.###.###c.##",
 	"###..t##.##t..##",
-	"####..##..#..###",
-	"E.....o.....o.##",
+	"####..##..#...##",
+	"E.....o.....o.oD",
 	"#t.....##.o..###",
 	"####.c###...####",
 	"####..#####.####",
@@ -49,6 +50,9 @@ static func build(s: Sim) -> SimMap:
 	m.kind = "site"
 	m.name = NAME
 	m.known = false
+	m.level = 1
+	m.pattern = "workings"
+	m.door_state = "closed"
 	for y in LAYOUT.size():
 		for x in LAYOUT[y].length():
 			var c := Vector2i(x, y)
@@ -60,6 +64,9 @@ static func build(s: Sim) -> SimMap:
 					m.torches.append(c)
 				"E":
 					m.entrance = c
+				"D":
+					m.rock[c] = true
+					m.door = c
 				"o":
 					m.boulders.append(_block(s, c, ""))
 				"c":

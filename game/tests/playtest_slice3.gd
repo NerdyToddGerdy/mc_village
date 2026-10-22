@@ -5,7 +5,8 @@ extends "res://tests/playtest_base.gd"
 ## works the old mine, answers the iron discovery with Investigate and a serious injury with Retreat,
 ## watches the return and unloading, then smelts iron and crafts an iron pickaxe. On the way it walks
 ## the road to the mine (Slice 4, #118), then builds the bridge, clears the cut, plans the line and
-## builds both stations from the signpost (#119, #121, #123). It fails on any
+## builds both stations from the signpost (#119, #121, #123). Last, a second trip digs to the door at
+## the end of the old mine and goes down to mine on Level 2 (#132). It fails on any
 ## stuck reason the player couldn't act on. Uses its own save and settings folders. Run from game/:
 ##   godot --headless --path . -s res://tests/playtest_slice3.gd
 
@@ -13,7 +14,7 @@ extends "res://tests/playtest_base.gd"
 const ACTIONABLE := ["more ", "Needs a pickaxe", "No one does ", "Stockpile is full", "Starving", "Hungry",
 	" broke", "Can’t reach", "No meals to pack", "No spare pickaxes to pack", "No pickaxe left",
 	"Everyone is hurt", "Investigating the vein needs", "Harvested wheat needs a stockpile",
-	"Meadow has no sheep left", "Injured: can't mine", "Track: needs"]
+	"Injured: can't mine", "Track: needs"]
 var _blockers := {}         ## Every blocker reason seen, so the run can check each one is actionable.
 
 
@@ -57,7 +58,10 @@ func _initialize() -> void:
 	await click(screen(bp, 1.0))
 	game._hud.refresh(sim)
 	await frames(2)
-	check(game.planner_open and visible_label("Old mine"), "selecting the board opens the planner")
+	check(game.planner_open and find_button("Adventure: Old mine") != null and find_button("Adventure: Meadow") != null, "selecting the board opens the adventures list: the old mine and the meadow")
+	check(await click_button("Adventure: Old mine"), "pick the old mine")
+	await settle()
+	check(game.adventure == OldMine.ID and visible_label("Old mine"), "its site report and planner open (%s)" % game.adventure)
 	check(await click_button("Tomas"), "add Tomas")
 	check(await click_button("Stone"), "send them for stone")
 	for i in 2:
@@ -125,7 +129,7 @@ func _initialize() -> void:
 		await look_at(c)
 		await click(screen(c, 0.5))
 	await key(KEY_ESCAPE)
-	check(await play_ticks_until(400, func(): return sim.expedition.get("cargo", {}).get("iron_ore", 0) >= 3 and sim.expedition.cargo.get("coal", 0) >= 3), "the party mines and packs iron ore and coal (%s, %s)" % [sim.expedition.get("cargo", {}), _seen.filter(func(t): return "Heading home" in t or "Back from" in t or "hurt" in t)])
+	check(await play_ticks_until(400, func(): return sim.expedition.get("cargo", {}).get("iron_ore", 0) >= 3 and sim.expedition.cargo.get("coal", 0) >= 3), "the party mines and packs iron ore and coal (%s, load %d of %d, %s)" % [sim.expedition.get("cargo", {}), sim.pack_load(), Sim.pack_capacity(sim.expedition), _seen.filter(func(t): return "Heading home" in t or "Back from" in t or "hurt" in t)])
 
 	# ---- A serious injury (issue #110): triggered here, then answered with Retreat
 	sim.on_map(OldMine.ID, sim.injure.bind(tomas, 2, "a cave-in"))
@@ -137,12 +141,13 @@ func _initialize() -> void:
 	await key(KEY_QUOTELEFT)
 	await key(KEY_TAB)
 	await key(KEY_TAB)
-	check(game.view_map == "village", "Tab, past the road, back to the village")
+	await key(KEY_TAB)
+	check(game.view_map == "village", "Tab, past the road and the meadow, back to the village")
 
 	# ---- Return and unloading (issue #112)
 	check(await play_until(120, func(): return sim.expedition.is_empty()), "the party gets home")
 	check(seen("Back from the old mine: ") and seen("Tomas seriously injured"), "the report says what came back and who was hurt")
-	check(await play_until(240, func(): return sim.stacks_where(func(st): return st.get("cargo", false)).is_empty() and count("iron_ore") >= 3), "the cargo is hauled to the stockpile")
+	check(await play_until(400, func(): return sim.stacks_where(func(st): return st.get("cargo", false)).is_empty() and count("iron_ore") >= 3), "the cargo is hauled to the stockpile (left %s, iron ore %d)" % [sim.stacks_where(func(st): return st.get("cargo", false)).map(func(st): return [st.type, st.n]), count("iron_ore")] + " zone %d free %s jobs %s" % [sim.zone.size(), sim.zone_dest("cobble"), sim.residents.map(func(r): return [r.name, r.map, r.job.label if r.job != null else "idle", r.jobs.haul.on])])
 	check(tomas.hurt == 2 and tomas.job != null and tomas.job.kind == "rest", "Tomas rests in bed to heal")
 
 	# ---- Smelting and an iron pickaxe (issue #104)
@@ -187,6 +192,46 @@ func _initialize() -> void:
 	check(await play_until(400, func(): return sim.station("village").get("done", false) and sim.station("mine").get("done", false)), "villagers carry planks and cobblestone out and build both stations (%s planks, %s cobblestone)" % [count("plank"), count("cobble")])
 	check(seen("The station at the village end of the line is built"), "a toast says so")
 	check(await play_until(Tuning.HEAL_TIME[2] * 2 + 60, func(): return tomas.hurt == 0), "Tomas heals and goes back to work")
+
+	# ---- Deeper levels (issue #132): a second trip, to dig to the door at the end of the old mine,
+	# go down and mine on Level 2
+	await look_at(board.origin)
+	await click(screen(board.origin, 1.0))
+	game._hud.refresh(sim)
+	await frames(2)
+	check(await click_button("Adventure: Old mine"), "the board: pick the old mine again")
+	check(await click_button("Coal"), "send the party for coal")
+	check(await click_button("picks less"), "no spare pickaxe")
+	var goer0 := sim.resident(game.plan.party[0])
+	if goer0.pick == null:  # set up by command: whoever's free first may have lost theirs on the last trip
+		goer0.pick = {"type": "stone_pick", "tier": 2, "dur": 25}
+	check(goer0.pick != null, "whoever goes has a pickaxe")
+	check(await click_button("Start packing"), "click Start packing")
+	check(await play_until(240, func(): return sim.depart_blocker() == ""), "packed again (%s)" % sim.depart_blocker())
+	check(await click_button("Depart"), "click Depart")
+	var goer: Dictionary = sim.resident(sim.expedition.party[0])
+	check(await play_until(120, func(): return sim.at_site(goer)), "%s reaches the old mine" % goer.name)
+	sim.expedition.policy = {"target": false, "full": true, "low": true}
+	check(await click_button("Old mine") and game.view_map == OldMine.ID, "show the old mine")
+	check(await click_button("Dig to the door"), "click Dig to the door in the party panel")
+	for i in 4:  # a fall or a cave-in on the way is luck: healed by command, so the door still gets tested
+		if await play_until(60, func(): return not sim.pending.is_empty() or goer.hurt > 0) and goer.hurt > 0 and sim.pending.is_empty():
+			goer.hurt = 0
+			goer.heal = 0.0
+	check(await play_until(60, func(): return not sim.pending.is_empty()), "the party mines its way to the door, and the game stops (%s)" % [[goer.map, goer.job.label if goer.job != null else "idle", goer.pick, goer.hurt, sim.get_map(OldMine.ID).door_state, sim.get_map(OldMine.ID).boulders.filter(func(b): return b.alive and b.des).map(func(b): return b.cell), sim.expedition.get("leg", ""), sim.expedition.get("home_why", ""), sim.pack_load()]])
+	await frames(3)
+	check(not sim.pending.is_empty() and sim.pending[0].kind == "door" and visible_label("A door down"), "a choice: the door down")
+	check(await click_button("Go down now"), "click Go down now")
+	await key(KEY_QUOTELEFT)
+	var two_id := MineLevels.level_id(2)
+	check(await play_until(60, func(): return goer.map == two_id and sim.at_site(goer)), "%s walks through the door into Level 2" % goer.name)
+	check(await click_button("Old mine, level 2") and game.view_map == two_id, "the map switcher shows Level 2")
+	var packed_before: int = sim.pack_load()
+	check(await play_until(120, func(): return sim.pack_load() > packed_before), "the party mines and packs on Level 2")
+	if sim.expedition.get("leg", "") != "home":  # unless its return policy already sent it
+		check(await click_button("Call the party home"), "call the party home")
+	check(await play_until(200, func(): return sim.expedition.is_empty()), "home up through Level 1 and the road")
+	check(seen("Back from the old mine, level 2: "), "the report is from Level 2")
 
 	# ---- Every stall had a reason the player could act on
 	var unknown: Array = _blockers.keys().filter(func(why): return not ACTIONABLE.any(func(a): return a in why))

@@ -56,7 +56,7 @@ Slice 2 is done when, from a fresh start, a player can:
 
 **Hunt order** (default key **G**): click or drag over sheep to mark them, as with Mine. A resident with Hunt switched on walks to the sheep, following it if it moves, and hunts it. A hunt drops **1 wool and 1 raw mutton** where the sheep stood. No tool is needed. Higher Hunt levels hunt faster.
 
-**The sheep meadow** is a place off the map, reached from a signpost at the map's left edge.
+**The sheep meadow** is a place off the map, reached from a signpost at the map's left edge. *Replaced in Slice 3.5 (#137): the meadow is now an expedition site with its own map, planned at the expedition board, and Send to the meadow is gone. See `slice-3.5-spec.md` §3. The rules below are how Slice 2 played.*
 - Select one or two residents and choose **Send to the meadow** in the resident panel.
 - They walk off the map and are **away** for the trip time. While away, they don't work in the village; the panel shows when they'll be back.
 - They return carrying what they found: **2 sheep's worth per resident** (2 wool and 2 raw mutton each), limited by what the meadow has.
@@ -349,7 +349,7 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 
 ## 14. Deferred
 
-Rest and sleep, happiness, shears and breeding, the inn, travelers' requests, food variety effects, spoiling, and tables for eating.
+Rest and sleep, happiness, shears, the inn, travelers' requests, food variety effects, spoiling, and tables for eating. Breeding came in with Slice 3.5's pens (`slice-3.5-spec.md`).
 
 **Building upgrades** (designed in §8, built later):
 - **Fireplace → kitchen:** a bigger queue, two cooks at once, and new recipes.
