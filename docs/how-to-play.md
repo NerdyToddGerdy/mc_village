@@ -42,21 +42,20 @@ The goals panel leads you through these steps. Each one unlocks the next.
 
 1. **Chop a tree.** Choose **Gather → Mine** (or press **X**) and click a tree. Ada fells it by hand, slowly. A tree drops 4 to 6 logs.
 2. **Build a crafting bench.** Choose **Build → Crafting bench** (or press **T**) and click open ground. It takes 4 logs.
-3. **Make Ada the toolsmith.** Press **J** for the jobs board and click Ada's **Toolsmith** cell. Nobody starts as a toolsmith, and only a toolsmith makes tools.
-4. **Craft a pickaxe.** Open the bench (click it, or press **C**). Queue planks, then sticks, then a wooden pickaxe.
-5. **Paint a stockpile.** Choose **Paint → Stockpile** (Z, then 1) and drag over open ground. Residents carry what they gather there.
-6. **Break a boulder.** With a pickaxe, Ada can mine boulders for cobblestone. Each one gives 6.
-7. **Hunt sheep for wool.** Choose **Gather → Hunt** (or press **G**) and mark sheep. Each one gives 1 wool and 1 raw mutton. A house's bed needs 3 wool.
-8. **Build Ada's house.** Choose **Build → House** (or press **H**), and press **R** to turn the door. The house goes up in stages as materials arrive, and its bed is the last stage.
-9. **Build a second house.** From here on, the bench queues the planks and sticks a recipe needs by itself.
-10. **Welcome a traveler.** Tomas arrives a little while after the second house, bed included, is finished.
-11. **Two residents at work.** Keep both busy on different jobs.
+3. **Craft a pickaxe.** Open the bench (click it, or press **C**). Queue planks, then sticks, then a wooden pickaxe.
+4. **Paint a stockpile.** Choose **Paint → Stockpile** (Z, then 1) and drag over open ground. Residents carry what they gather there.
+5. **Break a boulder.** With a pickaxe, Ada can mine boulders for cobblestone. Each one gives 6.
+6. **Hunt sheep for wool.** Choose **Gather → Hunt** (or press **G**) and mark sheep. Each one gives 1 wool and 1 raw mutton. A house's bed needs 3 wool.
+7. **Build Ada's house.** Choose **Build → House** (or press **H**), and press **R** to turn the door. The house goes up in stages as materials arrive, and its bed is the last stage.
+8. **Build a second house.** From here on, the bench queues the planks and sticks a recipe needs by itself.
+9. **Welcome a traveler.** Tomas arrives a little while after the second house, bed included, is finished.
+10. **Two residents at work.** Keep both busy on different jobs.
 
 ## Giving orders
 
 There are two ways to get work done.
 
-**Mark work for anyone.** The toolbar's orders mark the world, and any resident with that job switched on takes the work. Click to mark one thing, or drag a rectangle to mark many. Clicking something that's already marked unmarks it.
+**Mark work for anyone.** The toolbar's orders mark the world, and a resident whose job it is takes the work, or Ada, who does everything. Click to mark one thing, or drag a rectangle to mark many. Clicking something that's already marked unmarks it.
 
 | Toolbar | Order | What it does |
 |---|---|---|
@@ -73,7 +72,7 @@ While a toolbar menu is open, **1 to 9** pick its rows, so Z then 1 paints a sto
 
 **To erase** stockpile cells or farm plots, switch that Paint order on and start a drag on a painted cell. The cells that will go show in red. Items on an erased stockpile cell stay where they are and get carried to the rest of the stockpile. Wheat growing on an erased farm plot is lost.
 
-**Order someone directly.** Select a resident and **right-click** a tree, boulder or animal to send them to it, or right-click the ground to send them there. **Shift + right-click** adds the order to the end of their list. Direct orders come before everything else, whatever their jobs are set to. They still work while a Gather or Paint order is on.
+**Order someone directly.** Select a resident and **right-click** a tree, boulder or animal to send them to it, or right-click the ground to send them there. **Shift + right-click** adds the order to the end of their list. Direct orders come before everything else, whatever their job. They still work while a Gather or Paint order is on.
 
 ## Residents
 
@@ -85,15 +84,16 @@ While a toolbar menu is open, **1 to 9** pick its rows, so Z then 1 paints a sto
 - what they're carrying;
 - how hungry they are;
 - any orders you've queued for them;
-- one line about their jobs, with a button to the jobs board.
+- their **Job**, with a dropdown to change it, and a button to the jobs board.
 
-**The village jobs board** (press **J**, or click **Jobs** in the top bar) lists every resident and every job: Mine, Haul, Build, Craft, Toolsmith, Farm, Cook and Hunt.
-- Each cell shows the job's **priority** (1 goes first) or **Off**, the resident's **level** in it, and a thin bar of progress to the next level.
-- **Click** an Off cell to switch the job on, and click an on cell to cycle its priority 1 → 2 → 3.
-- **Shift-click** a cell to switch the job off.
-- A column's header counts who does the job, and reads "nobody" in yellow when no one does.
+**Jobs.** Every resident has **one job**: Mine, Haul, Build, Craft, Toolsmith, Farm, Cook or Hunt, or none. They do that job's work, and when there's none they carry loose things to the stockpile. **Ada does everything**: whatever's waiting, bench and fireplace work first, then building, then farming, then mining and hunting, then hauling. She covers any job nobody has.
 
-Residents work through their switched-on jobs priority 1 first. Within the same priority, bench and fireplace work comes first, then building, then farming, then mining and hunting, then hauling.
+**The village jobs board** (press **J**, or click **Jobs** in the top bar) lists every resident.
+- Click a resident's job (for example "Farmer, level 3 ▾") for the **job dropdown**. It lists each job with their level in it, best first, and how many residents already have it. Choose one to give them that job.
+- The board shows each resident's **level** in every job, with a thin bar of progress to the next. Their own job is lit.
+- A column's header counts the residents with that job, and reads "nobody" in yellow when no one has it. When Ada is away, work of a job nobody has waits, and the stuck list says "No one is a farmer".
+
+New residents arrive in the job they're skilled at.
 
 **Skills** grow with practice. Every finished task earns a point in its job, and levels 2 to 5 come at 8, 25, 50 and 90 points. Each level works 15% faster, and some jobs also get better results:
 
@@ -139,8 +139,8 @@ The panel is laid out like a crafting table:
 Once Ada's house is finished, a bench queues the planks and sticks a recipe needs on its own.
 
 **Tools.** Bare hands chop slowly and can't break stone. A wooden tool is faster, a stone one faster again, and an iron one fastest. Each use wears a tool down, and it breaks when it runs out.
-- **With a toolsmith** (anyone with Toolsmith on), the bench keeps one spare of each tool someone uses, made from the best material on hand: iron, then stone, then wood. A resident whose tool breaks walks over and picks up the spare.
-- **Without one,** a resident whose tool breaks stops and says so, and nothing makes a new one until you switch Toolsmith on for someone. Tools you queue by hand also need a toolsmith.
+- **With a toolsmith** (a resident whose job is Toolsmith; Ada doesn't count), the bench keeps one spare of each tool someone uses, made from the best material on hand: iron, then stone, then wood. A resident whose tool breaks walks over and picks up the spare.
+- **Without one,** a resident whose tool breaks stops and says so. Queue a new one at the bench (Ada makes it), or make someone the toolsmith.
 - **Equip** in the resident panel lists the tools lying about. Choose one, and the resident goes to fetch it and keeps it until it breaks.
 
 **Leather armor.** A cap, a tunic, trousers and boots, made from the meadow's leather by anyone who crafts. A resident in the village puts on any piece lying about for a slot they haven't filled, and you can see it on them in brown. Armor turns aside a share of the injuries from hazards: 5% for the cap or the boots, 10% for the trousers, 15% for the tunic, 35% for all four. A full set also makes an injury half as likely to be serious. Each piece loses a use every time a hazard strikes, and wears out after 8. The resident panel's **Armor** row shows the guard and the uses left, and the expedition planner shows the party's armor.

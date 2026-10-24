@@ -11,7 +11,7 @@ extends "res://tests/playtest_base.gd"
 ##   godot --headless --path . -s res://tests/playtest_slice3.gd
 
 ## Blockers a player can act on from the reason alone. Anything else in the stuck list fails the run.
-const ACTIONABLE := ["more ", "Needs a pickaxe", "No one does ", "Stockpile is full", "Starving", "Hungry",
+const ACTIONABLE := ["more ", "Needs a pickaxe", "No one is a ", "Stockpile is full", "Starving", "Hungry",
 	" broke", "Can’t reach", "No meals to pack", "No spare pickaxes to pack", "No pickaxe left",
 	"Everyone is hurt", "Investigating the vein needs", "Harvested wheat needs a stockpile",
 	"Injured: can't mine", "Track: needs"]
@@ -97,6 +97,13 @@ func _initialize() -> void:
 	check(await play_until(40, func(): return sim.at_site(ada) and sim.at_site(tomas)), "they reach the old mine")
 	check(sim.route_surveyed(), "walking it surveyed the road")
 	check(await click_button("Village"), "back to the village")
+	# Mira stays home: made a miner (one job each, issue #134), with the village's trees marked for her
+	check(await choose_job(mira, "mine"), "the jobs board: Mira, staying home, is made a miner (%s)" % mira.role)
+	await key(KEY_ESCAPE)
+	await look_at(Sim.rcell(mira))
+	await key(KEY_X)
+	await drag(screen(Vector2i(1, 1)), screen(Vector2i(sim.w - 2, sim.h - 2)))
+	await key(KEY_ESCAPE)
 	check(await play_until(30, func(): return mira.map == "village" and mira.job != null and mira.job.work != ""), "Mira keeps the village working (%s)" % (mira.job.label if mira.job != null else "idle"))
 
 	# ---- The party works the site (issue #109); the player marks the rubble at the tunnel's end
@@ -147,7 +154,7 @@ func _initialize() -> void:
 	# ---- Return and unloading (issue #112)
 	check(await play_until(120, func(): return sim.expedition.is_empty()), "the party gets home")
 	check(seen("Back from the old mine: ") and seen("Tomas seriously injured"), "the report says what came back and who was hurt")
-	check(await play_until(400, func(): return sim.stacks_where(func(st): return st.get("cargo", false)).is_empty() and count("iron_ore") >= 3), "the cargo is hauled to the stockpile (left %s, iron ore %d)" % [sim.stacks_where(func(st): return st.get("cargo", false)).map(func(st): return [st.type, st.n]), count("iron_ore")] + " zone %d free %s jobs %s" % [sim.zone.size(), sim.zone_dest("cobble"), sim.residents.map(func(r): return [r.name, r.map, r.job.label if r.job != null else "idle", r.jobs.haul.on])])
+	check(await play_until(400, func(): return sim.stacks_where(func(st): return st.get("cargo", false)).is_empty() and count("iron_ore") >= 3), "the cargo is hauled to the stockpile (left %s, iron ore %d)" % [sim.stacks_where(func(st): return st.get("cargo", false)).map(func(st): return [st.type, st.n]), count("iron_ore")] + " zone %d free %s jobs %s" % [sim.zone.size(), sim.zone_dest("cobble"), sim.residents.map(func(r): return [r.name, r.map, r.job.label if r.job != null else "idle", r.role])])
 	check(tomas.hurt == 2 and tomas.job != null and tomas.job.kind == "rest", "Tomas rests in bed to heal")
 
 	# ---- Smelting and an iron pickaxe (issue #104)
@@ -215,9 +222,12 @@ func _initialize() -> void:
 	check(await click_button("Old mine") and game.view_map == OldMine.ID, "show the old mine")
 	check(await click_button("Dig to the door"), "click Dig to the door in the party panel")
 	for i in 4:  # a fall or a cave-in on the way is luck: healed by command, so the door still gets tested
-		if await play_until(60, func(): return not sim.pending.is_empty() or goer.hurt > 0) and goer.hurt > 0 and sim.pending.is_empty():
-			goer.hurt = 0
-			goer.heal = 0.0
+		if await play_until(60, func(): return not sim.pending.is_empty() or goer.hurt > 0) and goer.hurt > 0:
+			if not sim.pending.is_empty() and sim.pending[0].kind == "injury":
+				sim.choose("press_on")  # a serious one too: pressed on, then healed
+			if sim.pending.is_empty():
+				goer.hurt = 0
+				goer.heal = 0.0
 	check(await play_until(60, func(): return not sim.pending.is_empty()), "the party mines its way to the door, and the game stops (%s)" % [[goer.map, goer.job.label if goer.job != null else "idle", goer.pick, goer.hurt, sim.get_map(OldMine.ID).door_state, sim.get_map(OldMine.ID).boulders.filter(func(b): return b.alive and b.des).map(func(b): return b.cell), sim.expedition.get("leg", ""), sim.expedition.get("home_why", ""), sim.pack_load()]])
 	await frames(3)
 	check(not sim.pending.is_empty() and sim.pending[0].kind == "door" and visible_label("A door down"), "a choice: the door down")

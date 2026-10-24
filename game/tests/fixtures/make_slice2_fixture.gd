@@ -9,7 +9,6 @@ extends SceneTree
 
 func _initialize() -> void:
 	var sim := Sim.new_game()
-	sim.residents[0].jobs.toolsmith.on = true
 	sim.designate_mine(area(0, 0, 10, 18))
 	sim.designate_hunt(Rect2i(0, 0, sim.w, sim.h))
 	var bench := sim.place_site("bench", at(8, 10))

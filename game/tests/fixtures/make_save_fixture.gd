@@ -8,8 +8,7 @@ extends SceneTree
 
 func _initialize() -> void:
 	var sim := Sim.new_game()
-	if SaveFormat.VERSION >= 15:
-		sim.residents[0].jobs.toolsmith.on = true  # Toolsmith starts off since #91; the player switches it on
+	# v15 to v21 switched Ada's Toolsmith on here (#91); from v22 Ada does everything (#134).
 	sim.designate_mine(area(0, 0, 10, 18))
 	if SaveFormat.VERSION >= 6:
 		sim.designate_hunt(Rect2i(0, 0, sim.w, sim.h))  # wool for the beds
@@ -35,6 +34,8 @@ func _initialize() -> void:
 				break
 	for i in 8:
 		sim.queue_add(bench, "planks")
+	if SaveFormat.VERSION >= 22:  # with no toolsmith keeping spares (#134), Ada makes her next pickaxe herself
+		sim.queue_add(bench, "stone_pick")
 	var walked := 0
 	for i in 1200 * Tuning.TPS:
 		sim.step()
@@ -43,9 +44,9 @@ func _initialize() -> void:
 			if walked >= Tuning.TPS:  # a second into the walk
 				break
 	sim.queue_add(bench, "stone_axe")
-	if SaveFormat.VERSION >= 10:  # job settings that aren't the defaults
-		sim.set_job_priority(sim.residents[0], "haul", 1)
-		sim.set_job_on(sim.residents[0], "hunt", false)
+	# v10 to v21 saved Ada with Haul at priority 1 and Hunt off; from v22 each resident has one job (#134).
+	if SaveFormat.VERSION >= 22:
+		sim.set_role(sim.residents[1], "farm")  # not the job Tomas arrived with, unless he's a farmer
 	if SaveFormat.VERSION >= 11:
 		sim.residents[0].jobs.build.xp = 30  # a level-3 builder
 	# v13 to v19 saved a meadow part-way to regaining a sheep (meadow_sheep 5, meadow_regrow 60); from
@@ -71,6 +72,8 @@ func _initialize() -> void:
 		mine.visited = true
 		var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], Vector2i(0, 0))
 		mira.pick = {"type": "stone_pick", "tier": 2, "dur": 20}
+		if SaveFormat.VERSION >= 22:
+			sim.set_role(mira, "mine")  # one job each (#134): added by hand, she'd have none
 		sim.move_to_map(mira, OldMine.ID, mine.entrance)
 		sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, mine.w, mine.h)))
 		sim.use_map(OldMine.ID)

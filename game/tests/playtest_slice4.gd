@@ -8,10 +8,10 @@ extends "res://tests/playtest_base.gd"
 ##   godot --headless --path . -s res://tests/playtest_slice4.gd
 
 ## Blockers a player can act on from the reason alone. Anything else in the stuck list fails the run.
-const ACTIONABLE := ["more ", "Needs a pickaxe", "No one does ", "Stockpile is full", "Starving", "Hungry",
+const ACTIONABLE := ["more ", "Needs a pickaxe", "No one is a ", "Stockpile is full", "Starving", "Hungry",
 	" broke", "Can’t reach", "No meals to pack", "No spare pickaxes to pack", "No pickaxe left",
 	"Everyone is hurt", "Harvested wheat needs a stockpile", "Meadow has no sheep left", "Injured: can't mine",
-	"Track: needs", "Track: no one with Build on"]
+	"Track: needs", "Track: no one is a builder"]
 var _blockers := {}         ## Every blocker reason seen, so the run can check each one is actionable.
 
 

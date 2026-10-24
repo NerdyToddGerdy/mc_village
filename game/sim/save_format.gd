@@ -12,12 +12,37 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 21
+const VERSION := 22
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22}
+
+
+## v22: one job per resident (issue #134). Ada does everything. Everyone else gets their switched-on
+## job with the best priority, ties broken by level, then the job list's order, or Haul if all were
+## off. The switches and priorities go. (Saves from before v10 get every job on at priority 2, then
+## Toolsmith off, as v10 and #91 gave them.)
+static func _v21_to_v22(d: Dictionary) -> Dictionary:
+	var st: Dictionary = d.state
+	for i in st.residents.size():
+		var r: Dictionary = st.residents[i]
+		var best := ""
+		var best_pri := 0
+		var best_lv := 0
+		for jb in Defs.JOBS:
+			var j: Dictionary = r.jobs[jb]
+			if j.get("on", jb != "toolsmith"):
+				var pri: int = j.get("pri", 2)
+				var lv := Sim.level(r, jb)
+				if best == "" or pri < best_pri or (pri == best_pri and lv > best_lv):
+					best = jb
+					best_pri = pri
+					best_lv = lv
+			r.jobs[jb] = {"xp": j.get("xp", 0)}
+		r.role = "all" if i == 0 else (best if best != "" else "haul")
+	return d
 
 
 ## v21: pens and breeding at the meadow (issue #139), and leather armor (issue #140). No map has a pen
