@@ -28,7 +28,7 @@ var _hatch_mat: StandardMaterial3D
 var _person_mats := {}
 
 ## Set by the game each frame.
-var live_outlines: Array = []   ## {rect: Rect2i, h: float, color: Color, dashed: bool}
+var live_outlines: Array = []   ## {rect: Rect2i, h: float, color: Color, dashed: bool}, or a dashed circle {center: Vector2, radius, h, color}
 var live_fills: Array = []      ## {rect: Rect2i, h: float, color: Color}
 var selected_ids: Array = []    ## Resident ids with a selection ring.
 var hover_id := 0               ## The resident under the mouse, who shows a name tag; 0 for none.
@@ -631,6 +631,12 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "board":
 		_add_board(solid if s.done else ghost, s)
 		return
+	if s.tpl == "chopping_block":
+		_add_chopping_block(solid if s.done else ghost, s)
+		return
+	if s.tpl == "mason_bench":
+		_add_mason_bench(solid if s.done else ghost, s)
+		return
 	if s.tpl == "bridge":
 		_add_bridge(solid if s.done else ghost, s)
 		return
@@ -733,6 +739,31 @@ func _add_board(b: Batch, s: Dictionary) -> void:
 		b.box(Vector3(p.x - 0.135, y + 0.1, p.y - 0.135), Vector3(p.x + 0.135, y + 0.14, p.y + 0.135), Palette.LOG)
 
 
+## The chopping block (issue #177): a squat round of log with an axe bitten into its top.
+func _add_chopping_block(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	if not s.done:
+		b.box(Vector3(o.x + 0.15, 0, o.y + 0.15), Vector3(o.x + 0.85, 0.2, o.y + 0.85), Color(Palette.BLUE, 0.45))
+		return
+	b.box(Vector3(o.x + 0.2, 0, o.y + 0.2), Vector3(o.x + 0.8, 0.45, o.y + 0.8), Palette.LOG)
+	b.box(Vector3(o.x + 0.24, 0.45, o.y + 0.24), Vector3(o.x + 0.76, 0.48, o.y + 0.76), Palette.PLANK)
+	b.box(Vector3(o.x + 0.46, 0.48, o.y + 0.3), Vector3(o.x + 0.54, 0.62, o.y + 0.5), Palette.STONE)
+	b.box(Vector3(o.x + 0.47, 0.55, o.y + 0.48), Vector3(o.x + 0.53, 0.6, o.y + 0.85), Palette.LOG.lightened(0.2))
+
+
+## The mason's bench (issue #177): a plank trestle with a dressed stone block and a chisel on top.
+func _add_mason_bench(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	if not s.done:
+		b.box(Vector3(o.x + 0.1, 0, o.y + 0.1), Vector3(o.x + 0.9, 0.2, o.y + 0.9), Color(Palette.BLUE, 0.45))
+		return
+	for k in [0.15, 0.75]:
+		b.box(Vector3(o.x + k, 0, o.y + 0.15), Vector3(o.x + k + 0.1, 0.55, o.y + 0.85), Palette.LOG)
+	b.box(Vector3(o.x + 0.08, 0.55, o.y + 0.1), Vector3(o.x + 0.92, 0.65, o.y + 0.9), Palette.PLANK)
+	b.box(Vector3(o.x + 0.25, 0.65, o.y + 0.3), Vector3(o.x + 0.6, 0.85, o.y + 0.65), Palette.COBBLE.lightened(0.15))
+	b.box(Vector3(o.x + 0.66, 0.65, o.y + 0.35), Vector3(o.x + 0.72, 0.69, o.y + 0.75), Palette.STONE)
+
+
 static var BED_BLANKET := Color("#B83A3A")
 
 
@@ -761,7 +792,16 @@ func _add_roof(b: Batch, o: Vector2i, color: Color) -> void:
 const _TOWARD_CAMERA := Vector3(0.57735, 0.57735, 0.57735)
 
 
-static func _tree_boxes(c: Vector2i) -> Array:
+static func _tree_boxes(c: Vector2i, stage := 2) -> Array:
+	match stage:
+		0:  # a sapling: a thin stem with a tuft of leaves (issue #177)
+			return [AABB(Vector3(c.x + 0.42, 0, c.y + 0.42), Vector3(0.16, 0.6, 0.16)),
+				AABB(Vector3(c.x + 0.25, 0.6, c.y + 0.25), Vector3(0.5, 0.4, 0.5)),
+				AABB(Vector3(c.x + 0.38, 1.0, c.y + 0.38), Vector3(0.24, 0.2, 0.24))]
+		1:  # a young tree: a cell wide, half height
+			return [AABB(Vector3(c.x + 0.3, 0, c.y + 0.3), Vector3(0.4, 1.5, 0.4)),
+				AABB(Vector3(c.x - 0.1, 1.5, c.y - 0.1), Vector3(1.2, 0.8, 1.2)),
+				AABB(Vector3(c.x + 0.2, 2.3, c.y + 0.2), Vector3(0.6, 0.5, 0.6))]
 	return [AABB(Vector3(c.x + 0.1, 0, c.y + 0.1), Vector3(0.8, 3, 0.8)),
 		AABB(Vector3(c.x - 1, 3, c.y - 1), Vector3(3, 1, 3)),
 		AABB(Vector3(c.x, 4, c.y), Vector3(1, 1, 1))]
@@ -773,7 +813,7 @@ func _tree_occludes(t: Dictionary) -> bool:
 		if f[1] == t.id:
 			continue
 		var p: Vector3 = f[0]
-		for box in _tree_boxes(t.cell):
+		for box in _tree_boxes(t.cell, Sim.tree_stage(t)):
 			if box.intersects_segment(p + _TOWARD_CAMERA * 0.05, p + _TOWARD_CAMERA * 80.0) != null:
 				return true
 	return false
@@ -799,7 +839,7 @@ func _build_occluders() -> void:
 		var fade: bool = faded.has(t.id)
 		var b := see_through if fade else solid
 		var alpha := 0.3 if fade else 1.0
-		var boxes := _tree_boxes(t.cell)
+		var boxes := _tree_boxes(t.cell, Sim.tree_stage(t))
 		b.box(boxes[0].position, boxes[0].end, Color(Palette.LOG, alpha))
 		b.box(boxes[1].position, boxes[1].end, Color(Palette.LEAVES, alpha))
 		b.box(boxes[2].position, boxes[2].end, Color(Palette.LEAVES, alpha))
@@ -840,6 +880,16 @@ func _outline(dark: Batch, col: Batch, rect: Rect2i, h: float, color: Color, das
 			_seg(col, p0, p1, h + 0.005, 0.06, color)
 
 
+## A dashed chalk circle on the ground, such as a workstation's work area (issue #177): short dashes,
+## each drawn as a small square, since segments are axis-aligned boxes.
+func _circle(dark: Batch, col: Batch, center: Vector2, radius: float, h: float, color: Color) -> void:
+	var n := int(TAU * radius / 0.52)
+	for i in n:
+		var p := center + Vector2.from_angle(TAU * i / n) * radius
+		_seg(dark, p, p, h, 0.2, Color(Palette.SLATE_DEEP, color.a))
+		_seg(col, p, p, h + 0.005, 0.11, color)
+
+
 func _seg(b: Batch, p0: Vector2, p1: Vector2, h: float, thick: float, color: Color) -> void:
 	var lo := Vector3(minf(p0.x, p1.x) - thick / 2, h, minf(p0.y, p1.y) - thick / 2)
 	var hi := Vector3(maxf(p0.x, p1.x) + thick / 2, h + 0.02, maxf(p0.y, p1.y) + thick / 2)
@@ -868,6 +918,9 @@ func _build_marks() -> void:
 	for b in sim.boulders:
 		if b.alive and b.des:
 			_sprite(MarkTextures.cross(), Vector3(b.cell.x + 0.5, 0.7, b.cell.y + 0.5), 0.7, _marks)
+	for o in sim.trees + sim.boulders:  # kept from gatherers' own work (issue #177)
+		if o.alive and o.get("keep", false) and not o.des:
+			_sprite(MarkTextures.keep(), Vector3(o.cell.x + 0.5, 1.6 if o.kind == "tree" else 0.7, o.cell.y + 0.5), 0.6, _marks)
 
 
 func _build_flags() -> void:
@@ -1222,7 +1275,10 @@ func _build_live() -> void:
 		var r: Rect2i = f.rect
 		col.box(Vector3(r.position.x, f.h, r.position.y), Vector3(r.end.x, f.h + 0.02, r.end.y), f.color)
 	for o in live_outlines:
-		_outline(dark, col, o.rect, o.h, o.color, o.dashed)
+		if o.has("radius"):
+			_circle(dark, col, o.center, o.radius, o.h, o.color)
+		else:
+			_outline(dark, col, o.rect, o.h, o.color, o.dashed)
 	dark.apply(_live_dark)
 	col.apply(_live_col)
 

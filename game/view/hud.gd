@@ -282,6 +282,9 @@ func _draw_mark(c: Control, t: String) -> void:
 			for a in [[Vector2(4, 4), Vector2(14, 14)], [Vector2(14, 4), Vector2(4, 14)]]:
 				c.draw_line(a[0], a[1], dark, 5)
 				c.draw_line(a[0], a[1], Palette.RED, 2.5)
+		"keep":  # the green ring round a kept tree (issue #177)
+			c.draw_arc(Vector2(9, 9), 6, 0, TAU, 24, dark, 4.5)
+			c.draw_arc(Vector2(9, 9), 6, 0, TAU, 24, Palette.GREEN, 2.2)
 		"hunt":  # the crosshair over a marked sheep
 			c.draw_arc(Vector2(9, 9), 6, 0, TAU, 24, dark, 4)
 			c.draw_arc(Vector2(9, 9), 6, 0, TAU, 24, Palette.RED, 2)
@@ -678,7 +681,7 @@ func _refresh_tallies(sim: Sim) -> void:
 	for k in sim.items:
 		var s: Dictionary = sim.items[k]
 		totals[s.type] = totals.get(s.type, 0) + s.n
-		if not sim.in_zone(s.cell):
+		if not sim.stored(s):
 			loose[s.type] = loose.get(s.type, 0) + s.n
 	var gear := 0  # tools and armor, worn and spare
 	for t in Defs.group_items("tools"):
@@ -806,7 +809,7 @@ static func _party_doing(party: Array) -> String:
 	for r in party:
 		var w: String = "idle"
 		if r.job != null:
-			w = {"mine": "mining", "haul": "hauling", "build": "building", "hunt": "hunting", "farm": "farming"}.get(r.job.work, "")
+			w = {"lumber": "chopping", "mason": "mining", "haul": "hauling", "build": "building", "hunt": "hunting", "farm": "farming"}.get(r.job.work, "")
 			if w == "":
 				w = "eating" if r.job.kind == "eat" else "walking"
 		doing[w] = doing.get(w, 0) + 1
@@ -1313,8 +1316,14 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		return
 	match target.kind:
 		"tree":
-			c.add_child(_head("Tree", "Drops %d logs" % target.logs))
+			if not Sim.grown(target):  # planted by a lumberjack (issue #177)
+				c.add_child(_head("Sapling" if Sim.tree_stage(target) == 0 else "Young tree", "Growing, %d%%" % int(target.grow / Tuning.SAPLING_GROW * 100.0)))
+				c.add_child(_bar(target.grow / Tuning.SAPLING_GROW, Palette.GREEN))
+				c.add_child(_label("It grows into a tree in %d minutes, and can't be chopped till then." % int(Tuning.SAPLING_GROW / 60.0), false, Palette.CHALK_DIM, Palette.BODY, true))
+				return
+			c.add_child(_head("Tree", "Drops %d logs and a sapling" % target.logs))
 			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target), "Secondary" if target.des else "Primary"))
+			_add_keep(c, sim, target)
 		"bush":
 			c.add_child(_head("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX]))
 			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, Palette.BODY, true))
@@ -1349,8 +1358,24 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			if target.des and sim.stuck.any(func(s): return s.focus_kind == "boulder"):
 				c.add_child(_reason("Needs a pickaxe"))
 			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target), "Secondary" if target.des else "Primary"))
+			_add_keep(c, sim, target)
 		"site":
 			_fill_site(c, sim, target)
+
+
+## A village tree or boulder's Keep toggle (issue #177): lumberjacks and stonemasons never take a kept
+## one on their own.
+func _add_keep(c: Container, sim: Sim, target: Dictionary) -> void:
+	if sim.map_id != "village":
+		return
+	var kept: bool = target.get("keep", false)
+	var b := _button("Keep: on" if kept else "Keep", func(): game.toggle_keep(target), "Secondary")
+	b.toggle_mode = true
+	b.set_pressed_no_signal(kept)
+	b.tooltip_text = "Lumberjacks and stonemasons leave it alone unless it's marked to mine."
+	c.add_child(b)
+	if not kept and sim.protected(target):
+		c.add_child(_label("On protected land: gatherers leave it alone.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
 
 
 ## The Craft button appears once a bench is finished; it opens the Craft panel above the toolbar
@@ -1795,6 +1820,9 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		if not game.planner_open:
 			c.add_child(_button("Open the planner", func(): game.open_planner(), "Primary"))
 		return
+	if not Sim.work_of(s).is_empty():  # a chopping block or mason's bench (issue #177)
+		_fill_workstation(c, sim, s, reasons)
+		return
 	# A finished bench or fireplace: a short summary here. Its recipes and queue live only in the
 	# Craft panel on the right, which selecting it opens.
 	c.add_child(_label(tpl.name, true, Palette.CHALK, Palette.TITLE))
@@ -1803,6 +1831,39 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		c.add_child(_reason(x.why))
 	if not game.craft_menu_open:
 		c.add_child(_button("Open the craft menu", func(): game.open_craft_menu(s), "Primary"))
+
+
+## A finished chopping block or mason's bench (issue #177): its pile, its keep-stock target with a
+## stepper, who works it, and what holds it up.
+func _fill_workstation(c: Container, sim: Sim, s: Dictionary, reasons: Array) -> void:
+	var wk := Sim.work_of(s)
+	var item: Dictionary = Defs.ITEMS[wk.item]
+	c.add_child(_label(Defs.TEMPLATES[s.tpl].name, true, Palette.CHALK, Palette.TITLE))
+	var n := sim.pile_count(s)
+	c.add_child(_row("Pile", "%d / %d %s" % [n, Tuning.WORK_STORE, item.many], false))
+	c.add_child(_bar(float(n) / Tuning.WORK_STORE))
+	var keep := HBoxContainer.new()
+	keep.add_theme_constant_override("separation", 6)
+	var less := _button("−", func(): game.set_keep_stock(s, s.keep - Tuning.KEEP_STEP), "Secondary")
+	less.disabled = s.keep <= 0
+	less.tooltip_text = "Keep %d fewer" % Tuning.KEEP_STEP
+	keep.add_child(less)
+	var lbl := _label("Keep %d %s" % [s.keep, item.many], false, Palette.CHALK, Palette.BODY)
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	keep.add_child(lbl)
+	var more := _button("+", func(): game.set_keep_stock(s, s.keep + Tuning.KEEP_STEP), "Secondary")
+	more.tooltip_text = "Keep %d more" % Tuning.KEEP_STEP
+	keep.add_child(more)
+	c.add_child(keep)
+	c.add_child(_label("The village has %d. %ss %s within %d cells on their own until it has %d." % [
+		sim.free_count(wk.item), Defs.JOB_NAMES[wk.job], "fell trees" if wk.kind == "tree" else "break boulders",
+		int(Tuning.WORK_RADIUS), s.keep], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	var workers: Array = sim.residents.filter(func(r): return r.role == wk.job).map(func(r): return r.name)
+	if not workers.is_empty():
+		c.add_child(_row(Defs.JOB_NAMES[wk.job] + ("s" if workers.size() > 1 else ""), Sim.names_text(workers), false))
+	for x in reasons:
+		c.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
 
 
 ## What a finished bench or fireplace is doing, for its panels.
@@ -2280,7 +2341,7 @@ func _add_level_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
 	c.add_child(row)
 
 
-## Who goes: up to PARTY_MAX residents, each with their Mine level, pickaxe and hunger. Anyone who
+## Who goes: up to PARTY_MAX residents, each with their Stonemason level, pickaxe and hunger. Anyone who
 ## can't go is listed with why.
 func _add_party_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
 	c.add_child(_row("Party", "%d of up to %d" % [plan.party.size(), Tuning.PARTY_MAX], false))
@@ -2288,7 +2349,7 @@ func _add_party_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
 		var why := sim.cant_join(r)
 		var on: bool = plan.party.has(r.id)
 		var pick: String = Defs.ITEMS[r.pick.type].one if r.pick != null else "no pickaxe"
-		var line: String = why if why != "" else "Mine level %d, %s, %s" % [Sim.level(r, "mine"), pick, _mood(r).to_lower()]
+		var line: String = why if why != "" else "Stonemason level %d, %s, %s" % [Sim.level(r, "mason"), pick, _mood(r).to_lower()]
 		if why == "" and plan.dest == Meadow.ID:  # at the meadow it's hunting that counts, and no pickaxe is needed
 			line = "Hunt level %d, %s" % [Sim.level(r, "hunt"), _mood(r).to_lower()]
 		var b := _button("%s\n%s" % [r.name, line], func(): game.plan_toggle(r.id), "Secondary")

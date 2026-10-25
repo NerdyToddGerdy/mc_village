@@ -37,6 +37,13 @@ static func _draw(img: Image, type: String) -> void:
 				_disc(img, p, 12, dark)
 			for p in [Vector2(22, 26), Vector2(41, 24), Vector2(30, 42), Vector2(46, 41)]:
 				_disc(img, p, 9, c.lightened(0.1 if p.x > 35 else 0.0))
+		"sapling":  # a thin stem with two leaves (issue #177)
+			_line(img, Vector2(32, 54), Vector2(32, 22), 9, dark)
+			_line(img, Vector2(32, 54), Vector2(32, 22), 4, Palette.LOG)
+			for p in [Vector2(22, 24), Vector2(42, 18)]:
+				_ellipse(img, p, Vector2(13, 9), dark)
+			for p in [Vector2(22, 24), Vector2(42, 18)]:
+				_ellipse(img, p, Vector2(10, 6), c)
 		"coal":  # dark lumps, edged in chalk so they read on the slate
 			for p in [Vector2(24, 36), Vector2(40, 30), Vector2(34, 46)]:
 				_disc(img, p, 13, Palette.CHALK_DIM)

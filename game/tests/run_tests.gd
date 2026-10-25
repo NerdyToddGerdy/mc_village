@@ -74,6 +74,8 @@ func _init() -> void:
 		"test_old_meadow_trips_come_home",
 		"test_pens_and_breeding",
 		"test_leather_armor",
+		"test_lumberjacks_and_stonemasons",
+		"test_saplings_and_replanting",
 	]
 	for t in tests:
 		_current = t
@@ -150,7 +152,7 @@ func test_full_opening() -> void:
 	check(s.h2.owner == sim.residents[1].id, "Tomas owns the second house")
 	check(sim.auto_craft, "auto ingredients unlocked")
 	# Skills (issue #48): Ada learned by doing, and Tomas arrived skilled in one job.
-	check(Sim.level(sim.residents[0], "mine") >= 2, "Ada's Mine level rose with practice (level %d)" % Sim.level(sim.residents[0], "mine"))
+	check(Sim.level(sim.residents[0], "lumber") >= 2, "Ada's Lumberjack level rose with practice (level %d)" % Sim.level(sim.residents[0], "lumber"))
 	if sim.residents.size() == 2:
 		var tomas: Dictionary = sim.residents[1]
 		var skilled: Array = Defs.JOBS.filter(func(jb): return Sim.level(tomas, jb) >= Tuning.ARRIVAL_LEVEL)
@@ -384,12 +386,19 @@ func test_every_save_fixture_still_loads() -> void:
 			check(sim.residents[0].jobs.values().all(func(j): return j.xp == 0 or v >= 11), "v%d: older saves start at level 1" % v)
 		check(sim.residents[0].role == "all" and sim.residents.slice(1).all(func(r): return r.role in Defs.JOBS), "v%d: Ada does everything, and everyone else has one job" % v)
 		check(sim.residents.all(func(r): return r.jobs.values().all(func(j): return j.keys() == ["xp"])), "v%d: the job switches and priorities are gone" % v)
-		if v >= 22:
+		if v >= 23:
+			check(sim.residents[1].role == "lumber", "v%d: a resident's job survives" % v)
+			var blocks: Array = sim.sites.filter(func(st): return st.tpl == "chopping_block")
+			check(blocks.size() == 1 and blocks[0].keep == 25 and sim.pile_count(blocks[0]) > 0, "v%d: the chopping block, its target and its pile survive" % v)
+			check(sim.trees.any(func(t): return t.alive and not Sim.grown(t)) and sim.trees.any(func(t): return t.get("keep", false)), "v%d: a growing sapling and a kept tree survive" % v)
+		elif v == 22:
 			check(sim.residents[1].role == "farm", "v%d: a resident's job survives" % v)
+			var mira: Dictionary = sim.residents[2]
+			check(mira.role == "lumber" and mira.jobs.lumber.xp == mira.jobs.mason.xp and not mira.jobs.has("mine"), "v22: a miner becomes a lumberjack, with Mine's experience in both new jobs (issue #177)")
 		elif sim.residents.size() >= 2:  # every job on at priority 2: the best level wins, then the first job
 			var t: Dictionary = sim.residents[1]
 			var skilled: Array = Defs.JOBS.filter(func(jb): return t.jobs[jb].xp > 0)
-			check(t.role == (skilled[0] if not skilled.is_empty() else "mine"), "v%d: Tomas gets the job he's best at (%s)" % [v, t.role])
+			check(t.role == (skilled[0] if not skilled.is_empty() else "lumber"), "v%d: Tomas gets the job he's best at (%s)" % [v, t.role])
 		var fires: Array = sim.sites.filter(func(s): return s.tpl == "fireplace")
 		if v >= 9:
 			check(fires.size() == 1 and fires[0].plot is Rect2i, "v%d: the fireplace and its reserved plot survive" % v)
@@ -431,7 +440,7 @@ func test_dropped_tools_keep_their_wear() -> void:
 	worn = loaded.stacks_where(func(s): return s.type == "wood_axe")
 	check(worn.size() == 1 and worn[0].dur == 3, "wear survives a save and load")
 	var bo := loaded.add_resident("Bo", "8C4F6B", at(1, 1))
-	loaded.set_role(bo, "mine")
+	loaded.set_role(bo, "lumber")
 	loaded.designate_mine(Rect2i(0, 0, loaded.w, loaded.h))
 	for b in loaded.boulders:
 		b.des = false
@@ -1007,16 +1016,16 @@ func test_one_job_each() -> void:
 	for i in 10 * Tuning.TPS:
 		sim.step()
 		if tomas.job != null:
-			mined = mined or tomas.job.work == "mine"
+			mined = mined or tomas.job.work == "lumber"
 			hauled = hauled or tomas.job.work == "haul"
 	check(not mined and hauled, "a farmer with nothing to farm never mines marked trees, and hauls instead")
 	# A new job takes over, and stops work of the old one.
-	sim.set_role(tomas, "mine")
+	sim.set_role(tomas, "lumber")
 	sim.fail_job(tomas)
 	run(sim, 0.1)
-	check(tomas.job != null and tomas.job.work == "mine", "made a miner, he mines (%s)" % (tomas.job.work if tomas.job else "idle"))
+	check(tomas.job != null and tomas.job.work == "lumber", "made a lumberjack, he chops (%s)" % (tomas.job.work if tomas.job else "idle"))
 	sim.set_role(tomas, "cook")
-	check(tomas.job == null or tomas.job.work != "mine", "a new job stops work of the old one")
+	check(tomas.job == null or tomas.job.work != "lumber", "a new job stops work of the old one")
 	check(Sim.job_list(tomas) == ["haul", "cook"] and Sim.job_list(ada) == Defs.JOBS, "his work is his job and hauling; Ada's is everything")
 	# No job: hauls only. Direct orders still work, and eating comes first.
 	sim.set_role(tomas, "none")
@@ -1028,19 +1037,19 @@ func test_one_job_each() -> void:
 	sim.fail_job(tomas)
 	run(sim, 0.1)
 	check(tomas.job != null and tomas.job.kind == "eat", "a hungry resident eats first")
-	# "No one is a miner" once nobody has the job and Ada can't see to it.
+	# "No one is a lumberjack" once nobody has the job and Ada can't see to it.
 	sim.compute_stuck()
 	check(not stuck_text(sim).contains("No one is a"), "while Ada's about, nothing is unstaffed: " + stuck_text(sim))
 	ada.away = true
 	sim.compute_stuck()
-	check(stuck_text(sim).contains("No one is a miner"), "with Ada away, marked trees say no one is a miner: " + stuck_text(sim))
-	sim.set_role(tomas, "mine")
+	check(stuck_text(sim).contains("No one is a lumberjack"), "with Ada away, marked trees say no one is a lumberjack: " + stuck_text(sim))
+	sim.set_role(tomas, "lumber")
 	sim.compute_stuck()
-	check(not stuck_text(sim).contains("No one is a miner"), "and the reason goes once someone is: " + stuck_text(sim))
+	check(not stuck_text(sim).contains("No one is a lumberjack"), "and the reason goes once someone is: " + stuck_text(sim))
 	ada.away = false
 	# Jobs survive a save.
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
-	check(loaded.residents[0].role == "all" and loaded.residents[1].role == "mine", "jobs survive a save")
+	check(loaded.residents[0].role == "all" and loaded.residents[1].role == "lumber", "jobs survive a save")
 
 
 ## Issue #134 (and #91): Ada makes tools queued by hand, but spare tools are made only while a
@@ -1088,28 +1097,28 @@ func test_skills_rise_and_pay_off() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
 	# Levels rise at 8, 25, 50 and 90 points and stop at 5.
-	check(Sim.level(ada, "mine") == 1, "everyone starts at level 1")
+	check(Sim.level(ada, "lumber") == 1, "everyone starts at level 1")
 	for i in 7:
-		sim.gain_xp(ada, "mine")
-	check(Sim.level(ada, "mine") == 1 and is_equal_approx(Sim.level_progress(ada, "mine"), 7.0 / 8.0), "7 points: still level 1, most of the way to 2")
+		sim.gain_xp(ada, "lumber")
+	check(Sim.level(ada, "lumber") == 1 and is_equal_approx(Sim.level_progress(ada, "lumber"), 7.0 / 8.0), "7 points: still level 1, most of the way to 2")
 	sim.events.clear()
-	sim.gain_xp(ada, "mine")
-	check(Sim.level(ada, "mine") == 2, "8 points: level 2")
-	check(sim.events.any(func(e): return e.text == "Ada is now level 2 at Mine."), "a new level gets a toast")
+	sim.gain_xp(ada, "lumber")
+	check(Sim.level(ada, "lumber") == 2, "8 points: level 2")
+	check(sim.events.any(func(e): return e.text == "Ada is now level 2 at Lumberjack."), "a new level gets a toast")
 	for pair in [[24, 2], [25, 3], [49, 3], [50, 4], [89, 4], [90, 5], [500, 5]]:
-		ada.jobs.mine.xp = pair[0]
-		check(Sim.level(ada, "mine") == pair[1], "%d points is level %d" % pair)
+		ada.jobs.lumber.xp = pair[0]
+		check(Sim.level(ada, "lumber") == pair[1], "%d points is level %d" % pair)
 	# Each finished task gives a point in its job.
 	var sim2 := Sim.new_game()
 	var a2: Dictionary = sim2.residents[0]
 	var tree: Dictionary = Sim.nearest(sim2.trees, Sim.rcell(a2))
 	sim2.direct_order(a2, tree)
 	run(sim2, 40)
-	check(a2.jobs.mine.xp == 1, "felling a tree, even by direct order, gives 1 Mine point")
+	check(a2.jobs.lumber.xp == 1, "felling a tree, even by direct order, gives 1 Lumberjack point")
 	# Faster: each level above 1 is 15% faster. Better: level 3 drops an extra log.
 	var sim3 := Sim.new_game()
 	var a3: Dictionary = sim3.residents[0]
-	set_level(a3, "mine", 3)
+	set_level(a3, "lumber", 3)
 	var t3: Dictionary = Sim.nearest(sim3.trees, Sim.rcell(a3))
 	var logs: int = t3.logs
 	sim3.direct_order(a3, t3)
@@ -1122,8 +1131,8 @@ func test_skills_rise_and_pay_off() -> void:
 			break
 	check(absf(ticks - Tuning.CHOP_TIME[0] / 1.3 * Tuning.TPS) <= 2, "level 3 chops 30%% faster (%d ticks)" % ticks)
 	check(count(sim3, "log") == logs + 1, "and gets 1 extra log (%d)" % count(sim3, "log"))
-	set_level(a3, "mine", 5)
-	check(Sim.skill_bonus(a3, "mine") == 2, "level 5 gets 2 extra")
+	set_level(a3, "lumber", 5)
+	check(Sim.skill_bonus(a3, "lumber") == 2, "level 5 gets 2 extra")
 	# Farm: extra wheat at level 3.
 	var sim4 := Sim.new_game()
 	var a4: Dictionary = sim4.residents[0]
@@ -1181,7 +1190,7 @@ func test_skills_rise_and_pay_off() -> void:
 	check(Sim.level(loaded.residents[0], "haul") == 3, "skills survive a save")
 	var t8: Dictionary = Sim.nearest(sim2.trees.filter(func(t): return t.alive), Sim.rcell(a2))
 	var bo := sim2.add_resident("Bo", Sim.TRAVELERS[0][1], sim2.nearest_walkable(Sim.rcell(a2) + Vector2i(1, 0)))
-	sim2.set_role(bo, "mine")
+	sim2.set_role(bo, "lumber")
 	sim2.direct_order(bo, t8)
 	run(sim2, 0.1)
 	sim2.set_role(bo, "cook")
@@ -1305,7 +1314,7 @@ func until_away(sim: Sim, r: Dictionary, seconds := 30.0) -> void:
 
 ## A resident with a stone pickaxe, moved onto the old mine at its entrance.
 func send_to_mine(sim: Sim, r: Dictionary) -> void:
-	sim.set_role(r, "mine")  # one job each (issue #134): the one sent to dig is a miner
+	sim.set_role(r, "mason")  # one job each (issue #134): the one sent to dig is a stonemason (issue #177)
 	r.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
 	sim.get_map(OldMine.ID).visited = true
 	sim.move_to_map(r, OldMine.ID, sim.get_map(OldMine.ID).entrance)
@@ -1334,7 +1343,7 @@ func test_residents_only_work_on_their_own_map() -> void:
 			crossed = true
 		if ada.job != null and ada.job.target != null and not village_ids.has(ada.job.target.id) and ada.job.target.get("kind", "") in ["tree", "boulder"]:
 			crossed = true
-		mined_here = mined_here or (tomas.job != null and tomas.job.work == "mine")
+		mined_here = mined_here or (tomas.job != null and tomas.job.work == "mason")
 	check(sim.map_id == "village", "the sim is back on the village after ticking")
 	check(not crossed, "nobody claims a job on another map")
 	check(mined_here and sim.on_map(OldMine.ID, func(): return count(sim, "cobble") + count(sim, "coal")) > 0, "Tomas mines the old mine while nobody looks at it")
@@ -2833,3 +2842,163 @@ func test_leather_armor() -> void:
 	check(loaded.residents[0].armor.chest.type == "leather_tunic", "what each resident wears is saved")
 	var up := SaveFormat.upgrade(str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v20.save")))
 	check(not up.has("error") and up.data.state.residents.all(func(r): return r.armor == {}), "residents in an older save wear nothing")
+
+
+# ---------------------------------------------------------------- workstations (issue #177)
+
+## A finished building of `tpl` on open ground near the middle of the village, or {}.
+func place_done(sim: Sim, tpl: String, near := Vector2i(16, 16)) -> Dictionary:
+	for d in range(0, 12):
+		for x in range(near.x - d, near.x + d + 1):
+			for y in range(near.y - d, near.y + d + 1):
+				var c := Vector2i(x, y)
+				if sim.placement_check(tpl, c) == "" and sim.walkable(c) and sim.obstacles_in(Rect2i(c, Defs.TEMPLATES[tpl].size)).trees.is_empty() and sim.obstacles_in(Rect2i(c, Defs.TEMPLATES[tpl].size)).boulders.is_empty():
+					var s := sim.place_site(tpl, c)
+					s.stage = Defs.TEMPLATES[tpl].stages.size()
+					s.done = true
+					sim._occ_dirty = true
+					return s
+	return {}
+
+
+func test_lumberjacks_and_stonemasons() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var block := place_done(sim, "chopping_block")
+	check(not block.is_empty() and block.keep == Tuning.KEEP_STOCK, "a chopping block keeps %d logs by default" % Tuning.KEEP_STOCK)
+	run(sim, 30)
+	check(sim.stats.felled == 0, "Ada never fells trees on her own, even with a chopping block")
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Chopping block: No one is a lumberjack"), "the block says it has nobody to work it: " + stuck_text(sim))
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(block.origin + Vector2i(0, 2)))
+	sim.set_role(tomas, "lumber")
+	tomas.axe = {"type": "stone_axe", "tier": 2, "dur": 999}
+	# Keep: the nearest tree in range. Protected: a tree in a fireplace's reserved plot.
+	var in_range := sim.trees.filter(func(t): return t.alive and Sim.in_area(block, t.cell))
+	in_range.sort_custom(func(a, b): return Sim.manhattan(a.cell, block.origin) < Sim.manhattan(b.cell, block.origin))
+	var kept: Dictionary = in_range[0]
+	sim.designate_keep(Rect2i(kept.cell, Vector2i.ONE))
+	check(kept.keep, "a tree can be marked Keep")
+	var plotted := {}
+	for t in in_range.slice(1):
+		for dx in range(-3, 4):
+			for dy in range(-3, 4):
+				var o: Vector2i = t.cell + Vector2i(dx, dy)
+				var plot = Sim.plot_rect("fireplace", o, 0)
+				if plotted.is_empty() and plot.has_point(t.cell) and o != t.cell and sim.placement_check("fireplace", o) == "" and sim.obstacles_in(Rect2i(o, Vector2i.ONE)).trees.is_empty() and sim.obstacles_in(Rect2i(o, Vector2i.ONE)).boulders.is_empty():
+					sim.place_site("fireplace", o)
+					plotted = t
+	check(not plotted.is_empty() and sim.protected(plotted), "a tree in a reserved plot is protected")
+	block.keep = 8
+	var max_pile := 0
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		max_pile = maxi(max_pile, sim.pile_count(block))
+	var felled: Array = sim.trees.filter(func(t): return not t.alive)
+	check(felled.size() >= 2, "a lumberjack fells unmarked trees on his own (%d)" % felled.size())
+	check(felled.all(func(t): return Sim.in_area(block, t.cell)), "only inside the chopping block's work area")
+	check(kept.alive and plotted.alive, "never a tree marked Keep, or one on protected land")
+	check(sim.pile_count(block) > 0 and sim.items.get(Sim.pile_cells(block)[0], {}).get("type", "log") == "log", "his logs go to the block's pile (%d)" % sim.pile_count(block))
+	check(sim.free_count("log") >= 8, "he stocks the village up to its target (%d logs)" % sim.free_count("log"))
+	var at_target: int = sim.stats.felled
+	run(sim, 60)
+	check(sim.stats.felled <= at_target + 1, "then stops felling (%d, then %d)" % [at_target, sim.stats.felled])
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Chopping block: Target reached (8 logs)") and sim.stuck.any(func(x): return x.why.begins_with("Target reached") and x.waiting), "a target reached is waiting, not stuck: " + stuck_text(sim))
+	# Marked trees are still worked, Keep or not.
+	sim.designate_mine(Rect2i(kept.cell, Vector2i.ONE), kept)
+	run(sim, 30)
+	check(not kept.alive, "a kept tree is felled once it's marked")
+	# Overflow: the pile holds WORK_STORE, the rest goes to the stockpile.
+	sim.paint_zone(open_rect(sim, Vector2i(3, 3)))
+	block.keep = 100
+	for i in 240 * Tuning.TPS:
+		sim.step()
+		max_pile = maxi(max_pile, sim.pile_count(block))
+		if sim.pile_count(block) >= Tuning.WORK_STORE and sim.stacks_where(func(st): return st.type == "log" and sim.in_zone(st.cell)).size() > 0:
+			break
+	check(max_pile <= Tuning.WORK_STORE, "the pile never holds more than %d (%d)" % [Tuning.WORK_STORE, max_pile])
+	check(sim.pile_count(block) == Tuning.WORK_STORE, "the pile fills (%d)" % sim.pile_count(block))
+	check(sim.stacks_where(func(st): return st.type == "log" and sim.in_zone(st.cell)).size() > 0, "and the overflow goes to the stockpile")
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Chopping block: Full (%d logs)" % Tuning.WORK_STORE), "a full pile says so: " + stuck_text(sim))
+	# Builders take from the pile like a stockpile.
+	block.keep = 0
+	for k in sim.items.keys():
+		if sim.items[k].type == "log" and sim.pile_at(k) == null:
+			sim.items.erase(k)
+	run(sim, 10)
+	var before := sim.pile_count(block)
+	var bench := sim.place_site("bench", Sim.rcell(ada) + Vector2i(0, -2) if sim.placement_check("bench", Sim.rcell(ada) + Vector2i(0, -2)) == "" else block.origin + Vector2i(0, 4))
+	run(sim, 60)
+	check(bench.done and sim.pile_count(block) <= before - 4, "a builder takes the bench's logs from the pile (%d, then %d)" % [before, sim.pile_count(block)])
+	# A save keeps the target and the Keep marks.
+	block.keep = 15
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	var lb: Dictionary = loaded.site(block.id)
+	check(lb.keep == 15 and loaded.trees.filter(func(t): return t.get("keep", false)).size() == 1, "the keep-stock target and Keep marks survive a save")
+	# Stonemason: needs a pickaxe, then breaks boulders in the mason's bench's area into its pile.
+	var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], sim.nearest_walkable(block.origin + Vector2i(2, 0)))
+	sim.set_role(mira, "mason")
+	for k in sim.items.keys():
+		if Defs.ITEMS[sim.items[k].type].get("tool", "") == "pick":
+			sim.items.erase(k)
+	ada.pick = null
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Mira: Stonemason: no pickaxe"), "a stonemason with no pickaxe says so: " + stuck_text(sim))
+	var mbench := place_done(sim, "mason_bench", Vector2i(8, 8))
+	mira.pick = {"type": "stone_pick", "tier": 2, "dur": 999}
+	run(sim, 120)
+	var broken: Array = sim.boulders.filter(func(b): return not b.alive)
+	check(not broken.is_empty() and broken.all(func(b): return Sim.in_area(mbench, b.cell)), "a stonemason breaks boulders in the mason's bench's area on his own (%d)" % broken.size())
+	check(sim.pile_count(mbench) > 0, "into the bench's pile (%d cobblestone)" % sim.pile_count(mbench))
+	for b in sim.boulders:
+		if Sim.in_area(mbench, b.cell):
+			b.alive = false
+	sim._occ_dirty = true
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Mason's bench: No boulders in range") or stuck_text(sim).contains("Mason's bench: Target reached"), "with none left in range, the bench says so: " + stuck_text(sim))
+
+
+func test_saplings_and_replanting() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var tree: Dictionary = Sim.nearest(sim.trees, Sim.rcell(ada))
+	sim.direct_order(ada, tree)
+	run(sim, 30)
+	check(not tree.alive and count(sim, "sapling") >= Tuning.SAPLINGS, "a felled tree drops a sapling (%d)" % count(sim, "sapling"))
+	var block := place_done(sim, "chopping_block")
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(block.origin + Vector2i(0, 2)))
+	sim.set_role(tomas, "lumber")
+	block.keep = 0  # no felling: only planting
+	var n := sim.trees.size()
+	run(sim, 60)
+	var planted: Array = sim.trees.slice(n)
+	check(not planted.is_empty() and planted.all(func(t): return not Sim.grown(t) and Sim.in_area(block, t.cell) and not sim.protected_cell(t.cell)), "a lumberjack plants saplings in the block's work area, off protected land (%d)" % planted.size())
+	check(planted.all(func(t): return not sim.walkable(t.cell)), "a sapling stands in the way like a tree")
+	var sap: Dictionary = planted[0]
+	sim.designate_mine(Rect2i(sap.cell, Vector2i.ONE))
+	check(not sap.des, "a sapling can't be marked to chop")
+	check(Sim.tree_stage(sap) == 0, "it starts as a sapling")
+	run(sim, Tuning.SAPLING_GROW / 2.0 + 1.0)
+	check(Sim.tree_stage(sap) == 1, "then a young tree")
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.trees.any(func(t): return t.id == sap.id and Sim.tree_stage(t) == 1), "growth survives a save")
+	run(sim, Tuning.SAPLING_GROW / 2.0)
+	check(Sim.grown(sap), "and grows into a full tree in %d seconds" % int(Tuning.SAPLING_GROW))
+	block.keep = 100
+	sim.designate_keep(Rect2i(sap.cell, Vector2i.ONE))  # keep it, so it's still standing below
+	# A blueprint over a sapling lifts it.
+	var young := sim.trees.filter(func(t): return t.alive and not Sim.grown(t))
+	if not young.is_empty():
+		var y: Dictionary = young[0]
+		var before := count(sim, "sapling")
+		sim.place_site("bench", y.cell)
+		check(not y.alive and count(sim, "sapling") == before + 1, "a blueprint over a sapling lifts it back into a sapling")
+	# No trees left in range.
+	for t in sim.trees:
+		if Sim.in_area(block, t.cell):
+			t.alive = false
+	sim._occ_dirty = true
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Chopping block: No trees in range. Plant saplings or move the chopping block"), "with none left in range, the block says so: " + stuck_text(sim))

@@ -701,9 +701,9 @@ func _test_jobs_grid(game: Game) -> void:
 	hud.refresh(sim)
 	await process_frame
 	check(game.jobs_board_open and hud._board_panel.visible and hud._jobs_btn.button_pressed, "it opens the board, and the Jobs button shows it")
-	check(_walk(hud._board).filter(func(n): return n.has_meta("cell") and not n.is_queued_for_deletion()).size() == 8 * sim.residents.size(), "a level cell per resident and job")
+	check(_walk(hud._board).filter(func(n): return n.has_meta("cell") and not n.is_queued_for_deletion()).size() == Defs.JOBS.size() * sim.residents.size(), "a level cell per resident and job")
 	var nobody: Array = _walk(hud._board).filter(func(n): return n is Label and n.text == "nobody" and not n.is_queued_for_deletion())
-	check(nobody.filter(func(l): return l.get_theme_color("font_color") == Palette.YELLOW).size() == 6, "the six jobs nobody has say so in yellow, Haul aside (%d)" % nobody.size())
+	check(nobody.filter(func(l): return l.get_theme_color("font_color") == Palette.YELLOW).size() == Defs.JOBS.size() - 2, "the jobs nobody has say so in yellow, Haul and Farm aside (%d)" % nobody.size())
 	var pick := func() -> Button:
 		return _walk(hud._board).filter(func(n): return n is Button and n.get_meta("label", "") == "Job: Tomas" and not n.is_queued_for_deletion()).front()
 	check(pick.call().text.begins_with("Farmer, level 1"), "Tomas's row shows his job and level (%s)" % pick.call().text)
@@ -711,7 +711,7 @@ func _test_jobs_grid(game: Game) -> void:
 	hud.refresh(sim)
 	await process_frame
 	var choices: Array = _walk(hud._job_list).filter(func(n): return n is Button and not n.is_queued_for_deletion())
-	check(hud._job_drop.visible and choices.size() == 9, "his dropdown lists every job and No job (%d)" % choices.size())
+	check(hud._job_drop.visible and choices.size() == Defs.JOBS.size() + 1, "his dropdown lists every job and No job (%d)" % choices.size())
 	check(choices[0].text.begins_with("Cook · level 3"), "best level first (%s)" % choices[0].text)
 	check(choices.any(func(b): return b.text == "Farm · level 1 · 1 farmer" and b.button_pressed), "his own job is lit, with how many have it")
 	choices.filter(func(b): return b.text.begins_with("Toolsmith"))[0].pressed.emit()

@@ -97,8 +97,8 @@ func _initialize() -> void:
 	check(await play_until(40, func(): return sim.at_site(ada) and sim.at_site(tomas)), "they reach the old mine")
 	check(sim.route_surveyed(), "walking it surveyed the road")
 	check(await click_button("Village"), "back to the village")
-	# Mira stays home: made a miner (one job each, issue #134), with the village's trees marked for her
-	check(await choose_job(mira, "mine"), "the jobs board: Mira, staying home, is made a miner (%s)" % mira.role)
+	# Mira stays home: made a lumberjack (one job each, issue #134; #177), with the village's trees marked for her
+	check(await choose_job(mira, "lumber"), "the jobs board: Mira, staying home, is made a lumberjack (%s)" % mira.role)
 	await key(KEY_ESCAPE)
 	await look_at(Sim.rcell(mira))
 	await key(KEY_X)
@@ -154,8 +154,9 @@ func _initialize() -> void:
 	# ---- Return and unloading (issue #112)
 	check(await play_until(120, func(): return sim.expedition.is_empty()), "the party gets home")
 	check(seen("Back from the old mine: ") and seen("Tomas seriously injured"), "the report says what came back and who was hurt")
+	check(await play_until(20, func(): return tomas.job != null and tomas.job.kind == "rest"), "Tomas rests in bed to heal (hurt %d, %s)" % [tomas.hurt, tomas.job.kind if tomas.job != null else "idle"])
+	check(tomas.hurt == 2, "still seriously hurt while he rests")
 	check(await play_until(400, func(): return sim.stacks_where(func(st): return st.get("cargo", false)).is_empty() and count("iron_ore") >= 3), "the cargo is hauled to the stockpile (left %s, iron ore %d)" % [sim.stacks_where(func(st): return st.get("cargo", false)).map(func(st): return [st.type, st.n]), count("iron_ore")] + " zone %d free %s jobs %s" % [sim.zone.size(), sim.zone_dest("cobble"), sim.residents.map(func(r): return [r.name, r.map, r.job.label if r.job != null else "idle", r.role])])
-	check(tomas.hurt == 2 and tomas.job != null and tomas.job.kind == "rest", "Tomas rests in bed to heal")
 
 	# ---- Smelting and an iron pickaxe (issue #104)
 	var fire = null

@@ -51,6 +51,10 @@ func _initialize() -> void:
 		sim.residents[0].jobs.build.xp = 30  # a level-3 builder
 	# v13 to v19 saved a meadow part-way to regaining a sheep (meadow_sheep 5, meadow_regrow 60); from
 	# v20 the meadow is a map of its own (below).
+	if SaveFormat.VERSION >= 23 and sim.residents[0].pick == null:  # saplings (#177) change the random numbers: she still has one to keep
+		sim.residents[0].pick = {"type": "stone_pick", "tier": 2, "dur": 20}
+	if SaveFormat.VERSION >= 23 and sim.residents[0].pick == null:  # saplings (#177) change the random numbers: she still has one to keep
+		sim.residents[0].pick = {"type": "stone_pick", "tier": 2, "dur": 20}
 	if SaveFormat.VERSION >= 12 and sim.residents[0].pick != null:
 		sim.residents[0].kept.pick = true  # a pickaxe she was told to equip
 	if SaveFormat.VERSION >= 3:
@@ -73,7 +77,7 @@ func _initialize() -> void:
 		var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], Vector2i(0, 0))
 		mira.pick = {"type": "stone_pick", "tier": 2, "dur": 20}
 		if SaveFormat.VERSION >= 22:
-			sim.set_role(mira, "mine")  # one job each (#134): added by hand, she'd have none
+			sim.set_role(mira, "mine" if SaveFormat.VERSION == 22 else "mason")  # one job each (#134): added by hand, she'd have none; Mine split in two in v23 (#177)
 		sim.move_to_map(mira, OldMine.ID, mine.entrance)
 		sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, mine.w, mine.h)))
 		sim.use_map(OldMine.ID)
@@ -196,6 +200,26 @@ func _initialize() -> void:
 		sim.expedition.sticks = 0
 		sim.expedition.wheat = 0
 		sim.expedition.supplies = {}
+		sim.events.clear()
+	if SaveFormat.VERSION >= 23:  # a chopping block with logs in its pile, a sapling growing, a tree kept, saplings lying about (#177)
+		var block := {}
+		for c in [at(4, 12), at(2, 1), at(15, 2), at(16, 12), at(1, 14), at(14, 14)]:
+			if sim.placement_check("chopping_block", c) == "":
+				block = sim.place_site("chopping_block", c)
+				break
+		block.stage = 1
+		block.done = true
+		block.keep = 25
+		var pile: Vector2i = Sim.pile_cells(block)[0]
+		sim.items.erase(pile)
+		sim.drop_items(pile, "log", 6)
+		var spot = sim.plant_cell([block], block.origin)
+		sim.trees.append({"id": sim._id(), "kind": "tree", "cell": spot, "logs": 5, "alive": true, "des": false,
+			"claim": 0, "unreach_until": 0, "grow": 90.0})
+		var kept = Sim.nearest(sim.trees.filter(func(t): return t.alive and Sim.grown(t)), block.origin)
+		kept.keep = true
+		sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(0, 1), "sapling", 2)
+		sim.set_role(sim.residents[1], "lumber")
 		sim.events.clear()
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,

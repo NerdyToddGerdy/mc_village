@@ -241,6 +241,8 @@ func _update_live_overlays() -> void:
 		if plot != null:
 			outlines.append({"rect": plot, "h": 0.02, "color": Color(Palette.RED if err != "" else Palette.CHALK, 0.6), "dashed": true})
 		outlines.append({"rect": Rect2i(origin, size), "h": 0.03, "color": Palette.RED if err != "" else Palette.BLUE, "dashed": true})
+		if Defs.TEMPLATES[placing].has("work"):  # the work area it'll have (issue #177)
+			outlines.append({"center": Vector2(origin) + Vector2(0.5, 0.5), "radius": Tuning.WORK_RADIUS, "h": 0.02, "color": Color(Palette.CHALK, 0.5)})
 		if err == "" and placing == "house":
 			fills.append({"rect": Rect2i(sim.door_cell(origin, rot), Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.55)})
 		if err != "":
@@ -249,14 +251,16 @@ func _update_live_overlays() -> void:
 		else:
 			var clr := Sim.clearing_text(sim.obstacles_in(Rect2i(origin, size)))
 			var turn := keys.first("rotate")
-			var names := {"house": "house", "bench": "crafting bench", "fireplace": "fireplace", "board": "expedition board"}
-			var turns := {"house": "the door", "bench": "its workshop plot", "fireplace": "its kitchen plot", "board": "its map room plot"}
+			var names := {"house": "house", "bench": "crafting bench", "fireplace": "fireplace", "board": "expedition board", "chopping_block": "chopping block", "mason_bench": "mason's bench"}
+			var turns := {"house": "the door", "bench": "its workshop plot", "fireplace": "its kitchen plot", "board": "its map room plot", "chopping_block": "its sawmill plot", "mason_bench": "its workshop plot"}
 			hint = "Place %s." % names[placing] + (" %s turns %s." % [turn, turns[placing]] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
 	if sel != null and sel.kind in ["tree", "boulder", "animal", "bush", "crop", "meadow", "route"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
+		if not Sim.work_of(sel).is_empty():  # its work area (issue #177)
+			outlines.append({"center": Vector2(sel.origin) + Vector2(0.5, 0.5), "radius": Tuning.WORK_RADIUS, "h": 0.03, "color": Color(Palette.CHALK, 0.8)})
 	elif sel != null and sel.kind == "pen":
 		outlines.append({"rect": sel.rect, "h": 0.04, "color": Palette.CHALK, "dashed": false})
 	if hint == "" and tool in ["chop", "break"] and _hover != null and _drag.is_empty():
@@ -269,6 +273,8 @@ func _update_live_overlays() -> void:
 			hint = "Drag to mark trees and boulders. Shift: trees only. Alt/Option: boulders only."
 	if hint == "" and tool == "stock" and _hover != null and _drag.is_empty():
 		hint = "Click or drag from a stockpile cell to erase." if sim.zone.has(_hover) else "Drag over open ground to paint a stockpile. Start on a stockpile to erase instead."
+	if hint == "" and tool == "keep" and _hover != null and _drag.is_empty():
+		hint = "Click or drag over trees and boulders that lumberjacks and stonemasons should leave alone. Click a kept one to unmark it."
 	if hint == "" and tool == "hunt" and _hover != null and _drag.is_empty():
 		hint = "Click or drag over animals to hunt them. Shift: only the kind you start on."
 	if hint == "" and tool == "lead" and _hover != null and _drag.is_empty():
@@ -606,6 +612,9 @@ func _left_up(e: InputEventMouseButton) -> void:
 			elif tool == "lead":
 				var hit = _pick(e.position, false) if small else null
 				sim.designate_lead(d.rect, hit if hit != null and hit.kind == "animal" else null)
+			elif tool == "keep":  # issue #177
+				var hit = _pick(e.position, false) if small else null
+				sim.designate_keep(d.rect, hit if hit != null and hit.kind in ["tree", "boulder"] else null)
 			elif tool == "hunt":
 				var hit = _pick(e.position, false) if small else null
 				sim.designate_hunt(d.rect, hit if hit != null and hit.kind == "animal" else null, hunt_species(d.a) if e.shift_pressed else "")
@@ -673,6 +682,7 @@ func _key(e: InputEventKey) -> void:
 		"mine": set_tool("mine")
 		"chop": set_tool("chop")
 		"break": set_tool("break")
+		"keep": set_tool("keep")
 		"craft": toggle_craft_menu()
 		"jobs": toggle_jobs_board()
 		"hunt": set_tool("hunt")
@@ -687,6 +697,8 @@ func _key(e: InputEventKey) -> void:
 		"house": start_placing("house")
 		"fireplace": start_placing("fireplace")
 		"board": start_placing("board")
+		"chopping_block": start_placing("chopping_block")
+		"mason_bench": start_placing("mason_bench")
 		"rotate":
 			if tool == "build":
 				rot = (rot + 1) % 4
@@ -846,7 +858,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "build", "bench", "house", "fireplace", "board"]
+const VILLAGE_ONLY := ["stock", "farm", "build", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -1096,6 +1108,16 @@ func plan_line() -> String:
 
 func toggle_mine(target: Dictionary) -> void:
 	_in_view(func(): sim.designate_mine(Rect2i(target.cell, Vector2i.ONE), target))
+
+
+## Marks a tree or boulder Keep, or unmarks it (issue #177).
+func toggle_keep(target: Dictionary) -> void:
+	_in_view(func(): sim.designate_keep(Rect2i(target.cell, Vector2i.ONE), target))
+
+
+## A workstation's keep-stock target (issue #177).
+func set_keep_stock(s: Dictionary, n: int) -> void:
+	sim.set_keep_stock(s, n)
 
 
 func cancel_site(s: Dictionary) -> void:

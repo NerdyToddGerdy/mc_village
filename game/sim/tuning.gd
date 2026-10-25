@@ -102,6 +102,15 @@ const MEAL_STOCK := 6                   ## The fireplace's standing order keeps 
 const SMELT_TIME := 5.0                 ## Seconds to smelt one iron ingot at the fireplace (issue #104).
 const STAGE_TIME := 10.0                ## Seconds of build work per construction stage.
 const ARRIVAL_DELAY := 45.0             ## Seconds after a house with a free bed is finished, per traveler.
+# Workstations (issue #177).
+const WORK_RADIUS := 8.0                ## Cells from a chopping block or mason's bench that its gatherers work on their own.
+const WORK_STORE := 20                  ## Logs or cobblestone a workstation's pile holds.
+const KEEP_STOCK := 20                  ## A new workstation's keep-stock target: gatherers stop once the village has this many.
+const KEEP_STEP := 5                    ## The keep-stock target's step in the workstation's panel.
+const SAPLINGS := 1                     ## Saplings a felled tree drops.
+const SAPLING_EXTRA := 0.3              ## Chance a felled tree drops one more.
+const SAPLING_GROW := 300.0             ## Seconds from planting a sapling to a full tree.
+const PLANT_TREE_TIME := 2.0            ## Seconds to plant a sapling.
 const UNREACHABLE_COOLDOWN := 8.0       ## Seconds before retrying a target that couldn't be reached.
 
 ## Indexed by tool tier: 0 = bare hands, 1 = wooden, 2 = stone, 3 = iron (issue #104).

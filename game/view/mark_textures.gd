@@ -61,6 +61,18 @@ static func heart() -> ImageTexture:
 						img.set_pixel(x, y, col))
 
 
+## Kept from gatherers' own work (issue #177): a ring, in stockpile green.
+static func keep() -> ImageTexture:
+	return _cached("keep", func(img: Image) -> void:
+		for pass_ in [[Palette.SLATE_DEEP, 13.0], [Palette.GREEN, 6.0]]:
+			var col: Color = pass_[0]
+			var w: float = pass_[1]
+			for i in 48:
+				var a0 := TAU * i / 48.0
+				var a1 := TAU * (i + 1) / 48.0
+				_line(img, Vector2(32, 32) + Vector2(cos(a0), sin(a0)) * 20, Vector2(32, 32) + Vector2(cos(a1), sin(a1)) * 20, w, col))
+
+
 static func flag() -> ImageTexture:
 	return _cached("flag", func(img: Image) -> void:
 		_line(img, Vector2(12, 62), Vector2(12, 6), 7.0, Palette.SLATE_DEEP)
