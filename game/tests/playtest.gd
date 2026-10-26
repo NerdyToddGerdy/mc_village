@@ -146,6 +146,7 @@ func _initialize() -> void:
 	check(await click_button("Stockpile"), "click Stockpile in the Paint menu")
 	check(game.tool == "stock" and game.menu_open == "", "Stockpile is on and the menu closes")
 	var zc := open_cell(at(12, 7), Vector2i(4, 2))
+	await look_at(zc)  # F centred the camera on Ada, wherever she happened to be
 	await drag(screen(zc), screen(zc + Vector2i(3, 1)))
 	check(sim.zone.size() >= 6, "dragging paints a stockpile (%d cells)" % sim.zone.size())
 	# A drag that starts on the stockpile erases instead (issue #63): take back its last column
@@ -162,6 +163,7 @@ func _initialize() -> void:
 	await frames(2)
 	check(sim.zone.size() == painted - 2 and not sim.in_zone(zc + Vector2i(3, 0)) and not sim.in_zone(zc + Vector2i(3, 1)), "releasing erases them (%d cells left)" % sim.zone.size())
 	await key(KEY_X)
+	await look_at(at(17, 17))  # F centred the camera on Ada, wherever she happened to be
 	await drag(screen(at(6, 3)), screen(at(17, 17)))
 	check(sim.boulders.filter(func(b): return b.des).size() >= 3, "dragging with Mine marks boulders")
 	await key(KEY_ESCAPE)
@@ -218,11 +220,17 @@ func _initialize() -> void:
 	await queue_recipe("Planks", 5)
 	await key(KEY_ESCAPE)
 	await key(KEY_X)  # more trees, so the walls' logs never run short after all those planks
+	await look_at(at(17, 17))  # F centred the camera on Ada, wherever she happened to be
 	await drag(screen(at(0, 0)), screen(at(17, 17)), true)
 	await key(KEY_ESCAPE)
 	await run(1000)
 	sim.compute_stuck()
-	check(h2 != null and h2.done, "second house finished (stage %d, felled %d, Ada's axe %s, broken %s, %s; marked trees %d; %s)" % [h2.stage if h2 != null else -1, sim.stats.felled, ada.axe, ada.broken.axe, ada.job.label if ada.job != null else "idle", sim.trees.filter(func(t): return t.alive and t.des).size(), sim.stuck.map(func(x): return x.why)])
+	var piled := {}
+	var loose := {}
+	for s in sim.stacks_where(func(_s): return true):
+		var into: Dictionary = piled if sim.stored(s) else loose
+		into[s.type] = into.get(s.type, 0) + int(s.n)
+	check(h2 != null and h2.done, "second house finished (stage %d, felled %d, Ada's axe %s, broken %s, %s; marked trees %d; %s; piled %s; loose %s)" % [h2.stage if h2 != null else -1, sim.stats.felled, ada.axe, ada.broken.axe, ada.job.label if ada.job != null else "idle", sim.trees.filter(func(t): return t.alive and t.des).size(), sim.stuck.map(func(x): return x.why), piled, loose])
 	check(sim.residents.size() == 2 and sim.stats.traveler_home, "Tomas arrives and moves in")
 	var tomas: Dictionary = sim.residents[1] if sim.residents.size() > 1 else {}
 	check(not tomas.is_empty() and Defs.JOBS.any(func(jb): return Sim.level(tomas, jb) >= Tuning.ARRIVAL_LEVEL), "Tomas arrives skilled in one job")
