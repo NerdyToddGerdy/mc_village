@@ -343,7 +343,7 @@ Automation may prepare dangerous missions, but departure approval stays manual i
 
 An isometric block-world diorama with visible changes caused by work.
 
-Decided: real 3D block geometry viewed through a fixed isometric orthographic camera, built in Godot 4. The interface uses the "carpenter's chalk" visual language. Orders are chalk marks on the blocks themselves, and panels are slate boards around the edges of the screen. Details are in `slice-1-spec.md`.
+Decided: real 3D block geometry viewed through a fixed isometric orthographic camera, built in Godot 4. The interface uses the "carpenter's chalk" visual language. Orders are chalk marks on the blocks themselves, and panels are slate boards around the edges of the screen. Details are in `slice-1-spec.md`. Blocks carry pixel textures, our own and drawn in code, not Minecraft's art (#206).
 
 - Chunky terrain and readable elevation.
 - Buildings visibly constructed in stages.
