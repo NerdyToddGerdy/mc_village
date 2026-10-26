@@ -8,7 +8,7 @@ Tracking issue: #11. Decisions settled with the owner while writing this spec:
 |---|---|
 | Needs (#18) | **Food only.** No rest or happiness yet. |
 | First food | **Wheat → bread**, plus **meat from sheep**. |
-| Jobs | Every resident has a **level in every job**, rising with practice, plus **on/off toggles and priorities**. You can still give direct orders. |
+| Jobs | Every resident has a **level in every job**, rising with practice, and **one job**, picked from a dropdown (#134, replacing the first decision's on/off toggles and priorities). **Ada does everything.** You can still give direct orders. |
 | Skill effect | Higher levels work **faster and give better results**. |
 | Recruitment (#24) | **No free bed, no arrival**, as in Minecraft. |
 | Beds | A **bed is part of every house** (its last construction stage) and needs wool. |
@@ -27,7 +27,7 @@ Slice 2 is done when, from a fresh start, a player can:
 - [x] Paint a farm, watch wheat be planted, grow and get harvested.
 - [x] Build a fireplace, with its kitchen space reserved, and see residents bake bread and cook mutton.
 - [x] See residents get hungry, fetch food and eat, and see a clear reason when there's no food.
-- [x] Turn jobs on and off and set priorities per resident, and watch skill levels rise with work.
+- [x] Give each resident a job, and watch skill levels rise with work. (First built as on/off toggles and priorities; one job each since #134.)
 - [x] Have a toolsmith keep spare tools stocked, so broken tools get replaced without the player.
 - [x] Send a resident to the sheep meadow and have them come back with wool and mutton.
 - [x] Build a third house with its bed and have a new traveler arrive.
@@ -46,9 +46,9 @@ Slice 2 is done when, from a fresh start, a player can:
 - **The clearing starts with 6 sheep**, enough wool for the two opening beds.
 - **Arrivals need a free bed** (§7). Tomas comes once the second house, bed included, is finished.
 - **Ada's house** is hers when its bed is finished, not when its roof is.
-- **Slice 1 goals** gain "Make Ada the toolsmith" after the bench (#91) and "Hunt sheep for wool" before Ada's house. The founding checklist otherwise stays, and its hints name the Gather and Paint menus (#93, #94).
+- **Slice 1 goals** gain "Hunt sheep for wool" before Ada's house. ("Make Ada the toolsmith", added after the bench by #91, went again with #134: Ada makes tools herself.) The founding checklist otherwise stays, and its hints name the Gather and Paint menus (#93, #94).
 - **After the founding (#81):** the goals panel folds to a small "Founding ✓" chip, since it has nothing left to guide. Whether Slice 2 gets a checklist of its own is still open. Saves made after the founding are labelled with facts about the village, "4 residents, 3 houses, 18 meals", rather than "Founding complete", so they can be told apart. The menu's subtitle reads "Your village: …" the same way. Older saves labelled "Founding complete" are listed by the same facts, read from the save.
-- **Tool breakage:** while anyone has the Toolsmith job switched on, a resident whose tool breaks fetches a spare instead of stopping (§6). With no toolsmith, the Slice 1 rule holds: they stop and report, and the report says how to fix it: "Axe broke. Craft one at the bench, or switch Toolsmith on for someone" (#91).
+- **Tool breakage:** while a resident's job is Toolsmith, a resident whose tool breaks fetches a spare instead of stopping (§6). With no toolsmith, the Slice 1 rule holds: they stop and report, and the report says how to fix it: "Axe broke. Craft one at the bench, or make someone the toolsmith" (#91, #134).
 
 ## 3. Sheep, hunting and the meadow
 
@@ -113,27 +113,30 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 - Hungry residents leave raw mutton for the fireplace. They eat it only when there's no other food.
 - Fireplace work is the **Cook** job (§5) and ranks with bench work.
 
-## 5. Jobs, priorities and skills
+## 5. Jobs and skills
 
 **Job types:** Mine, Haul, Build, Craft (the bench's planks and sticks), Toolsmith (the bench's tools), Farm, Cook, Hunt.
 
-Each resident has, for **every** job:
-- **On or off.** Everything starts on except **Toolsmith**, which starts off for everyone, Ada included (#91). A toolsmith uses up planks, sticks and cobblestone on spare tools without being asked, so the player employs one by switching it on. A traveler who arrives skilled as a toolsmith starts with it on.
-  - **Tools queued by hand need a toolsmith too** (decided with the owner). The founding checklist has a step for it, "Make Ada the toolsmith", between building the bench and crafting the pickaxe. Until someone has it on, a queued tool waits, and the stuck list says "No one does Toolsmith".
-  - Older saves keep their residents' switches, so a running village doesn't lose its toolsmith.
-- **Priority** 1 to 3, where 1 is first. Everything starts at 2.
-- **Level** 1 to 5, rising with experience.
+**One job each (#134).** This replaces the first decision, an on/off switch and a priority for every job (#47, #78).
+- **Every resident but Ada has one job**, or **No job**. They claim work of that job only.
+- **Idle hauling:** when there's no work of their job, or they have none, a resident hauls loose items to stockpiles. With nothing to haul either, they wait.
+- **Ada does everything.** She claims every kind of work, in Slice 1's fixed order (station work, then building, farming, gathering, then hauling). Her job reads **Everything**, with no dropdown. She's the generalist who covers whatever nobody has been given, tools queued by hand included.
+- **Each resident has a level** 1 to 5 in every job, rising with experience, whatever their job.
+- **New arrivals** start with the job they're skilled in ("Tomas is a skilled farmer" arrives as a Farmer).
+- **Older saves** (v22): each resident other than Ada gets their switched-on job with the best priority, ties broken by level and then the job list's order, or Haul if all were off. The switches and priorities go.
 
-**Claiming** (replacing Slice 1's single fixed order):
-1. Direct and queued orders first, regardless of toggles.
+**Claiming:**
+1. Direct and queued orders first, whatever the job.
 2. Then eating, when hungry (§4).
-3. Then jobs that are switched on, priority 1 first, then 2, then 3. Within a priority, Slice 1's order still applies: bench and fireplace work, then building, then gathering, then hauling.
+3. Then work of their job: for Ada, every job in Slice 1's order.
+4. Then hauling.
 
-**Village jobs board (#78).** Jobs are switched and prioritised on one board for everyone, opened with **J** (rebindable) or the **Jobs** button in the tally bar, and closed with J, the button or Esc.
-- **Rows** are residents, each with their tunic swatch and name; clicking a name selects them. **Columns** are the eight jobs. A column's header counts who does that job ("3 on"), and reads "nobody" in yellow at 0, matching the stuck list's "No one does Build".
-- **A cell** shows the job's priority (or Off), the resident's level in it, and a tick of progress to the next level.
-- **Clicking:** a click on an Off cell switches the job on at the priority it had. A click on an on cell cycles its priority 1 → 2 → 3 → 1. **Shift-click** switches it off.
-- **The resident panel** keeps one line about jobs, "7 of 8 jobs on. Best at Mine, level 3.", and a **Jobs board** button, in place of the old per-resident grid. That frees its height for tools, food and orders.
+**Village jobs board (#78, #134).** Everyone's jobs are on one board, opened with **J** (rebindable) or the **Jobs** button in the tally bar, and closed with J, the button or Esc.
+- **Rows** are residents, each with their tunic swatch and name; clicking a name selects them. Next to the name is their **job dropdown** ("Farmer, level 3 ▾"); Ada's reads "Everything".
+- **Columns** are the eight jobs. A column's header counts the residents with that job, Ada aside, and reads "nobody" in yellow at 0 (Haul aside, since everyone hauls).
+- **A cell** shows the resident's level in that job and a tick of progress to the next level. Their own job's cell is lit.
+- **The dropdown** lists each job with the resident's level in it, best first, and how many residents already have it ("Farm · level 3 · 2 farmers"), then **No job: haul**. Choosing one gives them that job and closes it; a click elsewhere or Esc closes it too.
+- **The resident panel** has a **Job** line with the same dropdown ("Farmer, level 3 ▾"), and a **Jobs board** button.
 - The board sits where the goals panel is, and the goals panel hides while it's open.
 
 **Skills.**
@@ -159,32 +162,32 @@ Each resident has, for **every** job:
 - **Bread at level 4:** a level-4 cook still waits for the recipe's 3 wheat at the fireplace but uses only 2. The spare wheat counts toward the next bread, and when the queue empties it's put back out.
 - **Tools:** a toolsmith's extra uses are rounded. A level-2 wooden pickaxe has 12 uses.
 - **Carry capacity:** the Haul bonus applies to all carrying, hauling and deliveries alike.
-- **Direct orders:** switching a job off doesn't cancel a direct or queued order of that kind.
+- **Direct orders:** changing a job doesn't cancel a direct or queued order.
 
 **New arrivals** start at level 1 everywhere except one job, picked by the sim's seeded random number generator, which starts at level 3. A traveler's toast says it ("Tomas is a skilled farmer").
 
 **How work maps to jobs** (#47):
 - **Mine:** marked trees and boulders. **Hunt:** marked sheep. **Farm:** planting and harvesting.
 - **Build:** building, and carrying materials to construction sites.
-- **Craft / Toolsmith / Cook:** making and carrying ingredients for station recipes. Planks and sticks are Craft, tools are Toolsmith, fireplace recipes are Cook. With Toolsmith off, a resident still makes the planks and sticks queued ahead of a pickaxe and leaves the pickaxe itself.
+- **Craft / Toolsmith / Cook:** making and carrying ingredients for station recipes. Planks and sticks are Craft, tools are Toolsmith, fireplace recipes are Cook. A Crafter makes the planks and sticks queued ahead of a pickaxe and leaves the pickaxe itself.
 - **Haul:** carrying loose items to stockpiles.
-- Within one priority, the order is: station work (Craft, Toolsmith, Cook), then Build, then Farm, then Mine and Hunt (nearest first), then Haul.
-- Switching off the job a resident is doing stops it. Changing a priority doesn't interrupt current work.
-- With every job off, a resident still eats and follows direct and queued orders.
-- "No one does X" appears in the stuck list when there's work of that job and every resident has it off.
+- Ada's order is: station work (Craft, Toolsmith, Cook), then Build, then Farm, then Mine and Hunt (nearest first), then Haul.
+- A new job stops work of the old one.
+- "No one is a farmer" (or miner, cook, and so on) appears in the stuck list when there's work of that job, no resident has it, and Ada can't see to it: she's away, on another map, resting or packing for an expedition.
+- A party member keeps their job while away (#106). It applies again once they're back.
 
-**Character panel.** The resident panel first had a **Jobs** grid (#47). The Village jobs board (#78, above) has replaced it; the panel keeps a one-line summary and a button to the board.
+**Character panel.** The resident panel first had a **Jobs** grid (#47). The Village jobs board (#78, above) replaced it; the panel has the job dropdown and a button to the board.
 
 ## 6. Toolsmith
 
-A resident with **Toolsmith** switched on keeps the village in spare tools. That switch is what makes them **employed** (decided with the owner, #91): a resident with every job on, Toolsmith included, counts.
+A resident whose job is **Toolsmith** keeps the village in spare tools (#91, #134). **Ada doesn't count**: she makes tools queued by hand, but spares need a toolsmith of the village's own.
 - For each tool kind someone is using (axe, pickaxe), the toolsmith keeps **1 spare** in stock, of the best tier the bench can make with materials on hand. Spare tools come from the toolsmith's own bench queue entries, marked "(toolsmith)".
 - A resident whose tool breaks **fetches a spare** instead of stopping. Their "Axe broke" report clears as soon as they pick it up.
 - **Nothing to make a spare from:** the stuck list says why ("Toolsmith needs 2 more sticks for a spare axe").
-- **No toolsmith at all:** no spares are queued, Slice 1's rule holds, and residents stop and report ("Axe broke. Craft one at the bench, or switch Toolsmith on for someone").
+- **No toolsmith at all:** no spares are queued, Slice 1's rule holds, and residents stop and report ("Axe broke. Craft one at the bench, or make someone the toolsmith").
 - **In use** means someone holds a tool of that kind or has had one break. **A spare** is any axe or pickaxe lying about or stockpiled.
 - **Which tier:** stone when there's enough cobblestone on hand for it, otherwise wood. Its planks and sticks are queued ahead of it like any other recipe, once that's unlocked.
-- **One entry at a time:** each kind gets one toolsmith entry, at the first finished bench. If you remove the entry, the toolsmith queues it again. To stop it, switch Toolsmith off.
+- **One entry at a time:** each kind gets one toolsmith entry, at the first finished bench. If you remove the entry, the toolsmith queues it again. To stop it, give them another job.
 - **While a spare is coming:** a resident whose tool broke shows "Axe broke. Waiting for the toolsmith’s spare" until it's made.
 
 **Equipping a chosen tool** (owner's request, made alongside #49):
@@ -254,7 +257,7 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 - "Fireplace: Bread needs N more wheat", using the bench's wording rules.
 - When placing a job building, "Not enough room to grow into a kitchen" (or a workshop) if its reserved plot would overlap a building or the map edge.
 - "Toolsmith needs N more X for a spare Y".
-- "No one does Farm" (or Hunt, Cook, and so on), when there's work of that type and every resident has it switched off.
+- "No one is a farmer" (or hunter, cook, and so on), when there's work of that type, no resident has the job, and Ada can't see to it (§5, #134).
 - "Meadow has no sheep left", when a trip is planned.
 
 **Stuck and waiting (#77).** The stuck list has two tiers:
@@ -273,6 +276,7 @@ Taken together, the upgrade steps:
 - Adds no farm plots (v7→v8, #45).
 - Gives existing residents every job on at priority 2 (v9→v10, #47).
 - Gives existing residents level 1 in every job (v10→v11, #48).
+- Gives each resident one job, and Ada Everything, in place of the switches and priorities (v21→v22, #134; see §5).
 - Marks no tools as chosen (v11→v12, equipping).
 - Gives older saves a full meadow with nobody away (v12→v13, #50).
 - Swaps each resident's old tunic for the new colour in the same place on the list (v13→v14, #79).

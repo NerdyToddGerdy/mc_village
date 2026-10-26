@@ -209,19 +209,39 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 	var r := {"id": _id(), "kind": "res", "name": rname, "shirt": shirt, "pos": Vector2(cell),
 		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null,
 		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false,
-		"orders": [], "hunger": 100.0, "jobs": default_jobs(), "kept": {"axe": false, "pick": false},
+		"orders": [], "hunger": 100.0, "role": "all" if residents.is_empty() else "none", "jobs": default_jobs(), "kept": {"axe": false, "pick": false},
 		"away": false, "back_at": 0, "trip": "", "map": map_id, "hurt": 0, "heal": 0.0, "armor": {}}
 	residents.append(r)
 	return r
 
 
-## Every job on at priority 2, except Toolsmith (spec §5, issue #91): the player employs a toolsmith
-## by switching it on, since a toolsmith spends materials on spare tools unasked.
+## Experience in every job, none yet (spec §5).
 static func default_jobs() -> Dictionary:
 	var out := {}
 	for jb in Defs.JOBS:
-		out[jb] = {"on": jb != "toolsmith", "pri": 2, "xp": 0}
+		out[jb] = {"xp": 0}
 	return out
+
+
+## Whether a resident claims work of a job (issue #134): Ada ("all") claims every kind, and everyone
+## else their one job, then hauling when there's none.
+static func works(r: Dictionary, job: String) -> bool:
+	return r.role == "all" or r.role == job or job == "haul"
+
+
+## The jobs whose work a resident claims, in Defs.JOBS order.
+static func job_list(r: Dictionary) -> Array:
+	return Defs.JOBS.filter(func(jb): return works(r, jb))
+
+
+## "Farmer", "Everything" for Ada, or "No job".
+static func role_name(r: Dictionary) -> String:
+	match r.role:
+		"all":
+			return "Everything"
+		"none":
+			return "No job"
+	return Defs.JOB_SKILLED[r.role].capitalize()
 
 
 ## Which job a recipe's work belongs to: the fireplace's is Cook, the bench's tools are Toolsmith,
@@ -807,9 +827,9 @@ func expand_queues() -> void:
 const TOOL_NAMES := {"axe": "axe", "pick": "pickaxe"}
 
 
-## Whether anyone has the Toolsmith job switched on.
+## Whether a resident's job is Toolsmith. Ada doesn't count: spares need a toolsmith of their own (issue #134).
 func has_toolsmith() -> bool:
-	return residents.any(func(r): return r.jobs.toolsmith.on)
+	return residents.any(func(r): return r.role == "toolsmith")
 
 
 ## Whether a "(toolsmith)" entry for this tool kind is queued at any bench.
@@ -822,7 +842,7 @@ func _spare_queued(kind: String) -> bool:
 	return false
 
 
-## The toolsmith's standing order (spec §6): while anyone has Toolsmith on, keep one spare of each
+## The toolsmith's standing order (spec §6): while a resident is the Toolsmith, keep one spare of each
 ## tool kind someone uses, of the best tier the bench can make from what's on hand: iron, then stone,
 ## then wood. Queued as
 ## "(toolsmith)" entries at the first finished bench, one per kind at a time.
@@ -1729,19 +1749,17 @@ func _claim(r: Dictionary) -> void:
 		expand_queues()
 	keep_meals_stocked()
 	keep_tools_stocked()
-	# Jobs switched on, priority 1 first; within a priority, Slice 1's order (spec §5).
-	for p in [1, 2, 3]:
-		var jobs: Array = Defs.JOBS.filter(func(jb): return r.jobs[jb].on and r.jobs[jb].pri == p)
-		if jobs.is_empty():
-			continue
-		for kind in CLAIM_ORDER:
-			var j = _claim_kind(r, c, kind, jobs)
-			if j != null:
-				r.job = j
-				return
+	# Their job's work, then hauling; Ada everything, in Slice 1's order (spec §5, issue #134).
+	var jobs := job_list(r)
+	for kind in CLAIM_ORDER:
+		var j = _claim_kind(r, c, kind, jobs)
+		if j != null:
+			r.job = j
+			return
 
 
-## The kinds of work, in the order a resident looks for them within one priority.
+## The kinds of work, in the order a resident looks for them. Hauling comes last, so a resident's
+## own job always comes before it.
 const CLAIM_ORDER := ["station", "build", "farm", "gather", "haul"]
 
 
@@ -2511,7 +2529,7 @@ func _arrive() -> void:
 	var t := add_resident(who[0] if n < TRAVELERS.size() else "%s %d" % [who[0], n / TRAVELERS.size() + 1], who[1], spawn)
 	var skill: String = Defs.JOBS[rng.randi_range(0, Defs.JOBS.size() - 1)]
 	t.jobs[skill].xp = Tuning.SKILL_LEVELS[Tuning.ARRIVAL_LEVEL - 2]
-	t.jobs[skill].on = true  # a skilled toolsmith arrives at work (issue #91)
+	t.role = skill  # an arrival starts with the job they're skilled in (issue #134)
 	walk_in(t)
 	_toast("A traveler named %s has arrived, a skilled %s." % [t.name, Defs.JOB_SKILLED[skill]], t.id)
 
@@ -2583,8 +2601,8 @@ func _stuck_on_map() -> void:
 			var bl := track_blocker(s.seg)
 			if bl != "":
 				_add_stuck(tpl.name, "Track: %s first" % bl.to_lower(), mid, 0.4, "site", s.id)
-			elif not residents.any(func(o): return o.jobs.build.on):
-				_add_stuck(tpl.name, "Track: no one with Build on", mid, 0.4, "site", s.id)
+			elif not _staffed("build"):
+				_add_stuck(tpl.name, "Track: no one is a builder", mid, 0.4, "site", s.id)
 			elif line_short() > 0:
 				_add_stuck(tpl.name, "Track: needs %d more rails" % line_short(), mid, 0.4, "site", s.id)
 			continue
@@ -2647,7 +2665,7 @@ func _stuck_on_map() -> void:
 				if _spare_queued(k):
 					_add_stuck(r.name, "%s broke. Waiting for the toolsmith’s spare" % tname, at, 1.6, "res", r.id)
 				elif not has_toolsmith():
-					_add_stuck(r.name, "%s broke. Craft one at the bench, or switch Toolsmith on for someone" % tname, at, 1.6, "res", r.id)
+					_add_stuck(r.name, "%s broke. Craft one at the bench, or make someone the toolsmith" % tname, at, 1.6, "res", r.id)
 				else:
 					_add_stuck(r.name, "%s broke. Needs a new %s" % [tname, tname.to_lower()], at, 1.6, "res", r.id)
 		if r.note != null and r.note.until > tick:
@@ -2674,16 +2692,32 @@ func _stuck_on_map() -> void:
 			_add_stuck("Stockpile", "Stockpile is full", Vector2(m.zone.keys()[0]) + Vector2(0.5, 0.5), 0.6, "", 0)
 
 
-## "No one does Farm" (spec §9): there's work of a job and every resident has that job off.
+## "No one is a farmer" (spec §9): there's work of a job, nobody but Ada has it, and Ada can't see
+## to it, being away, hurt or packing for an expedition (issue #134).
 func _stuck_unstaffed() -> void:
 	if here().is_empty() or m.kind == "site":  # a party works a site whatever its jobs (issue #109)
 		return
 	for jb in Defs.JOBS:
-		if residents.any(func(r): return r.jobs[jb].on):
+		if _staffed(jb):
 			continue
 		var at = _work_at(jb)
 		if at != null:
-			_add_stuck(Defs.JOB_NAMES[jb], "No one does %s" % Defs.JOB_NAMES[jb], Vector2(at) + Vector2(0.5, 0.5), 0.8, "", 0)
+			_add_stuck(Defs.JOB_NAMES[jb], "No one is a %s" % Defs.JOB_SKILLED[jb], Vector2(at) + Vector2(0.5, 0.5), 0.8, "", 0)
+
+
+## Whether someone sees to a job's work: a resident whose job it is (or anyone, for hauling), or Ada
+## while she's about the village or the road, well and not packing. Builders and haulers walk out from
+## the village to work the road, so village residents count there too.
+func _staffed(jb: String) -> bool:
+	for r in residents:
+		if r.role == jb:
+			return true
+		var about: bool = not r.away and maps[r.map].kind != "site"
+		if about and jb == "haul":
+			return true
+		if about and r.role == "all" and not resting(r) and not in_staging_party(r):
+			return true
+	return false
 
 
 ## A cell where work of this job is waiting, or null when there's none.
@@ -2943,20 +2977,18 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 	return s
 
 
-## Switches a job on or off for a resident (spec §5). Switching off the job they're doing stops it.
-func set_job_on(r: Dictionary, job: String, on: bool) -> void:
-	if r.map != map_id:
-		on_map(r.map, set_job_on.bind(r, job, on))
+## Gives a resident their one job (issue #134): one of Defs.JOBS, or "none" to only haul. A new job
+## stops work of the old one. Ada does everything, so hers doesn't change.
+func set_role(r: Dictionary, role: String) -> void:
+	if r.role == "all" or r.role == role:
 		return
-	r.jobs[job].on = on
-	if not on and r.job != null and r.job.work == job and not r.job.ordered:
+	if r.map != map_id:
+		on_map(r.map, set_role.bind(r, role))
+		return
+	var old: String = r.role
+	r.role = role
+	if r.job != null and r.job.work == old and old != "haul" and not r.job.ordered:
 		fail_job(r)
-	rev += 1
-
-
-## Sets a job's priority, 1 (first) to 3.
-func set_job_priority(r: Dictionary, job: String, pri: int) -> void:
-	r.jobs[job].pri = clampi(pri, 1, 3)
 	rev += 1
 
 
@@ -4014,16 +4046,14 @@ func _claim_on_road(r: Dictionary) -> Job:
 	if r.hunger < Tuning.EAT_BELOW:
 		return _back_job()
 	var c := rcell(r)
-	for p in [1, 2, 3]:
-		var jobs: Array = Defs.JOBS.filter(func(jb): return r.jobs[jb].on and r.jobs[jb].pri == p)
-		for kind in ["build", "gather"]:
-			var j = _claim_kind(r, c, kind, jobs)
-			if j != null:
-				return j
-		if jobs.has("haul"):
-			var hj = _platform_haul(r, false)
-			if hj != null:
-				return hj
+	var jobs := job_list(r)
+	for kind in ["build", "gather"]:
+		var j = _claim_kind(r, c, kind, jobs)
+		if j != null:
+			return j
+	var hj = _platform_haul(r, false)
+	if hj != null:
+		return hj
 	return _back_job()
 
 
