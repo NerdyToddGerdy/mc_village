@@ -66,7 +66,7 @@ There are two ways to get work done.
 | | Hunt (G) | Sheep, cows and pigs. Shift-drag marks only the kind you start on. Shows while there are animals about |
 | **Paint** (Z) | Stockpile | Ground where residents store what they gather |
 | | Farm plot (P) | Open grass where residents grow wheat |
-| **Build** (B) | Crafting bench (T), House (H), Fireplace (K), Chopping block, Mason's bench | Place a blueprint. R turns it |
+| **Build** (B) | Crafting bench (T), House (H), Fireplace (K), and each job's workstation | Place a blueprint. R turns it |
 | **Craft** (C) | | Opens the Craft panel for your benches and fireplace |
 
 While a toolbar menu is open, **1 to 9** pick its rows, so Z then 1 paints a stockpile. The Gather and Paint buttons show the order that's on, such as "Gather: Hunt". Esc puts the order away.
@@ -89,12 +89,27 @@ While a toolbar menu is open, **1 to 9** pick its rows, so Z then 1 paints a sto
 
 **Jobs.** Every resident has **one job**: Lumberjack, Stonemason, Haul, Build, Craft, Toolsmith, Farm, Cook or Hunt, or none. They do that job's work, and when there's none they carry loose things to the stockpile. A lumberjack chops trees, and a stonemason breaks boulders and mines ore. **Ada does everything**: whatever's waiting, bench and fireplace work first, then building, then farming, then marked trees, boulders and animals, then hauling. She covers any job nobody has, but she only fells what you've marked.
 
+**Each job needs its workstation.** A resident works their job only from a workstation of their own, one resident to each, so two farmers need two composters. Until there's a free one they haul, and their job reads "Farmer (no composter)". Ada needs none.
+
+| Job | Workstation | Cost |
+|---|---|---|
+| Lumberjack | Chopping block | 4 planks |
+| Stonemason | Mason's bench | 2 planks, 4 cobblestone |
+| Build | Builder's table | 4 planks, 2 logs |
+| Craft | Crafting bench | 4 logs |
+| Toolsmith | Toolsmith's bench | 4 planks, 3 cobblestone (tools are still made at the crafting bench) |
+| Farm | Composter | 4 planks |
+| Cook | Fireplace | 6 cobblestone |
+| Hunt | Hunter's lodge | 6 logs, 2 planks |
+
+A workstation's panel names who works from it ("Tomas's composter"). Giving someone a new job frees their old workstation.
+
 **The village jobs board** (press **J**, or click **Jobs** in the top bar) lists every resident.
-- Click a resident's job (for example "Farmer, level 3 ▾") for the **job dropdown**. It lists each job with their level in it, best first, and how many residents already have it. Choose one to give them that job.
+- Click a resident's job (for example "Farmer, level 3 ▾") for the **job dropdown**. It lists each job with their level in it, best first, how many residents already have it, and whether a workstation for it is free. Choose one to give them that job.
 - The board shows each resident's **level** in every job, with a thin bar of progress to the next. Their own job is lit.
 - A column's header counts the residents with that job, and reads "nobody" in yellow when no one has it. When Ada is away, work of a job nobody has waits, and the stuck list says "No one is a farmer".
 
-New residents arrive in the job they're skilled at.
+New residents arrive in the job they're skilled at, and haul until its workstation is built.
 
 **Skills** grow with practice. Every finished task earns a point in its job, and levels 2 to 5 come at 8, 25, 50 and 90 points. Each level works 15% faster, and some jobs also get better results:
 

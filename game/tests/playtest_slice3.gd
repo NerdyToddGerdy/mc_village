@@ -41,6 +41,11 @@ func _initialize() -> void:
 	var ada: Dictionary = sim.residents[0]
 	var tomas: Dictionary = sim.residents[1]
 
+	# ---- A chopping block, for whoever stays home as the lumberjack (issues #177, #184): Ada builds it
+	var block = await place_from_menu("Chopping block", "chopping_block", Sim.nearest(sim.trees.filter(func(t): return t.alive), at(9, 9)).cell + Vector2i(2, 0))
+	check(block != null and block.tpl == "chopping_block", "a chopping block is placed from the Build menu")
+	check(await play_until(120, func(): return block != null and block.done), "and built")
+
 	# ---- The expedition board (issue #105), from the Build menu
 	check(await click_button("Build") and await click_button("Expedition board"), "pick Expedition board in the Build menu")
 	var bp := build_spot("board", at(9, 9))

@@ -706,14 +706,14 @@ func _test_jobs_grid(game: Game) -> void:
 	check(nobody.filter(func(l): return l.get_theme_color("font_color") == Palette.YELLOW).size() == Defs.JOBS.size() - 2, "the jobs nobody has say so in yellow, Haul and Farm aside (%d)" % nobody.size())
 	var pick := func() -> Button:
 		return _walk(hud._board).filter(func(n): return n is Button and n.get_meta("label", "") == "Job: Tomas" and not n.is_queued_for_deletion()).front()
-	check(pick.call().text.begins_with("Farmer, level 1"), "Tomas's row shows his job and level (%s)" % pick.call().text)
+	check(pick.call().text.begins_with("Farmer, level 1 (no composter)"), "Tomas's row shows his job and level, and that he has no composter (%s)" % pick.call().text)
 	pick.call().pressed.emit()
 	hud.refresh(sim)
 	await process_frame
 	var choices: Array = _walk(hud._job_list).filter(func(n): return n is Button and not n.is_queued_for_deletion())
 	check(hud._job_drop.visible and choices.size() == Defs.JOBS.size() + 1, "his dropdown lists every job and No job (%d)" % choices.size())
 	check(choices[0].text.begins_with("Cook · level 3"), "best level first (%s)" % choices[0].text)
-	check(choices.any(func(b): return b.text == "Farm · level 1 · 1 farmer" and b.button_pressed), "his own job is lit, with how many have it")
+	check(choices.any(func(b): return b.text == "Farm · level 1 · 1 farmer · no composter" and b.button_pressed), "his own job is lit, with how many have it, and that there's no composter (issue #184)")
 	choices.filter(func(b): return b.text.begins_with("Toolsmith"))[0].pressed.emit()
 	hud.refresh(sim)
 	await process_frame
@@ -832,6 +832,10 @@ func _test_stuck_list(game: Game) -> void:
 	ada.pick = {"type": "wood_pick", "tier": 1, "dur": 5}
 	var smith := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-2, 0)))
 	sim.set_role(smith, "toolsmith")  # a toolsmith keeps spares (issues #91, #134)
+	var tsb := sim.place_site("toolsmith_bench", Sim.rcell(ada) + Vector2i(-3, 3))  # from his own bench (issue #184)
+	tsb.stage = 1
+	tsb.done = true
+	sim.assign_workstations()
 	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "cobble", 3)
 	for i in Tuning.TPS:
 		sim.step()

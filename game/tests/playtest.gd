@@ -146,6 +146,7 @@ func _initialize() -> void:
 	check(await click_button("Stockpile"), "click Stockpile in the Paint menu")
 	check(game.tool == "stock" and game.menu_open == "", "Stockpile is on and the menu closes")
 	var zc := open_cell(at(12, 7), Vector2i(4, 2))
+	await look_at(zc)  # F centred the camera on Ada, wherever she happened to be
 	await drag(screen(zc), screen(zc + Vector2i(3, 1)))
 	check(sim.zone.size() >= 6, "dragging paints a stockpile (%d cells)" % sim.zone.size())
 	# A drag that starts on the stockpile erases instead (issue #63): take back its last column
@@ -162,6 +163,7 @@ func _initialize() -> void:
 	await frames(2)
 	check(sim.zone.size() == painted - 2 and not sim.in_zone(zc + Vector2i(3, 0)) and not sim.in_zone(zc + Vector2i(3, 1)), "releasing erases them (%d cells left)" % sim.zone.size())
 	await key(KEY_X)
+	await look_at(at(17, 17))  # F centred the camera on Ada, wherever she happened to be
 	await drag(screen(at(6, 3)), screen(at(17, 17)))
 	check(sim.boulders.filter(func(b): return b.des).size() >= 3, "dragging with Mine marks boulders")
 	await key(KEY_ESCAPE)
@@ -217,8 +219,18 @@ func _initialize() -> void:
 	await queue_recipe("Planks", 5)
 	await queue_recipe("Planks", 5)
 	await key(KEY_ESCAPE)
+	await key(KEY_X)  # more trees, so the walls' logs never run short after all those planks
+	await look_at(at(17, 17))  # F centred the camera on Ada, wherever she happened to be
+	await drag(screen(at(0, 0)), screen(at(17, 17)), true)
+	await key(KEY_ESCAPE)
 	await run(1000)
-	check(h2 != null and h2.done, "second house finished")
+	sim.compute_stuck()
+	var piled := {}
+	var loose := {}
+	for s in sim.stacks_where(func(_s): return true):
+		var into: Dictionary = piled if sim.stored(s) else loose
+		into[s.type] = into.get(s.type, 0) + int(s.n)
+	check(h2 != null and h2.done, "second house finished (stage %d, felled %d, Ada's axe %s, broken %s, %s; marked trees %d; %s; piled %s; loose %s)" % [h2.stage if h2 != null else -1, sim.stats.felled, ada.axe, ada.broken.axe, ada.job.label if ada.job != null else "idle", sim.trees.filter(func(t): return t.alive and t.des).size(), sim.stuck.map(func(x): return x.why), piled, loose])
 	check(sim.residents.size() == 2 and sim.stats.traveler_home, "Tomas arrives and moves in")
 	var tomas: Dictionary = sim.residents[1] if sim.residents.size() > 1 else {}
 	check(not tomas.is_empty() and Defs.JOBS.any(func(jb): return Sim.level(tomas, jb) >= Tuning.ARRIVAL_LEVEL), "Tomas arrives skilled in one job")
@@ -344,6 +356,10 @@ func _initialize() -> void:
 	check(not game._hud._job_drop.visible, "choosing closes the dropdown")
 	await key(KEY_ESCAPE)
 	check(not game.jobs_board_open and not game._menu.visible, "Esc closes the jobs board first")
+	# Issue #184: the toolsmith keeps spares once he has a toolsmith's bench of his own
+	var tsb = await place_from_menu("Toolsmith's bench", "toolsmith_bench", Sim.rcell(tomas) + Vector2i(0, 3))
+	check(tsb != null and tsb.tpl == "toolsmith_bench", "a toolsmith's bench is placed from the Build menu")
+	check(await play_until(200, func(): return tsb != null and tsb.done and tsb.worker == tomas.id), "it's built, and Tomas claims it")
 	for i in 120:
 		await run(1)
 		if ["axe", "pick"].any(func(k): return not sim.tool_items(k, 0).is_empty()):
@@ -402,7 +418,9 @@ func _initialize() -> void:
 
 	# Tools dropdown on hover
 	var tb: Button = game._hud._tools_btn
-	await move(Vector2(1000, 430))
+	# Open ground, so the click on the world below selects nothing (a bench would open its Craft panel)
+	var clear := screen(open_cell(game._cell_at(Vector2(1000, 430))))
+	await move(clear)
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "Tools list is closed")
 	await move(tb.get_global_rect().get_center())
@@ -411,31 +429,40 @@ func _initialize() -> void:
 	await move(game._hud._tools_drop.get_global_rect().get_center())
 	await frames(2)
 	check(game._hud._tools_drop.visible, "the list stays open while the pointer moves onto it")
-	await move(Vector2(1000, 430))
+	await move(clear)
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "moving away closes the list")
 	# A click pins it open; it closes on a second click, on a click elsewhere, or on Esc (issue #90)
 	await click(tb.get_global_rect().get_center())
-	await move(Vector2(1000, 430))
+	await move(clear)
 	await frames(2)
 	check(game._hud._tools_drop.visible, "a click pins the list open")
 	await click(tb.get_global_rect().get_center())
-	await move(Vector2(1000, 430))
+	await move(clear)
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "a second click unpins it, and moving away closes it")
 	await click(tb.get_global_rect().get_center())
-	await click(Vector2(1000, 430))  # clear of the button and the list
+	await click(clear)  # clear of the button and the list
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "pinned, a click on the world closes it")
 	await click(tb.get_global_rect().get_center())
-	await move(Vector2(1000, 430))
+	await move(clear)
 	await key(KEY_ESCAPE)
 	await frames(2)
 	check(not game._hud._tools_drop.visible and not game._menu.visible, "pinned, Esc closes it (and doesn't open the menu)")
 
 	# Menu by mouse: save, load with confirmation, controls, start over
+	# Esc closes an open tool, menu or panel before it opens the game menu, and the real-time clicks
+	# above sometimes leave one open.
+	var still_open := {"tool": game.tool, "menu": game.menu_open, "jobs board": game.jobs_board_open, "craft panel": game.craft_menu_open, "planner": game.planner_open}
+	for k in still_open.keys():
+		if not still_open[k]:
+			still_open.erase(k)
+	if not still_open.is_empty():
+		print("     (closing %s first)" % still_open)
+		await key(KEY_ESCAPE)
 	await key(KEY_ESCAPE)
-	check(game._menu.visible and game.speed == 0, "Esc opens the menu and pauses")
+	check(game._menu.visible and game.speed == 0, "Esc opens the menu and pauses (tool \"%s\", menu \"%s\", jobs board %s, craft %s, planner %s)" % [game.tool, game.menu_open, game.jobs_board_open, game.craft_menu_open, game.planner_open])
 	check(await click_button("Save game"), "click Save game")
 	check(await click_button("Save here"), "click Save here")
 	check(FileAccess.file_exists(game._slot_path(1)), "slot 1 is written")

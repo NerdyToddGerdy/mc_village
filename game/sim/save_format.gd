@@ -12,12 +12,33 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 23
+const VERSION := 24
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23, 23: _v23_to_v24}
+
+
+## v24: a resident works their job only from a workstation they've claimed (issue #184). Finished
+## benches, fireplaces, chopping blocks and mason's benches go to residents whose jobs match, first come
+## first served; the rest haul until one is built. Nothing else is claimed.
+static func _v23_to_v24(d: Dictionary) -> Dictionary:
+	var st: Dictionary = d.state
+	var sites: Array = st.maps.village.sites
+	for s in sites:
+		s.worker = 0
+	for r in st.residents:
+		var tpl: String = V24_STATIONS.get(r.role, "")
+		for s in sites:
+			if s.tpl == tpl and s.done and s.worker == 0:
+				s.worker = r.id
+				break
+	return d
+
+
+## The workstations that existed when v24 came in (issue #184), by job.
+const V24_STATIONS := {"craft": "bench", "cook": "fireplace", "lumber": "chopping_block", "mason": "mason_bench"}
 
 
 ## v23: Lumberjack and Stonemason replace Mine (issue #177). A miner becomes a lumberjack: nobody's

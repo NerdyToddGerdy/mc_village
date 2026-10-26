@@ -76,9 +76,12 @@ func _init() -> void:
 		"test_leather_armor",
 		"test_lumberjacks_and_stonemasons",
 		"test_saplings_and_replanting",
+		"test_jobs_need_their_workstation",
 	]
 	for t in tests:
 		_current = t
+		if OS.get_environment("TEST_TRACE") != "":
+			print("... %s (%d ms)" % [t, Time.get_ticks_msec()])
 		call(t)
 	print("\n%d checks, %d failed" % [_checks, _failures])
 	# No checks means the tests never ran (for example, a script failed to compile).
@@ -388,6 +391,10 @@ func test_every_save_fixture_still_loads() -> void:
 		check(sim.residents.all(func(r): return r.jobs.values().all(func(j): return j.keys() == ["xp"])), "v%d: the job switches and priorities are gone" % v)
 		if v >= 23:
 			check(sim.residents[1].role == "lumber", "v%d: a resident's job survives" % v)
+			if v == 23:  # issue #184: the chopping block goes to the lumberjack
+				check(sim.sites.any(func(st): return st.tpl == "chopping_block" and st.worker == sim.residents[1].id), "v23: Tomas claims the chopping block on upgrade")
+			if v >= 24:
+				check(sim.sites.any(func(st): return st.tpl == "composter" and st.worker == 0), "v%d: a free composter stays free" % v)
 			var blocks: Array = sim.sites.filter(func(st): return st.tpl == "chopping_block")
 			check(blocks.size() == 1 and blocks[0].keep == 25 and sim.pile_count(blocks[0]) > 0, "v%d: the chopping block, its target and its pile survive" % v)
 			check(sim.trees.any(func(t): return t.alive and not Sim.grown(t)) and sim.trees.any(func(t): return t.get("keep", false)), "v%d: a growing sapling and a kept tree survive" % v)
@@ -441,6 +448,7 @@ func test_dropped_tools_keep_their_wear() -> void:
 	check(worn.size() == 1 and worn[0].dur == 3, "wear survives a save and load")
 	var bo := loaded.add_resident("Bo", "8C4F6B", at(1, 1))
 	loaded.set_role(bo, "lumber")
+	give_station(loaded, bo)  # issue #184: a job needs its workstation
 	loaded.designate_mine(Rect2i(0, 0, loaded.w, loaded.h))
 	for b in loaded.boulders:
 		b.des = false
@@ -1021,12 +1029,13 @@ func test_one_job_each() -> void:
 	check(not mined and hauled, "a farmer with nothing to farm never mines marked trees, and hauls instead")
 	# A new job takes over, and stops work of the old one.
 	sim.set_role(tomas, "lumber")
+	give_station(sim, tomas)  # issue #184: a job needs its workstation
 	sim.fail_job(tomas)
 	run(sim, 0.1)
 	check(tomas.job != null and tomas.job.work == "lumber", "made a lumberjack, he chops (%s)" % (tomas.job.work if tomas.job else "idle"))
 	sim.set_role(tomas, "cook")
 	check(tomas.job == null or tomas.job.work != "lumber", "a new job stops work of the old one")
-	check(Sim.job_list(tomas) == ["haul", "cook"] and Sim.job_list(ada) == Defs.JOBS, "his work is his job and hauling; Ada's is everything")
+	check(sim.job_list(tomas) == ["haul"] and sim.job_list(ada) == Defs.JOBS, "his work is his job and hauling; Ada's is everything")
 	# No job: hauls only. Direct orders still work, and eating comes first.
 	sim.set_role(tomas, "none")
 	var tree: Dictionary = Sim.nearest(sim.trees.filter(func(t): return t.alive and t.claim == 0), Sim.rcell(tomas))
@@ -1071,6 +1080,7 @@ func test_spares_need_a_resident_toolsmith() -> void:
 	check(Goals.LIST.all(func(g): return not g.t.contains("toolsmith")), "the checklist no longer asks for a toolsmith")
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
 	sim.set_role(tomas, "toolsmith")
+	give_station(sim, tomas)  # issue #184: a job needs its workstation
 	sim.drop_items(Sim.rcell(ada) + Vector2i(0, 1), "plank", 6)
 	sim.drop_items(Sim.rcell(ada) + Vector2i(0, 2), "stick", 4)
 	run(sim, 2)
@@ -1201,6 +1211,7 @@ func test_skills_rise_and_pay_off() -> void:
 func hire_toolsmith(sim: Sim) -> Dictionary:
 	var t := sim.add_resident("Bram", Sim.TRAVELERS[4][1], sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(0, 3)))
 	sim.set_role(t, "toolsmith")
+	give_station(sim, t)  # issue #184: a job needs its workstation
 	return t
 
 
@@ -1315,6 +1326,7 @@ func until_away(sim: Sim, r: Dictionary, seconds := 30.0) -> void:
 ## A resident with a stone pickaxe, moved onto the old mine at its entrance.
 func send_to_mine(sim: Sim, r: Dictionary) -> void:
 	sim.set_role(r, "mason")  # one job each (issue #134): the one sent to dig is a stonemason (issue #177)
+	give_station(sim, r)  # issue #184: a job needs its workstation
 	r.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
 	sim.get_map(OldMine.ID).visited = true
 	sim.move_to_map(r, OldMine.ID, sim.get_map(OldMine.ID).entrance)
@@ -2077,6 +2089,7 @@ func test_survey_and_obstacles() -> void:
 	check(sim.plan_bridge() == "" and sim.plan_bridge() != "", "Build the bridge places one blueprint")
 	var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], sim.route_sign() + Vector2i(-3, 0))
 	sim.set_role(mira, "build")
+	give_station(sim, mira)  # issue #184: a job needs its workstation
 	mira.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
 	sim.drop_items(sim.route_sign() + Vector2i(-4, 2), "plank", 12)
 	var labels: Array = []
@@ -2846,6 +2859,12 @@ func test_leather_armor() -> void:
 
 # ---------------------------------------------------------------- workstations (issue #177)
 
+## A finished workstation for a resident's job, near them, which they claim (issue #184).
+func give_station(sim: Sim, r: Dictionary) -> Dictionary:
+	var st := place_done(sim, Defs.JOB_STATIONS[r.role], Sim.rcell(r) + Vector2i(0, 3) if r.map == "village" else Vector2i(16, 16))
+	return st
+
+
 ## A finished building of `tpl` on open ground near the middle of the village, or {}.
 func place_done(sim: Sim, tpl: String, near := Vector2i(16, 16)) -> Dictionary:
 	for d in range(0, 12):
@@ -2857,6 +2876,7 @@ func place_done(sim: Sim, tpl: String, near := Vector2i(16, 16)) -> Dictionary:
 					s.stage = Defs.TEMPLATES[tpl].stages.size()
 					s.done = true
 					sim._occ_dirty = true
+					sim.assign_workstations()
 					return s
 	return {}
 
@@ -2869,7 +2889,7 @@ func test_lumberjacks_and_stonemasons() -> void:
 	run(sim, 30)
 	check(sim.stats.felled == 0, "Ada never fells trees on her own, even with a chopping block")
 	sim.compute_stuck()
-	check(stuck_text(sim).contains("Chopping block: No one is a lumberjack"), "the block says it has nobody to work it: " + stuck_text(sim))
+	check(stuck_text(sim).contains("Chopping block: No lumberjack to work it"), "the block says it has nobody to work it: " + stuck_text(sim))
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(block.origin + Vector2i(0, 2)))
 	sim.set_role(tomas, "lumber")
 	tomas.axe = {"type": "stone_axe", "tier": 2, "dur": 999}
@@ -3002,3 +3022,75 @@ func test_saplings_and_replanting() -> void:
 	sim._occ_dirty = true
 	sim.compute_stuck()
 	check(stuck_text(sim).contains("Chopping block: No trees in range. Plant saplings or move the chopping block"), "with none left in range, the block says so: " + stuck_text(sim))
+
+
+# ---------------------------------------------------------------- workstations claimed (issue #184)
+
+func test_jobs_need_their_workstation() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	sim.set_role(tomas, "farm")
+	sim.paint_farm(open_rect(sim, Vector2i(2, 2)))
+	ada.away = true  # off at the meadow, so the plots are Tomas's to farm
+	ada.back_at = 1 << 30
+	var farmed := false
+	for i in 15 * Tuning.TPS:
+		sim.step()
+		farmed = farmed or (tomas.job != null and tomas.job.work == "farm")
+	check(not farmed and not sim.works(tomas, "farm"), "a farmer with no composter doesn't farm")
+	check(sim.role_text(tomas) == "Farmer (no composter)", "his job reads \"Farmer (no composter)\" (%s)" % sim.role_text(tomas))
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Tomas: Build a composter to start work"), "the stuck list says so: " + stuck_text(sim))
+	var comp := place_done(sim, "composter", Sim.rcell(tomas) + Vector2i(0, 3))
+	check(comp.worker == tomas.id and is_same(sim.claimed(tomas), comp), "building a composter: Tomas claims it")
+	check(sim.station_title(comp) == "Tomas's composter" and sim.role_text(tomas) == "Farmer", "\"Tomas's composter\", and his job reads Farmer")
+	sim.fail_job(tomas)
+	farmed = false
+	for i in 20 * Tuning.TPS:
+		sim.step()
+		farmed = farmed or (tomas.job != null and tomas.job.work == "farm")
+	check(farmed, "and he farms")
+	ada.away = false
+	# One resident to a workstation.
+	var bram := sim.add_resident("Bram", Sim.TRAVELERS[2][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-2, 0)))
+	sim.set_role(bram, "farm")
+	check(comp.worker == tomas.id and sim.needs_station(bram), "a second farmer doesn't share Tomas's composter")
+	var comp2 := place_done(sim, "composter", Sim.rcell(bram) + Vector2i(0, -3))
+	check(comp2.worker == bram.id, "a second composter goes to him")
+	# Ada works anywhere and claims nothing.
+	check(sim.claimed(ada).is_empty() and sim.job_list(ada) == Defs.JOBS, "Ada claims no workstation and does every job")
+	# A new job frees the old workstation; tearing one down hands its resident another, or leaves them hauling.
+	sim.set_role(bram, "cook")
+	check(comp2.worker == 0 and sim.needs_station(bram), "a new job frees the old workstation")
+	sim.cancel_site(comp)
+	check(comp2.worker == tomas.id, "with his composter gone, Tomas claims the free one")
+	sim.cancel_site(comp2)
+	check(sim.needs_station(tomas) and sim.job_list(tomas) == ["haul"], "with none left, he hauls")
+	# Toolsmith's spares need a resident toolsmith with a toolsmith's bench.
+	sim.set_role(bram, "toolsmith")
+	check(not sim.has_toolsmith(), "a toolsmith with no toolsmith's bench keeps no spares")
+	var tbench := place_done(sim, "toolsmith_bench", Sim.rcell(bram) + Vector2i(3, 0))
+	check(tbench.worker == bram.id and sim.has_toolsmith(), "with one, he does")
+	# Crafters use their own bench first.
+	var b1 := place_done(sim, "bench", Vector2i(6, 6))
+	var b2 := place_done(sim, "bench", Vector2i(24, 24))
+	sim.set_role(tomas, "craft")
+	var own := sim.claimed(tomas)
+	check(not own.is_empty() and (is_same(own, b1) or is_same(own, b2)), "a crafter claims a bench")
+	for b in [b1, b2]:
+		sim.queue_add(b, "planks")
+	sim.drop_items(own.origin + Vector2i(0, 1), "log", 2)
+	sim.drop_items((b2 if is_same(own, b1) else b1).origin + Vector2i(0, 1), "log", 2)
+	sim.fail_job(tomas)
+	var at_own := false
+	var elsewhere := false
+	for i in 10 * Tuning.TPS:
+		sim.step()
+		if tomas.job != null and tomas.job.target != null and tomas.job.target.get("tpl", "") == "bench":
+			at_own = at_own or is_same(tomas.job.target, own)
+			elsewhere = elsewhere or (not at_own and not is_same(tomas.job.target, own))
+	check(at_own and not elsewhere, "and works at his own first")
+	# Saved and loaded, workstations keep their residents.
+	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(loaded.site(tbench.id).worker == bram.id and not loaded.claimed(loaded.resident(bram.id)).is_empty(), "claims survive a save")
