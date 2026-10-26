@@ -956,12 +956,14 @@ func keep_tools_stocked() -> void:
 ## The fireplace's standing order (spec §4): while stored meals are fewer than MEAL_STOCK, queue
 ## one meal whose inputs exist, bread first. One at a time, so it never queues what it can't make.
 func keep_meals_stocked() -> void:
-	var meals := 0
-	for meal in Defs.MEALS:
-		meals += free_count(meal)
+	var meals := -1  # counted once a fireplace needs it: every claim asks, with or without one
 	for f in m.sites:
 		if not (f.done and f.tpl == "fireplace" and f.get("keep_meals", true)):
 			continue
+		if meals < 0:
+			meals = 0
+			for meal in Defs.MEALS:
+				meals += free_count(meal)
 		if f.autoq.has(true):
 			meals += 1  # already making one
 			continue
@@ -1021,11 +1023,23 @@ func pile_count(s: Dictionary) -> int:
 	return n
 
 
+## Every finished workstation's pile cells, as cell -> workstation: `pile_at` for many cells at once.
+func pile_map() -> Dictionary:
+	var out := {}
+	for s in m.sites:
+		if s.done and not work_of(s).is_empty():
+			for c in pile_cells(s):
+				if not out.has(c):
+					out[c] = s
+	return out
+
+
 ## Whether a stack is put away: in a stockpile, or in the pile of a workstation that keeps its type.
-func stored(st: Dictionary) -> bool:
+## A caller checking many stacks passes `pile_map()`, worked out once.
+func stored(st: Dictionary, piles = null) -> bool:
 	if in_zone(st.cell):
 		return true
-	var ws = pile_at(st.cell)
+	var ws = pile_at(st.cell) if piles == null else piles.get(st.cell)
 	return ws != null and work_of(ws).item == st.type
 
 
@@ -1104,7 +1118,8 @@ func _workstation_job(r: Dictionary, c: Vector2i):
 		return null
 	var stations := [own]
 	var item: String = work_of(stations[0]).item
-	var loose := stacks_where(func(st): return st.type == item and avail(st) > 0 and not stored(st) and stations.any(func(s): return in_area(s, st.cell)))
+	var piles := pile_map()
+	var loose := stacks_where(func(st): return st.type == item and avail(st) > 0 and not stored(st, piles) and stations.any(func(s): return in_area(s, st.cell)))
 	if not loose.is_empty():
 		var ls: Dictionary = nearest(loose, c)
 		var pd = pile_dest(item, ls.cell)
@@ -2159,17 +2174,23 @@ func _tagged(j: Job, work: String) -> Job:
 
 ## The nearest loose stack that has room in a stockpile (unloaded cargo first), as {stack, dest, n}, or null.
 func _haul_source(c: Vector2i, carry := Tuning.CARRY):
-	var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s))
-	# An expedition's unloaded cargo goes first (issue #112), then the nearest.
-	loose.sort_custom(func(a, b): return a.get("cargo", false) and not b.get("cargo", false) or (a.get("cargo", false) == b.get("cargo", false) and manhattan(a.cell, c) < manhattan(b.cell, c)))
-	# Where a type can go is worked out once a type, not once a stack, so an idle hauler with a full
-	# stockpile costs little each tick.
+	var piles := pile_map()
+	var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s, piles))
+	# Where a type can go is worked out once a type, not once a stack, and before sorting: an idle
+	# hauler with a full stockpile asks every tick, so finding nowhere to go has to cost little.
 	var dests := {}  # type -> a stockpile cell with room for it, or null
 	var piled := {}  # type -> whether a workstation's pile keeps it with room (issue #177)
+	var anywhere := false
 	for ls in loose:
 		if not dests.has(ls.type):
 			dests[ls.type] = zone_dest(ls.type)
 			piled[ls.type] = pile_dest(ls.type, c) != null
+			anywhere = anywhere or dests[ls.type] != null or piled[ls.type]
+	if not anywhere:
+		return null
+	# An expedition's unloaded cargo goes first (issue #112), then the nearest.
+	loose.sort_custom(func(a, b): return a.get("cargo", false) and not b.get("cargo", false) or (a.get("cargo", false) == b.get("cargo", false) and manhattan(a.cell, c) < manhattan(b.cell, c)))
+	for ls in loose:
 		var pd = pile_dest(ls.type, ls.cell) if piled[ls.type] else null  # a workstation's pile before the stockpile
 		if pd != null:
 			return {"stack": ls, "dest": pd.cell, "n": mini(mini(avail(ls), carry), pd.room), "pile": pd.site}
@@ -3028,7 +3049,8 @@ func _stuck_on_map() -> void:
 				_add_stuck("Farm", "Harvested wheat needs a stockpile before replanting", Vector2(k) + Vector2(0.5, 0.5), 0.6, "crop", m.farm[k].id)
 				break
 	if not m.zone.is_empty():
-		var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s))
+		var piles := pile_map()
+		var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s, piles))
 		var full := not loose.is_empty()
 		var tried := {}
 		for s in loose:
