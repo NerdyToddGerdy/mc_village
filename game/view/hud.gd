@@ -1929,6 +1929,36 @@ func _fill_workstation(c: Container, sim: Sim, s: Dictionary, reasons: Array) ->
 	c.add_child(_label(_station_line(sim, s), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	for x in reasons:
 		c.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
+	c.add_child(_rule())
+	c.add_child(_label(_bench_status(sim, s), false, Palette.CHALK_DIM, Palette.BODY, true))
+	c.add_child(_make_keep_row(sim, s))
+	if not game.craft_menu_open:
+		c.add_child(_button("Open the craft menu", func(): game.open_craft_menu(s), "Secondary"))
+
+
+## A workstation's standing order (issue #178): "Keep 20 planks", with − and +. 0 is off.
+func _make_keep_row(sim: Sim, s: Dictionary) -> Control:
+	var rec := Defs.recipe(Defs.TEMPLATES[s.tpl].makes)
+	var out: String = rec.out.keys()[0]
+	var v := VBoxContainer.new()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	var n: int = s.get("make_keep", 0)
+	var less := _button("−", func(): game.set_make_keep(s, n - Tuning.MAKE_STEP), "Secondary")
+	less.disabled = n <= 0
+	less.tooltip_text = "Keep %d fewer" % Tuning.MAKE_STEP
+	row.add_child(less)
+	var lbl := _label("Keep %s" % Defs.words(out, n) if n > 0 else "Make %s: off" % Defs.ITEMS[out].many, false, Palette.CHALK, Palette.BODY)
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(lbl)
+	var more := _button("+", func(): game.set_make_keep(s, n + Tuning.MAKE_STEP), "Secondary")
+	more.tooltip_text = "Keep %d more" % Tuning.MAKE_STEP
+	row.add_child(more)
+	v.add_child(row)
+	var inp: String = rec.inp.keys()[0]
+	v.add_child(_label("The village has %d. While it has fewer, %ss make them here from %s." % [sim.free_count(out), Defs.JOB_NAMES[Sim.recipe_job(rec)].to_lower(), Defs.ITEMS[inp].many] if n > 0 else "Nothing is made here unless you queue it.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	return v
 
 
 ## Who works from a workstation (issue #184): "Bram works here as the farmer.", or that it's free.
@@ -2013,6 +2043,8 @@ func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 		bar.tooltip_text = "Missing planks and sticks are queued automatically." if sim.auto_craft else "Once Ada’s house is finished, the bench queues the planks and sticks a recipe needs."
 	c.add_child(bar)
 	c.add_child(_on_hand(sim, s))
+	if Defs.TEMPLATES[s.tpl].has("makes"):
+		c.add_child(_make_keep_row(sim, s))
 	if s.tpl == "fireplace":
 		var on: bool = s.get("keep_meals", true)
 		var keep := _button("Keep %d meals in stock: %s" % [Tuning.MEAL_STOCK, "on" if on else "off"], func(): game.set_keep_meals(s, not on), "Secondary")

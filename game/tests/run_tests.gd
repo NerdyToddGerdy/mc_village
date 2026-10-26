@@ -81,6 +81,7 @@ func _init() -> void:
 		"test_saplings_and_replanting",
 		"test_jobs_need_their_workstation",
 		"test_hunters_keep_a_herd_floor",
+		"test_workstations_process_materials",
 	]
 	var only := Array(OS.get_cmdline_user_args())
 	if not only.is_empty():
@@ -2910,6 +2911,7 @@ func test_lumberjacks_and_stonemasons() -> void:
 	var ada: Dictionary = sim.residents[0]
 	var block := place_done(sim, "chopping_block")
 	check(not block.is_empty() and block.keep == Tuning.KEEP_STOCK, "a chopping block keeps %d logs by default" % Tuning.KEEP_STOCK)
+	block.make_keep = 0  # gathering and piles only here: no sawing (issue #178)
 	run(sim, 30)
 	check(sim.stats.felled == 0, "Ada never fells trees on her own, even with a chopping block")
 	sim.compute_stuck()
@@ -3097,6 +3099,49 @@ func test_hunters_keep_a_herd_floor() -> void:
 	sim.set_herd_floor("cow", 5)
 	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(back.floor_of("cow") == 5 and back.floor_of("pig") == Tuning.HERD_FLOOR, "herd floors are saved, unset ones at the default")
+
+
+func test_workstations_process_materials() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	ada.away = true  # off at the meadow: the workstations' own gatherers do the work
+	ada.back_at = 1 << 30
+	var logs_before: int = sim.stats.felled
+	var block := place_done(sim, "chopping_block")
+	check(block.make_keep == 20 and Sim.is_station(block), "a chopping block is a station that keeps 20 planks by default")
+	block.keep = 0  # no felling: just the logs set down for it
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(block.origin + Vector2i(0, 2)))
+	sim.set_role(tomas, "lumber")
+	check(is_same(sim.claimed(tomas), block), "Tomas claims the chopping block")
+	sim.set_make_keep(block, 12)
+	sim.drop_items(sim.nearest_walkable(block.origin + Vector2i(2, 2)), "log", 4)
+	run(sim, 4)
+	check(block.queue == ["saw_planks"] and block.autoq == [true], "under its target, the standing order queues sawn planks (%s)" % [block.queue])
+	run(sim, 90)
+	check(sim.free_count("plank") == 15 and sim.free_count("log") == 1, "he saws 5 planks a log, up to the target, then stops (%d planks, %d logs left)" % [sim.free_count("plank"), sim.free_count("log")])
+	check(sim.stats.felled == logs_before and tomas.jobs.lumber.xp > 0, "sawing is Lumberjack work (%d xp)" % tomas.jobs.lumber.xp)
+	check(Sim.recipe_for(tomas, Defs.recipe("saw_planks")).out.plank == 5, "a level-1 lumberjack saws 5 planks")
+	tomas.jobs.lumber.xp = Tuning.SKILL_LEVELS[2]
+	check(Sim.recipe_for(tomas, Defs.recipe("saw_planks")).out.plank == 6, "a level-4 lumberjack saws 6")
+	check(Defs.recipe("planks").out.plank == 4 and Defs.recipe("planks").get("at", "bench") == "bench", "the bench's Planks recipe stays, at 4 a log")
+	# The mason's bench cuts stone bricks.
+	var mb := place_done(sim, "mason_bench", block.origin + Vector2i(6, 0))
+	check(mb.make_keep == 10, "a mason's bench keeps 10 stone bricks by default")
+	mb.keep = 0
+	var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], sim.nearest_walkable(mb.origin + Vector2i(0, 2)))
+	sim.set_role(mira, "mason")
+	sim.set_make_keep(mb, 4)
+	sim.drop_items(sim.nearest_walkable(mb.origin + Vector2i(2, 2)), "cobble", 7)
+	run(sim, 90)
+	check(sim.free_count("stone_brick") == 4 and sim.free_count("cobble") == 3, "she cuts 2 cobblestone into 2 stone bricks, up to the target (%d bricks, %d cobblestone left)" % [sim.free_count("stone_brick"), sim.free_count("cobble")])
+	check(mira.jobs.mason.xp > 0, "cutting is Stonemason work")
+	# Queued by hand, past the target; a target of 0 turns the standing order off.
+	sim.set_make_keep(mb, 0)
+	sim.queue_add(mb, "stone_bricks")
+	run(sim, 30)
+	check(sim.free_count("stone_brick") == 6 and mb.queue.is_empty(), "a batch queued by hand is cut regardless (%d)" % sim.free_count("stone_brick"))
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(back.sites.any(func(st): return st.tpl == "chopping_block" and st.make_keep == 12), "standing orders are saved")
 
 
 func test_jobs_need_their_workstation() -> void:

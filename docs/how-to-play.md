@@ -134,6 +134,7 @@ A lumberjack or stonemason works whatever you've marked first. With nothing mark
 - **The pile:** the cells beside it hold up to 20 logs or cobblestone. Gatherers carry what they cut there first, which saves the walk to the stockpile. Builders and crafters take from it like a stockpile, and anything over 20 goes to the stockpile.
 - **Keep-stock target:** set in the workstation's panel ("Keep 20 logs", with − and +). Once the village has that many, its gatherers stop cutting so they don't strip the area for nothing.
 - **Left alone:** trees and boulders marked **Keep**, and anything on a building or its reserved plot, a stockpile, farm or pen, or beside a house's door.
+- **Processing:** a chopping block also saws planks, 5 from a log (the bench makes 4), and a mason's bench cuts cobblestone into **stone bricks**, 2 for 2. Each keeps a stock, set in its panel ("Keep 20 planks", with − and +), and its gatherer makes more while the village is short. Each also has a tab in the Craft panel, where you can queue more by hand. Stone bricks are for buildings still to come.
 - **Replanting:** a felled tree drops a sapling, sometimes two. Lumberjacks plant saplings on open grass in their chopping block's area. A sapling grows into a full tree in about 5 minutes. Until then it can't be chopped.
 
 The workstation's panel and the stuck list say what's holding it up: "No trees in range", "Target reached", "Full", or a stonemason with no pickaxe.

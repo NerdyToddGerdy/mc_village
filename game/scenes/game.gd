@@ -1122,6 +1122,10 @@ func set_keep_stock(s: Dictionary, n: int) -> void:
 	sim.set_keep_stock(s, n)
 
 
+func set_make_keep(s: Dictionary, n: int) -> void:
+	sim.set_make_keep(s, n)
+
+
 func set_herd_floor(species: String, n: int) -> void:
 	sim.set_herd_floor(species, n)
 
