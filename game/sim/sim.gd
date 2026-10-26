@@ -2426,9 +2426,12 @@ func sign_for(dest: String) -> Vector2i:
 ## New animals wander in at the far west edge.
 func _regrow_herds() -> void:
 	var herd := Meadow.herd()
+	var wild := {}  # pens don't count (issue #139)
+	for a in m.sheep:
+		if a.alive and a.get("pen", 0) == 0:
+			wild[a.species] = wild.get(a.species, 0) + 1
 	for sp in herd:
-		var alive: int = m.sheep.filter(func(a): return a.alive and a.species == sp and a.get("pen", 0) == 0).size()  # pens don't count (issue #139)
-		if alive >= herd[sp]:
+		if wild.get(sp, 0) >= herd[sp]:
 			m.regrow.erase(sp)
 			continue
 		m.regrow[sp] = m.regrow.get(sp, 0.0) + Tuning.DT
