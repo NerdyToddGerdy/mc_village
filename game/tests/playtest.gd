@@ -418,7 +418,9 @@ func _initialize() -> void:
 
 	# Tools dropdown on hover
 	var tb: Button = game._hud._tools_btn
-	await move(Vector2(1000, 430))
+	# Open ground, so the click on the world below selects nothing (a bench would open its Craft panel)
+	var clear := screen(open_cell(game._cell_at(Vector2(1000, 430))))
+	await move(clear)
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "Tools list is closed")
 	await move(tb.get_global_rect().get_center())
@@ -427,31 +429,40 @@ func _initialize() -> void:
 	await move(game._hud._tools_drop.get_global_rect().get_center())
 	await frames(2)
 	check(game._hud._tools_drop.visible, "the list stays open while the pointer moves onto it")
-	await move(Vector2(1000, 430))
+	await move(clear)
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "moving away closes the list")
 	# A click pins it open; it closes on a second click, on a click elsewhere, or on Esc (issue #90)
 	await click(tb.get_global_rect().get_center())
-	await move(Vector2(1000, 430))
+	await move(clear)
 	await frames(2)
 	check(game._hud._tools_drop.visible, "a click pins the list open")
 	await click(tb.get_global_rect().get_center())
-	await move(Vector2(1000, 430))
+	await move(clear)
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "a second click unpins it, and moving away closes it")
 	await click(tb.get_global_rect().get_center())
-	await click(Vector2(1000, 430))  # clear of the button and the list
+	await click(clear)  # clear of the button and the list
 	await frames(2)
 	check(not game._hud._tools_drop.visible, "pinned, a click on the world closes it")
 	await click(tb.get_global_rect().get_center())
-	await move(Vector2(1000, 430))
+	await move(clear)
 	await key(KEY_ESCAPE)
 	await frames(2)
 	check(not game._hud._tools_drop.visible and not game._menu.visible, "pinned, Esc closes it (and doesn't open the menu)")
 
 	# Menu by mouse: save, load with confirmation, controls, start over
+	# Esc closes an open tool, menu or panel before it opens the game menu, and the real-time clicks
+	# above sometimes leave one open.
+	var still_open := {"tool": game.tool, "menu": game.menu_open, "jobs board": game.jobs_board_open, "craft panel": game.craft_menu_open, "planner": game.planner_open}
+	for k in still_open.keys():
+		if not still_open[k]:
+			still_open.erase(k)
+	if not still_open.is_empty():
+		print("     (closing %s first)" % still_open)
+		await key(KEY_ESCAPE)
 	await key(KEY_ESCAPE)
-	check(game._menu.visible and game.speed == 0, "Esc opens the menu and pauses")
+	check(game._menu.visible and game.speed == 0, "Esc opens the menu and pauses (tool \"%s\", menu \"%s\", jobs board %s, craft %s, planner %s)" % [game.tool, game.menu_open, game.jobs_board_open, game.craft_menu_open, game.planner_open])
 	check(await click_button("Save game"), "click Save game")
 	check(await click_button("Save here"), "click Save here")
 	check(FileAccess.file_exists(game._slot_path(1)), "slot 1 is written")
