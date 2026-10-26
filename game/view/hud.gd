@@ -167,8 +167,9 @@ func _ready() -> void:
 
 	var br := _corner(Control.PRESET_BOTTOM_RIGHT)
 	for m in OrderMenus.MENUS:  # Gather, Paint and Build: one menu control for all three (#93, #94)
-		var box := VBoxContainer.new()
-		box.add_theme_constant_override("separation", 2)
+		var box := GridContainer.new()  # one column, or two once a menu is long (the Build menu, #184)
+		box.add_theme_constant_override("h_separation", 2)
+		box.add_theme_constant_override("v_separation", 2)
 		_menus[m] = box
 		var mp := _panel(box, Vector2(300, 0), 6)
 		mp.visible = false
@@ -503,6 +504,7 @@ func _refresh_toolbar(sim: Sim) -> void:
 		if game.menu_open != m:
 			continue
 		var list: Array = sim.on_map(game.view_map, OrderMenus.entries.bind(m, sim))
+		_menus[m].columns = 2 if list.size() > MENU_ROWS else 1
 		_rebuild(_menus[m], "%s%s%s" % [list.map(func(e): return e.id), _keys_sig, game.tool], func(c: Container) -> void:
 			for i in list.size():
 				c.add_child(_menu_row(m, i, list[i])))
@@ -567,6 +569,7 @@ func _menu_row(menu: String, i: int, e: Dictionary) -> Button:
 
 
 const MENU_W := 288.0
+const MENU_ROWS := 6  ## Rows a toolbar menu shows in one column; a longer one is laid out in two.
 
 
 func _keycap(key: String) -> PanelContainer:
@@ -1448,7 +1451,8 @@ func _job_picker(sim: Sim, r: Dictionary) -> Control:
 		l.mouse_filter = Control.MOUSE_FILTER_STOP
 		return l
 	var lv := "" if r.role == "none" else ", level %d" % Sim.level(r, r.role)
-	var b := _button("%s%s  ▾" % [Sim.role_name(r), lv], func(): pass, "Secondary")
+	var short := " (no %s)" % Defs.TEMPLATES[Defs.JOB_STATIONS[r.role]].name.to_lower() if sim.needs_station(r) else ""
+	var b := _button("%s%s%s  ▾" % [Sim.role_name(r), lv, short], func(): pass, "Secondary")
 	b.set_meta("label", "Job: %s" % r.name)
 	b.toggle_mode = true
 	b.set_pressed_no_signal(_job_for == r.id)
@@ -1484,7 +1488,7 @@ func _refresh_job_drop(sim: Sim) -> void:
 	var counts := {}
 	for o in sim.residents:
 		counts[o.role] = counts.get(o.role, 0) + 1
-	var sig := "%d%s%s%s" % [r.id, r.role, r.jobs, counts]
+	var sig := "%d%s%s%s%s" % [r.id, r.role, r.jobs, counts, _stations_sig(sim)]
 	_rebuild(_job_list, sig, func(c: Container) -> void:
 		var order: Array = Defs.JOBS.duplicate()
 		order.sort_custom(func(a, b): return Sim.level(r, a) > Sim.level(r, b) or (Sim.level(r, a) == Sim.level(r, b) and Defs.JOBS.find(a) < Defs.JOBS.find(b)))
@@ -1493,6 +1497,11 @@ func _refresh_job_drop(sim: Sim) -> void:
 			var n: int = counts.get(jb, 0)
 			if jb != "none" and n > 0:
 				text += " · %d %s" % [n, _job_people(jb, n)]
+			if Defs.JOB_STATIONS.has(jb):  # issue #184: a job needs a free workstation of its own
+				var tpl: String = Defs.JOB_STATIONS[jb]
+				var free: int = sim.maps.village.sites.filter(func(st): return st.done and st.tpl == tpl and st.get("worker", 0) in [0, r.id]).size()
+				var tname: String = Defs.TEMPLATES[tpl].name.to_lower()
+				text += " · %d %s free" % [free, tname] if free > 0 else " · no %s" % tname
 			var b := _button(text, func():
 				game.set_role(r, jb)
 				_close_job_drop(), "Secondary")
@@ -1500,8 +1509,13 @@ func _refresh_job_drop(sim: Sim) -> void:
 			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			b.toggle_mode = true
 			b.set_pressed_no_signal(r.role == jb)
-			b.tooltip_text = "Only hauls, when there's something to carry" if jb == "none" else "%s does %s work, and hauls when there's none" % [r.name, Defs.JOB_NAMES[jb]]
+			b.tooltip_text = "Only hauls, when there's something to carry" if jb == "none" else "%s does %s work from a %s of their own, and hauls when there's none or no %s is free" % [r.name, Defs.JOB_NAMES[jb], Defs.TEMPLATES[Defs.JOB_STATIONS[jb]].name.to_lower(), Defs.TEMPLATES[Defs.JOB_STATIONS[jb]].name.to_lower()] if Defs.JOB_STATIONS.has(jb) else "%s does %s work, and hauls when there's none" % [r.name, Defs.JOB_NAMES[jb]]
 			c.add_child(b))
+
+
+## Which workstations exist and who has each (issue #184), for panels that show them.
+static func _stations_sig(sim: Sim) -> String:
+	return str(sim.maps.village.sites.filter(func(st): return st.done and Defs.JOB_STATIONS.values().has(st.tpl)).map(func(st): return [st.id, st.get("worker", 0)]))
 
 
 ## "farmer", "2 farmers".
@@ -1517,7 +1531,7 @@ func _refresh_board(sim: Sim) -> void:
 	_jobs_btn.set_pressed_no_signal(game.jobs_board_open)
 	if not game.jobs_board_open:
 		return
-	var sig := "%s|%s|%d" % [game.selection, _keys_sig, _job_for]
+	var sig := "%s|%s|%d|%s" % [game.selection, _keys_sig, _job_for, _stations_sig(sim)]
 	for r in sim.residents:
 		sig += "%d%s%s%s%s%s;" % [r.id, r.name, r.role, r.jobs, r.away, r.map]
 	_rebuild(_board, sig, func(c: Container) -> void:
@@ -1548,6 +1562,14 @@ func _refresh_board(sim: Sim) -> void:
 			col.add_child(count)
 			var people: String = Defs.JOB_SKILLED[jb].capitalize() + "s"
 			col.tooltip_text = "%s: %s. Ada does this work when she can." % [people, "nobody" if n == 0 else str(n)] if jb != "haul" else "%s: %d. Everyone hauls when there's nothing of their own job to do." % [people, n]
+			if Defs.JOB_STATIONS.has(jb):  # how many workstations there are for it (issue #184)
+				var tpl: String = Defs.JOB_STATIONS[jb]
+				var ns: int = sim.maps.village.sites.filter(func(st): return st.done and st.tpl == tpl).size()
+				var word: String = Defs.TEMPLATES[tpl].name.to_lower().split(" ")[-1]  # "2 benches", "no composter"
+				var built := _label("%d %s" % [ns, word if ns == 1 else word + ("es" if word.ends_with("ch") else "s")] if ns > 0 else "no " + word, false, Palette.CHALK_DIM, Palette.CAPTION)
+				built.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				col.add_child(built)
+				col.tooltip_text += " Each needs a %s of their own: %d built." % [Defs.TEMPLATES[tpl].name.to_lower(), ns]
 			col.mouse_filter = Control.MOUSE_FILTER_STOP
 			grid.add_child(col)
 		for r in sim.residents:
@@ -1823,9 +1845,16 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	if not Sim.work_of(s).is_empty():  # a chopping block or mason's bench (issue #177)
 		_fill_workstation(c, sim, s, reasons)
 		return
+	if not Sim.is_station(s):  # the toolsmith's bench, composter, lodge or builder's table (issue #184)
+		c.add_child(_label(sim.station_title(s), true, Palette.CHALK, Palette.TITLE))
+		c.add_child(_label(_station_line(sim, s), false, Palette.CHALK_DIM, Palette.BODY, true))
+		for x in reasons:
+			c.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
+		return
 	# A finished bench or fireplace: a short summary here. Its recipes and queue live only in the
 	# Craft panel on the right, which selecting it opens.
-	c.add_child(_label(tpl.name, true, Palette.CHALK, Palette.TITLE))
+	c.add_child(_label(sim.station_title(s), true, Palette.CHALK, Palette.TITLE))
+	c.add_child(_label(_station_line(sim, s), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	c.add_child(_label(_bench_status(sim, s), false, Palette.CHALK_DIM, Palette.BODY, true))
 	for x in reasons:
 		c.add_child(_reason(x.why))
@@ -1838,7 +1867,7 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 func _fill_workstation(c: Container, sim: Sim, s: Dictionary, reasons: Array) -> void:
 	var wk := Sim.work_of(s)
 	var item: Dictionary = Defs.ITEMS[wk.item]
-	c.add_child(_label(Defs.TEMPLATES[s.tpl].name, true, Palette.CHALK, Palette.TITLE))
+	c.add_child(_label(sim.station_title(s), true, Palette.CHALK, Palette.TITLE))
 	var n := sim.pile_count(s)
 	c.add_child(_row("Pile", "%d / %d %s" % [n, Tuning.WORK_STORE, item.many], false))
 	c.add_child(_bar(float(n) / Tuning.WORK_STORE))
@@ -1859,11 +1888,20 @@ func _fill_workstation(c: Container, sim: Sim, s: Dictionary, reasons: Array) ->
 	c.add_child(_label("The village has %d. %ss %s within %d cells on their own until it has %d." % [
 		sim.free_count(wk.item), Defs.JOB_NAMES[wk.job], "fell trees" if wk.kind == "tree" else "break boulders",
 		int(Tuning.WORK_RADIUS), s.keep], false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	var workers: Array = sim.residents.filter(func(r): return r.role == wk.job).map(func(r): return r.name)
-	if not workers.is_empty():
-		c.add_child(_row(Defs.JOB_NAMES[wk.job] + ("s" if workers.size() > 1 else ""), Sim.names_text(workers), false))
+	c.add_child(_label(_station_line(sim, s), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	for x in reasons:
 		c.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
+
+
+## Who works from a workstation (issue #184): "Bram works here as the farmer.", or that it's free.
+func _station_line(sim: Sim, s: Dictionary) -> String:
+	var job: String = Defs.JOB_STATIONS.find_key(s.tpl)
+	var who := sim.resident(s.get("worker", 0))
+	var what: String = {"toolsmith": " Tools are made at the crafting bench; the toolsmith keeps spares in stock.",
+		"farm": " The farmer tends any farm plot.", "hunt": " The hunter hunts marked animals.", "build": " The builder puts up blueprints."}.get(job, "")
+	if not who.is_empty():
+		return "%s works here as the %s.%s" % [who.name, Defs.JOB_SKILLED[job], what]
+	return "Free: give someone the %s job and they'll claim it. Ada works anywhere without one.%s" % [Defs.JOB_NAMES[job], what]
 
 
 ## What a finished bench or fireplace is doing, for its panels.

@@ -251,9 +251,10 @@ func _update_live_overlays() -> void:
 		else:
 			var clr := Sim.clearing_text(sim.obstacles_in(Rect2i(origin, size)))
 			var turn := keys.first("rotate")
-			var names := {"house": "house", "bench": "crafting bench", "fireplace": "fireplace", "board": "expedition board", "chopping_block": "chopping block", "mason_bench": "mason's bench"}
-			var turns := {"house": "the door", "bench": "its workshop plot", "fireplace": "its kitchen plot", "board": "its map room plot", "chopping_block": "its sawmill plot", "mason_bench": "its workshop plot"}
-			hint = "Place %s." % names[placing] + (" %s turns %s." % [turn, turns[placing]] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
+			var tpl_def: Dictionary = Defs.TEMPLATES[placing]
+			var name: String = tpl_def.name.to_lower()
+			var turning := "the door" if placing == "house" else "its %s plot" % tpl_def.get("plot", "")
+			hint = "Place %s." % name + (" %s turns %s." % [turn, turning] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
 	if sel != null and sel.kind in ["tree", "boulder", "animal", "bush", "crop", "meadow", "route"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
@@ -699,6 +700,7 @@ func _key(e: InputEventKey) -> void:
 		"board": start_placing("board")
 		"chopping_block": start_placing("chopping_block")
 		"mason_bench": start_placing("mason_bench")
+		"toolsmith_bench", "composter", "lodge", "builder_table": start_placing(keys.action_for(e))
 		"rotate":
 			if tool == "build":
 				rot = (rot + 1) % 4
@@ -858,7 +860,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "build", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "keep"]
+const VILLAGE_ONLY := ["stock", "farm", "build", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 

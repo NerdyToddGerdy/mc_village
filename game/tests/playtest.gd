@@ -217,8 +217,12 @@ func _initialize() -> void:
 	await queue_recipe("Planks", 5)
 	await queue_recipe("Planks", 5)
 	await key(KEY_ESCAPE)
+	await key(KEY_X)  # more trees, so the walls' logs never run short after all those planks
+	await drag(screen(at(0, 0)), screen(at(17, 17)), true)
+	await key(KEY_ESCAPE)
 	await run(1000)
-	check(h2 != null and h2.done, "second house finished")
+	sim.compute_stuck()
+	check(h2 != null and h2.done, "second house finished (stage %d, felled %d, Ada's axe %s, broken %s, %s; marked trees %d; %s)" % [h2.stage if h2 != null else -1, sim.stats.felled, ada.axe, ada.broken.axe, ada.job.label if ada.job != null else "idle", sim.trees.filter(func(t): return t.alive and t.des).size(), sim.stuck.map(func(x): return x.why)])
 	check(sim.residents.size() == 2 and sim.stats.traveler_home, "Tomas arrives and moves in")
 	var tomas: Dictionary = sim.residents[1] if sim.residents.size() > 1 else {}
 	check(not tomas.is_empty() and Defs.JOBS.any(func(jb): return Sim.level(tomas, jb) >= Tuning.ARRIVAL_LEVEL), "Tomas arrives skilled in one job")
@@ -344,6 +348,10 @@ func _initialize() -> void:
 	check(not game._hud._job_drop.visible, "choosing closes the dropdown")
 	await key(KEY_ESCAPE)
 	check(not game.jobs_board_open and not game._menu.visible, "Esc closes the jobs board first")
+	# Issue #184: the toolsmith keeps spares once he has a toolsmith's bench of his own
+	var tsb = await place_from_menu("Toolsmith's bench", "toolsmith_bench", Sim.rcell(tomas) + Vector2i(0, 3))
+	check(tsb != null and tsb.tpl == "toolsmith_bench", "a toolsmith's bench is placed from the Build menu")
+	check(await play_until(200, func(): return tsb != null and tsb.done and tsb.worker == tomas.id), "it's built, and Tomas claims it")
 	for i in 120:
 		await run(1)
 		if ["axe", "pick"].any(func(k): return not sim.tool_items(k, 0).is_empty()):

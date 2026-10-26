@@ -78,6 +78,14 @@ func _initialize() -> void:
 		mira.pick = {"type": "stone_pick", "tier": 2, "dur": 20}
 		if SaveFormat.VERSION >= 22:
 			sim.set_role(mira, "mine" if SaveFormat.VERSION == 22 else "mason")  # one job each (#134): added by hand, she'd have none; Mine split in two in v23 (#177)
+		if SaveFormat.VERSION >= 24:  # a stonemason works from her mason's bench (#184)
+			for c in [at(16, 12), at(1, 14), at(14, 14), at(12, 16), at(16, 16)]:
+				if sim.placement_check("mason_bench", c) == "":
+					var mb := sim.place_site("mason_bench", c)
+					mb.stage = 1
+					mb.done = true
+					break
+			sim.assign_workstations()
 		sim.move_to_map(mira, OldMine.ID, mine.entrance)
 		sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, mine.w, mine.h)))
 		sim.use_map(OldMine.ID)
@@ -220,6 +228,19 @@ func _initialize() -> void:
 		kept.keep = true
 		sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(0, 1), "sapling", 2)
 		sim.set_role(sim.residents[1], "lumber")
+		sim.events.clear()
+	if SaveFormat.VERSION >= 24:  # Tomas claims the chopping block; a composter stands free, with nobody farming (#184)
+		for c in [at(2, 1), at(15, 2), at(16, 12), at(1, 14), at(14, 14), at(12, 16)]:
+			if sim.placement_check("composter", c) == "":
+				var comp := sim.place_site("composter", c)
+				comp.stage = 1
+				comp.done = true
+				break
+		sim.assign_workstations()
+		if not sim.sites.any(func(st): return st.tpl == "chopping_block" and st.worker == sim.residents[1].id):
+			printerr("Tomas didn't claim the chopping block.")
+			quit(1)
+			return
 		sim.events.clear()
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,

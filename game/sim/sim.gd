@@ -225,14 +225,72 @@ static func default_jobs() -> Dictionary:
 
 
 ## Whether a resident claims work of a job (issue #134): Ada ("all") claims every kind, and everyone
-## else their one job, then hauling when there's none.
-static func works(r: Dictionary, job: String) -> bool:
-	return r.role == "all" or r.role == job or job == "haul"
+## else their one job, once they've claimed its workstation (issue #184), then hauling.
+func works(r: Dictionary, job: String) -> bool:
+	if r.role == "all" or job == "haul":
+		return true
+	return r.role == job and not claimed(r).is_empty()
 
 
 ## The jobs whose work a resident claims, in Defs.JOBS order.
-static func job_list(r: Dictionary) -> Array:
+func job_list(r: Dictionary) -> Array:
 	return Defs.JOBS.filter(func(jb): return works(r, jb))
+
+
+## The finished workstation a resident has claimed (issue #184), or {}. Ada claims none.
+func claimed(r: Dictionary) -> Dictionary:
+	if r.role == "all" or not Defs.JOB_STATIONS.has(r.role):
+		return {}
+	for st in maps.village.sites:
+		if st.done and st.get("worker", 0) == r.id:
+			return st
+	return {}
+
+
+## Whether a resident's job is waiting on a workstation: they have one that needs it, and none is theirs.
+func needs_station(r: Dictionary) -> bool:
+	return r.role != "all" and Defs.JOB_STATIONS.has(r.role) and claimed(r).is_empty()
+
+
+## Hands out workstations (issue #184), one resident to each. A workstation whose resident is gone, has
+## another job now, or which isn't finished is freed; then each resident whose job needs one and who has
+## none claims the nearest free one.
+func assign_workstations() -> void:
+	var vm: SimMap = maps.village
+	var changed := false
+	for st in vm.sites:
+		var wid: int = st.get("worker", 0)
+		if wid == 0:
+			continue
+		var r := resident(wid)
+		if r.is_empty() or not st.done or Defs.JOB_STATIONS.get(r.role, "") != st.tpl:
+			st.worker = 0
+			changed = true
+	for r in residents:
+		if not needs_station(r):
+			continue
+		var free: Array = vm.sites.filter(func(st): return st.done and st.tpl == Defs.JOB_STATIONS[r.role] and st.get("worker", 0) == 0)
+		if free.is_empty():
+			continue
+		var best: Dictionary = _nearest_site(free, rcell(r))
+		best.worker = r.id
+		changed = true
+	if changed:
+		rev += 1
+
+
+## "Farmer", or with no workstation of their own, "Farmer (no composter)".
+func role_text(r: Dictionary) -> String:
+	if needs_station(r):
+		return "%s (no %s)" % [role_name(r), Defs.TEMPLATES[Defs.JOB_STATIONS[r.role]].name.to_lower()]
+	return role_name(r)
+
+
+## A workstation's name with its resident's: "Bram's composter", or just "Composter" while it's free.
+func station_title(st: Dictionary) -> String:
+	var r := resident(st.get("worker", 0))
+	var tname: String = Defs.TEMPLATES[st.tpl].name
+	return tname if r.is_empty() else "%s's %s" % [r.name, tname.substr(0, 1).to_lower() + tname.substr(1)]
 
 
 ## "Farmer", "Everything" for Ada, or "No job".
@@ -727,6 +785,13 @@ func _clear_footprint(s: Dictionary) -> void:
 
 
 func _on_site_done(s: Dictionary) -> void:
+	assign_workstations()
+	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
+		var job: String = Defs.JOB_STATIONS.find_key(s.tpl)
+		var who := resident(s.get("worker", 0))
+		_toast("The %s is ready. %s" % [Defs.TEMPLATES[s.tpl].name.to_lower(),
+			"%s works from it as the %s." % [who.name, Defs.JOB_SKILLED[job]] if not who.is_empty() else "A %s can work from it." % Defs.JOB_SKILLED[job]], 0, s.id)
+		return
 	if s.tpl == "bench":
 		_toast("The crafting bench is ready. Select it to queue crafts.", 0, s.id)
 		return
@@ -841,7 +906,7 @@ const TOOL_NAMES := {"axe": "axe", "pick": "pickaxe"}
 
 ## Whether a resident's job is Toolsmith. Ada doesn't count: spares need a toolsmith of their own (issue #134).
 func has_toolsmith() -> bool:
-	return residents.any(func(r): return r.role == "toolsmith")
+	return residents.any(func(r): return r.role == "toolsmith" and not claimed(r).is_empty())
 
 
 ## Whether a "(toolsmith)" entry for this tool kind is queued at any bench.
@@ -925,11 +990,6 @@ static func gather_job_of(target: Dictionary) -> String:
 ## A building's workstation: {job, kind, item}, or {} for a building that isn't one.
 static func work_of(s: Dictionary) -> Dictionary:
 	return Defs.TEMPLATES[s.tpl].get("work", {})
-
-
-## Finished workstations of a job on the current map.
-func workstations(job: String) -> Array:
-	return m.sites.filter(func(s): return s.done and work_of(s).get("job", "") == job)
 
 
 ## Whether `c` is in a workstation's work area.
@@ -1021,11 +1081,11 @@ static func tree_stage(t: Dictionary) -> int:
 	return 0 if t.grow < Tuning.SAPLING_GROW / 2.0 else 1
 
 
-## Unmarked trees or boulders a job's gatherers take on their own: grown, not protected, and in the
-## work area of a workstation of theirs whose keep-stock target the village hasn't reached.
-func auto_targets(job: String) -> Array:
+## Unmarked trees or boulders gatherers take on their own: grown, not protected, and in the work area
+## of one of `stations` whose keep-stock target the village hasn't reached.
+func auto_targets(stations: Array) -> Array:
 	var out: Array = []
-	for s in workstations(job):
+	for s in stations:
 		var w := work_of(s)
 		if free_count(w.item) >= s.keep:
 			continue
@@ -1039,9 +1099,10 @@ func auto_targets(job: String) -> Array:
 ## work area to a pile, plant saplings (lumberjacks), then fell or break the nearest of auto_targets.
 func _workstation_job(r: Dictionary, c: Vector2i):
 	var job: String = r.role
-	var stations := workstations(job)
-	if stations.is_empty():
+	var own := claimed(r)  # their own workstation's area only (issue #184)
+	if own.is_empty() or work_of(own).is_empty():
 		return null
+	var stations := [own]
 	var item: String = work_of(stations[0]).item
 	var loose := stacks_where(func(st): return st.type == item and avail(st) > 0 and not stored(st) and stations.any(func(s): return in_area(s, st.cell)))
 	if not loose.is_empty():
@@ -1059,7 +1120,7 @@ func _workstation_job(r: Dictionary, c: Vector2i):
 		return null
 	if job == "mason" and r.pick == null and tool_items("pick", 0).is_empty():
 		return null
-	var targets := auto_targets(job)
+	var targets := auto_targets(stations)
 	if targets.is_empty():
 		return null
 	return _gather_job(r, nearest(targets, c))
@@ -1302,7 +1363,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl in ["board", "chopping_block", "mason_bench"]:
+	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table"]:
 		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
@@ -2028,7 +2089,8 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 				return null
 			var benches := m.sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty() and s.crafter == 0 and not bench_craftable(s, st_jobs).is_empty() and not _cooling(s))
 			if not benches.is_empty():
-				var b: Dictionary = _nearest_site(benches, c)
+				var own := claimed(r)  # their own station first, then any free one (issue #184)
+				var b: Dictionary = own if benches.any(func(x): return is_same(x, own)) else _nearest_site(benches, c)
 				var rec := bench_craftable(b, st_jobs)
 				return _tagged(_craft_job(r, b, rec), recipe_job(rec))
 			var dj = _try_deliver(r, c, m.sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty()), st_jobs)
@@ -2100,11 +2162,18 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 	var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s))
 	# An expedition's unloaded cargo goes first (issue #112), then the nearest.
 	loose.sort_custom(func(a, b): return a.get("cargo", false) and not b.get("cargo", false) or (a.get("cargo", false) == b.get("cargo", false) and manhattan(a.cell, c) < manhattan(b.cell, c)))
+	# Where a type can go is worked out once a type, not once a stack, so an idle hauler with a full
+	# stockpile costs little each tick.
+	var dests := {}  # type -> a stockpile cell with room for it, or null
+	var piled := {}  # type -> whether a workstation's pile keeps it with room (issue #177)
 	for ls in loose:
-		var pd = pile_dest(ls.type, ls.cell)  # a workstation's pile before the stockpile (issue #177)
+		if not dests.has(ls.type):
+			dests[ls.type] = zone_dest(ls.type)
+			piled[ls.type] = pile_dest(ls.type, c) != null
+		var pd = pile_dest(ls.type, ls.cell) if piled[ls.type] else null  # a workstation's pile before the stockpile
 		if pd != null:
 			return {"stack": ls, "dest": pd.cell, "n": mini(mini(avail(ls), carry), pd.room), "pile": pd.site}
-		var dest = zone_dest(ls.type)
+		var dest = dests[ls.type]
 		if dest == null:
 			continue
 		var cap := Defs.stack_cap(ls.type)
@@ -2175,6 +2244,8 @@ func step() -> void:
 		_step_map()
 	use_map("village")
 	_step_arrivals()
+	if tick % 10 == 0:
+		assign_workstations()
 	use_map(prev)
 	var kinds := {}
 	var working := 0
@@ -2956,7 +3027,11 @@ func _stuck_on_map() -> void:
 	if not m.zone.is_empty():
 		var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s))
 		var full := not loose.is_empty()
+		var tried := {}
 		for s in loose:
+			if tried.has(s.type):
+				continue
+			tried[s.type] = true
 			if zone_dest(s.type) != null:
 				full = false
 				break
@@ -2988,8 +3063,8 @@ func _stuck_workstations() -> void:
 		var at := Vector2(s.origin) + Vector2(0.5, 0.5)
 		var h := site_height(s) + 0.4
 		var item: Dictionary = Defs.ITEMS[wk.item]
-		if not residents.any(func(r): return r.role == wk.job):
-			_add_stuck(tname, "No one is a %s to work it" % Defs.JOB_SKILLED[wk.job], at, h, "site", s.id, false, true)
+		if s.get("worker", 0) == 0:
+			_add_stuck(tname, "No %s to work it" % Defs.JOB_SKILLED[wk.job], at, h, "site", s.id, false, true)
 		elif free_count(wk.item) >= s.keep:
 			_add_stuck(tname, "Target reached (%d %s)" % [s.keep, item.many], at, h, "site", s.id, false, true)
 		else:
@@ -3006,6 +3081,8 @@ func _stuck_workstations() -> void:
 	for r in here():
 		if r.role == "mason" and r.pick == null and not any_pick and not r.broken.pick:
 			_add_stuck(r.name, "Stonemason: no pickaxe", r.pos + Vector2(0.5, 0.5), 1.6, "res", r.id)
+		if needs_station(r) and m.kind == "village":  # issue #184: they haul till there's one
+			_add_stuck(r.name, "Build a %s to start work" % Defs.TEMPLATES[Defs.JOB_STATIONS[r.role]].name.to_lower(), r.pos + Vector2(0.5, 0.5), 1.6, "res", r.id)
 
 
 ## Whether someone sees to a job's work: a resident whose job it is (or anyone, for hauling), or Ada
@@ -3065,6 +3142,8 @@ func site_height(s: Dictionary) -> float:
 		return 0.55 if s.done else 0.2
 	if s.tpl == "mason_bench":
 		return 0.8 if s.done else 0.2
+	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
+		return 0.9 if s.done else 0.2
 	if s.tpl in ["bridge", "track", "station"]:
 		return 0.2 if s.tpl != "station" or not s.done else 0.9
 	return [0.2, 0.5, 2.5, 4.0, 4.0][mini(s.stage, 4)]
@@ -3266,7 +3345,7 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 	var s := {"id": _id(), "kind": "site", "tpl": tpl, "origin": origin, "size": Defs.TEMPLATES[tpl].size,
 		"rot": rot, "stage": 0, "store": {}, "incoming": {}, "builder": 0, "crafter": 0, "crafting": "",
 		"done": false, "owner": 0, "queue": [], "autoq": [], "unreach_until": 0,
-		"plot": plot_rect(tpl, origin, rot), "map": map_id}
+		"plot": plot_rect(tpl, origin, rot), "map": map_id, "worker": 0}
 	if tpl == "fireplace":
 		s.keep_meals = true
 	if not work_of(s).is_empty():
@@ -3298,6 +3377,7 @@ func set_role(r: Dictionary, role: String) -> void:
 	r.role = role
 	if r.job != null and r.job.work == old and old != "haul" and not r.job.ordered:
 		fail_job(r)
+	assign_workstations()  # the old job's workstation is freed, and the new one's claimed (issue #184)
 	rev += 1
 
 
@@ -3328,6 +3408,7 @@ func cancel_site(s: Dictionary) -> void:
 			drop_items(s.origin + Vector2i(0, s.size.y), k, s.store[k])
 	m.sites.erase(s)
 	_occ_dirty = true
+	assign_workstations()  # its resident claims another free one, or hauls (issue #184)
 	rev += 1
 
 

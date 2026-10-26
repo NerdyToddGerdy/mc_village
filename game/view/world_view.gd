@@ -637,6 +637,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "mason_bench":
 		_add_mason_bench(solid if s.done else ghost, s)
 		return
+	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
+		_add_small_station(solid if s.done else ghost, s)
+		return
 	if s.tpl == "bridge":
 		_add_bridge(solid if s.done else ghost, s)
 		return
@@ -762,6 +765,36 @@ func _add_mason_bench(b: Batch, s: Dictionary) -> void:
 	b.box(Vector3(o.x + 0.08, 0.55, o.y + 0.1), Vector3(o.x + 0.92, 0.65, o.y + 0.9), Palette.PLANK)
 	b.box(Vector3(o.x + 0.25, 0.65, o.y + 0.3), Vector3(o.x + 0.6, 0.85, o.y + 0.65), Palette.COBBLE.lightened(0.15))
 	b.box(Vector3(o.x + 0.66, 0.65, o.y + 0.35), Vector3(o.x + 0.72, 0.69, o.y + 0.75), Palette.STONE)
+
+
+static var COMPOST := Color("#4E3B28")
+
+
+## The other jobs' workstations (issue #184), each a small build you can tell apart at a glance.
+func _add_small_station(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	if not s.done:
+		b.box(Vector3(o.x + 0.1, 0, o.y + 0.1), Vector3(o.x + 0.9, 0.2, o.y + 0.9), Color(Palette.BLUE, 0.45))
+		return
+	var x := float(o.x)
+	var z := float(o.y)
+	match s.tpl:
+		"toolsmith_bench":  # a plank bench with a stone block for an anvil, and a hammer
+			b.box(Vector3(x + 0.1, 0, z + 0.15), Vector3(x + 0.9, 0.6, z + 0.85), Palette.PLANK)
+			b.box(Vector3(x + 0.25, 0.6, z + 0.3), Vector3(x + 0.6, 0.85, z + 0.7), Palette.STONE)
+			b.box(Vector3(x + 0.65, 0.6, z + 0.45), Vector3(x + 0.85, 0.66, z + 0.55), Palette.LOG)
+		"composter":  # a plank bin full of dark compost
+			b.box(Vector3(x + 0.12, 0, z + 0.12), Vector3(x + 0.88, 0.7, z + 0.88), Palette.PLANK)
+			b.box(Vector3(x + 0.2, 0.2, z + 0.2), Vector3(x + 0.8, 0.72, z + 0.8), COMPOST)
+		"lodge":  # a lean-to of logs with a hide stretched on its frame
+			b.box(Vector3(x + 0.1, 0, z + 0.1), Vector3(x + 0.9, 0.15, z + 0.9), Palette.LOG)
+			for k in [0.15, 0.75]:
+				b.box(Vector3(x + k, 0, z + 0.15), Vector3(x + k + 0.1, 1.0, z + 0.25), Palette.LOG)
+			b.box(Vector3(x + 0.2, 0.35, z + 0.17), Vector3(x + 0.8, 0.95, z + 0.23), Palette.ITEM_COLORS.leather)
+		"builder_table":  # a sawhorse and a trestle with a plank across them
+			for k in [0.12, 0.78]:
+				b.box(Vector3(x + k, 0, z + 0.2), Vector3(x + k + 0.1, 0.5, z + 0.8), Palette.LOG)
+			b.box(Vector3(x + 0.05, 0.5, z + 0.35), Vector3(x + 0.95, 0.58, z + 0.65), Palette.PLANK)
 
 
 static var BED_BLANKET := Color("#B83A3A")
