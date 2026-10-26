@@ -7,6 +7,8 @@ const ITEMS := {
 	"plank": {"one": "plank", "many": "planks", "label": "Planks", "group": "building"},
 	"stick": {"one": "stick", "many": "sticks", "label": "Sticks", "group": "building"},
 	"cobble": {"one": "cobblestone", "many": "cobblestone", "label": "Cobblestone", "group": "building"},
+	# Dropped by a felled tree, and planted by a lumberjack (issue #177).
+	"sapling": {"one": "sapling", "many": "saplings", "label": "Saplings", "group": "building"},
 	"wool": {"one": "wool", "many": "wool", "label": "Wool", "group": "animal"},
 	"mutton": {"one": "raw mutton", "many": "raw mutton", "label": "Mutton", "group": "food"},
 	"wheat": {"one": "wheat", "many": "wheat", "label": "Wheat", "group": "food"},
@@ -102,12 +104,18 @@ const RECIPES := [
 const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot", "H": "leather"}
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
-const JOBS := ["mine", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
-const JOB_NAMES := {"mine": "Mine", "haul": "Haul", "build": "Build", "craft": "Craft", "toolsmith": "Toolsmith",
+## Lumberjack and Stonemason replaced Mine in issue #177.
+const JOBS := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
+const JOB_NAMES := {"lumber": "Lumberjack", "mason": "Stonemason", "haul": "Haul", "build": "Build", "craft": "Craft", "toolsmith": "Toolsmith",
 	"farm": "Farm", "cook": "Cook", "hunt": "Hunt"}
 ## "Tomas is a skilled farmer."
-const JOB_SKILLED := {"mine": "miner", "haul": "hauler", "build": "builder", "craft": "crafter", "toolsmith": "toolsmith",
+const JOB_SKILLED := {"lumber": "lumberjack", "mason": "stonemason", "haul": "hauler", "build": "builder", "craft": "crafter", "toolsmith": "toolsmith",
 	"farm": "farmer", "cook": "cook", "hunt": "hunter"}
+
+## Each job's workstation (issue #184): a resident works their job only once they've claimed a finished
+## one, one resident to each. Haul needs none.
+const JOB_STATIONS := {"lumber": "chopping_block", "mason": "mason_bench", "build": "builder_table", "craft": "bench",
+	"toolsmith": "toolsmith_bench", "farm": "composter", "cook": "fireplace", "hunt": "lodge"}
 
 ## Meals the fireplace's standing order keeps in stock.
 const MEALS := ["bread", "cooked_mutton", "cooked_beef", "cooked_porkchop"]
@@ -134,6 +142,30 @@ const TEMPLATES := {
 	]},
 	"fireplace": {"name": "Fireplace", "size": Vector2i(1, 1), "station": true, "plot": "kitchen", "stages": [
 		{"name": "Fireplace", "verb": "needs", "cost": {"cobble": 6}},
+	]},
+	# Workstations (issue #177): a gatherer's job building. `work` names the job whose gatherers use it,
+	# what they gather in its work area, and the item it stores in a pile beside it.
+	"chopping_block": {"name": "Chopping block", "size": Vector2i(1, 1), "plot": "sawmill",
+		"work": {"job": "lumber", "kind": "tree", "item": "log"}, "stages": [
+		{"name": "Chopping block", "verb": "needs", "cost": {"plank": 4}},
+	]},
+	"mason_bench": {"name": "Mason's bench", "size": Vector2i(1, 1), "plot": "mason's workshop",
+		"work": {"job": "mason", "kind": "boulder", "item": "cobble"}, "stages": [
+		{"name": "Mason's bench", "verb": "needs", "cost": {"plank": 2, "cobble": 4}},
+	]},
+	# The other jobs' workstations (issue #184). Small builds that reserve room for an upgrade; the
+	# toolsmith's grows into an anvil once there's iron.
+	"toolsmith_bench": {"name": "Toolsmith's bench", "size": Vector2i(1, 1), "plot": "anvil", "stages": [
+		{"name": "Toolsmith's bench", "verb": "needs", "cost": {"plank": 4, "cobble": 3}},
+	]},
+	"composter": {"name": "Composter", "size": Vector2i(1, 1), "plot": "granary", "stages": [
+		{"name": "Composter", "verb": "needs", "cost": {"plank": 4}},
+	]},
+	"lodge": {"name": "Hunter's lodge", "size": Vector2i(1, 1), "plot": "tannery", "stages": [
+		{"name": "Hunter's lodge", "verb": "needs", "cost": {"log": 6, "plank": 2}},
+	]},
+	"builder_table": {"name": "Builder's table", "size": Vector2i(1, 1), "plot": "builder's yard", "stages": [
+		{"name": "Builder's table", "verb": "needs", "cost": {"plank": 4, "log": 2}},
 	]},
 	# Where expeditions are planned and packed (issue #105). It grows into the map room.
 	"board": {"name": "Expedition board", "size": Vector2i(1, 1), "plot": "map room", "stages": [

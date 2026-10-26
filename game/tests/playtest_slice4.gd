@@ -172,7 +172,7 @@ func trip(sim: Sim, ada: Dictionary, by_cart := false) -> Dictionary:
 			if started < 0:
 				started = sim.tick
 				target = ada.job.target
-				norm = Sim.skill_speed(ada, "mine") * Sim.hurt_speed(ada) * (Tuning.DARK_WORK if sim.on_map(OldMine.ID, sim.get_map(OldMine.ID).is_dark.bind(Sim.rcell(ada))) else 1.0) * (Tuning.HUNGRY_SPEED if ada.hunger < Tuning.HUNGRY_BELOW else 1.0)
+				norm = Sim.skill_speed(ada, "mason") * Sim.hurt_speed(ada) * (Tuning.DARK_WORK if sim.on_map(OldMine.ID, sim.get_map(OldMine.ID).is_dark.bind(Sim.rcell(ada))) else 1.0) * (Tuning.HUNGRY_SPEED if ada.hunger < Tuning.HUNGRY_BELOW else 1.0)
 		elif started >= 0 and target != null and not target.alive:
 			work_ticks += float(sim.tick - started) * norm
 			blocks += 1

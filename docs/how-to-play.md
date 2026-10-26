@@ -62,10 +62,11 @@ There are two ways to get work done.
 | **Gather** (E) | Mine (X) | Fell trees and break boulders. Shift-drag marks only trees, Alt-drag (Option on a Mac) only boulders |
 | | Chop trees | Trees only |
 | | Break boulders | Boulders only. Breaking them needs a pickaxe |
+| | Keep | Trees and boulders lumberjacks and stonemasons leave alone on their own rounds (a green ring). They're still worked if you mark them |
 | | Hunt (G) | Sheep, cows and pigs. Shift-drag marks only the kind you start on. Shows while there are animals about |
 | **Paint** (Z) | Stockpile | Ground where residents store what they gather |
 | | Farm plot (P) | Open grass where residents grow wheat |
-| **Build** (B) | Crafting bench (T), House (H), Fireplace (K) | Place a blueprint. R turns it |
+| **Build** (B) | Crafting bench (T), House (H), Fireplace (K), and each job's workstation | Place a blueprint. R turns it |
 | **Craft** (C) | | Opens the Craft panel for your benches and fireplace |
 
 While a toolbar menu is open, **1 to 9** pick its rows, so Z then 1 paints a stockpile. The Gather and Paint buttons show the order that's on, such as "Gather: Hunt". Esc puts the order away.
@@ -86,20 +87,36 @@ While a toolbar menu is open, **1 to 9** pick its rows, so Z then 1 paints a sto
 - any orders you've queued for them;
 - their **Job**, with a dropdown to change it, and a button to the jobs board.
 
-**Jobs.** Every resident has **one job**: Mine, Haul, Build, Craft, Toolsmith, Farm, Cook or Hunt, or none. They do that job's work, and when there's none they carry loose things to the stockpile. **Ada does everything**: whatever's waiting, bench and fireplace work first, then building, then farming, then mining and hunting, then hauling. She covers any job nobody has.
+**Jobs.** Every resident has **one job**: Lumberjack, Stonemason, Haul, Build, Craft, Toolsmith, Farm, Cook or Hunt, or none. They do that job's work, and when there's none they carry loose things to the stockpile. A lumberjack chops trees, and a stonemason breaks boulders and mines ore. **Ada does everything**: whatever's waiting, bench and fireplace work first, then building, then farming, then marked trees, boulders and animals, then hauling. She covers any job nobody has, but she only fells what you've marked.
+
+**Each job needs its workstation.** A resident works their job only from a workstation of their own, one resident to each, so two farmers need two composters. Until there's a free one they haul, and their job reads "Farmer (no composter)". Ada needs none.
+
+| Job | Workstation | Cost |
+|---|---|---|
+| Lumberjack | Chopping block | 4 planks |
+| Stonemason | Mason's bench | 2 planks, 4 cobblestone |
+| Build | Builder's table | 4 planks, 2 logs |
+| Craft | Crafting bench | 4 logs |
+| Toolsmith | Toolsmith's bench | 4 planks, 3 cobblestone (tools are still made at the crafting bench) |
+| Farm | Composter | 4 planks |
+| Cook | Fireplace | 6 cobblestone |
+| Hunt | Hunter's lodge | 6 logs, 2 planks |
+
+A workstation's panel names who works from it ("Tomas's composter"). Giving someone a new job frees their old workstation.
 
 **The village jobs board** (press **J**, or click **Jobs** in the top bar) lists every resident.
-- Click a resident's job (for example "Farmer, level 3 ▾") for the **job dropdown**. It lists each job with their level in it, best first, and how many residents already have it. Choose one to give them that job.
+- Click a resident's job (for example "Farmer, level 3 ▾") for the **job dropdown**. It lists each job with their level in it, best first, how many residents already have it, and whether a workstation for it is free. Choose one to give them that job.
 - The board shows each resident's **level** in every job, with a thin bar of progress to the next. Their own job is lit.
 - A column's header counts the residents with that job, and reads "nobody" in yellow when no one has it. When Ada is away, work of a job nobody has waits, and the stuck list says "No one is a farmer".
 
-New residents arrive in the job they're skilled at.
+New residents arrive in the job they're skilled at, and haul until its workstation is built.
 
 **Skills** grow with practice. Every finished task earns a point in its job, and levels 2 to 5 come at 8, 25, 50 and 90 points. Each level works 15% faster, and some jobs also get better results:
 
 | Job | Better result |
 |---|---|
-| Mine | An extra log or cobblestone per tree or boulder, at levels 3 and 5 |
+| Lumberjack | An extra log per tree, at levels 3 and 5 |
+| Stonemason | An extra cobblestone or ore per boulder or ore block, at levels 3 and 5 |
 | Farm | An extra wheat per harvest, at levels 3 and 5 |
 | Haul | Carries one more, at levels 3 and 5 |
 | Craft | 5 planks from a log instead of 4, at level 4 and up |
@@ -107,6 +124,18 @@ New residents arrive in the job they're skilled at.
 | Toolsmith | Tools last 20% longer per level above 1 |
 
 **New residents** arrive skilled in one job, at level 3, and the toast that announces them says which.
+
+## Lumberjacks, stonemasons and their workstations
+
+A lumberjack or stonemason works whatever you've marked first. With nothing marked, they find their own work around their **workstation**:
+- **Chopping block** (4 planks) for lumberjacks, and **mason's bench** (2 planks, 4 cobblestone) for stonemasons. Build them from the Build menu. Each reserves room for a later upgrade.
+- **Work area:** everything within 8 cells. Selecting the workstation, or placing one, draws it as a dashed circle. Put the workstation where you want the land cleared.
+- **The pile:** the cells beside it hold up to 20 logs or cobblestone. Gatherers carry what they cut there first, which saves the walk to the stockpile. Builders and crafters take from it like a stockpile, and anything over 20 goes to the stockpile.
+- **Keep-stock target:** set in the workstation's panel ("Keep 20 logs", with − and +). Once the village has that many, its gatherers stop cutting so they don't strip the area for nothing.
+- **Left alone:** trees and boulders marked **Keep**, and anything on a building or its reserved plot, a stockpile, farm or pen, or beside a house's door.
+- **Replanting:** a felled tree drops a sapling, sometimes two. Lumberjacks plant saplings on open grass in their chopping block's area. A sapling grows into a full tree in about 5 minutes. Until then it can't be chopped.
+
+The workstation's panel and the stuck list say what's holding it up: "No trees in range", "Target reached", "Full", or a stonemason with no pickaxe.
 
 ## Materials and stockpiles
 
@@ -189,7 +218,7 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 **The site report** (left) says what the village knows about the place: what it has been told, the walk there, and what can be gathered. Until someone has been, there are no estimates and no known hazards.
 
 **Planning:**
-- **Party:** choose 1 to 3 residents. Each shows their Mine level, pickaxe and hunger. Anyone who can't go, such as someone still walking in, says why.
+- **Party:** choose 1 to 3 residents. Each shows their Stonemason level, pickaxe and hunger. Anyone who can't go, such as someone still walking in, says why.
 - **Bring back:** what to gather and how much.
 - **Meals to take** and **spare pickaxes.** One meal each is kept for the walk home, unless you choose **Spend it**.
 - **Packs:** each member carries 15 items. Supplies (yellow) and cargo (blue) share that room, so more food leaves less room for what they bring back.
@@ -240,7 +269,7 @@ The road between the village and the old mine is a map of its own: **Road to the
 
 **Obstacles:**
 - **The stream.** People wade across, slowly. **Build the bridge**, on the signpost's panel, places a plank bridge (12 planks). Residents with Build on carry the planks out from the village and build it. After that there's no more wading, and track can cross.
-- **The rocky cut.** Three boulders stand on the line. **Clear the cut** marks them, and residents with Mine on walk out with their pickaxes to break them. You can also mark them yourself with Gather while looking at the road.
+- **The rocky cut.** Three boulders stand on the line. **Clear the cut** marks them, and stonemasons (and Ada) walk out with their pickaxes to break them. You can also mark them yourself with Gather while looking at the road.
 
 Residents who go out to work on the road walk back to the village when they're done, or when they get hungry.
 

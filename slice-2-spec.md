@@ -115,7 +115,7 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 
 ## 5. Jobs and skills
 
-**Job types:** Mine, Haul, Build, Craft (the bench's planks and sticks), Toolsmith (the bench's tools), Farm, Cook, Hunt.
+**Job types:** Lumberjack, Stonemason, Haul, Build, Craft (the bench's planks and sticks), Toolsmith (the bench's tools), Farm, Cook, Hunt. Lumberjack and Stonemason replaced Mine (#177): Lumberjack works trees and Stonemason works boulders and ore.
 
 **One job each (#134).** This replaces the first decision, an on/off switch and a priority for every job (#47, #78).
 - **Every resident but Ada has one job**, or **No job**. They claim work of that job only.
@@ -123,12 +123,37 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 - **Ada does everything.** She claims every kind of work, in Slice 1's fixed order (station work, then building, farming, gathering, then hauling). Her job reads **Everything**, with no dropdown. She's the generalist who covers whatever nobody has been given, tools queued by hand included.
 - **Each resident has a level** 1 to 5 in every job, rising with experience, whatever their job.
 - **New arrivals** start with the job they're skilled in ("Tomas is a skilled farmer" arrives as a Farmer).
+- **Older saves** (v23, #177): a resident whose job was Mine becomes a Lumberjack, since nobody's trees and boulders were counted apart, so the tie rule applies. Mine's experience is copied to both Lumberjack and Stonemason.
 - **Older saves** (v22): each resident other than Ada gets their switched-on job with the best priority, ties broken by level and then the job list's order, or Haul if all were off. The switches and priorities go.
+
+**Jobs need their workstation (#184).** A resident works their job only once they've claimed a finished workstation of it, like Minecraft's job-site blocks. One resident claims each workstation, so two farmers need two composters.
+
+| Job | Workstation | Cost (provisional) | Reserves room for |
+|---|---|---|---|
+| Lumberjack | Chopping block | 4 planks | Sawmill |
+| Stonemason | Mason's bench | 2 planks, 4 cobblestone | Mason's workshop |
+| Build | Builder's table | 4 planks, 2 logs | Builder's yard |
+| Craft | Crafting bench | 4 logs | Workshop |
+| Toolsmith | Toolsmith's bench | 4 planks, 3 cobblestone | Anvil (once there's iron) |
+| Farm | Composter | 4 planks | Granary |
+| Cook | Fireplace | 6 cobblestone | Kitchen |
+| Hunt | Hunter's lodge | 6 logs, 2 planks | Tannery |
+| Haul | none: always available | | |
+
+- **A workstation isn't a home.** A house's bed is still what brings a traveler and where a resident heals. Building a workstation adds no bed, and a house unlocks no job.
+- **Claiming:** a resident whose job needs a workstation, and who has none, claims the nearest free finished one. Its panel names them ("Tomas's composter"). A new job frees the old workstation. A workstation that's removed frees its resident, who claims another free one if there is one.
+- **No workstation:** the job can still be given. Until one is free the resident hauls, their job reads "Farmer (no composter)", and the stuck list says "Tomas: Build a composter to start work".
+- **Arrivals** come with their skilled job, and haul until its workstation is built.
+- **Ada claims none.** She does everything, at any building.
+- **Where the work happens:** crafters and cooks work at their own claimed station first, then any free one. Lumberjacks and stonemasons work their own workstation's area only. Farmers tend any plot.
+- **Toolsmith:** tools are still made at a crafting bench. The toolsmith's bench is where the toolsmith works from, and spare tools (§6) need a resident toolsmith who has claimed one.
+- **The jobs board and dropdown** show the free workstations: "Farm · level 3 · 1 composter free", or "· no composter". Each column counts the workstations built under the number of residents with the job.
+- **Older saves** (v24): finished benches, fireplaces, chopping blocks and mason's benches go to residents whose jobs match, first come first served. Everyone else hauls, with the reason shown, until one is built.
 
 **Claiming:**
 1. Direct and queued orders first, whatever the job.
 2. Then eating, when hungry (§4).
-3. Then work of their job: for Ada, every job in Slice 1's order.
+3. Then work of their job, once they have its workstation: for Ada, every job in Slice 1's order.
 4. Then hauling.
 
 **Village jobs board (#78, #134).** Everyone's jobs are on one board, opened with **J** (rebindable) or the **Jobs** button in the tally bar, and closed with J, the button or Esc.
@@ -147,7 +172,8 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 
 | Job | Better result |
 |---|---|
-| Mine | +1 log or cobblestone per tree or boulder at levels 3 and 5 |
+| Lumberjack | +1 log per tree at levels 3 and 5 |
+| Stonemason | +1 cobblestone or ore per boulder or ore block at levels 3 and 5 |
 | Farm | +1 wheat per harvest at levels 3 and 5 |
 | Cook | Bread takes 2 wheat instead of 3 at level 4 and up |
 | Toolsmith | Tools get +20% uses per level above 1 |
@@ -157,7 +183,7 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 
 **How skills apply** (#48):
 - **Experience:** a point is earned when a whole task finishes: a tree felled, a stage built, a recipe made, a plot planted or harvested, a sheep hunted, a load hauled or delivered. That's true whether the work was claimed or ordered directly. Carrying to a site counts as Build. Carrying ingredients to a station counts as the recipe's job.
-- **New levels:** reaching one gets a toast, for example "Ada is now level 2 at Mine".
+- **New levels:** reaching one gets a toast, for example "Ada is now level 2 at Lumberjack".
 - **Speed:** the 15% per level applies to the work itself (chopping, building, crafting, planting), not to walking.
 - **Bread at level 4:** a level-4 cook still waits for the recipe's 3 wheat at the fireplace but uses only 2. The spare wheat counts toward the next bread, and when the queue empties it's put back out.
 - **Tools:** a toolsmith's extra uses are rounded. A level-2 wooden pickaxe has 12 uses.
@@ -167,14 +193,28 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 **New arrivals** start at level 1 everywhere except one job, picked by the sim's seeded random number generator, which starts at level 3. A traveler's toast says it ("Tomas is a skilled farmer").
 
 **How work maps to jobs** (#47):
-- **Mine:** marked trees and boulders. **Hunt:** marked sheep. **Farm:** planting and harvesting.
+- **Lumberjack:** marked trees, then their own work at a chopping block (below). **Stonemason:** marked boulders, then their own work at a mason's bench, and mining at the old mine and surveying the vein. **Hunt:** marked sheep. **Farm:** planting and harvesting.
 - **Build:** building, and carrying materials to construction sites.
 - **Craft / Toolsmith / Cook:** making and carrying ingredients for station recipes. Planks and sticks are Craft, tools are Toolsmith, fireplace recipes are Cook. A Crafter makes the planks and sticks queued ahead of a pickaxe and leaves the pickaxe itself.
 - **Haul:** carrying loose items to stockpiles.
-- Ada's order is: station work (Craft, Toolsmith, Cook), then Build, then Farm, then Mine and Hunt (nearest first), then Haul.
+- Ada's order is: station work (Craft, Toolsmith, Cook), then Build, then Farm, then marked trees, boulders and animals (nearest first), then Haul. She never fells or breaks anything unmarked.
 - A new job stops work of the old one.
-- "No one is a farmer" (or miner, cook, and so on) appears in the stuck list when there's work of that job, no resident has it, and Ada can't see to it: she's away, on another map, resting or packing for an expedition.
+- "No one is a farmer" (or lumberjack, cook, and so on) appears in the stuck list when there's work of that job, no resident has it, and Ada can't see to it: she's away, on another map, resting or packing for an expedition.
 - A party member keeps their job while away (#106). It applies again once they're back.
+
+**Workstations: the chopping block and the mason's bench (#177).** A lumberjack or stonemason with no marked work finds their own, but only around a workstation the player has built.
+- **The buildings:** the chopping block (4 planks) and the mason's bench (2 planks, 4 cobblestone) are 1×1, from the Build menu. Each reserves a 3×3 plot for its upgrade, a sawmill or a mason's workshop (§8).
+- **Work area:** everything within 8 cells of the workstation. It's drawn as a dashed chalk circle while the workstation is selected or being placed.
+- **Their own work**, once nothing marked is left, in this order:
+  1. carry logs or cobblestone lying in a work area to the workstation's pile;
+  2. a lumberjack plants saplings (below);
+  3. fell the nearest unmarked tree, or break the nearest unmarked boulder, in a work area.
+- **Pile:** the two cells beside the workstation, inside its plot, hold up to 20 logs or cobblestone. Haulers carry logs and cobblestone to the nearest pile with room before the stockpile, and anything over goes to the stockpile. Builders, crafters and packing take from a pile like a stockpile.
+- **Keep-stock target:** each workstation keeps 20 by default, set in steps of 5 in its panel. Gatherers stop their own work once the village has that many (piles, stockpiles and loose items together). Marked work goes on regardless.
+- **Protected land:** a gatherer's own work never takes a tree or boulder that's marked **Keep**, or that stands in a building's footprint or reserved plot, on a stockpile, farm or pen, or beside a house's door. **Keep** is a Gather order (click or drag; clicking a kept one unmarks it) and a toggle in a tree's or boulder's panel. A kept tree shows a green ring. Kept trees are still felled when marked.
+- **Ada** works marked trees and boulders but never makes her own work, so she never clears the land on her own.
+- **Saplings (settles #22 for village trees):** a felled tree drops 1 sapling, with a 30% chance of a second. A lumberjack plants saplings on open grass in a chopping block's work area. The spot must be off protected land and off the map's edge, at least 3 cells from another tree and 2 from a boulder. A sapling grows into a full tree in 5 minutes: it shows as a sapling, then a young tree at half-time, then a full tree. Until then it can't be marked or chopped, though it blocks the way like a tree. A blueprint placed over a sapling lifts it back into a sapling item. Saplings are stockpiled and hauled like anything else.
+- **The workstation's panel** shows its pile, its target, the resident who has claimed it (#184), and its stuck reasons.
 
 **Character panel.** The resident panel first had a **Jobs** grid (#47). The Village jobs board (#78, above) replaced it; the panel has the job dropdown and a button to the board.
 
@@ -239,6 +279,8 @@ Once a crafting bench is finished, a **Craft** button appears in the orders tool
 |---|---|---|
 | Fireplace (1×1) | Kitchen | 3×3, fireplace at its back wall |
 | Crafting bench (1×1) | Workshop | 3×3, bench at its back wall, for benches placed from Slice 2 on |
+| Chopping block (1×1, #177) | Sawmill | 3×3, block at its back wall; its pile sits on the two cells beside it |
+| Mason's bench (1×1, #177) | Mason's workshop | 3×3, bench at its back wall; its pile sits on the two cells beside it |
 
 A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgraded later only if the 3×3 around it happens to be clear.
 
@@ -246,6 +288,10 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 |---|---|---|
 | Bed | House stage 4 | 3 wool, 3 planks |
 | Fireplace | Build menu, K | 6 cobblestone (reserves a 3×3 kitchen plot) |
+| Chopping block | Build menu (#177) | 4 planks (reserves a 3×3 sawmill plot) |
+| Mason's bench | Build menu (#177) | 2 planks, 4 cobblestone (reserves a 3×3 mason's workshop plot) |
+| Keep mark | Gather menu, Keep (click or drag) | — |
+| Toolsmith's bench, composter, hunter's lodge, builder's table | Build menu (#184) | See §5 |
 | Farm plot | Farm order, P (drag) | free |
 | Hunt mark | Hunt order, G (click or drag) | — |
 | Meadow trip | Resident panel: Send to the meadow | — |
@@ -259,6 +305,8 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 - "Toolsmith needs N more X for a spare Y".
 - "No one is a farmer" (or hunter, cook, and so on), when there's work of that type, no resident has the job, and Ada can't see to it (§5, #134).
 - "Meadow has no sheep left", when a trip is planned.
+- Workstations (#177): "Chopping block: No trees in range. Plant saplings or move the chopping block", "Mason's bench: No boulders in range", and "Stonemason: no pickaxe" on a stonemason with none to pick up. Waiting, not stuck: "Target reached (20 cobblestone)", "Full (20 logs)" (the overflow goes to the stockpile), "Saplings growing: no grown trees in range yet", and "No lumberjack to work it" while no one has claimed it.
+- "Tomas: Build a composter to start work", for a resident whose job has no free workstation (#184).
 
 **Stuck and waiting (#77).** The stuck list has two tiers:
 - **Stuck:** work that can't go on. These entries get a yellow flag in the list and on the map, and the list puts the longest-stuck first. An entry keeps its age while only its count changes ("4 more planks" becoming "3 more planks").
@@ -277,6 +325,8 @@ Taken together, the upgrade steps:
 - Gives existing residents every job on at priority 2 (v9→v10, #47).
 - Gives existing residents level 1 in every job (v10→v11, #48).
 - Gives each resident one job, and Ada Everything, in place of the switches and priorities (v21→v22, #134; see §5).
+- Hands existing benches, fireplaces, chopping blocks and mason's benches to residents whose jobs match (v23→v24, #184; see §5).
+- Turns a Mine resident into a Lumberjack, with Mine's experience in both Lumberjack and Stonemason (v22→v23, #177; see §5). No village has a workstation, sapling or Keep mark yet.
 - Marks no tools as chosen (v11→v12, equipping).
 - Gives older saves a full meadow with nobody away (v12→v13, #50).
 - Swaps each resident's old tunic for the new colour in the same place on the list (v13→v14, #79).
@@ -299,12 +349,12 @@ Taken together, the upgrade steps:
 | K | Place a fireplace |
 | A drag that starts on a painted cell | Erase that zone: stockpile cells (#63) or farm plots (#93) |
 
-All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees, Break boulders and Stockpile have actions with no default key. Settings files from before #93 hand Z from Stockpile to the Paint menu. A new default key the player has already given to something else is left with them, and the new action starts with no key.
+All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees, Break boulders, Keep, Stockpile and the workstations from #177 and #184 have actions with no default key. Settings files from before #93 hand Z from Stockpile to the Paint menu. A new default key the player has already given to something else is left with them, and the new action starts with no key.
 
 **Orders toolbar (#93, #94).** The toolbar is **Gather ▸ · Paint ▸ · Build ▸ · Craft**. This replaces Slice 1's Mine, Hunt, Stockpile and Farm buttons (slice-1-spec.md §10, §12).
 - **Menus:** Gather, Paint and Build each open a small menu above the toolbar, all built from one control and one data table, so a later order is a new row rather than a new button. Each row shows the order's mark, its name, a line about it, its number in the menu, and its direct key if it has one.
 - **Picking a row** switches that order on (or starts placing that building) and closes the menu. Unlike the direct keys, picking the order that's already on leaves it on.
-- **Gather:** Mine (trees and boulders), Chop trees (trees only), Break boulders (boulders only; the stuck list still says "Needs a pickaxe"), and Hunt, which shows while there are live sheep. Shift-drag and Alt-drag still limit Mine to trees or boulders.
+- **Gather:** Mine (trees and boulders), Chop trees (trees only), Break boulders (boulders only; the stuck list still says "Needs a pickaxe"), Keep (in the village, #177), and Hunt, which shows while there are live sheep. Shift-drag and Alt-drag still limit Mine to trees or boulders.
 - **Paint:** Stockpile and Farm plot. Farming is available from the start, so Farm plot always shows.
 - **What's on:** while one of its orders is on, the Gather or Paint button names it, as in "Gather: Hunt" or "Paint: Farm plot", and shows that order's mark. Otherwise the button reads "Gather ▸" or "Paint ▸".
 - **Right-click** with residents selected still orders them while any Gather or Paint order is on, and leaves the order on. With a menu open, right-click closes it.
@@ -345,6 +395,11 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 | `skill_levels` | 8, 25, 50, 90 points |
 | `skill_speed` | +15% per level above 1 |
 | `arrival_delay` | 45 s per free bed |
+| `work_radius` | 8 cells around a chopping block or mason's bench (#177) |
+| `work_store` | 20 logs or cobblestone in a workstation's pile |
+| `keep_stock` / `keep_step` | 20 by default / steps of 5 |
+| `saplings` / `sapling_extra` | 1 per felled tree / 30% chance of a second |
+| `sapling_grow` / `plant_tree_time` | 300 s / 2 s |
 
 ## 13. Open questions (not blocking the start)
 

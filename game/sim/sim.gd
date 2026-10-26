@@ -80,6 +80,7 @@ var pending: Array = []
 var cart := {}
 var stuck: Array = []        ## {who, why, map, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
 var _fence_claims := {}      ## Vector2i -> the resident putting up that pen fence (issue #139). Not saved.
+var _plant_claims := {}      ## Vector2i -> the lumberjack going to plant a sapling there (issue #177). Not saved.
 var _stuck_since := {}       ## A stuck entry's key -> the tick it first showed, to order the list (issue #77). Not saved.
 var events: Array = []       ## {type: "toast", text, res_id, site_id, map}
 var rev := 0
@@ -224,14 +225,72 @@ static func default_jobs() -> Dictionary:
 
 
 ## Whether a resident claims work of a job (issue #134): Ada ("all") claims every kind, and everyone
-## else their one job, then hauling when there's none.
-static func works(r: Dictionary, job: String) -> bool:
-	return r.role == "all" or r.role == job or job == "haul"
+## else their one job, once they've claimed its workstation (issue #184), then hauling.
+func works(r: Dictionary, job: String) -> bool:
+	if r.role == "all" or job == "haul":
+		return true
+	return r.role == job and not claimed(r).is_empty()
 
 
 ## The jobs whose work a resident claims, in Defs.JOBS order.
-static func job_list(r: Dictionary) -> Array:
+func job_list(r: Dictionary) -> Array:
 	return Defs.JOBS.filter(func(jb): return works(r, jb))
+
+
+## The finished workstation a resident has claimed (issue #184), or {}. Ada claims none.
+func claimed(r: Dictionary) -> Dictionary:
+	if r.role == "all" or not Defs.JOB_STATIONS.has(r.role):
+		return {}
+	for st in maps.village.sites:
+		if st.done and st.get("worker", 0) == r.id:
+			return st
+	return {}
+
+
+## Whether a resident's job is waiting on a workstation: they have one that needs it, and none is theirs.
+func needs_station(r: Dictionary) -> bool:
+	return r.role != "all" and Defs.JOB_STATIONS.has(r.role) and claimed(r).is_empty()
+
+
+## Hands out workstations (issue #184), one resident to each. A workstation whose resident is gone, has
+## another job now, or which isn't finished is freed; then each resident whose job needs one and who has
+## none claims the nearest free one.
+func assign_workstations() -> void:
+	var vm: SimMap = maps.village
+	var changed := false
+	for st in vm.sites:
+		var wid: int = st.get("worker", 0)
+		if wid == 0:
+			continue
+		var r := resident(wid)
+		if r.is_empty() or not st.done or Defs.JOB_STATIONS.get(r.role, "") != st.tpl:
+			st.worker = 0
+			changed = true
+	for r in residents:
+		if not needs_station(r):
+			continue
+		var free: Array = vm.sites.filter(func(st): return st.done and st.tpl == Defs.JOB_STATIONS[r.role] and st.get("worker", 0) == 0)
+		if free.is_empty():
+			continue
+		var best: Dictionary = _nearest_site(free, rcell(r))
+		best.worker = r.id
+		changed = true
+	if changed:
+		rev += 1
+
+
+## "Farmer", or with no workstation of their own, "Farmer (no composter)".
+func role_text(r: Dictionary) -> String:
+	if needs_station(r):
+		return "%s (no %s)" % [role_name(r), Defs.TEMPLATES[Defs.JOB_STATIONS[r.role]].name.to_lower()]
+	return role_name(r)
+
+
+## A workstation's name with its resident's: "Bram's composter", or just "Composter" while it's free.
+func station_title(st: Dictionary) -> String:
+	var r := resident(st.get("worker", 0))
+	var tname: String = Defs.TEMPLATES[st.tpl].name
+	return tname if r.is_empty() else "%s's %s" % [r.name, tname.substr(0, 1).to_lower() + tname.substr(1)]
 
 
 ## "Farmer", "Everything" for Ada, or "No job".
@@ -620,6 +679,11 @@ static func clearing_text(o: Dictionary) -> String:
 func _mark_obstacles(s: Dictionary) -> void:
 	var o := site_obstacles(s)
 	for t in o.trees + o.boulders:
+		if not grown(t):  # a sapling in the way is lifted, not felled (issue #177)
+			t.alive = false
+			_occ_dirty = true
+			drop_items(t.cell, "sapling", 1)
+			continue
 		if not t.des:
 			t.des = true
 			t.unreach_until = 0
@@ -721,11 +785,24 @@ func _clear_footprint(s: Dictionary) -> void:
 
 
 func _on_site_done(s: Dictionary) -> void:
+	assign_workstations()
+	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
+		var job: String = Defs.JOB_STATIONS.find_key(s.tpl)
+		var who := resident(s.get("worker", 0))
+		_toast("The %s is ready. %s" % [Defs.TEMPLATES[s.tpl].name.to_lower(),
+			"%s works from it as the %s." % [who.name, Defs.JOB_SKILLED[job]] if not who.is_empty() else "A %s can work from it." % Defs.JOB_SKILLED[job]], 0, s.id)
+		return
 	if s.tpl == "bench":
 		_toast("The crafting bench is ready. Select it to queue crafts.", 0, s.id)
 		return
 	if s.tpl == "fireplace":
 		_toast("The fireplace is lit. It keeps %d meals in stock when there's wheat or mutton." % Tuning.MEAL_STOCK, 0, s.id)
+		return
+	if not work_of(s).is_empty():
+		var wk := work_of(s)
+		_toast("The %s is ready. %ss %s within %d cells of it on their own, until the village has %d %s." % [
+			Defs.TEMPLATES[s.tpl].name.to_lower(), Defs.JOB_NAMES[wk.job], "fell trees" if wk.kind == "tree" else "break boulders",
+			int(Tuning.WORK_RADIUS), s.keep, Defs.ITEMS[wk.item].many], 0, s.id)
 		return
 	if s.tpl == "bridge":
 		_toast("The bridge over the stream is built: no more wading, and track can cross.", 0, s.id)
@@ -829,7 +906,7 @@ const TOOL_NAMES := {"axe": "axe", "pick": "pickaxe"}
 
 ## Whether a resident's job is Toolsmith. Ada doesn't count: spares need a toolsmith of their own (issue #134).
 func has_toolsmith() -> bool:
-	return residents.any(func(r): return r.role == "toolsmith")
+	return residents.any(func(r): return r.role == "toolsmith" and not claimed(r).is_empty())
 
 
 ## Whether a "(toolsmith)" entry for this tool kind is queued at any bench.
@@ -879,12 +956,14 @@ func keep_tools_stocked() -> void:
 ## The fireplace's standing order (spec §4): while stored meals are fewer than MEAL_STOCK, queue
 ## one meal whose inputs exist, bread first. One at a time, so it never queues what it can't make.
 func keep_meals_stocked() -> void:
-	var meals := 0
-	for meal in Defs.MEALS:
-		meals += free_count(meal)
+	var meals := -1  # counted once a fireplace needs it: every claim asks, with or without one
 	for f in m.sites:
 		if not (f.done and f.tpl == "fireplace" and f.get("keep_meals", true)):
 			continue
+		if meals < 0:
+			meals = 0
+			for meal in Defs.MEALS:
+				meals += free_count(meal)
 		if f.autoq.has(true):
 			meals += 1  # already making one
 			continue
@@ -903,6 +982,233 @@ func keep_meals_stocked() -> void:
 				break
 
 
+# ---------------------------------------------------------------- workstations (issue #177)
+
+## Which job works a tree or a boulder: Lumberjack for trees, Stonemason for boulders and ore.
+static func gather_job_of(target: Dictionary) -> String:
+	return "lumber" if target.kind == "tree" else "mason"
+
+
+## A building's workstation: {job, kind, item}, or {} for a building that isn't one.
+static func work_of(s: Dictionary) -> Dictionary:
+	return Defs.TEMPLATES[s.tpl].get("work", {})
+
+
+## Whether `c` is in a workstation's work area.
+static func in_area(s: Dictionary, c: Vector2i) -> bool:
+	return Vector2(c).distance_to(Vector2(s.origin)) <= Tuning.WORK_RADIUS
+
+
+## The two cells beside a workstation, inside its plot, where its pile goes.
+static func pile_cells(s: Dictionary) -> Array:
+	var side: Vector2i = [Vector2i(1, 0), Vector2i(0, 1)][int(s.get("rot", 0)) % 2]
+	return [s.origin + side, s.origin - side]
+
+
+## The finished workstation whose pile is on `c`, or null.
+func pile_at(c: Vector2i):
+	for s in m.sites:
+		if s.done and not work_of(s).is_empty() and pile_cells(s).has(c):
+			return s
+	return null
+
+
+## Logs or cobblestone in a workstation's pile.
+func pile_count(s: Dictionary) -> int:
+	var n := 0
+	for c in pile_cells(s):
+		var it = m.items.get(c)
+		if it != null and it.type == work_of(s).item:
+			n += it.n
+	return n
+
+
+## Every finished workstation's pile cells, as cell -> workstation: `pile_at` for many cells at once.
+func pile_map() -> Dictionary:
+	var out := {}
+	for s in m.sites:
+		if s.done and not work_of(s).is_empty():
+			for c in pile_cells(s):
+				if not out.has(c):
+					out[c] = s
+	return out
+
+
+## Whether a stack is put away: in a stockpile, or in the pile of a workstation that keeps its type.
+## A caller checking many stacks passes `pile_map()`, worked out once.
+func stored(st: Dictionary, piles = null) -> bool:
+	if in_zone(st.cell):
+		return true
+	var ws = pile_at(st.cell) if piles == null else piles.get(st.cell)
+	return ws != null and work_of(ws).item == st.type
+
+
+## The nearest workstation pile to `c` with room for `type`, as {site, cell, room}, or null.
+func pile_dest(type: String, c: Vector2i):
+	if _occ_dirty:
+		_recompute_occ()
+	var best = null
+	var bd := 1 << 30
+	for s in m.sites:
+		if not s.done or work_of(s).get("item", "") != type or manhattan(s.origin, c) >= bd:
+			continue
+		var room: int = Tuning.WORK_STORE - pile_count(s) - s.incoming.get(type, 0)
+		if room <= 0:
+			continue
+		for pc in pile_cells(s):
+			var it = m.items.get(pc)
+			if m.zone_res.has(pc) or not walkable(pc) or (it != null and (it.type != type or it.n >= Defs.stack_cap(type))):
+				continue
+			best = {"site": s, "cell": pc, "room": mini(room, Defs.stack_cap(type) - (it.n if it != null else 0))}
+			bd = manhattan(s.origin, c)
+			break
+	return best
+
+
+## Whether the land at `c` is kept from gatherers' own work and from planting: a building or its
+## reserved plot, a stockpile, a farm or a pen, or beside a house's door.
+func protected_cell(c: Vector2i) -> bool:
+	if site_at(c) != null or reserved_at(c) != null or m.zone.has(c) or m.farm.has(c) or pen_at(c) != null:
+		return true
+	for s in m.sites:
+		if s.tpl == "house":
+			var d := door_cell(s.origin, s.rot)
+			if absi(c.x - d.x) <= 1 and absi(c.y - d.y) <= 1:
+				return true
+	return false
+
+
+## Whether a tree or boulder is kept from gatherers' own work: marked Keep, or on protected land.
+func protected(t: Dictionary) -> bool:
+	return t.get("keep", false) or protected_cell(t.cell)
+
+
+## A full-grown tree, or any boulder. A sapling counts up its `grow` seconds; a full tree has none.
+static func grown(t: Dictionary) -> bool:
+	return t.get("grow", -1.0) < 0.0
+
+
+## How grown a tree is: 0 a sapling, 1 a young tree, 2 full grown.
+static func tree_stage(t: Dictionary) -> int:
+	if grown(t):
+		return 2
+	return 0 if t.grow < Tuning.SAPLING_GROW / 2.0 else 1
+
+
+## Unmarked trees or boulders gatherers take on their own: grown, not protected, and in the work area
+## of one of `stations` whose keep-stock target the village hasn't reached.
+func auto_targets(stations: Array) -> Array:
+	var out: Array = []
+	for s in stations:
+		var w := work_of(s)
+		if free_count(w.item) >= s.keep:
+			continue
+		for t in (m.trees if w.kind == "tree" else m.boulders):
+			if t.alive and not t.des and t.claim == 0 and grown(t) and not t.get("hidden", false) and not _cooling(t) and in_area(s, t.cell) and not protected(t) and not out.any(func(o): return is_same(o, t)):
+				out.append(t)
+	return out
+
+
+## A gatherer's own work at their job's workstations, once nothing marked is left: carry what lies in a
+## work area to a pile, plant saplings (lumberjacks), then fell or break the nearest of auto_targets.
+func _workstation_job(r: Dictionary, c: Vector2i):
+	var job: String = r.role
+	var own := claimed(r)  # their own workstation's area only (issue #184)
+	if own.is_empty() or work_of(own).is_empty():
+		return null
+	var stations := [own]
+	var item: String = work_of(stations[0]).item
+	var piles := pile_map()
+	var loose := stacks_where(func(st): return st.type == item and avail(st) > 0 and not stored(st, piles) and stations.any(func(s): return in_area(s, st.cell)))
+	if not loose.is_empty():
+		var ls: Dictionary = nearest(loose, c)
+		var pd = pile_dest(item, ls.cell)
+		if pd != null:
+			return _tagged(_haul_job(r, ls, pd.cell, mini(mini(avail(ls), carry_cap(r)), pd.room), pd.site), job)
+	if job == "lumber":
+		var pj = _plant_job(r, c, stations)
+		if pj != null:
+			return pj
+	if r.get("hurt", 0) > 0:
+		return null
+	if job == "lumber" and r.broken.axe and tool_items("axe", 0).is_empty():
+		return null
+	if job == "mason" and r.pick == null and tool_items("pick", 0).is_empty():
+		return null
+	var targets := auto_targets(stations)
+	if targets.is_empty():
+		return null
+	return _gather_job(r, nearest(targets, c))
+
+
+## The nearest cell to `c` where a lumberjack may plant a sapling: open grass in a chopping block's work
+## area, off protected land and the map's edge, and clear of other trees' canopies. Null if none.
+func plant_cell(stations: Array, c: Vector2i):
+	if _occ_dirty:
+		_recompute_occ()
+	var best = null
+	var bd := 1 << 30
+	var rr := ceili(Tuning.WORK_RADIUS)
+	for s in stations:
+		for dx in range(-rr, rr + 1):
+			for dy in range(-rr, rr + 1):
+				var p: Vector2i = s.origin + Vector2i(dx, dy)
+				var d := manhattan(p, c)
+				if d >= bd or p.x < 1 or p.y < 1 or p.x >= w - 1 or p.y >= h - 1 or not in_area(s, p):
+					continue
+				if not walkable(p) or m.items.has(p) or _plant_claims.has(p) or p == meadow_sign() or p == route_sign() or protected_cell(p):
+					continue
+				if m.trees.any(func(t): return t.alive and absi(t.cell.x - p.x) <= 2 and absi(t.cell.y - p.y) <= 2):
+					continue
+				if m.boulders.any(func(b): return b.alive and absi(b.cell.x - p.x) <= 1 and absi(b.cell.y - p.y) <= 1):
+					continue
+				best = p
+				bd = d
+	return best
+
+
+## Fetching a sapling and planting it in a chopping block's work area.
+func _plant_job(r: Dictionary, c: Vector2i, stations: Array):
+	var saps := stacks_where(func(st): return st.type == "sapling" and avail(st) > 0)
+	if saps.is_empty():
+		return null
+	var cell = plant_cell(stations, c)
+	if cell == null:
+		return null
+	var st: Dictionary = nearest(saps, c)
+	var j := Job.new("plant", "Going to plant a sapling", "that spot")
+	j.work = "lumber"
+	st.res += 1
+	var sh := j.hold({"t": "stack", "stack": st, "n": 1})
+	_plant_claims[cell] = r.id
+	j.hold({"t": "plant", "cell": cell})
+	j.step(_goto([st.cell], false))
+	j.step({"op": "pickup", "stack": st, "n": 1, "hold": sh})
+	j.step(_goto([cell], true))
+	j.step({"op": "work", "what": "plant_tree", "cell": cell, "label": "Planting a sapling"})
+	return j
+
+
+## Sets a workstation's keep-stock target: its gatherers stop once the village has this many.
+func set_keep_stock(s: Dictionary, n: int) -> void:
+	s.keep = maxi(0, n)
+	rev += 1
+
+
+## Marks trees and boulders in `rect` Keep: gatherers never take them on their own, though they're still
+## worked when marked. A single click on a kept one (pass it as `single`) unmarks it instead.
+func designate_keep(rect: Rect2i, single = null) -> void:
+	var hit: Array = [single] if single != null else (m.trees + m.boulders).filter(func(o): return o.alive and not o.get("hidden", false) and rect.has_point(o.cell))
+	var all_on := not hit.is_empty() and hit.all(func(o): return o.get("keep", false))
+	for o in hit:
+		o.keep = not (single != null and all_on)
+		if o.keep and not o.des and o.claim != 0:  # a gatherer was on the way to it unasked
+			var r := resident(o.claim)
+			if not r.is_empty() and r.job != null and is_same(r.job.target, o):
+				fail_job(r)
+	rev += 1
+
+
 # ---------------------------------------------------------------- jobs
 
 func _goto(cells: Array, adjacent: bool) -> Dictionary:
@@ -914,7 +1220,7 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 	var kind := "axe" if is_tree else "pick"
 	var j := Job.new("gather", "Going to chop a tree" if is_tree else "Going to break a boulder",
 		"this tree" if is_tree else "this boulder")
-	j.work = "mine"
+	j.work = gather_job_of(target)
 	j.target = target
 	target.claim = r.id
 	j.hold({"t": "claim", "ent": target})
@@ -1072,8 +1378,8 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl == "board":
-		label = "Building the expedition board"
+	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table"]:
+		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
 	elif s.tpl == "track":
@@ -1096,16 +1402,22 @@ func _craft_job(r: Dictionary, b: Dictionary, rec: Dictionary) -> Job:
 	return j
 
 
-func _haul_job(r: Dictionary, stack: Dictionary, dest: Vector2i, n: int) -> Job:
-	var j := Job.new("haul", "Hauling %s to the stockpile" % Defs.ITEMS[stack.type].many, "the stockpile")
+## Carrying a stack to a stockpile cell, or to a workstation's pile (`pile`, issue #177).
+func _haul_job(r: Dictionary, stack: Dictionary, dest: Vector2i, n: int, pile := {}) -> Job:
+	var where: String = "the stockpile" if pile.is_empty() else "the " + Defs.TEMPLATES[pile.tpl].name.to_lower()
+	var j := Job.new("haul", "Hauling %s to %s" % [Defs.ITEMS[stack.type].many, where], where)
 	stack.res += n
 	m.zone_res[dest] = r.id
 	var sh := j.hold({"t": "stack", "stack": stack, "n": n})
 	var zh := j.hold({"t": "zone", "cell": dest})
+	var drop := {"op": "haul_drop", "cell": dest, "type": stack.type, "n": n, "hold": zh}
+	if not pile.is_empty():
+		pile.incoming[stack.type] = pile.incoming.get(stack.type, 0) + n
+		drop.pile_hold = j.hold({"t": "incoming", "site": pile, "type": stack.type, "n": n})
 	j.step(_goto([stack.cell], false))
 	j.step({"op": "pickup", "stack": stack, "n": n, "hold": sh})
 	j.step(_goto([dest], false))
-	j.step({"op": "haul_drop", "cell": dest, "type": stack.type, "n": n, "hold": zh})
+	j.step(drop)
 	return j
 
 
@@ -1132,6 +1444,9 @@ func _release(r: Dictionary, j: Job) -> void:
 			"fence":
 				if _fence_claims.get(hd.cell, 0) == r.id:
 					_fence_claims.erase(hd.cell)
+			"plant":
+				if _plant_claims.get(hd.cell, 0) == r.id:
+					_plant_claims.erase(hd.cell)
 			"builder":
 				if hd.site.builder == r.id:
 					hd.site.builder = 0
@@ -1307,6 +1622,9 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			if r.carry == null:
 				return "gone"
 			j.holds.erase(st.hold)
+			if st.has("pile_hold"):
+				st.pile_hold.site.incoming[st.type] -= st.n
+				j.holds.erase(st.pile_hold)
 			drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
 			r.carry = null
 			return true
@@ -1549,6 +1867,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.HUNT_TIME
 		"plant":
 			return Tuning.PLANT_TIME
+		"plant_tree":
+			return Tuning.PLANT_TREE_TIME
 		"harvest":
 			return Tuning.HARVEST_TIME
 		"eat", "graze":
@@ -1577,13 +1897,15 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			t.des = false
 			_occ_dirty = true
 			if t.kind == "tree":
-				drop_items(t.cell, "log", t.logs + skill_bonus(r, "mine"))
+				drop_items(t.cell, "log", t.logs + skill_bonus(r, "lumber"))
+				var saplings := Tuning.SAPLINGS + (1 if rng.randf() < Tuning.SAPLING_EXTRA else 0)
+				drop_items(t.cell, "sapling", saplings)  # issue #177
 				stats.felled += 1
 			elif t.has("ore"):  # an ore block (issue #103); it never comes back (issue #102)
-				drop_items(t.cell, Defs.ORES[t.ore].item, Tuning.ORE_YIELD[t.ore] + skill_bonus(r, "mine"))
+				drop_items(t.cell, Defs.ORES[t.ore].item, Tuning.ORE_YIELD[t.ore] + skill_bonus(r, "mason"))
 				stats.ore_mined = stats.get("ore_mined", 0) + 1
 			else:
-				drop_items(t.cell, "cobble", Tuning.BOULDER_COBBLE + skill_bonus(r, "mine"))
+				drop_items(t.cell, "cobble", Tuning.BOULDER_COBBLE + skill_bonus(r, "mason"))
 				stats.broken_boulders += 1
 			_wear(r, st.tool)
 			if t.get("loose", false):  # issue #110
@@ -1624,6 +1946,16 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				return "gone"
 			crop.grow = 0.0
 			stats.planted = stats.get("planted", 0) + 1
+			rev += 1
+		"plant_tree":  # issue #177
+			var pc: Vector2i = st.cell
+			if r.carry == null or r.carry.type != "sapling" or not walkable(pc) or m.items.has(pc) or residents.any(func(o): return o.map == map_id and rcell(o) == pc) or m.sheep.any(func(a): return a.alive and a.cell == pc):
+				return "gone"
+			r.carry = null
+			m.trees.append({"id": _id(), "kind": "tree", "cell": pc, "logs": 4 + (next_id * 7) % 3, "alive": true, "des": false,
+				"claim": 0, "unreach_until": 0, "grow": 0.0})
+			_occ_dirty = true
+			stats.trees_planted = stats.get("trees_planted", 0) + 1
 			rev += 1
 		"harvest":
 			var crop: Dictionary = st.target
@@ -1772,7 +2104,8 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 				return null
 			var benches := m.sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty() and s.crafter == 0 and not bench_craftable(s, st_jobs).is_empty() and not _cooling(s))
 			if not benches.is_empty():
-				var b: Dictionary = _nearest_site(benches, c)
+				var own := claimed(r)  # their own station first, then any free one (issue #184)
+				var b: Dictionary = own if benches.any(func(x): return is_same(x, own)) else _nearest_site(benches, c)
 				var rec := bench_craftable(b, st_jobs)
 				return _tagged(_craft_job(r, b, rec), recipe_job(rec))
 			var dj = _try_deliver(r, c, m.sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty()), st_jobs)
@@ -1796,11 +2129,13 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 				return _tagged(_farm_job(r, crop), "farm")
 		"gather":
 			var targets: Array = []
-			if jobs.has("mine") and r.get("hurt", 0) == 0:  # the injured can't mine (issue #110)
+			var can_gather: bool = r.get("hurt", 0) == 0  # the injured can't chop or mine (issue #110)
+			if jobs.has("lumber") and can_gather:
 				if not r.broken.axe or not tool_items("axe", 0).is_empty():
 					for t in m.trees:
 						if t.alive and t.des and t.claim == 0 and not _cooling(t):
 							targets.append(t)
+			if jobs.has("mason") and can_gather:
 				if r.pick != null or not tool_items("pick", 0).is_empty():
 					for b in m.boulders:
 						if b.alive and b.des and b.claim == 0 and not _cooling(b):
@@ -1811,21 +2146,23 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 						targets.append(sh)
 			if not targets.is_empty():
 				var t: Dictionary = nearest(targets, c)
-				return _tagged(_hunt_job(r, t), "hunt") if t.kind == "animal" else _tagged(_gather_job(r, t), "mine")
+				return _tagged(_hunt_job(r, t), "hunt") if t.kind == "animal" else _gather_job(r, t)
 			var rj = _road_claim(r, "gather", jobs)
 			if rj != null:
-				return _tagged(rj, "mine")
+				return rj
+			if r.role != "all":  # a gatherer's own work at their workstation; never Ada's (issue #177)
+				var wj = _workstation_job(r, c)
+				if wj != null:
+					return wj
 		"haul":
 			if not jobs.has("haul"):
 				return null
 			var pj = _pack_job(r, c)  # packing for an expedition comes before the stockpile
 			if pj != null:
 				return _tagged(pj, "haul")
-			if m.zone.is_empty():
-				return _road_claim(r, "haul", jobs)
 			var hs = _haul_source(c, carry_cap(r))
 			if hs != null:
-				return _tagged(_haul_job(r, hs.stack, hs.dest, hs.n), "haul")
+				return _tagged(_haul_job(r, hs.stack, hs.dest, hs.n, hs.get("pile", {})), "haul")
 			return _road_claim(r, "haul", jobs)
 	return null
 
@@ -1837,11 +2174,27 @@ func _tagged(j: Job, work: String) -> Job:
 
 ## The nearest loose stack that has room in a stockpile (unloaded cargo first), as {stack, dest, n}, or null.
 func _haul_source(c: Vector2i, carry := Tuning.CARRY):
-	var loose := stacks_where(func(s): return avail(s) > 0 and not in_zone(s.cell))
+	var piles := pile_map()
+	var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s, piles))
+	# Where a type can go is worked out once a type, not once a stack, and before sorting: an idle
+	# hauler with a full stockpile asks every tick, so finding nowhere to go has to cost little.
+	var dests := {}  # type -> a stockpile cell with room for it, or null
+	var piled := {}  # type -> whether a workstation's pile keeps it with room (issue #177)
+	var anywhere := false
+	for ls in loose:
+		if not dests.has(ls.type):
+			dests[ls.type] = zone_dest(ls.type)
+			piled[ls.type] = pile_dest(ls.type, c) != null
+			anywhere = anywhere or dests[ls.type] != null or piled[ls.type]
+	if not anywhere:
+		return null
 	# An expedition's unloaded cargo goes first (issue #112), then the nearest.
 	loose.sort_custom(func(a, b): return a.get("cargo", false) and not b.get("cargo", false) or (a.get("cargo", false) == b.get("cargo", false) and manhattan(a.cell, c) < manhattan(b.cell, c)))
 	for ls in loose:
-		var dest = zone_dest(ls.type)
+		var pd = pile_dest(ls.type, ls.cell) if piled[ls.type] else null  # a workstation's pile before the stockpile
+		if pd != null:
+			return {"stack": ls, "dest": pd.cell, "n": mini(mini(avail(ls), carry), pd.room), "pile": pd.site}
+		var dest = dests[ls.type]
 		if dest == null:
 			continue
 		var cap := Defs.stack_cap(ls.type)
@@ -1912,6 +2265,8 @@ func step() -> void:
 		_step_map()
 	use_map("village")
 	_step_arrivals()
+	if tick % 10 == 0:
+		assign_workstations()
 	use_map(prev)
 	var kinds := {}
 	var working := 0
@@ -1940,6 +2295,14 @@ func _step_map() -> void:
 			var before := crop_stage(crop)
 			crop.grow = minf(Tuning.WHEAT_GROW, crop.grow + Tuning.DT)
 			if crop_stage(crop) != before:
+				rev += 1
+	for t in m.trees:  # saplings grow into trees (issue #177)
+		if t.alive and not grown(t):
+			var before := tree_stage(t)
+			t.grow += Tuning.DT
+			if t.grow >= Tuning.SAPLING_GROW:
+				t.grow = -1.0
+			if tree_stage(t) != before:
 				rev += 1
 	for sh in m.sheep:
 		if sh.alive:
@@ -2084,9 +2447,12 @@ func sign_for(dest: String) -> Vector2i:
 ## New animals wander in at the far west edge.
 func _regrow_herds() -> void:
 	var herd := Meadow.herd()
+	var wild := {}  # pens don't count (issue #139)
+	for a in m.sheep:
+		if a.alive and a.get("pen", 0) == 0:
+			wild[a.species] = wild.get(a.species, 0) + 1
 	for sp in herd:
-		var alive: int = m.sheep.filter(func(a): return a.alive and a.species == sp and a.get("pen", 0) == 0).size()  # pens don't count (issue #139)
-		if alive >= herd[sp]:
+		if wild.get(sp, 0) >= herd[sp]:
 			m.regrow.erase(sp)
 			continue
 		m.regrow[sp] = m.regrow.get(sp, 0.0) + Tuning.DT
@@ -2650,6 +3016,7 @@ func _stuck_on_map() -> void:
 			_add_stuck(tpl.name, why,
 				mid, site_height(s) + 0.4, "site", s.id, false, standing)
 	_stuck_unstaffed()
+	_stuck_workstations()
 	_stuck_expedition()
 	_stuck_site()
 	var has_food: bool = food_available() if m.kind != "route" else on_map("village", food_available)  # the road eats from home
@@ -2682,9 +3049,14 @@ func _stuck_on_map() -> void:
 				_add_stuck("Farm", "Harvested wheat needs a stockpile before replanting", Vector2(k) + Vector2(0.5, 0.5), 0.6, "crop", m.farm[k].id)
 				break
 	if not m.zone.is_empty():
-		var loose := stacks_where(func(s): return avail(s) > 0 and not in_zone(s.cell))
+		var piles := pile_map()
+		var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s, piles))
 		var full := not loose.is_empty()
+		var tried := {}
 		for s in loose:
+			if tried.has(s.type):
+				continue
+			tried[s.type] = true
 			if zone_dest(s.type) != null:
 				full = false
 				break
@@ -2705,6 +3077,39 @@ func _stuck_unstaffed() -> void:
 			_add_stuck(Defs.JOB_NAMES[jb], "No one is a %s" % Defs.JOB_SKILLED[jb], Vector2(at) + Vector2(0.5, 0.5), 0.8, "", 0)
 
 
+## What holds up a chopping block or mason's bench (issue #177), and a stonemason with no pickaxe.
+## A target reached or a full pile is waiting, not stuck: the overflow goes to the stockpile.
+func _stuck_workstations() -> void:
+	for s in m.sites:
+		var wk := work_of(s)
+		if not s.done or wk.is_empty():
+			continue
+		var tname: String = Defs.TEMPLATES[s.tpl].name
+		var at := Vector2(s.origin) + Vector2(0.5, 0.5)
+		var h := site_height(s) + 0.4
+		var item: Dictionary = Defs.ITEMS[wk.item]
+		if s.get("worker", 0) == 0:
+			_add_stuck(tname, "No %s to work it" % Defs.JOB_SKILLED[wk.job], at, h, "site", s.id, false, true)
+		elif free_count(wk.item) >= s.keep:
+			_add_stuck(tname, "Target reached (%d %s)" % [s.keep, item.many], at, h, "site", s.id, false, true)
+		else:
+			var pool: Array = m.trees if wk.kind == "tree" else m.boulders
+			var left := pool.filter(func(t): return t.alive and not t.get("hidden", false) and in_area(s, t.cell) and not protected(t))
+			if left.is_empty():
+				var why := "No trees in range. Plant saplings or move the chopping block" if wk.kind == "tree" else "No boulders in range"
+				_add_stuck(tname, why, at, h, "site", s.id)
+			elif not left.any(func(t): return grown(t)):
+				_add_stuck(tname, "Saplings growing: no grown trees in range yet", at, h, "site", s.id, false, true)
+		if pile_count(s) >= Tuning.WORK_STORE:
+			_add_stuck(tname, "Full (%d %s)" % [Tuning.WORK_STORE, item.many], at, h, "site", s.id, false, true)
+	var any_pick := not tool_items("pick", 0).is_empty()
+	for r in here():
+		if r.role == "mason" and r.pick == null and not any_pick and not r.broken.pick:
+			_add_stuck(r.name, "Stonemason: no pickaxe", r.pos + Vector2(0.5, 0.5), 1.6, "res", r.id)
+		if needs_station(r) and m.kind == "village":  # issue #184: they haul till there's one
+			_add_stuck(r.name, "Build a %s to start work" % Defs.TEMPLATES[Defs.JOB_STATIONS[r.role]].name.to_lower(), r.pos + Vector2(0.5, 0.5), 1.6, "res", r.id)
+
+
 ## Whether someone sees to a job's work: a resident whose job it is (or anyone, for hauling), or Ada
 ## while she's about the village or the road, well and not packing. Builders and haulers walk out from
 ## the village to work the road, so village residents count there too.
@@ -2723,8 +3128,8 @@ func _staffed(jb: String) -> bool:
 ## A cell where work of this job is waiting, or null when there's none.
 func _work_at(jb: String):
 	match jb:
-		"mine":
-			for o in m.trees + boulders:
+		"lumber", "mason":
+			for o in (m.trees if jb == "lumber" else m.boulders):
 				if o.alive and o.des:
 					return o.cell
 		"hunt":
@@ -2758,6 +3163,12 @@ func site_height(s: Dictionary) -> float:
 		return 0.7 if s.done else 0.2
 	if s.tpl == "board":
 		return 1.5 if s.done else 0.2
+	if s.tpl == "chopping_block":
+		return 0.55 if s.done else 0.2
+	if s.tpl == "mason_bench":
+		return 0.8 if s.done else 0.2
+	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
+		return 0.9 if s.done else 0.2
 	if s.tpl in ["bridge", "track", "station"]:
 		return 0.2 if s.tpl != "station" or not s.done else 0.9
 	return [0.2, 0.5, 2.5, 4.0, 4.0][mini(s.stage, 4)]
@@ -2770,11 +3181,11 @@ func site_height(s: Dictionary) -> float:
 func designate_mine(rect: Rect2i, single = null, kinds := ["tree", "boulder"]) -> void:
 	var hit: Array = []
 	if single != null:
-		hit = [single]
+		hit = [single] if grown(single) else []
 	else:
 		var pool: Array = (m.trees if kinds.has("tree") else []) + (m.boulders if kinds.has("boulder") else [])
 		for o in pool:
-			if o.alive and not o.get("hidden", false) and rect.has_point(o.cell):
+			if o.alive and not o.get("hidden", false) and grown(o) and rect.has_point(o.cell):
 				hit.append(o)
 	var all_on := not hit.is_empty() and hit.all(func(o): return o.des)
 	for o in hit:
@@ -2959,9 +3370,11 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 	var s := {"id": _id(), "kind": "site", "tpl": tpl, "origin": origin, "size": Defs.TEMPLATES[tpl].size,
 		"rot": rot, "stage": 0, "store": {}, "incoming": {}, "builder": 0, "crafter": 0, "crafting": "",
 		"done": false, "owner": 0, "queue": [], "autoq": [], "unreach_until": 0,
-		"plot": plot_rect(tpl, origin, rot), "map": map_id}
+		"plot": plot_rect(tpl, origin, rot), "map": map_id, "worker": 0}
 	if tpl == "fireplace":
 		s.keep_meals = true
+	if not work_of(s).is_empty():
+		s.keep = Tuning.KEEP_STOCK
 	m.sites.append(s)
 	_occ_dirty = true
 	for c in site_cells(s):
@@ -2989,6 +3402,7 @@ func set_role(r: Dictionary, role: String) -> void:
 	r.role = role
 	if r.job != null and r.job.work == old and old != "haul" and not r.job.ordered:
 		fail_job(r)
+	assign_workstations()  # the old job's workstation is freed, and the new one's claimed (issue #184)
 	rev += 1
 
 
@@ -3019,6 +3433,7 @@ func cancel_site(s: Dictionary) -> void:
 			drop_items(s.origin + Vector2i(0, s.size.y), k, s.store[k])
 	m.sites.erase(s)
 	_occ_dirty = true
+	assign_workstations()  # its resident claims another free one, or hauls (issue #184)
 	rev += 1
 
 
@@ -4026,9 +4441,9 @@ func _road_claim(r: Dictionary, kind: String, jobs: Array):
 				if j == null:
 					j = _platform_haul(r, true)
 		"gather":
-			if jobs.has("mine") and r.get("hurt", 0) == 0:
-				var targets: Array = m.trees.filter(func(t): return t.alive and t.des and t.claim == 0 and not _cooling(t))
-				if has_pick:
+			if r.get("hurt", 0) == 0:
+				var targets: Array = m.trees.filter(func(t): return t.alive and t.des and t.claim == 0 and not _cooling(t)) if jobs.has("lumber") else []
+				if has_pick and jobs.has("mason"):
 					targets += m.boulders.filter(func(b): return b.alive and b.des and b.claim == 0 and not _cooling(b))
 				if not targets.is_empty():
 					var t: Dictionary = nearest(targets, Road.VILLAGE_END)
@@ -4451,7 +4866,7 @@ func _site_job(r: Dictionary):
 		var targets := m.boulders.filter(func(b): return b.alive and b.des and b.claim == 0 and not _cooling(b))
 		if not targets.is_empty():
 			_drop_unused(r, pj)
-			return _tagged(_gather_job(r, nearest(targets, c)), "mine")
+			return _gather_job(r, nearest(targets, c))
 	return pj
 
 
@@ -4905,7 +5320,7 @@ func _survey_job(r: Dictionary):
 		expedition.survey = false
 		return null
 	var j := Job.new("survey", "Going to investigate the vein", "the iron vein")
-	j.work = "mine"
+	j.work = "mason"
 	j.step(_goto(vein.map(func(b): return b.cell), true))
 	j.step({"op": "work", "what": "survey", "label": "Investigating the vein"})
 	return j

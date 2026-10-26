@@ -124,19 +124,25 @@ func _initialize() -> void:
 	check(levels >= 2 and seen("is now level"), "skill levels rise with work, with a toast (best level %d)" % levels)
 	await select_resident(ada)
 	check(visible_label("Everything"), "Ada's panel says she does everything")
-	var best_cell: Control = await job_cell(ada, "mine")
+	var best_cell: Control = await job_cell(ada, "lumber")
 	check(best_cell != null and best_cell.find_children("*", "Label", true, false).any(func(l): return "Lv " in l.text), "the jobs board shows levels")
 	await key(KEY_ESCAPE)
 
 	# ---- Toolsmith: Tomas takes the job, an axe is made, a spare is kept, and a broken axe is replaced from it
 	check(await choose_job(tomas, "toolsmith"), "the jobs board: make Tomas the toolsmith, so spares are kept (%s)" % tomas.role)
+	var tjob: Button = await job_button(tomas)
+	check(tjob != null and "(no toolsmith's bench)" in tjob.text, "with no toolsmith's bench, his job says so (%s)" % (tjob.text if tjob else "no button"))
 	await key(KEY_ESCAPE)
+	# Issue #184: a toolsmith works from a toolsmith's bench of his own
+	var tsb = await place_from_menu("Toolsmith's bench", "toolsmith_bench", at(9, 9))
+	check(tsb != null and tsb.tpl == "toolsmith_bench", "a toolsmith's bench is placed from the Build menu")
+	check(await play_until(300, func(): return tsb != null and tsb.done and tsb.worker == tomas.id), "it's built, and Tomas claims it (%s)" % [tsb.get("worker", 0) if tsb != null else "none"])
 	check(await open_bench_panel(), "open the bench's Craft panel again")
 	check(await queue_recipe("Wooden axe"), "queue a wooden axe")
 	await key(KEY_ESCAPE)
 	await look_at(at(9, 9))
-	await key(KEY_X)
-	await drag(screen(Vector2i(1, 1)), screen(Vector2i(sim.w - 2, sim.h - 2)))
+	await key(KEY_X)  # the top half's trees now, keeping the bottom half's for an axe to break on
+	await drag(screen(Vector2i(1, 1)), screen(Vector2i(sim.w - 2, sim.h / 2 - 1)))
 	await key(KEY_ESCAPE)
 	var holder: Array = [null]
 	check(await play_until(300, func():
@@ -149,7 +155,12 @@ func _initialize() -> void:
 		var users: Array = sim.residents.filter(func(r): return r.axe != null)
 		for r in users:
 			r.axe.dur = 1
-		check(await play_until(300, func(): return sim.stats.tools_broken > 0), "an axe breaks (%s)" % [_seen.filter(func(t): return "broke" in t)])
+			r.kept.axe = true  # chosen, so it isn't swapped for a better spare before it breaks
+		await look_at(at(9, 12))
+		await key(KEY_X)
+		await drag(screen(Vector2i(1, sim.h / 2)), screen(Vector2i(sim.w - 2, sim.h - 2)))
+		await key(KEY_ESCAPE)
+		check(await play_until(300, func(): return sim.stats.tools_broken > 0), "an axe breaks (%s; trees left %d, marked %d; %s)" % [_seen.filter(func(t): return "broke" in t), sim.trees.filter(func(t): return t.alive and Sim.grown(t)).size(), sim.trees.filter(func(t): return t.alive and t.des).size(), sim.residents.map(func(r): return [r.name, r.role, r.job.label if r.job != null else "idle", r.axe])])
 		check(await play_until(90, func(): return users.all(func(r): return r.axe != null and not r.broken.axe)), "whoever's axe broke fetches the spare instead of stopping")
 		await play(1)
 		check(find_button("Needs a new axe") == null, "and no \"Needs a new axe\" report is left")

@@ -295,6 +295,24 @@ func build_spot(tpl: String, near: Vector2i) -> Vector2i:
 	return Vector2i(-1, -1)
 
 
+## Places a building from the Build menu the way a player would: B, its row, then a click on an
+## open spot near `near`. Returns the blueprint, or null.
+func place_from_menu(row: String, tpl: String, near: Vector2i):
+	if game.menu_open != "build":
+		await key(KEY_B)
+	if game.menu_open != "build" or not await click_button(row):
+		printerr("     (Build menu: open %s)" % game.menu_open)
+		return null
+	var spot := build_spot(tpl, near)
+	if spot.x < 0:
+		return null
+	await look_at(spot)
+	await click(screen(spot))
+	if game.tool != "":
+		await key(KEY_ESCAPE)
+	return game.sim.site_at(spot)
+
+
 ## Selects a resident the way a player would: F until it's them.
 func select_resident(r: Dictionary) -> void:
 	for i in game.sim.residents.size() + 1:
