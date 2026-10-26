@@ -222,7 +222,7 @@ func _initialize() -> void:
 	check(sim.residents.size() == 2 and sim.stats.traveler_home, "Tomas arrives and moves in")
 	var tomas: Dictionary = sim.residents[1] if sim.residents.size() > 1 else {}
 	check(not tomas.is_empty() and Defs.JOBS.any(func(jb): return Sim.level(tomas, jb) >= Tuning.ARRIVAL_LEVEL), "Tomas arrives skilled in one job")
-	check(Sim.level(ada, "mine") >= 2, "Ada's Mine level has risen with practice (level %d)" % Sim.level(ada, "mine"))
+	check(Sim.level(ada, "lumber") >= 2, "Ada's Lumberjack level has risen with practice (level %d)" % Sim.level(ada, "lumber"))
 
 	# Toast button and next-resident key
 	game._hud.add_toast({"text": "Tomas moved into the new house.", "res_id": tomas.get("id", 0), "site_id": 0})
@@ -368,6 +368,37 @@ func _initialize() -> void:
 			check(ada.direct != null and ada.direct.kind == "equip" or ada.job != null and ada.job.kind == "equip", "choosing it sends Ada to get it")
 			await run(10)
 			check(ada.kept.axe or ada.kept.pick, "Ada equips it and keeps it")
+
+	# Mason's bench (issue #177): built from the Build menu; Tomas, made the Stonemason, breaks the
+	# boulders around it on his own and piles the stone beside it
+	game.selection = {}
+	await key(KEY_B)
+	check(await click_button("Mason's bench"), "the Build menu lists the mason's bench")
+	check(game.placing == "mason_bench", "it starts placing a mason's bench")
+	var near_rock: Vector2i = Sim.nearest(sim.boulders.filter(func(b): return b.alive), Sim.rcell(ada)).cell
+	var mb_spot := build_spot("mason_bench", near_rock + Vector2i(2, 0))
+	await look_at(mb_spot)
+	await click(screen(mb_spot))
+	var mbench = sim.site_at(mb_spot)
+	check(mbench != null and mbench.tpl == "mason_bench" and mbench.plot != null, "the mason's bench is placed with its workshop plot reserved")
+	if game.tool != "":
+		await key(KEY_ESCAPE)
+	if sim.tool_items("pick", 0).is_empty() and tomas.pick == null:  # a pickaxe for the stonemason
+		check(await open_bench_panel(), "open the bench's Craft panel for a pickaxe")
+		await queue_recipe("Stone pickaxe")
+		await key(KEY_ESCAPE)
+	check(await choose_job(tomas, "mason"), "the jobs board: make Tomas the Stonemason (%s)" % tomas.role)
+	await key(KEY_ESCAPE)
+	check(await play_until(240, func(): return mbench != null and mbench.done and sim.pile_count(mbench) >= Tuning.BOULDER_COBBLE), "Tomas piles stone beside the mason's bench (%d)" % (sim.pile_count(mbench) if mbench != null else 0))
+	check(sim.boulders.filter(func(b): return not b.alive and not b.des).size() > 0 or sim.stats.broken_boulders > 0, "breaking boulders nobody marked")
+	await look_at(mb_spot)
+	await click(screen(mb_spot, 0.5))
+	game._hud.refresh(sim)
+	await frames(2)
+	check(game.selection.get("kind", "") == "site" and visible_label("Keep %d cobblestone" % mbench.keep), "selecting it shows its keep-stock target")
+	check(game._world.live_outlines.any(func(o): return o.has("radius")), "and draws its work area")
+	check(await click_button("+"), "raise the target")
+	check(mbench.keep == Tuning.KEEP_STOCK + Tuning.KEEP_STEP, "the target goes up by %d (%d)" % [Tuning.KEEP_STEP, mbench.keep])
 
 	# Tools dropdown on hover
 	var tb: Button = game._hud._tools_btn

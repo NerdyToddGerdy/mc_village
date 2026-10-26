@@ -15,6 +15,7 @@ const MENUS := {
 		{"id": "mine", "name": "Mine", "sub": "Trees and boulders. Shift: trees only. Alt: boulders only", "mark": "mine"},
 		{"id": "chop", "name": "Chop trees", "sub": "Trees only", "mark": "chop"},
 		{"id": "break", "name": "Break boulders", "sub": "Boulders only. Breaking them needs a pickaxe", "mark": "break"},
+		{"id": "keep", "name": "Keep", "sub": "Trees and boulders lumberjacks and stonemasons leave alone", "mark": "keep", "unlock": "village"},
 		{"id": "hunt", "name": "Hunt", "sub": "Sheep, cows and pigs, for wool, leather and meat. Shift: one kind only", "mark": "hunt", "unlock": "animals"},
 		{"id": "lead", "name": "Lead to a pen", "sub": "Animals the party walks into a pen with room", "mark": "lead", "unlock": "pens"},
 	]},
@@ -27,12 +28,14 @@ const MENUS := {
 		{"id": "bench", "name": "Crafting bench", "sub": "4 logs. Reserves room for a workshop", "mark": "build"},
 		{"id": "house", "name": "House", "sub": "8 cobblestone, then 16 planks and 4 logs, then 12 planks, then a bed", "mark": "build"},
 		{"id": "fireplace", "name": "Fireplace", "sub": "6 cobblestone. Reserves room for a kitchen", "mark": "build"},
+		{"id": "chopping_block", "name": "Chopping block", "sub": "4 planks. Lumberjacks fell the trees around it and pile the logs. Reserves room for a sawmill", "mark": "build"},
+		{"id": "mason_bench", "name": "Mason's bench", "sub": "2 planks and 4 cobblestone. Stonemasons break the boulders around it. Reserves room for a workshop", "mark": "build"},
 		{"id": "board", "name": "Expedition board", "sub": "6 planks and 4 sticks. Plans trips to the old mine. Reserves room for a map room", "mark": "build", "unlock": "founded"},
 	]},
 }
 
 ## The tools a Gather or Paint entry switches on: they mark or paint by dragging over the map.
-const MARK_TOOLS := ["mine", "chop", "break", "hunt", "lead", "stock", "farm", "pen"]
+const MARK_TOOLS := ["mine", "chop", "break", "keep", "hunt", "lead", "stock", "farm", "pen"]
 
 
 ## The menu an order tool belongs to, or "".

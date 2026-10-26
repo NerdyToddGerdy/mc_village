@@ -12,12 +12,30 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 22
+const VERSION := 23
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23}
+
+
+## v23: Lumberjack and Stonemason replace Mine (issue #177). A miner becomes a lumberjack: nobody's
+## trees and boulders were counted apart, so it's the tie rule. Mine's experience carries over to both.
+## No village has a workstation yet, no tree is a sapling or kept, and Ada's "all" is unchanged.
+static func _v22_to_v23(d: Dictionary) -> Dictionary:
+	for r in d.state.residents:
+		var xp: int = r.jobs.get("mine", {}).get("xp", 0)
+		r.jobs.erase("mine")
+		r.jobs["lumber"] = {"xp": xp}
+		r.jobs["mason"] = {"xp": xp}
+		if r.role == "mine":
+			r.role = "lumber"
+	return d
+
+
+## The jobs as they were up to v22, before Lumberjack and Stonemason replaced Mine (issue #177).
+const V22_JOBS := ["mine", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
 
 
 ## v22: one job per resident (issue #134). Ada does everything. Everyone else gets their switched-on
@@ -31,7 +49,7 @@ static func _v21_to_v22(d: Dictionary) -> Dictionary:
 		var best := ""
 		var best_pri := 0
 		var best_lv := 0
-		for jb in Defs.JOBS:
+		for jb in V22_JOBS:
 			var j: Dictionary = r.jobs[jb]
 			if j.get("on", jb != "toolsmith"):
 				var pri: int = j.get("pri", 2)
@@ -283,7 +301,9 @@ static func _v10_to_v11(d: Dictionary) -> Dictionary:
 static func _v9_to_v10(d: Dictionary) -> Dictionary:
 	for r in d.state.residents:
 		if not r.has("jobs"):
-			r.jobs = Sim.default_jobs()
+			r.jobs = {}
+			for jb in V22_JOBS:  # the jobs of the time, which later steps upgrade
+				r.jobs[jb] = {"on": jb != "toolsmith", "pri": 2, "xp": 0}
 	return d
 
 

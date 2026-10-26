@@ -124,7 +124,7 @@ func _initialize() -> void:
 	check(levels >= 2 and seen("is now level"), "skill levels rise with work, with a toast (best level %d)" % levels)
 	await select_resident(ada)
 	check(visible_label("Everything"), "Ada's panel says she does everything")
-	var best_cell: Control = await job_cell(ada, "mine")
+	var best_cell: Control = await job_cell(ada, "lumber")
 	check(best_cell != null and best_cell.find_children("*", "Label", true, false).any(func(l): return "Lv " in l.text), "the jobs board shows levels")
 	await key(KEY_ESCAPE)
 
