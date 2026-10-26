@@ -77,12 +77,17 @@ static func build(s: Sim) -> SimMap:
 	return m
 
 
-## Animals of each species at the start, and the most the meadow holds of each.
+static var _herd := {}
+
+
+## Animals of each species at the start, and the most the meadow holds of each. Worked out from the
+## layout once: the meadow's regrowth asks every tick.
 static func herd() -> Dictionary:
-	var out := {}
-	for row in LAYOUT:
-		for ch in row:
-			var sp: String = {"s": "sheep", "c": "cow", "p": "pig"}.get(ch, "")
-			if sp != "":
-				out[sp] = out.get(sp, 0) + 1
-	return out
+	if _herd.is_empty():
+		for row in LAYOUT:
+			for ch in row:
+				var sp: String = {"s": "sheep", "c": "cow", "p": "pig"}.get(ch, "")
+				if sp != "":
+					_herd[sp] = _herd.get(sp, 0) + 1
+		_herd.make_read_only()
+	return _herd

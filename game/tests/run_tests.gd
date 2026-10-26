@@ -1,11 +1,14 @@
 extends SceneTree
 ## Headless sim tests. Run from the game/ folder:
 ##   godot --headless --path . -s res://tests/run_tests.gd
-## Exits with code 1 if any test fails.
+## Words after `--` run only the tests whose names contain one of them:
+##   godot --headless --path . -s res://tests/run_tests.gd -- farm fireplace
+## Exits with code 1 if any test fails, or if no test matches.
 
 var _failures := 0
 var _checks := 0
 var _current := ""
+var _opening = null  ## The played opening's save and its sites' ids, played once for every test that needs it.
 ## Seconds to allow for walking the road to the mine, one way (issue #118).
 const ROAD := 30.0
 
@@ -78,6 +81,10 @@ func _init() -> void:
 		"test_saplings_and_replanting",
 		"test_jobs_need_their_workstation",
 	]
+	var only := Array(OS.get_cmdline_user_args())
+	if not only.is_empty():
+		tests = tests.filter(func(t): return only.any(func(w): return w in t))
+		print("%d of the tests match %s" % [tests.size(), " ".join(only)])
 	for t in tests:
 		_current = t
 		if OS.get_environment("TEST_TRACE") != "":
@@ -119,6 +126,22 @@ func stuck_text(sim: Sim) -> String:
 	return " | ".join(parts)
 
 
+## The founding moment, played: a fresh copy of it for each test, as {sim, bench, h1, h2}. It's
+## played once and loaded from its save after that, because it's 1,900 seconds of play.
+func opening() -> Dictionary:
+	if _opening == null:
+		var sim := Sim.new_game()
+		var s := play_opening(sim)
+		_opening = {"save": var_to_str(sim.save_state()), "ids": {}}
+		for k in s:
+			_opening.ids[k] = s[k].id
+	var copy := Sim.from_state(str_to_var(_opening.save))
+	var out := {"sim": copy}
+	for k in _opening.ids:
+		out[k] = copy.sites.filter(func(x): return x.id == _opening.ids[k])[0]
+	return out
+
+
 ## Plays the founding moment the way a player would, end to end.
 func play_opening(sim: Sim) -> Dictionary:
 	sim.designate_mine(area(0, 0, 10, 18))
@@ -143,8 +166,8 @@ func play_opening(sim: Sim) -> Dictionary:
 
 
 func test_full_opening() -> void:
-	var sim := Sim.new_game()
-	var s := play_opening(sim)
+	var s := opening()
+	var sim: Sim = s.sim
 	check(s.bench.done, "bench is built")
 	check(sim.stats.pick_crafted, "a pickaxe was crafted")
 	check(sim.stats.broken_boulders > 0, "boulders were broken")
@@ -717,8 +740,8 @@ func test_hunting_sheep() -> void:
 
 ## Issue #43: a bed is a house's last stage, and travelers come only for free beds.
 func test_beds_and_free_bed_arrivals() -> void:
-	var sim := Sim.new_game()
-	var s := play_opening(sim)
+	var s := opening()
+	var sim: Sim = s.sim
 	check(s.h1.stage == 4 and s.h2.stage == 4, "both opening houses got their beds")
 	check(sim.stats.get("sheep_hunted", 0) == 6, "the six sheep were hunted for wool")
 	var wool: int = Goals.LIST.map(func(g): return g.t).find("Hunt sheep for wool")

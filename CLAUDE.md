@@ -25,7 +25,7 @@ Godot is installed at `/Applications/Godot.app/Contents/MacOS/Godot` (via `brew 
 ```sh
 GODOT=/Applications/Godot.app/Contents/MacOS/Godot
 $GODOT --path .                                              # play
-$GODOT --headless --path . -s res://tests/run_tests.gd       # sim tests; exit code 1 on failure
+$GODOT --headless --path . -s res://tests/run_tests.gd       # sim tests; exit code 1 on failure (add `-- farm` to run only matching tests)
 $GODOT --headless --path . -s res://tests/game_test.gd       # real game scene: menu, save, load, start over
 $GODOT --headless --path . -s res://tests/playtest.gd        # bot plays the whole opening through pushed input events (~1 min)
 $GODOT --headless --path . -s res://tests/playtest_village.gd  # Slice 2 bot: founding (by command), then the village through input, with a meadow adventure for wool
@@ -42,7 +42,16 @@ $GODOT --path . --resolution 1280x720 -- --screenshot-menu   # Save game menu (-
 
 Screenshots and saves (`saves/slot_N.save`) live in `~/Library/Application Support/Godot/app_userdata/Block Village/`. `game_test.gd` and the playtests write to `test_saves/` and `playtest_saves/` there instead, so they never touch real saves. The playtests push input with `push_input(event, true)` (local coordinates) because the window is stretched. Their shared input helpers live in `tests/playtest_base.gd`. It's the quickest way to check view changes without clicking through the game.
 
-There's no single-test runner. To focus on one test, temporarily trim the `tests` list in `tests/run_tests.gd`. Tests are named after the behaviour they cover.
+To run some of the sim tests, put words after `--`: `run_tests.gd -- farm fireplace` runs every test whose name contains one of them, and exits with code 1 if none does. Tests are named after the behaviour they cover, so the `tests` list in `tests/run_tests.gd` is the index to pick words from.
+
+**Testing while coding.** Everything together takes about 6 minutes: the sim tests about 2½, the game test 5 s, and the five bots 20–55 s each. Match the run to the change:
+- **While coding:** only the sim tests for what you're changing, by name. Run the whole suite once the change works.
+- **Before committing a sim change:** the whole sim suite.
+- **A change to the view, the HUD, input or `game.gd`:** `game_test.gd`, and the bot that plays that part of the game.
+- **A save format change:** `run_tests.gd -- save fixture upgrade`, then the whole suite.
+- **Before opening a PR:** every bot, one at a time, because they share a save slot. CI runs everything on every PR, so a bot that doesn't touch the change can be left to CI.
+
+**Keep the tick cheap.** Every test and bot is bound by how fast `Sim.step()` runs: the opening alone is 38,000 ticks. Idle residents look for work every tick, so anything `_claim` calls runs thousands of times a minute even when it finds nothing. Work out what can't change once (not once a tick), and return early when a search can't succeed. `test_full_opening` (about 25 s) is a quick check that the tick hasn't slowed down.
 
 ## Godot project layout
 
