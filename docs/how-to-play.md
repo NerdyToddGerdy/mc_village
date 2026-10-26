@@ -108,6 +108,7 @@ A workstation's panel names who works from it ("Tomas's composter"). Giving some
 - Click a resident's job (for example "Farmer, level 3 ▾") for the **job dropdown**. It lists each job with their level in it, best first, how many residents already have it, and whether a workstation for it is free. Choose one to give them that job.
 - The board shows each resident's **level** in every job, with a thin bar of progress to the next. Their own job is lit.
 - A column's header counts the residents with that job, and reads "nobody" in yellow when no one has it. When Ada is away, work of a job nobody has waits, and the stuck list says "No one is a farmer".
+- **Hunters leave** sets how many wild animals of each kind in the village hunters spare, 2 to start, with − and +. A hunter with a lodge hunts on their own until only that many are left, and the stuck list then says "Hunter: herd at its floor". Animals you mark are hunted anyway, and penned ones are never hunted on a hunter's own.
 
 New residents arrive in the job they're skilled at, and haul until its workstation is built.
 

@@ -62,6 +62,7 @@ var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafte
 var arrival_at := -1
 var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
+var herd_floor := {}         ## Species -> how many wild animals hunters leave in the village (issue #183); unset is Tuning.HERD_FLOOR.
 ## The planned expedition (issues #106, #107), or {} when there's none. One at a time (#25):
 ##   {dest, board (site id), party: [resident ids], target: {item, n}, meals, picks,
 ##    policy: {target, full, low}, spend_return, state: "staging" or "out", packed: {item: n}, tools: [{type, dur}],
@@ -1189,6 +1190,33 @@ func _plant_job(r: Dictionary, c: Vector2i, stations: Array):
 	return j
 
 
+## How many wild animals of a species hunters leave in the village (issue #183).
+func floor_of(species: String) -> int:
+	return herd_floor.get(species, Tuning.HERD_FLOOR)
+
+
+## Sets how many wild animals of a species hunters leave: they never hunt below it on their own.
+func set_herd_floor(species: String, n: int) -> void:
+	herd_floor[species] = maxi(0, n)
+	rev += 1
+
+
+## Wild animals on this map nobody has marked or claimed, by species. Penned ones don't count (issue #139).
+func free_herds() -> Dictionary:
+	var out := {}
+	for a in m.sheep:
+		if a.alive and a.get("pen", 0) == 0 and not a.des and a.claim == 0:
+			out[a.species] = out.get(a.species, 0) + 1
+	return out
+
+
+## The unmarked animals a hunter takes on their own (issue #183): wild ones of each species with more
+## than its floor left, so they never hunt the last ones.
+func auto_prey() -> Array:
+	var herds := free_herds()
+	return m.sheep.filter(func(a): return a.alive and a.get("pen", 0) == 0 and not a.des and a.claim == 0 and not _cooling(a) and herds.get(a.species, 0) > floor_of(a.species))
+
+
 ## Sets a workstation's keep-stock target: its gatherers stop once the village has this many.
 func set_keep_stock(s: Dictionary, n: int) -> void:
 	s.keep = maxi(0, n)
@@ -2154,6 +2182,10 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 				var wj = _workstation_job(r, c)
 				if wj != null:
 					return wj
+			if r.role == "hunt" and m.kind == "village" and not claimed(r).is_empty():  # down to the herd floor (issue #183)
+				var prey := auto_prey()
+				if not prey.is_empty():
+					return _tagged(_hunt_job(r, nearest(prey, c)), "hunt")
 		"haul":
 			if not jobs.has("haul"):
 				return null
@@ -3106,6 +3138,12 @@ func _stuck_workstations() -> void:
 	for r in here():
 		if r.role == "mason" and r.pick == null and not any_pick and not r.broken.pick:
 			_add_stuck(r.name, "Stonemason: no pickaxe", r.pos + Vector2(0.5, 0.5), 1.6, "res", r.id)
+		if r.role == "hunt" and m.kind == "village" and not claimed(r).is_empty() and auto_prey().is_empty() and not m.sheep.any(func(a): return a.alive and a.des):
+			var herds := free_herds()
+			var left: Array = []
+			for sp in herds:
+				left.append("%d %s" % [herds[sp], Defs.SPECIES[sp].one if herds[sp] == 1 else Defs.SPECIES[sp].many])
+			_add_stuck(r.name, "Hunter: herd at its floor (%s)" % ", ".join(left) if not left.is_empty() else "Hunter: no animals to hunt", r.pos + Vector2(0.5, 0.5), 1.6, "res", r.id, false, true)
 		if needs_station(r) and m.kind == "village":  # issue #184: they haul till there's one
 			_add_stuck(r.name, "Build a %s to start work" % Defs.TEMPLATES[Defs.JOB_STATIONS[r.role]].name.to_lower(), r.pos + Vector2(0.5, 0.5), 1.6, "res", r.id)
 
@@ -5596,7 +5634,7 @@ func save_state() -> Dictionary:
 		maps_out[id] = maps[id].save()
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
 		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
-		"rng_state": rng.state, "seed": seed,
+		"herd_floor": herd_floor.duplicate(), "rng_state": rng.state, "seed": seed,
 		"expedition": expedition.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true)}
 
 
@@ -5617,6 +5655,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.arrival_at = d.arrival_at
 	s.arrived = d.arrived
 	s.auto_craft = d.auto_craft
+	s.herd_floor = d.herd_floor.duplicate()
 	# Bushes added to older saves (v7) may sit where something now stands; drop those.
 	s.bushes = s.bushes.filter(func(b):
 		for o in s.trees + s.boulders:

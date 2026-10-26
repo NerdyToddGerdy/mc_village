@@ -1534,6 +1534,8 @@ func _refresh_board(sim: Sim) -> void:
 	var sig := "%s|%s|%d|%s" % [game.selection, _keys_sig, _job_for, _stations_sig(sim)]
 	for r in sim.residents:
 		sig += "%d%s%s%s%s%s;" % [r.id, r.name, r.role, r.jobs, r.away, r.map]
+	var herds := _wild_herds(sim)
+	sig += "|%s|%s" % [herds, sim.herd_floor]
 	_rebuild(_board, sig, func(c: Container) -> void:
 		var head := HBoxContainer.new()
 		var title := _label("Village jobs", true, Palette.CHALK, Palette.HEADING)
@@ -1587,7 +1589,43 @@ func _refresh_board(sim: Sim) -> void:
 			grid.add_child(pick)
 			for jb in Defs.JOBS:
 				grid.add_child(_board_cell(r, jb))
-		c.add_child(grid))
+		c.add_child(grid)
+		_add_herd_floors(c, sim, herds))
+
+
+## Wild animals in the village by species, penned ones aside (issue #139).
+func _wild_herds(sim: Sim) -> Dictionary:
+	var out := {}
+	for a in sim.maps.village.sheep:
+		if a.alive and a.get("pen", 0) == 0:
+			out[a.species] = out.get(a.species, 0) + 1
+	return out
+
+
+## The jobs board's herd floors (issue #183): how many of each wild species hunters leave, with a stepper.
+func _add_herd_floors(c: Container, sim: Sim, herds: Dictionary) -> void:
+	if herds.is_empty():
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.add_child(_label("Hunters leave", true, Palette.CHALK, Palette.BODY))
+	for sp in Defs.SPECIES:
+		if not herds.has(sp):
+			continue
+		var sd: Dictionary = Defs.SPECIES[sp]
+		var n := sim.floor_of(sp)
+		var less := _button("−", func(): game.set_herd_floor(sp, n - 1), "Secondary")
+		less.disabled = n <= 0
+		less.tooltip_text = "Leave one fewer %s" % sd.one
+		row.add_child(less)
+		var lbl := _label("%d %s" % [n, sd.one if n == 1 else sd.many], false, Palette.CHALK, Palette.BODY)
+		lbl.tooltip_text = "Hunters hunt %s on their own until %d %s left (%d now). Marked ones are hunted anyway." % [sd.many, n, "is" if n == 1 else "are", herds[sp]]
+		lbl.mouse_filter = Control.MOUSE_FILTER_STOP
+		row.add_child(lbl)
+		var more := _button("+", func(): game.set_herd_floor(sp, n + 1), "Secondary")
+		more.tooltip_text = "Leave one more %s" % sd.one
+		row.add_child(more)
+	c.add_child(row)
 
 
 ## A resident's level in a job on the board, with a tick of progress to the next; lit for their job.

@@ -80,6 +80,7 @@ func _init() -> void:
 		"test_lumberjacks_and_stonemasons",
 		"test_saplings_and_replanting",
 		"test_jobs_need_their_workstation",
+		"test_hunters_keep_a_herd_floor",
 	]
 	var only := Array(OS.get_cmdline_user_args())
 	if not only.is_empty():
@@ -3048,6 +3049,55 @@ func test_saplings_and_replanting() -> void:
 
 
 # ---------------------------------------------------------------- workstations claimed (issue #184)
+
+func test_hunters_keep_a_herd_floor() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var wild := func() -> int: return sim.sheep.filter(func(a): return a.alive and a.get("pen", 0) == 0).size()
+	var flock: int = wild.call()
+	run(sim, 30)
+	check(wild.call() == flock, "Ada never hunts on her own (%d sheep)" % flock)
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	sim.set_role(tomas, "hunt")
+	run(sim, 20)
+	check(wild.call() == flock, "a hunter with no lodge doesn't hunt")
+	var lodge := give_station(sim, tomas)
+	check(is_same(sim.claimed(tomas), lodge), "Tomas claims the hunter's lodge")
+	check(sim.floor_of("sheep") == Tuning.HERD_FLOOR, "the herd floor starts at %d" % Tuning.HERD_FLOOR)
+	var keep := flock - 2
+	sim.set_herd_floor("sheep", keep)
+	run(sim, 150)
+	check(wild.call() == keep, "he hunts on his own down to the floor and no further (%d of %d left, floor %d)" % [wild.call(), flock, keep])
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Tomas: Hunter: herd at its floor (%d sheep)" % keep) and sim.stuck.any(func(x): return x.why.begins_with("Hunter: herd") and x.waiting), "the stuck list says the herd is at its floor, waiting: " + stuck_text(sim))
+	# Marks come first, and a marked animal is hunted even below the floor.
+	ada.away = true  # off at the meadow, so the marks are Tomas's
+	ada.back_at = 1 << 30
+	var near: Dictionary = Sim.nearest(sim.sheep.filter(func(a): return a.alive), Sim.rcell(tomas))
+	var far: Dictionary = sim.sheep.filter(func(a): return a.alive and not is_same(a, near)).reduce(func(best, a): return a if Sim.manhattan(a.cell, Sim.rcell(tomas)) > Sim.manhattan(best.cell, Sim.rcell(tomas)) else best)
+	sim.set_herd_floor("sheep", 0)
+	far.des = true
+	sim.fail_job(tomas)
+	var first = null
+	for i in 10 * Tuning.TPS:
+		sim.step()
+		if tomas.job != null and tomas.job.work == "hunt":
+			first = tomas.job.target
+			break
+	check(first != null and is_same(first, far), "with the floor lowered, he hunts the marked sheep before a nearer unmarked one")
+	sim.set_herd_floor("sheep", 50)
+	var before: int = wild.call()
+	var other: Dictionary = sim.sheep.filter(func(a): return a.alive and not a.des and a.claim == 0)[0]
+	other.des = true
+	run(sim, 60)
+	check(not other.alive and wild.call() < before, "a marked sheep is hunted even at the floor")
+	sim.set_herd_floor("sheep", -3)
+	check(sim.floor_of("sheep") == 0, "the floor never goes below 0")
+	# Saved with the game.
+	sim.set_herd_floor("cow", 5)
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(back.floor_of("cow") == 5 and back.floor_of("pig") == Tuning.HERD_FLOOR, "herd floors are saved, unset ones at the default")
+
 
 func test_jobs_need_their_workstation() -> void:
 	var sim := Sim.new_game()

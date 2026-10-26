@@ -242,6 +242,8 @@ func _initialize() -> void:
 			quit(1)
 			return
 		sim.events.clear()
+	if SaveFormat.VERSION >= 25:  # the village keeps 4 sheep from its hunters (#183)
+		sim.set_herd_floor("sheep", 4)
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}
