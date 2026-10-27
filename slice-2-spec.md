@@ -77,6 +77,8 @@ Slice 2 is done when, from a fresh start, a player can:
 
 The book (`Game.open_book`, shown over the goals panel's place) has a **Goals** page and one page per building or zone (`Goals.PAGES`, in the Build menu's order): what it's for, who works it, what it grows into, what goes wrong without it. A page shows once its building is available: the board after Ada's house, the pen after the board, the road after a party has been to the old mine. The selection panel of a building with a page has a "? About the …" button. Which pages have been read isn't tracked. Saving: v30 adds `meals_cooked` and `ore_home`; an old village that has cooked or has iron at home starts with them set.
 
+**Worn paths (#196).** Walking packs the village's ground into paths, as in Foundation. Each step a resident takes onto a village cell adds `WEAR_STEP` wear to it (capped at `WEAR_CAP`), unless it lies under a building or on a stockpile or farm. Stages by wear: grass; **worn grass** from `WEAR_WORN`; **dirt path** from `WEAR_DIRT`; **packed path** from `WEAR_PACKED`. A cell nobody stepped on since the last pass loses 1 wear every `WEAR_DECAY_SECS`, so paths follow where the village goes now. Dirt and packed paths walk faster (`PATH_SPEED_DIRT`, `PATH_SPEED_PACKED` times `WALK`), which multiplies with the stream's `FORD_SPEED` (`Sim.ground_speed`). Once any ground is worn, pathing (`Sim.find_path`) costs each step the time to cross its cell, so a path a little longer but quicker is taken and busy routes reinforce themselves; with no wear it's the plain breadth-first search. Placing a building or painting a stockpile or farm clears the wear under it. Only the village wears: site maps and the road don't, and led animals and the cart don't. The ground tints by stage (`world_view.gd`), redrawn only when a cell changes stage (`sim.rev`). The map keeps the wear per cell (`SimMap.wear`, shifted with the map when it grows). Saving: v31; older saves start on bare grass.
+
 ## 3. Sheep, hunting and the meadow
 
 **Sheep** are animals that wander slowly within the clearing, avoiding trees, boulders and buildings. Six start in the clearing. None arrive in the clearing on their own; the meadow regains its sheep (below).
@@ -158,7 +160,7 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 | Job | Workstation | Cost (provisional) | Reserves room for |
 |---|---|---|---|
 | Lumberjack | Chopping block | 4 planks | Sawmill |
-| Stonemason | Mason's bench | 2 planks, 4 cobblestone | Mason's workshop |
+| Stonemason | Mason's bench | 2 planks, 4 cobblestone | Mineshaft (#204) |
 | Build | Builder's table | 4 planks, 2 logs | Builder's yard |
 | Craft | Crafting bench | 4 logs | Workshop |
 | Toolsmith | Toolsmith's bench | 4 planks, 3 cobblestone | Anvil (once there's iron) |
@@ -230,7 +232,7 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 - A party member keeps their job while away (#106). It applies again once they're back.
 
 **Workstations: the chopping block and the mason's bench (#177).** A lumberjack or stonemason with no marked work finds their own, but only around a workstation the player has built.
-- **The buildings:** the chopping block (4 planks) and the mason's bench (2 planks, 4 cobblestone) are 1×1, from the Build menu. Each reserves a 3×3 plot for its upgrade, a sawmill or a mason's workshop (§8).
+- **The buildings:** the chopping block (4 planks) and the mason's bench (2 planks, 4 cobblestone) are 1×1, from the Build menu. Each reserves a 3×3 plot for its upgrade, a sawmill or a mineshaft (§8).
 - **Work area (#203):** painted cells (`site.area`), not a circle. A new workstation starts with the cells within `WORK_START_RADIUS` (8) of it that no other workstation of its kind has, so it works straight away. Select it and press **Paint area** (the tool stays on until **Done painting** or Esc): drag to add cells, and start a drag on a painted cell to erase, like farms. Cells more than `WORK_REACH` (12) from the workstation stay unpainted, and the hint says so. A cell belongs to at most one chopping block and at most one mason's bench: painting one another owns moves it. An area may lie over stockpiles, farms and pens; lumberjacks still plant nothing on protected land. It's drawn as a flat chalk wash while the workstation is selected, while placing one (its starting area) and while painting. Saving: v32 gives every standing chopping block and mason's bench the circle it always worked.
 - **Their own work**, once nothing marked is left, in this order:
   1. carry logs or cobblestone lying in a work area to the workstation's pile;
@@ -245,7 +247,7 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 - **The workstation's panel** shows its pile, its target, the resident who has claimed it (#184), and its stuck reasons.
 - **Processing (#178):** each workstation is also a station with a queue, and gets a tab in the Craft panel.
   - The chopping block saws **5 planks from a log** ("Sawn planks"), against the bench's 4. A level-4 lumberjack saws 6. The bench's Planks recipe stays.
-  - The mason's bench cuts **2 cobblestone into 2 stone bricks**. Stone bricks are a new building material. Nothing uses them yet; the mason's workshop, the kitchen and a sturdier house will.
+  - The mason's bench cuts **2 cobblestone into 2 stone bricks**. Stone bricks are a new building material. The mineshaft (#204) takes 6 to build, and the kitchen and a sturdier house will use them too.
   - Sawing is Lumberjack work and cutting is Stonemason work, so their levels speed it up. Ada does it too, like all station work.
   - **Standing order:** a chopping block keeps 20 planks and a mason's bench 10 stone bricks, set in steps of 5 in its panel and its Craft panel tab (0 is off). While the village has fewer, it queues one batch at a time, like the fireplace's meals, when the inputs are on hand. Batches queued by hand are made regardless.
 
@@ -319,7 +321,7 @@ Once a crafting bench is finished, a **Craft** button appears in the orders tool
 **Job buildings start simple and evolve in place.** Each job building starts as its simplest form and reserves the plot its next form needs.
 - **Reserved plot:** shown as a faint dashed outline, and while placing, next to the blueprint. It stays clear: nothing can be built, stockpiled or farmed on it, though residents walk across it. Placing the building clears stockpile cells and farm plots from it. Trees and boulders already there are left alone until the upgrade needs the space.
 - **Turning:** R turns which side the plot opens toward. The building sits in the middle of the plot's back wall, and the fireplace's mouth faces the plot.
-- **Room to grow:** a job building's own plot must stay on the map and clear of other buildings and plots, or placement says "Not enough room to grow into a kitchen" (or a workshop).
+- **Room to grow:** a job building's own plot must stay on the map and clear of other buildings and plots, or placement says "Not enough room to grow into a kitchen" (or a workshop, sawmill, mineshaft and so on, by the building's plot).
 - **The upgrade itself** is later work (§14). It keeps the building's queue and adds capacity or recipes.
 
 | Starts as | Grows into (later) | Reserved plot |
@@ -380,7 +382,7 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 - "Starving: no food stored", and "Hungry" on the resident.
 - "House needs a bed: N more wool".
 - "Fireplace: Bread needs N more wheat", using the bench's wording rules.
-- When placing a job building, "Not enough room to grow into a kitchen" (or a workshop) if its reserved plot would overlap a building or the map edge.
+- When placing a job building, "Not enough room to grow into a kitchen" (or a workshop, sawmill, mineshaft and so on) if its reserved plot would overlap a building or the map edge.
 - "Toolsmith needs N more X for a spare Y".
 - "No one is a farmer" (or hunter, cook, and so on), when there's work of that type, no resident has the job, and Ada can't see to it (§5, #134).
 - "Meadow has no sheep left", when a trip is planned.
@@ -410,6 +412,10 @@ Taken together, the upgrade steps:
 - Starts every species at the default herd floor (v24→v25, #183).
 - Gives each existing chopping block and mason's bench the default standing order: 20 planks, 10 stone bricks (v25→v26, #178).
 - Turns automatic ingredients on and carries the founding's progress over to the reworked goals (v26→v27, #182; see above).
+- Counts meals cooked and iron ore brought home from what a village already has, so it isn't asked to do them again (v29→v30, #198; see above).
+- Starts every village on bare grass: the wear is empty (v30→v31, #196).
+- Gives each chopping block and mason's bench the circle it always worked as its painted area (v31→v32, #203).
+- Nothing changes for the mineshaft (v32→v33, #204): a site may carry `upgrading` and `shaft`, and none does yet.
 - Nothing changes for land claims (v28→v29, #187): a save keeps its size, and claims available come from its residents (it saves the number made).
 - Nothing changes for storehouses (v27→v28, #189): older saves have none. A storehouse saves its chest count, and its chests' stacks are saved with the map's items, keyed by chest slot.
 - Turns a Mine resident into a Lumberjack, with Mine's experience in both Lumberjack and Stonemason (v22→v23, #177; see §5). No village has a workstation, sapling or Keep mark yet.
@@ -464,8 +470,6 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 - **Erasing farm plots:** with Farm plot on, a drag that starts on a plot erases the plots in its rectangle, previewed in red like stockpile cells. Anything growing on them is lost, as with the plot panel's Remove plot.
 
 **Tools dropdown (#90).** A click pins the list open, and a second click unpins it. A click anywhere outside the button and the list, or Esc, closes it. Only keyboard focus (tabbing to the button) holds it open, not the focus a click leaves behind. Hovering the gap between the button and the list counts as hovering, but the rest of their bounding box doesn't, and the mouse leaving the window ends hovering.
-
-**Worn paths (#196).** Walking packs the village's ground into paths, as in Foundation. Each step a resident takes onto a village cell adds `WEAR_STEP` wear to it (capped at `WEAR_CAP`), unless it lies under a building or on a stockpile or farm. Stages by wear: grass; **worn grass** from `WEAR_WORN`; **dirt path** from `WEAR_DIRT`; **packed path** from `WEAR_PACKED`. A cell nobody stepped on since the last pass loses 1 wear every `WEAR_DECAY_SECS`, so paths follow where the village goes now. Dirt and packed paths walk faster (`PATH_SPEED_DIRT`, `PATH_SPEED_PACKED` times `WALK`), which multiplies with the stream's `FORD_SPEED` (`Sim.ground_speed`). Once any ground is worn, pathing (`Sim.find_path`) costs each step the time to cross its cell, so a path a little longer but quicker is taken and busy routes reinforce themselves; with no wear it's the plain breadth-first search. Placing a building or painting a stockpile or farm clears the wear under it. Only the village wears: site maps and the road don't, and led animals and the cart don't. The ground tints by stage (`world_view.gd`), redrawn only when a cell changes stage (`sim.rev`). The map keeps the wear per cell (`SimMap.wear`, shifted with the map when it grows). Saving: v31; older saves start on bare grass.
 
 **Panel keys (#197).** While something is selected, the first seven buttons of its panel (`Hud._register_panel_keys`: the panel's own buttons in the order they appear, not the − and + steppers) have keys **Q E R Z X C V**, each shown in a keycap at the button's left. A key emits the button's `pressed`, so it runs the same callable as a click. Lists: while the job dropdown or a resident's equip list is open, **1 to 9** pick its entries (the speed keys wait). A Destructive button arms on its key and acts on a second press of it; any other key disarms it. The selection stays after a key. With nothing selected, the order keys keep their meanings; **Esc** clears the selection before it opens the menu; **F** is not a panel key. They're the Selection group on the Controls page (`panel1`–`panel7`, `list1`–`list9`): looked up with `KeyBindings.panel_index` / `list_index`, never `action_for`, and allowed to share a key with an order or a speed key, and nothing else (`may_share`). No save change.
 
@@ -522,14 +526,14 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 
 ## 13. Open questions (not blocking the start)
 
-- **Regrowth (#22):** do trees regrow from saplings? Without regrowth, a long game runs out of trees. (Decided: the meadow regains 1 sheep every 4 minutes up to 8. Trees don't regrow yet.)
+- **Regrowth (#22), decided:** trees regrow from saplings, the meadow regains its animals over time, and boulders don't come back. Once every boulder on the village map is gone, a mason's bench can be dug out into a mineshaft (#204). Depletion at the sites is decided with their slices.
 - **Building customization (#21):** still fixed templates in Slice 2.
 
 ## 14. Deferred
 
 Rest and sleep, happiness, shears, the inn, travelers' requests, food variety effects, spoiling, and tables for eating. Breeding came in with Slice 3.5's pens (`slice-3.5-spec.md`).
 
-**Building upgrades** (designed in §8, built later):
+**Building upgrades** (designed in §8). The mason's bench's mineshaft is built (#204: the rebuild is one more stage of the same site, keeping its worker, queue and work area); the rest are later:
 - **Fireplace → kitchen:** a bigger queue, two cooks at once, and new recipes.
 - **Bench → workshop:** two crafters at once, and later tool repair.
 - **Farm plot → barn-backed farm:** seed storage, and later fences.
