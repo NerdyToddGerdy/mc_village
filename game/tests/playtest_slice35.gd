@@ -82,8 +82,8 @@ func _initialize() -> void:
 	check(count("wheat") >= 2, "2 wheat in the village")
 
 	# ---- The adventures list (issue #136): pick the meadow, plan, pack and depart
-	check(await open_adventures(sim), "the meadow signpost's planner leads back to all the adventures")
-	check(await click_button("Adventure: Meadow"), "the adventures list: pick the meadow")
+	check(await open_adventures(sim), "the meadow signpost opens the board")
+	check(await pick_location("Meadow"), "the Location dropdown: pick the meadow")
 	await settle()
 	check(game.adventure == Meadow.ID and game.plan.sticks == 12, "a meadow plan packs the pen's 12 sticks (%s)" % game.plan.get("sticks", -1))
 	var other: Dictionary = sim.residents.filter(func(r): return r.id != ada.id and sim.cant_join(r) == "")[0]
@@ -146,8 +146,8 @@ func _initialize() -> void:
 	check(visible_label("15% guard"), "%s's panel shows the tunic's guard" % wearer.name)
 
 	# ---- A mine trip with the tunic on: the planner's protection line
-	check(await open_adventures(sim), "back to the adventures list")
-	check(await click_button("Adventure: Old mine"), "the adventures list: pick the old mine")
+	check(await open_adventures(sim), "back to the board")
+	check(await pick_location("Old mine"), "the Location dropdown: pick the old mine")
 	await settle()
 	for id in game.plan.party.duplicate():
 		if id != wearer.id:
@@ -189,7 +189,7 @@ func pen_spot(sim: Sim) -> Rect2i:
 	return Rect2i(-1, -1, 0, 0)
 
 
-## Opens the adventures list through the meadow signpost: its planner's "All adventures". The fixture's
+## Opens the expedition board through the meadow signpost, on the meadow. The fixture's
 ## board stands behind a house, where the fixed camera can't see it to click.
 func open_adventures(sim: Sim) -> bool:
 	if game.view_map != "village" and not await click_button("Village"):
@@ -201,9 +201,7 @@ func open_adventures(sim: Sim) -> bool:
 	if not await click_button("Plan a trip to the meadow"):
 		return false
 	await settle()
-	var ok := await click_button("All adventures")
-	await settle()
-	return ok
+	return game.planner_open
 
 
 ## Hovers each tally group's button and checks its dropdown's counts against the sim (issue #141).
