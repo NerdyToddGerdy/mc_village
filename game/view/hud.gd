@@ -68,6 +68,8 @@ var _tool_btns := {}
 var _tool_keys := {}            ## Each orders button's keycap Label.
 var _toolbar_sig := ""
 var _armed_key := ""            ## The Destructive button waiting for its second click, if any.
+var _panel_btns: Array = []     ## The selection panel's buttons that have a panel key, in panel order (issue #197).
+const PANEL_KEYS := 7
 var _armed_until := 0
 const ARM_MS := 3000
 var _menus := {}                ## Toolbar menu id -> its rows' container (OrderMenus.MENUS).
@@ -537,6 +539,114 @@ func _destructive(text: String, confirm: String, key: String, on_press: Callable
 	b.set_meta("disarmed_text", text)
 	b.set_meta("arm_key", key)
 	return b
+
+
+## Gives the selection panel's first PANEL_KEYS buttons their keys (issue #197): the panel's own
+## buttons in the order they appear, so a key and a click run the same callable. Each shows its key in
+## a small keycap at its left. The − and + steppers and the equip list's entries stay click-only
+## (the entries have 1–9 while their list is open).
+func _register_panel_keys(c: Container) -> void:
+	_panel_btns = []
+	for b in c.find_children("*", "Button", true, false):
+		if b.disabled or _going(b, c):
+			continue
+		if b.text in ["−", "+"] or b.has_meta("entry"):
+			continue
+		if _panel_btns.size() < PANEL_KEYS:
+			_panel_btns.append(b)
+	for i in _panel_btns.size():
+		var key: String = game.keys.first("panel%d" % (i + 1))
+		if key != "":
+			_add_keycap(_panel_btns[i], key)
+
+
+## Whether a node, or one of its parents up to `root`, is waiting to be freed: a panel rebuild queues
+## the old rows, and the new ones are added beside them in the same frame.
+static func _going(n: Node, root: Node) -> bool:
+	while n != null and n != root:
+		if n.is_queued_for_deletion():
+			return true
+		n = n.get_parent()
+	return false
+
+
+## A small chalk keycap at the left of a button, with room made for it.
+func _add_keycap(b: Button, key: String) -> void:
+	var cap := PanelContainer.new()
+	var cap_box := _box(Color(0, 0, 0, 0), 3, 0, Palette.CHALK_DIM)
+	cap_box.content_margin_left = 5
+	cap_box.content_margin_right = 5
+	cap_box.content_margin_top = 0
+	cap_box.content_margin_bottom = 0
+	cap.add_theme_stylebox_override("panel", cap_box)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cap.add_child(_label(key, false, Palette.CHALK_DIM, Palette.CAPTION))
+	b.add_child(cap)
+	var width := _font.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, Palette.CAPTION).x + 12
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		var sb := b.get_theme_stylebox(state).duplicate() as StyleBoxFlat
+		sb.content_margin_left = maxf(sb.content_margin_left, 10 + width + 6)
+		b.add_theme_stylebox_override(state, sb)
+	var place := func() -> void:
+		cap.size = cap.get_combined_minimum_size()
+		cap.position = Vector2(10, (b.size.y - cap.size.y) / 2)
+	b.resized.connect(place)
+	cap.minimum_size_changed.connect(place)
+	b.set_meta("keycap", cap)
+
+
+## Presses the selection panel's button for panel key `i` (from 0), for a click-free action. Returns
+## whether there was one. A Destructive button takes its key twice, and any other key disarms it.
+func press_panel_key(i: int) -> bool:
+	if i >= _panel_btns.size() or not is_instance_valid(_panel_btns[i]) or _panel_btns[i].disabled:
+		_disarm()
+		return false
+	var b: Button = _panel_btns[i]
+	if _armed_key != "" and b.get_meta("arm_key", "") != _armed_key:
+		_disarm()
+	b.pressed.emit()
+	return true
+
+
+## Puts away an armed Destructive button, as its timeout does.
+func _disarm() -> void:
+	if _armed_key == "":
+		return
+	_armed_key = ""
+	for n in _sel.find_children("*", "Button", true, false) + _plan_box.find_children("*", "Button", true, false):
+		if n.has_meta("disarmed_text"):
+			n.text = n.get_meta("disarmed_text")
+
+
+## The entries of the list that's open (the job dropdown, or the equip list in the resident panel), for 1–9.
+func list_entries() -> Array:
+	var out: Array = []
+	if _job_drop.visible:
+		for b in _job_list.find_children("*", "Button", true, false):
+			if not _going(b, _job_list):
+				out.append(b)
+	elif equip_kind != "":
+		for b in _sel.find_children("*", "Button", true, false):
+			if not _going(b, _sel) and b.has_meta("entry"):
+				out.append(b)
+	return out
+
+
+func list_open() -> bool:
+	return not list_entries().is_empty()
+
+
+## Any key that isn't the armed button's own puts the Destructive button away.
+func disarm_panel() -> void:
+	_disarm()
+
+
+func press_list_key(i: int) -> bool:
+	var list := list_entries()
+	if i >= list.size() or list[i].disabled:
+		return false
+	list[i].pressed.emit()
+	return true
 
 
 ## Toolbar badges, build-menu keys and tooltips, from the current key bindings (issue #8).
@@ -1451,7 +1561,10 @@ func _refresh_selection(sim: Sim) -> void:
 	for s in sim.stuck:
 		sig += s.why
 	sig += game.tool + str(game.area_site)  # the Paint area button reads Done painting while it's on (issue #203)
-	_rebuild(_sel, sig, func(c: Container) -> void: _fill_selection(c, sim, sel, target))
+	sig += _keys_sig
+	_rebuild(_sel, sig, func(c: Container) -> void:
+		_fill_selection(c, sim, sel, target)
+		_register_panel_keys(c))
 
 
 func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
@@ -1905,6 +2018,7 @@ func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
 		b.theme_type_variation = "Secondary"
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.add_theme_font_size_override("font_size", Palette.CAPTION)
+		b.set_meta("entry", true)  # 1–9 pick it while the list is open (issue #197)
 		c.add_child(b)
 
 

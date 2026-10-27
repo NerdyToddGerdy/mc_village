@@ -728,6 +728,19 @@ func _key(e: InputEventKey) -> void:
 			pick_order(menu_open, list[i].id)
 		get_viewport().set_input_as_handled()
 		return
+	if _hud.list_open():  # a dropdown or the equip list: 1–9 pick its entries, not the speed (issue #197)
+		var li := keys.list_index(e)
+		if li >= 0:
+			_hud.press_list_key(li)
+			get_viewport().set_input_as_handled()
+			return
+	if not selection.is_empty() and tool == "" and menu_open == "" and placing == "" and e.keycode != KEY_ESCAPE:
+		# The selection panel's buttons have keys (issue #197): the same actions as clicking them.
+		var pi := keys.panel_index(e)
+		if pi >= 0 and _hud.press_panel_key(pi):
+			get_viewport().set_input_as_handled()
+			return
+		_hud.disarm_panel()
 	if e.keycode == KEY_ESCAPE:
 		if tool != "" or menu_open != "":
 			set_tool("")
@@ -739,6 +752,8 @@ func _key(e: InputEventKey) -> void:
 			craft_menu_open = false
 		elif planner_open:
 			planner_open = false
+		elif not selection.is_empty():  # clears the selection, which gives the order keys back (issue #197)
+			selection = {}
 		else:
 			open_menu("main")
 		get_viewport().set_input_as_handled()
