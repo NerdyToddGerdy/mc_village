@@ -13,6 +13,9 @@ uniform vec3 finish = vec3(0.0);
 // A map-wide grade: the mines are colder and harsher than the village (issue #206).
 uniform vec3 grade : source_color = vec3(1.0);
 uniform float contrast = 1.0;
+// A lone part that moves (a resident's or an animal's) lays its texture in its own space, so the
+// pattern travels with it instead of sliding over it.
+uniform bool local_uv = false;
 
 varying vec3 wpos;
 varying vec3 wnormal;
@@ -24,6 +27,10 @@ void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	wnormal = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
 	lpos = VERTEX + 0.5;
+	if (local_uv) {
+		wpos = VERTEX;
+		wnormal = NORMAL;
+	}
 	lay = from_instance ? floor(INSTANCE_CUSTOM.rgb * 255.0 + 0.5) : finish;
 	vec3 s = vec3(length(MODEL_MATRIX[0].xyz), length(MODEL_MATRIX[1].xyz), length(MODEL_MATRIX[2].xyz));
 	end_axis = int(lay.z) - 1;

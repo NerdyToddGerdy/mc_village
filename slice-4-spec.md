@@ -164,6 +164,18 @@ It runs in CI.
 
 **Hand playtest:** a checklist mirroring #51 and #113, in #125. Every stall must be understood from its on-screen reason alone.
 
+The checklist, from a Slice 3 village with iron on hand (`tests/fixtures/slice3_village.save`). Tick each on screen:
+- [ ] Tab to the road: it shows its segments, the obstacles and the journey estimate; unwalked segments are fogged.
+- [ ] Walk it with a party and see the rest of the road surveyed.
+- [ ] Residents build the bridge and clear the cut, visibly, from delivered materials.
+- [ ] Craft rails and a minecart at the bench; both come out of iron ingots.
+- [ ] Plan the line: its cost and the time it saves are shown before you commit; the crew lays it section by section.
+- [ ] Build a station at each end; the cart parks at the village one.
+- [ ] Send an expedition by cart: the round trip is shorter and mining at the mine is no faster.
+- [ ] Cargo comes off at the station's platform and is hauled to the stockpile.
+- [ ] Every stall in the list says what to do about it; none is a mystery.
+- [ ] The look (#206): blocks, loose items, residents and animals carry their textures on the village, the mine (colder), the meadow and the road, and chalk marks still read on top of all of them.
+
 **Iron.** The line and a cart take 11 iron ingots, more than the old mine's vein yielded at 2 ore a block. So `ORE_YIELD` is raised to 4 iron ore and 3 coal a block: 16 iron ore, and coal enough to smelt it. That leaves room for an iron pickaxe as well.
 
 ## 10. Controls

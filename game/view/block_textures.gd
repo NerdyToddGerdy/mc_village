@@ -21,6 +21,8 @@ const BRICK := 9
 const SHINGLE := 10
 const WOOL := 11
 const SOIL := 12
+const CLOTH := 13
+const FUR := 14
 
 ## How far a texel strays from mid-grey at most, as a fraction of the block's colour. Low, so chalk
 ## marks and outlines still read on every material (slice-1-spec.md §12, Contrast).
@@ -43,6 +45,8 @@ const BRICKS := Vector3i(BRICK, BRICK, 0)
 const SHINGLES := Vector3i(SHINGLE, SHINGLE, 0)
 const FLEECE := Vector3i(WOOL, WOOL, 0)
 const TILLED := Vector3i(SOIL, SOIL, 0)
+const CLOTHING := Vector3i(CLOTH, CLOTH, 0)  ## Residents' clothes (phase 4).
+const HIDE := Vector3i(FUR, FUR, 0)          ## Leather, and the cows' and pigs' coats.
 
 static var _array: Texture2DArray
 
@@ -50,7 +54,7 @@ static var _array: Texture2DArray
 ## Every layer, built once.
 static func array() -> Texture2DArray:
 	if _array == null:
-		var draws: Array[Callable] = [_flat, _grass, _dirt, _bark, _rings, _plank, _leaves, _stone, _cobble, _brick, _shingle, _wool, _soil]
+		var draws: Array[Callable] = [_flat, _grass, _dirt, _bark, _rings, _plank, _leaves, _stone, _cobble, _brick, _shingle, _wool, _soil, _cloth, _fur]
 		var images: Array[Image] = []
 		for i in draws.size():
 			var img := Image.create_empty(SIZE, SIZE, false, Image.FORMAT_RGB8)
@@ -257,6 +261,26 @@ static func _wool(img: Image, rng: RandomNumberGenerator) -> void:
 		for dy in range(-1, 2):
 			for dx in range(-1, 2):
 				_px(img, cx + dx, cy + dy, s * (0.6 if dx != 0 and dy != 0 else 1.0))
+
+
+## Woven cloth: a fine weave, alternate threads a shade apart.
+static func _cloth(img: Image, rng: RandomNumberGenerator) -> void:
+	for y in SIZE:
+		for x in SIZE:
+			_px(img, x, y, (0.35 if (x + y) % 2 == 0 else -0.35) + (0.25 if (x / 2 + y / 2) % 2 == 0 else -0.25) + rng.randf_range(-0.12, 0.12))
+
+
+## A short coat: soft streaks running down, a few lighter hairs.
+static func _fur(img: Image, rng: RandomNumberGenerator) -> void:
+	for x in SIZE:
+		var col := rng.randf_range(-0.3, 0.3)
+		for y in SIZE:
+			_px(img, x, y, col + rng.randf_range(-0.2, 0.2))
+	for i in 10:
+		var x := rng.randi_range(0, SIZE - 1)
+		var y := rng.randi_range(0, SIZE - 1)
+		for k in 3:
+			_px(img, x, y + k, 0.8)
 
 
 ## Tilled earth: furrows running across, a dark trough and a lighter ridge.

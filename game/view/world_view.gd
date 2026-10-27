@@ -1174,13 +1174,24 @@ func drawn_pos(r: Dictionary) -> Vector2:
 
 ## A resident's body part. Parts hidden behind a tree or wall show as a faint silhouette in the
 ## resident's tunic colour, so who is who reads even under a canopy (issue #79).
-func _person_mat(color: Color, tunic: Color) -> StandardMaterial3D:
-	var key := color.to_html() + tunic.to_html()
+func _person_mat(color: Color, tunic: Color, finish := BlockTextures.PLAIN) -> Material:
+	var key := color.to_html() + tunic.to_html() + str(finish)
 	if not _person_mats.has(key):
-		var m := StandardMaterial3D.new()
-		m.albedo_color = color
-		m.roughness = 1.0
-		m.next_pass = _xray_material(tunic)
+		var m: Material
+		if finish == BlockTextures.PLAIN:
+			var sm := StandardMaterial3D.new()
+			sm.albedo_color = color
+			sm.roughness = 1.0
+			sm.next_pass = _xray_material(tunic)
+			m = sm
+		else:  # a pixel texture (issue #206, phase 4), through the blocks' shader
+			var shm := _block_material(false)
+			shm.set_shader_parameter("from_instance", false)
+			shm.set_shader_parameter("local_uv", true)
+			shm.set_shader_parameter("tint", color)
+			shm.set_shader_parameter("finish", Vector3(finish))
+			shm.next_pass = _xray_material(tunic)
+			m = shm
 		_person_mats[key] = m
 	return _person_mats[key]
 
@@ -1220,12 +1231,12 @@ void fragment() {
 	return _xrays[key]
 
 
-func _part(parent: Node3D, size: Vector3, y: float, color: Color, tunic := Palette.CHALK) -> MeshInstance3D:
+func _part(parent: Node3D, size: Vector3, y: float, color: Color, tunic := Palette.CHALK, finish := BlockTextures.PLAIN) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	bm.size = size
 	mi.mesh = bm
-	mi.material_override = _person_mat(color, tunic)
+	mi.material_override = _person_mat(color, tunic, finish)
 	mi.position = Vector3(0, y + size.y / 2, 0)
 	parent.add_child(mi)
 	return mi
@@ -1240,8 +1251,8 @@ func _make_person(r: Dictionary) -> Node3D:
 	var tunic := Color("#" + r.shirt)
 	# Feet, legs and shirt are their own boxes, so worn armor (issue #140) can recolour each.
 	_part(body, Vector3(0.26, 0.1, 0.26), 0, Palette.LEGS, tunic).name = "Feet"
-	_part(body, Vector3(0.26, 0.22, 0.26), 0.1, Palette.LEGS, tunic).name = "Legs"
-	_part(body, Vector3(0.34, 0.46, 0.34), 0.32, tunic, tunic).name = "Shirt"
+	_part(body, Vector3(0.26, 0.22, 0.26), 0.1, Palette.LEGS, tunic, BlockTextures.CLOTHING).name = "Legs"
+	_part(body, Vector3(0.34, 0.46, 0.34), 0.32, tunic, tunic, BlockTextures.CLOTHING).name = "Shirt"
 	_part(body, Vector3(0.24, 0.32, 0.24), 0.78, Palette.SKIN, tunic)
 	var carry := _part(body, Vector3(0.28, 0.24, 0.28), 1.14, Palette.PLANK, tunic)
 	carry.name = "Carry"
@@ -1341,7 +1352,9 @@ func _dress(n: Node3D, r: Dictionary) -> void:
 	var leather: Color = Palette.ITEM_COLORS.leather
 	(n.get_node("Body/Cap") as Node3D).visible = worn.has("head")
 	for p in [["Feet", "feet", Palette.LEGS, leather.darkened(0.15)], ["Legs", "legs", Palette.LEGS, leather], ["Shirt", "chest", tunic, leather]]:
-		(n.get_node("Body/" + p[0]) as MeshInstance3D).material_override = _person_mat(p[3] if worn.has(p[1]) else p[2], tunic)
+		var on: bool = worn.has(p[1])
+		var finish := BlockTextures.HIDE if on else (BlockTextures.PLAIN if p[0] == "Feet" else BlockTextures.CLOTHING)
+		(n.get_node("Body/" + p[0]) as MeshInstance3D).material_override = _person_mat(p[3] if on else p[2], tunic, finish)
 
 
 # ---------------------------------------------------------------- animals (issues #42, #138)
@@ -1366,7 +1379,7 @@ func _make_animal(species: String) -> Node3D:
 	match species:
 		"cow":
 			_part(body, Vector3(0.58, 0.26, 0.34), 0.0, COW_HIDE.darkened(0.3))  # legs
-			var hide := _part(body, Vector3(0.74, 0.36, 0.44), 0.24, COW_HIDE)
+			var hide := _part(body, Vector3(0.74, 0.36, 0.44), 0.24, COW_HIDE, Palette.CHALK, BlockTextures.HIDE)
 			hide.name = "Hide"
 			var patch := _part(body, Vector3(0.28, 0.37, 0.45), 0.24, COW_PATCH)  # a white patch round its middle
 			patch.position.x = -0.1
@@ -1380,14 +1393,14 @@ func _make_animal(species: String) -> Node3D:
 				horn.position.z = z
 		"pig":
 			_part(body, Vector3(0.38, 0.1, 0.26), 0.0, PIG_SNOUT.darkened(0.2))  # short legs
-			_part(body, Vector3(0.5, 0.26, 0.36), 0.08, PIG_SKIN)
+			_part(body, Vector3(0.5, 0.26, 0.36), 0.08, PIG_SKIN, Palette.CHALK, BlockTextures.HIDE)
 			var head := _part(body, Vector3(0.2, 0.2, 0.24), 0.12, PIG_SKIN)
 			head.position.x = 0.32
 			var snout := _part(body, Vector3(0.06, 0.1, 0.14), 0.16, PIG_SNOUT)
 			snout.position.x = 0.44
 		_:
 			_part(body, Vector3(0.44, 0.16, 0.30), 0.0, SHEEP_FACE)     # legs, as one dark block
-			_part(body, Vector3(0.56, 0.34, 0.42), 0.14, SHEEP_WOOL)     # woolly body
+			_part(body, Vector3(0.56, 0.34, 0.42), 0.14, SHEEP_WOOL, Palette.CHALK, BlockTextures.FLEECE)     # woolly body
 			var head := _part(body, Vector3(0.2, 0.22, 0.2), 0.3, SHEEP_FACE)
 			head.name = "Head"
 			head.position.x = 0.34
