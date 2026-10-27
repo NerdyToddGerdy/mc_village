@@ -74,6 +74,17 @@ func key(code: Key, shift := false) -> void:
 	await frames(2)
 
 
+## The middle of the open radial Gather menu's wedge `i` on screen (issue #176).
+func radial_wedge(i: int) -> Vector2:
+	var r: Dictionary = game.radial
+	var span: float = TAU / r.wedges.size()
+	return r.center + Vector2.from_angle(-PI / 2 + i * span) * (Game.RADIAL_IN + Game.RADIAL_OUT) / 2
+
+
+func radial_ids() -> Array:
+	return game.radial.get("wedges", []).map(func(w): return w.id)
+
+
 func screen(cell: Vector2i, h := 0.0) -> Vector2:
 	return game._cam.unproject_position(Vector3(cell.x + 0.5, h, cell.y + 0.5))
 

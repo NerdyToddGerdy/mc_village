@@ -76,7 +76,14 @@ While a toolbar menu is open, **1 to 9** pick its rows, so Z then 1 paints a sto
 
 **To erase** stockpile cells or farm plots, switch that Paint order on and start a drag on a painted cell. The cells that will go show in red. Items on an erased stockpile cell stay where they are and get carried to the rest of the stockpile. Wheat growing on an erased farm plot is lost.
 
-**Order someone directly.** Select a resident and **right-click** a tree, boulder or animal to send them to it, or right-click the ground to send them there. **Shift + right-click** adds the order to the end of their list. Direct orders come before everything else, whatever their job. They still work while a Gather or Paint order is on.
+**Right-click a tree, boulder or animal** for a ring of its orders, with or without anyone selected:
+- **Chop**, **Break** or **Hunt** marks it for anyone (**Cancel** once it's marked).
+- **Chop now**, **Break now** or **Hunt now** sends the residents you've selected straight to it. It only shows with someone selected, and it's greyed when they can't, with the reason below the ring ("Break now: Tomas has no pickaxe").
+- **Chop all trees nearby** or **Break all nearby** marks everything of its kind within 4 cells.
+
+Click a wedge, press 1 to 4, or hold the right button, drag to a wedge and let go. The middle names it and what it drops; click it to select it. Esc or a click outside closes the ring.
+
+**Order someone directly.** Select a resident and right-click the ground to send them there. **Shift + right-click** a tree, boulder or animal skips the ring and adds that order to the end of their list. Direct orders come before everything else, whatever their job. They still work while a Gather or Paint order is on.
 
 ## Residents
 
@@ -316,8 +323,9 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | Shift-drag / Alt-drag with Mine | Mark trees only, or boulders only |
 | Click | Select a resident or anything else |
 | Shift-drag | Select several residents |
-| Right-click | Order the selected residents to mine, hunt or walk |
-| Shift + right-click | Queue an order after their current one |
+| Right-click a tree, boulder or animal | Its orders, in a ring: click one, press 1–4, or drag to one and let go. Esc closes it |
+| Right-click the ground | Walk the selected residents there |
+| Shift + right-click | Queue an order after their current one, skipping the ring |
 | J | Village jobs board |
 | F / N | Next resident, next stuck item |
 | Tab | Switch between the village, the old mine (and its levels), the road to it and the meadow, once they're known |

@@ -10,6 +10,7 @@ var _theme := Theme.new()
 var _font: FontFile
 var _bold: FontVariation
 var _root := Control.new()
+var _radial := Control.new()  ## Draws the radial Gather menu (issue #176) when it's open.
 var _tallies := HBoxContainer.new()
 var _tools_btn: Button
 var _jobs_btn: Button               ## Opens the Village jobs board (issue #78).
@@ -202,6 +203,10 @@ func _ready() -> void:
 	_board_panel.visible = false
 	_root.add_child(_board_panel)
 	_root.add_child(_job_drop)
+	_radial.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_radial.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_radial.draw.connect(_draw_radial)
+	_root.add_child(_radial)
 	_choice_box.add_theme_constant_override("separation", 8)
 	_choice_box.custom_minimum_size.x = 380
 	_choice_panel = _panel(_choice_box, Vector2.ZERO, 18)
@@ -319,6 +324,49 @@ func _draw_mark(c: Control, t: String) -> void:
 			c.draw_rect(Rect2(2, 6, 14, 4), Palette.PLANK)
 			c.draw_rect(Rect2(3, 10, 2, 6), Palette.PLANK)
 			c.draw_rect(Rect2(13, 10, 2, 6), Palette.PLANK)
+
+
+## The radial Gather menu (issue #176): slate wedges outlined in chalk round the cursor, each with
+## its order's mark, number and name; the hovered one filled in chalk, a greyed one dim. The middle
+## names the target and what it drops.
+func _draw_radial() -> void:
+	var r: Dictionary = game.radial
+	if r.is_empty():
+		return
+	var c: Vector2 = r.center
+	var rin := Game.RADIAL_IN
+	var rout := Game.RADIAL_OUT
+	var n: int = r.wedges.size()
+	var span := TAU / n
+	for i in n:
+		var w: Dictionary = r.wedges[i]
+		var a0 := -PI / 2 - span / 2 + i * span + 0.035
+		var a1 := a0 + span - 0.07
+		var pts := PackedVector2Array()
+		for k in 17:
+			pts.append(c + Vector2.from_angle(lerpf(a0, a1, k / 16.0)) * rout)
+		for k in range(16, -1, -1):
+			pts.append(c + Vector2.from_angle(lerpf(a0, a1, k / 16.0)) * rin)
+		var lit: bool = r.hover == i and w.ok
+		_radial.draw_colored_polygon(pts, Palette.CHALK if lit else Color(Palette.SLATE, 0.95 if w.ok else 0.7))
+		var edge := pts.duplicate()
+		edge.append(pts[0])
+		_radial.draw_polyline(edge, Palette.CHALK if w.ok else Palette.CHALK_DIM, 1.5, true)
+		var mid := c + Vector2.from_angle((a0 + a1) / 2) * (rin + rout) / 2
+		_radial.draw_set_transform(mid + Vector2(-9, -26))
+		_draw_mark(_radial, w.mark)
+		_radial.draw_set_transform(Vector2.ZERO)
+		var col: Color = Palette.SLATE_DEEP if lit else (Palette.CHALK if w.ok else Palette.CHALK_DIM)
+		var tw := 104.0
+		_radial.draw_multiline_string(_bold, mid + Vector2(-tw / 2, 4), "%d  %s" % [i + 1, w.label], HORIZONTAL_ALIGNMENT_CENTER, tw, Palette.CAPTION, 2, col)
+	_radial.draw_circle(c, rin - 3, Palette.SLATE_DEEP)
+	_radial.draw_arc(c, rin - 3, 0, TAU, 40, Palette.CHALK, 1.5, true)
+	var title: String = game.radial_title(r.target)
+	var parts := title.split(" · ")
+	var w2 := (rin - 6) * 2
+	_radial.draw_string(_bold, c + Vector2(-w2 / 2, -4), parts[0], HORIZONTAL_ALIGNMENT_CENTER, w2, Palette.CAPTION, Palette.CHALK)
+	if parts.size() > 1:
+		_radial.draw_multiline_string(_font, c + Vector2(-w2 / 2, 10), parts[1], HORIZONTAL_ALIGNMENT_CENTER, w2, Palette.CAPTION - 2, 2, Palette.CHALK_DIM)
 
 
 # ---------------------------------------------------------------- shared builders (also used by the menu)
@@ -1046,6 +1094,9 @@ func _over_tools(at: Vector2, group := "") -> bool:
 func _process(_delta: float) -> void:
 	if _tools_btn == null:
 		return
+	_radial.visible = not game.radial.is_empty()
+	if _radial.visible:
+		_radial.queue_redraw()
 	if _armed_key != "" and Time.get_ticks_msec() >= _armed_until:
 		_armed_key = ""
 		for n in _sel.find_children("*", "Button", true, false) + _plan_box.find_children("*", "Button", true, false):

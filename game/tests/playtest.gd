@@ -86,10 +86,13 @@ func _initialize() -> void:
 	one = Sim.nearest(sim.sheep.filter(func(x): return x.alive), Sim.rcell(ada))
 	var at_sheep: Vector2 = game._cam.unproject_position(Vector3(one.pos.x + 0.5, 0.3, one.pos.y + 0.5))
 	await move(at_sheep)
-	check(game._hud._hint.text.begins_with("Right-click: Hunt"), "hovering a sheep with Ada selected hints Right-click: Hunt (\"%s\")" % game._hud._hint.text)
+	check(game._hud._hint.text.begins_with("Right-click: options"), "hovering a sheep hints that right-click has options (\"%s\")" % game._hud._hint.text)
 	await click(at_sheep, MOUSE_BUTTON_RIGHT)
+	check(radial_ids() == ["mark", "now"], "right-click on a sheep opens the radial: Hunt and Hunt now (%s)" % [radial_ids()])
+	if not game.radial.is_empty():
+		await click(radial_wedge(1))
 	await run(40)
-	check(not one.alive, "right-click sends Ada to hunt it")
+	check(not one.alive, "Hunt now sends Ada to hunt it")
 	check(sim.items.values().any(func(it): return it.type == "wool") and sim.items.values().any(func(it): return it.type == "mutton"), "the hunted sheep drops wool and mutton")
 	# The houses' beds need 6 wool in all: mark the rest of the flock.
 	await key(KEY_G)
@@ -309,10 +312,48 @@ func _initialize() -> void:
 			t2 = cand
 			break
 	if not t2.is_empty():
-		await move(screen(t2.cell, 1.5))
-		check(game._hud._hint.text.begins_with("Right-click: Mine"), "hovering a tree with Ada selected hints Right-click: Mine (got \"%s\"; under cursor %s; tree at %s)" % [game._hud._hint.text, game._pick(game._mouse), t2.cell])
-		await click(screen(t2.cell, 1.5), MOUSE_BUTTON_RIGHT)
-		check(ada.job != null and is_same(ada.job.target, t2) or ada.direct != null, "right-click orders Ada to mine that tree")
+		var tp := screen(t2.cell, 1.5)
+		# The radial Gather menu (issue #176). With nobody selected: Chop and Chop all trees nearby
+		game.selection = {}
+		await move(tp)
+		check(game._hud._hint.text.begins_with("Right-click: options"), "hovering a tree hints that right-click has options (got \"%s\"; under cursor %s; tree at %s)" % [game._hud._hint.text, game._pick(game._mouse), t2.cell])
+		await click(tp, MOUSE_BUTTON_RIGHT)
+		check(radial_ids() == ["mark", "nearby"], "with nobody selected, the radial shows Chop and Chop all trees nearby, not Chop now (%s)" % [radial_ids()])
+		await key(KEY_ESCAPE)
+		check(game.radial.is_empty() and not game._menu.visible, "Esc closes it")
+		# With Ada selected: Chop now, clicked
+		game.selection = {"kind": "res", "ids": [ada.id]}
+		await click(tp, MOUSE_BUTTON_RIGHT)
+		check(radial_ids() == ["mark", "now", "nearby"], "with Ada selected, Chop now is there too (%s)" % [radial_ids()])
+		if game.radial.size() > 0:
+			await move(radial_wedge(1))
+			game._process(0.0)
+			check(game._hud._hint.text == "2: Chop now", "hovering a wedge names it (\"%s\")" % game._hud._hint.text)
+			await click(radial_wedge(1))
+		check(game.radial.is_empty() and (ada.job != null and is_same(ada.job.target, t2) or ada.direct != null), "Chop now orders Ada to chop that tree")
+		# A greyed wedge shows its reason
+		ada.hunger = 0.0
+		await click(tp, MOUSE_BUTTON_RIGHT)
+		if game.radial.size() > 0:
+			await move(radial_wedge(1))
+			game._process(0.0)
+		check(game._hud._hint.text == "Chop now: Ada is starving" and not game.radial.get("wedges", [{}, {"ok": true}])[1].ok, "a starving Ada's Chop now is greyed, and says why on hover (\"%s\")" % game._hud._hint.text)
+		await key(KEY_ESCAPE)
+		ada.hunger = 100.0
+		# Press, drag to a wedge and release: Chop all trees nearby
+		var marked_before: int = sim.trees.filter(func(t): return t.alive and t.des).size()
+		await move(tp)
+		await press(tp, true, MOUSE_BUTTON_RIGHT)
+		var w2 := radial_wedge(2) if game.radial.size() > 0 else tp
+		await move(tp.lerp(w2, 0.5))
+		await move(w2)
+		await press(w2, false, MOUSE_BUTTON_RIGHT)
+		check(game.radial.is_empty() and sim.trees.filter(func(t): return t.alive and t.des).size() > marked_before + 1, "press, drag to Chop all trees nearby and release: the trees round it are marked (%d, then %d)" % [marked_before, sim.trees.filter(func(t): return t.alive and t.des).size()])
+		# Shift + right-click skips the radial and queues the order
+		var queued: int = ada.orders.size()
+		await click(screen(t2.cell, 1.5), MOUSE_BUTTON_RIGHT, true)
+		check(game.radial.is_empty() and ada.orders.size() == queued + 1, "Shift + right-click on a tree skips the radial and queues the order (%d)" % ada.orders.size())
+		ada.orders.clear()
 
 	# Shift + right-click queues orders; the panel lists them and can clear them
 	var vis2 := root.get_visible_rect().size
