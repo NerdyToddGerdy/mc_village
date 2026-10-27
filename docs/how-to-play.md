@@ -71,6 +71,10 @@ When both chapters are done the panel folds to a green **The village ✓** chip.
 
 The goals panel's **Book** button (or the chip, once the chapters are done) opens the village book in its place. Its **Goals** page lists every step with its why. Every other page is a building or zone: what it's for, who works it, what it grows into and what goes wrong without it. A page shows once its building can be built (the expedition board once Ada's house is up, the pen once the board is built, the road once a party has been to the old mine). Select a building and click **? About the…** to jump to its page. Esc or **Close** shuts the book.
 
+## Paths
+
+The ground wears where residents walk. Busy routes turn to worn grass, then a dirt path, then a darker packed path, and residents walk faster on paths and choose them when they're not much longer. A path that nobody walks any more slowly grows back to grass. Buildings, stockpiles and farms don't wear, and putting one on a path clears it. Only the village has paths, not the mine or the road.
+
 ## Giving orders
 
 There are two ways to get work done.

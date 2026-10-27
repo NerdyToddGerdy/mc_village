@@ -391,6 +391,10 @@ func _initialize() -> void:
 		await key(KEY_ESCAPE)
 	check(await play_until(300, func(): return new_house != null and new_house.stage >= 1), "and builders get its foundation down (stage %d)" % (new_house.stage if new_house != null else -1))
 
+	# ---- Worn paths (issue #196): the village has run a while, so the busy ground has packed down
+	var worn: Array = sim.maps.village.wear.values()
+	check(worn.size() >= 5 and worn.any(func(w): return w >= Tuning.WEAR_DIRT), "the busy ground has worn into a path (%d cells worn, most worn %d)" % [worn.size(), worn.max() if not worn.is_empty() else 0])
+
 	# ---- Every stall has a reason: anything in the stuck list carries one
 	check(sim.stuck.all(func(s): return s.why != ""), "every stuck item says why")
 

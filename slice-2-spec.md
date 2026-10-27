@@ -465,6 +465,8 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 
 **Tools dropdown (#90).** A click pins the list open, and a second click unpins it. A click anywhere outside the button and the list, or Esc, closes it. Only keyboard focus (tabbing to the button) holds it open, not the focus a click leaves behind. Hovering the gap between the button and the list counts as hovering, but the rest of their bounding box doesn't, and the mouse leaving the window ends hovering.
 
+**Worn paths (#196).** Walking packs the village's ground into paths, as in Foundation. Each step a resident takes onto a village cell adds `WEAR_STEP` wear to it (capped at `WEAR_CAP`), unless it lies under a building or on a stockpile or farm. Stages by wear: grass; **worn grass** from `WEAR_WORN`; **dirt path** from `WEAR_DIRT`; **packed path** from `WEAR_PACKED`. A cell nobody stepped on since the last pass loses 1 wear every `WEAR_DECAY_SECS`, so paths follow where the village goes now. Dirt and packed paths walk faster (`PATH_SPEED_DIRT`, `PATH_SPEED_PACKED` times `WALK`), which multiplies with the stream's `FORD_SPEED` (`Sim.ground_speed`). Once any ground is worn, pathing (`Sim.find_path`) costs each step the time to cross its cell, so a path a little longer but quicker is taken and busy routes reinforce themselves; with no wear it's the plain breadth-first search. Placing a building or painting a stockpile or farm clears the wear under it. Only the village wears: site maps and the road don't, and led animals and the cart don't. The ground tints by stage (`world_view.gd`), redrawn only when a cell changes stage (`sim.rev`). The map keeps the wear per cell (`SimMap.wear`, shifted with the map when it grows). Saving: v31; older saves start on bare grass.
+
 **Menu button (#216).** A **Menu** button at the top right, beside the speed buttons, opens the same main menu as Esc. Its keycap shows the `menu` binding and follows a rebind; Esc itself stays fixed. `Game.toggle_menu()` opens the menu, or closes it again from the main page. The menu's overlay covers the screen while it's open, so the button is reached by mouse only to open it; Esc, the menu key or the menu's own Back close it.
 
 **Erasing stockpile cells (#63).** With the Stockpile order on, a drag that starts on a stockpile cell erases every stockpile cell in its rectangle instead of painting, and a click on one cell erases just that cell, as clicking a marked tree unmarks it under Mine.
@@ -478,6 +480,10 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 | Key | Value |
 |---|---|
 | `map_size` | 32 × 32 (was 18 × 18) |
+| `WEAR_STEP` / `WEAR_CAP` | 1 / 100 (#196) |
+| `WEAR_WORN` / `WEAR_DIRT` / `WEAR_PACKED` | 10 / 30 / 60 wear: worn grass, dirt path, packed path |
+| `WEAR_DECAY_SECS` | 20 s per wear lost on an unwalked cell |
+| `PATH_SPEED_DIRT` / `PATH_SPEED_PACKED` | 1.15 / 1.3 times `WALK` |
 | `start_trees` / `start_boulders` | about 40 / about 16, laid out by hand |
 | `start_sheep` | 6 |
 | `sheep_walk` | 0.6 cells/s, pausing often |
