@@ -262,6 +262,8 @@ func _initialize() -> void:
 	check(sim.stats.meadow_wool and sim.free_count("wool") >= 3, "with the wool for the second bed (%d)" % sim.free_count("wool"))
 	if game.planner_open:
 		await click_button("Close")
+	game._hud.refresh(sim)  # the board hides on the next refresh, and its plan is wide enough to sit under the click below
+	await frames(2)
 	await look_at(at(17, 17))
 	check(Goals.LIST[Goals.current(sim)].t == "Build a second house", "the checklist asks for the second house (%s)" % Goals.progress_text(sim))
 
