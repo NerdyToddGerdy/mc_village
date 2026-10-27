@@ -148,6 +148,8 @@ Everything is carried. Felled trees drop logs where they stood, and broken bould
 
 Until you paint a stockpile, items stay where they fell, and builders fetch them from the ground. Once there's a stockpile, residents with **Haul** on carry loose items to it. Each cell holds up to 16. If the stockpile is full, the stuck list says so.
 
+**The storehouse** (Build menu: 6 cobblestone, 12 planks and 4 logs) is the main storage once you have one. It holds nothing until you add chests. Craft a **chest** at the bench (8 planks) and a hauler carries it in. Each chest holds 9 stacks of anything, up to 4 chests. Haulers fill the nearest storehouse with room first, and stockpiles take what doesn't fit. Residents fetch what's stored at its door, and its panel lists what's inside. The squares on each chest's lid show what it holds.
+
 The top bar counts what you have, with how much of it is still lying loose.
 
 ## Crafting and tools

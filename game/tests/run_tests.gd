@@ -83,6 +83,7 @@ func _init() -> void:
 		"test_jobs_need_their_workstation",
 		"test_hunters_keep_a_herd_floor",
 		"test_workstations_process_materials",
+		"test_storehouse_chests",
 	]
 	var only := Array(OS.get_cmdline_user_args())
 	if not only.is_empty():
@@ -3222,6 +3223,73 @@ func test_workstations_process_materials() -> void:
 	check(sim.free_count("stone_brick") == 6 and mb.queue.is_empty(), "a batch queued by hand is cut regardless (%d)" % sim.free_count("stone_brick"))
 	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(back.sites.any(func(st): return st.tpl == "chopping_block" and st.make_keep == 12), "standing orders are saved")
+
+
+func test_storehouse_chests() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var sh := place_done(sim, "storehouse", Sim.rcell(ada) + Vector2i(0, 5))
+	check(not sh.is_empty() and sh.plot.size == Vector2i(3, 5), "a storehouse is 3×3, with its upgrade's plot behind it")
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Storehouse: No chests yet"), "with no chests it says so: " + stuck_text(sim))
+	# A chest from the bench is carried in and set in place: 9 stacks of room.
+	check(Defs.recipe("chest").inp == {"plank": 8}, "a chest is 8 planks at the bench")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 0), "chest", 1)
+	run(sim, 40)
+	check(sh.chests == 1 and Sim.store_slots(sh).size() == Tuning.CHEST_STACKS and sim.free_count("chest") == 0, "a hauler carries the chest in (%d chests)" % sh.chests)
+	# Haulers fill the chests first; the stockpile takes what's left over.
+	var slots := Sim.store_slots(sh)
+	var cap := Defs.stack_cap("log")
+	for i in Tuning.CHEST_STACKS - 1:
+		sim._store_put(slots[i], "cobble", Defs.stack_cap("cobble"))
+	sim.paint_zone(open_rect(sim, Vector2i(2, 1)))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 1), "log", cap + 3)
+	run(sim, 90)
+	var last = sim.items.get(slots[-1])
+	check(last != null and last.type == "log" and last.n == cap, "the chests fill up to their capacity (%s)" % [last])
+	var piled := sim.stacks_where(func(st): return st.type == "log" and sim.in_zone(st.cell))
+	check(piled.size() == 1 and piled[0].n == 3, "and only the overflow goes to the stockpile (%s)" % [piled.map(func(st): return st.n)])
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 1), "wool", 2 * Defs.stack_cap("wool") + 1)
+	run(sim, 90)
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("The storehouse is full") and stuck_text(sim).contains("Stockpile is full"), "with no room anywhere, the storehouse and the stockpile say they're full: " + stuck_text(sim))
+	# Crafting fetches from the chests.
+	var bench := place_done(sim, "bench", Sim.rcell(ada) + Vector2i(-3, 0))
+	for k in sim.items.keys():
+		if sim.items[k].type == "log" and not Sim.in_store(k):
+			sim.items.erase(k)
+	sim.queue_add(bench, "planks")
+	run(sim, 30)
+	check(bench.queue.is_empty() and sim.items.get(slots[-1], {}).get("n", 0) == cap - 1, "the bench's log comes out of a chest")
+	# The nearest storehouse with room fills first.
+	var far := place_done(sim, "storehouse", Sim.rcell(ada) + Vector2i(14, 0))
+	far.chests = 1
+	var near_door := Sim.store_door(far)
+	sim.drop_items(near_door + Vector2i(0, 1), "stick", 4)
+	run(sim, 40)
+	check(sim.stacks_where(func(st): return st.type == "stick" and Sim.in_store(st.cell) and is_same(sim.store_of(st.cell), far)).size() == 1, "sticks dropped by the far storehouse go into its chest")
+	# Packing for an expedition fetches from the chests too.
+	sim.residents[0].hunger = 100.0
+	for k in Sim.store_slots(far):
+		if not sim.items.has(k):
+			sim._store_put(k, "bread", 3)
+			break
+	var board := place_done(sim, "board", Sim.rcell(ada) + Vector2i(-4, 4))
+	var plan := sim.new_plan(Meadow.ID)
+	plan.meals = 3
+	check(sim.plan_expedition(plan) == "", "a meadow trip is planned")
+	var packed := false
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			packed = true
+			break
+	check(packed, "its bread is packed from the far storehouse's chest (%s)" % sim.depart_blocker())
+	# Saved with the game.
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	var bsh: Dictionary = back.sites.filter(func(st): return st.id == sh.id)[0]
+	check(bsh.chests == 1 and back.items.has(slots[0]) and back.items[slots[0]].type == "cobble", "chests and what's in them are saved")
+	check(board.done, "")
 
 
 func test_jobs_need_their_workstation() -> void:

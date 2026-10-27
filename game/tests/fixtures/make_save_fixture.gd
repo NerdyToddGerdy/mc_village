@@ -252,6 +252,18 @@ func _initialize() -> void:
 		var block: Dictionary = sim.sites.filter(func(st): return st.tpl == "chopping_block")[0]
 		sim.set_make_keep(block, 15)
 		sim.queue_add(block, "saw_planks")
+	if SaveFormat.VERSION >= 28:  # a storehouse with 2 chests, holding logs and a pickaxe (#189)
+		for c in [at(14, 12), at(2, 13), at(13, 14), at(0, 12)]:
+			if sim.placement_check("storehouse", c) == "":
+				var sh := sim.place_site("storehouse", c)
+				sh.stage = 2
+				sh.done = true
+				sh.chests = 2
+				sim._occ_dirty = true
+				var slots := Sim.store_slots(sh)
+				sim._store_put(slots[0], "log", 12)
+				sim._store_put(slots[9], "stone_pick", 1, 17)
+				break
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

@@ -25,6 +25,7 @@ const ACTIONS := [
 	["fireplace", "Orders", "Place a fireplace", [KEY_K]],
 	["board", "Orders", "Place an expedition board", []],
 	["chopping_block", "Orders", "Place a chopping block", []],
+	["storehouse", "Orders", "Place a storehouse", []],
 	["mason_bench", "Orders", "Place a mason's bench", []],
 	["toolsmith_bench", "Orders", "Place a toolsmith's bench", []],
 	["composter", "Orders", "Place a composter", []],
