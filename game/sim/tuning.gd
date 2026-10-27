@@ -111,6 +111,7 @@ const MAKE_KEEP := {"chopping_block": 20, "mason_bench": 10}  ## A workstation's
 const MAKE_STEP := 5                    ## Its step in the workstation's panel.
 const CHESTS := 4                       ## Chests a storehouse holds (issue #189).
 const CHEST_STACKS := 9                 ## Stacks a chest holds, each of any item.
+const RADIAL_NEARBY := 4                ## "Chop all trees nearby" marks within this many cells (issue #176).
 const HERD_FLOOR := 2                   ## Wild animals of each species hunters leave in the village (issue #183), until changed on the jobs board.
 const SAPLINGS := 1                     ## Saplings a felled tree drops.
 const SAPLING_EXTRA := 0.3              ## Chance a felled tree drops one more.

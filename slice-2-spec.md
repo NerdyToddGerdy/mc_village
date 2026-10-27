@@ -418,7 +418,24 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 - **Gather:** Mine (trees and boulders), Chop trees (trees only), Break boulders (boulders only; the stuck list still says "Needs a pickaxe"), Keep (in the village, #177), and Hunt, which shows while there are live sheep. Shift-drag and Alt-drag still limit Mine to trees or boulders.
 - **Paint:** Stockpile and Farm plot. Farming is available from the start, so Farm plot always shows.
 - **What's on:** while one of its orders is on, the Gather or Paint button names it, as in "Gather: Hunt" or "Paint: Farm plot", and shows that order's mark. Otherwise the button reads "Gather ▸" or "Paint ▸".
-- **Right-click** with residents selected still orders them while any Gather or Paint order is on, and leaves the order on. With a menu open, right-click closes it.
+- **Right-click** on the ground with residents selected still sends them there while any Gather or Paint order is on, and leaves the order on. With a menu open, right-click closes it. Right-click on a tree, boulder or animal opens the radial Gather menu (#176, below).
+
+**Radial Gather menu (#176).** Right-clicking a tree, boulder or animal (an ore block counts as a boulder) opens a ring of wedges centred on the cursor, with or without residents selected.
+
+| Target | Wedges |
+|---|---|
+| Tree | **Chop** (mark it for anyone), **Chop now** (order the selected residents), **Chop all trees nearby** (marks the trees within 4 cells) |
+| Boulder or ore | **Break**, **Break now**, **Break all nearby** |
+| Animal | **Hunt**, **Hunt now** |
+| Already marked | **Cancel** takes the first wedge's place |
+
+- **"Now" wedges** show only with residents selected. They're direct orders, as right-click gave before.
+- **Choosing:** click a wedge; or press right, drag to a wedge and release on it; or press 1–4. Esc, a click outside the ring or a right-click on the ground closes it. A right-click on another target moves it there.
+- **Never silent:** a wedge that can't work now is greyed, and hovering it says why, in yellow below the ring: "Break now: Tomas has no pickaxe", "Chop now: Ada is away" (or starving, or hurt). Picking it says so in a toast.
+- **The middle** names the target and what it drops ("Tree · 4 logs", "Sheep · 1 wool and 1 raw mutton"). Clicking it selects the target.
+- **Shift + right-click** on a target skips the radial and queues the order (Chop now, Break now or Hunt now) for the selected residents, as before. It's the fast path.
+- **Look:** slate wedges with chalk outlines and each order's mark, the hovered one filled in chalk, drawn over the world without motion.
+- Placing a building, right-click still cancels the placement. The Gather and Paint orders and drag-marking are unchanged: the radial is for single targets.
 - **Erasing farm plots:** with Farm plot on, a drag that starts on a plot erases the plots in its rectangle, previewed in red like stockpile cells. Anything growing on them is lost, as with the plot panel's Remove plot.
 
 **Tools dropdown (#90).** A click pins the list open, and a second click unpins it. A click anywhere outside the button and the list, or Esc, closes it. Only keyboard focus (tabbing to the button) holds it open, not the focus a click leaves behind. Hovering the gap between the button and the list counts as hovering, but the rest of their bounding box doesn't, and the mouse leaving the window ends hovering.

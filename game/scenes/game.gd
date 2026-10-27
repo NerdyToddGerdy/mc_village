@@ -24,6 +24,7 @@ var line_preview := false                ## The route panel shows the line's cos
 var plan := {}                          ## The plan being drawn up in the planner; the sim's once confirmed.
 var adventure := ""                     ## The adventure the planner shows (issue #136); "" shows the list.
 var selection := {}                     ## {} | {kind:"res", ids:[...]} | {kind:"tree"/"boulder"/"site", id}
+var radial := {}                        ## The open radial Gather menu (issue #176), or {}.
 ## The map in view (issue #101): "village" or a site map. The sim stays on the village between
 ## frames; input and drawing switch it to this map while they work, then back.
 var view_map := "village"
@@ -291,15 +292,22 @@ func _update_live_overlays() -> void:
 			hint_col = Palette.YELLOW
 		else:
 			hint = "Drag over open grass to paint a farm. Start on a farm plot to erase instead."
-	if hint == "" and tool == "" and _drag.is_empty() and selection.get("kind", "") == "res":
+	if not radial.is_empty():  # issue #176
+		var hv: int = radial.hover
+		if hv >= 0:
+			var w: Dictionary = radial.wedges[hv]
+			hint = w.why if not w.ok else "%d: %s" % [hv + 1, w.label]
+			hint_col = Palette.YELLOW if not w.ok else Palette.CHALK
+		else:
+			hint = "Pick an order, or press 1–%d. Click the middle to select it. Esc closes." % radial.wedges.size()
+	elif hint == "" and tool == "" and _drag.is_empty():
 		var hit = _pick(_mouse, false)
-		if hit != null and hit.kind in ["tree", "boulder"]:
-			hint = "Right-click: Mine. Shift queues it."
-		elif hit != null and hit.kind == "animal":
-			hint = "Right-click: Hunt. Shift queues it."
+		if hit != null and hit.kind in ["tree", "boulder", "animal"]:
+			hint = "Right-click: options." + (" Shift queues %s." % ("a hunt" if hit.kind == "animal" else "it") if selection.get("kind", "") == "res" else "")
 	_world.live_outlines = outlines
 	_world.live_fills = fills
-	_hud.show_hint(hint, _mouse, hint_col)
+	var hint_at: Vector2 = _mouse if radial.is_empty() else radial.center + Vector2(-90, RADIAL_OUT - 8)  # below the radial, clear of its wedges
+	_hud.show_hint(hint, hint_at, hint_col)
 	_update_focus(sel)
 
 
@@ -487,6 +495,8 @@ func _handle_input(event: InputEvent) -> void:
 	if event is InputEventWithModifiers:
 		_mods.shift = event.shift_pressed
 		_mods.alt = event.alt_pressed
+	if _radial_input(event):
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		_key(event)
 	elif event is InputEventMouseMotion:
@@ -532,21 +542,29 @@ func _mouse_button(e: InputEventMouseButton) -> void:
 			_left_up(e)
 
 
-## Right-click orders the selected residents. It never fails silently: placing a building, it
-## cancels the placement; with Mine, Hunt or Stockpile on, it still gives the order and leaves the
-## tool on; with nobody selected, or someone starving, it says why nothing happened.
+## Right-click on a tree, boulder or animal opens the radial Gather menu (issue #176); Shift +
+## right-click skips it and queues the order for the selected residents. Elsewhere it orders them
+## to walk there. It never fails silently: placing a building or with a menu open, it cancels; with
+## an order tool on and nobody selected it turns the tool off; with nobody selected, or someone
+## starving, it says why nothing happened.
 func _right_click(e: InputEventMouseButton) -> void:
 	var has_residents: bool = selection.get("kind", "") == "res" and not selection.ids.is_empty()
-	if menu_open != "" or tool == "build" or (tool != "" and not has_residents):
+	if menu_open != "" or tool == "build":
+		set_tool("")
+		return
+	# Residents aren't order targets, so look past anyone standing in front of the tree or sheep.
+	var hit = _pick(e.position, false)
+	var cell = _cell_at(e.position)
+	if hit != null and hit.kind in ["tree", "boulder", "animal"] and not e.shift_pressed:
+		open_radial(hit, e.position, true)  # issue #176: with or without residents; Shift skips it
+		return
+	if tool != "" and not has_residents:
 		set_tool("")
 		return
 	if not has_residents:
 		var key := keys.first("next_res")
 		_hud.add_toast({"text": "Select a resident first." + (" %s selects the next one." % key if key != "" else ""), "res_id": 0, "site_id": 0})
 		return
-	# Residents aren't order targets, so look past anyone standing in front of the tree or sheep.
-	var hit = _pick(e.position, false)
-	var cell = _cell_at(e.position)
 	for id in selection.ids:
 		var r := sim.resident(id)
 		if r.is_empty():
@@ -1680,3 +1698,161 @@ func _screenshot_scene() -> void:
 	img.save_png(path)
 	print("screenshot: ", path)
 	get_tree().quit()
+
+
+# ---------------------------------------------------------------- the radial Gather menu (issue #176)
+
+const RADIAL_IN := 42.0    ## The radial's centre, in HUD pixels: a click there selects the target.
+const RADIAL_OUT := 118.0  ## Its outer edge; a click beyond closes it.
+
+
+## Opens the radial Gather menu on a tree, boulder or animal, centred at a screen point. `held` while
+## the right button that opened it is still down, so a release on a wedge picks it.
+func open_radial(target: Dictionary, at: Vector2, held := false) -> void:
+	radial = {"target": target, "map": view_map, "center": at, "wedges": radial_wedges(target), "hover": -1, "held": held, "dragged": false}
+
+
+func close_radial() -> void:
+	radial = {}
+
+
+## The wedges for a target, as [{id, label, mark, ok, why}]: mark it for anyone (Cancel once it's
+## marked), order the selected residents now (only with some selected), and mark all nearby (not for
+## animals). A "now" that can't happen is greyed, with its reason.
+func radial_wedges(t: Dictionary) -> Array:
+	var verb: String = {"tree": "Chop", "boulder": "Break", "animal": "Hunt"}[t.kind]
+	var mark: String = {"tree": "chop", "boulder": "break", "animal": "hunt"}[t.kind]
+	var out: Array = []
+	out.append({"id": "cancel", "label": "Cancel", "mark": mark, "ok": true, "why": ""} if t.des else {"id": "mark", "label": verb, "mark": mark, "ok": true, "why": ""})
+	var ids: Array = selection.get("ids", []) if selection.get("kind", "") == "res" else []
+	if not ids.is_empty():
+		var why := _now_blocker(ids, t)
+		out.append({"id": "now", "label": verb + " now", "mark": mark, "ok": why == "", "why": "%s now: %s" % [verb, why] if why != "" else ""})
+	if t.kind != "animal":
+		out.append({"id": "nearby", "label": "Chop all trees nearby" if t.kind == "tree" else "Break all nearby", "mark": mark, "ok": true, "why": ""})
+	return out
+
+
+## Why none of these residents can take the order now, or "" when one can.
+func _now_blocker(ids: Array, t: Dictionary) -> String:
+	var why := ""
+	for id in ids:
+		var r := sim.resident(id)
+		if r.is_empty():
+			continue
+		var w := ""
+		if r.away or r.map != view_map:
+			w = "%s is away" % r.name
+		elif r.get("hunger", 100.0) <= 0.0:
+			w = "%s is starving" % r.name
+		elif t.kind != "animal" and r.get("hurt", 0) > 0:
+			w = "%s is hurt" % r.name
+		elif t.kind == "boulder" and r.pick == null and sim.tool_items("pick", 0).is_empty():
+			w = "%s has no pickaxe" % r.name
+		if w == "":
+			return ""
+		if why == "":
+			why = w
+	return why
+
+
+## What the radial's centre says: "Tree · 4 logs".
+func radial_title(t: Dictionary) -> String:
+	match t.kind:
+		"tree":
+			return "Tree · %s" % Defs.words("log", t.get("logs", 4))
+		"boulder":
+			if t.has("ore"):
+				return "%s · %s" % [Defs.ORES[t.ore].name, Defs.words(Defs.ORES[t.ore].item, 1)]
+			return "Boulder · %s" % Defs.words("cobble", Tuning.BOULDER_COBBLE)
+		"animal":
+			return "%s · %s" % [Defs.SPECIES[t.species].name, Defs.drops_text(t.species)]
+	return ""
+
+
+## Which wedge a screen point is over, or -1 (the centre is -2, outside the ring -3).
+func radial_at(p: Vector2) -> int:
+	var d: Vector2 = p - radial.center
+	if d.length() < RADIAL_IN:
+		return -2
+	if d.length() > RADIAL_OUT:
+		return -3
+	var n: int = radial.wedges.size()
+	var span := TAU / n
+	var a := fposmod(d.angle() + PI / 2 + span / 2, TAU)  # wedge 0 is centred straight up
+	return mini(int(a / span), n - 1)
+
+
+## Picks a wedge: a greyed one does nothing but say why.
+func pick_radial(i: int) -> void:
+	if radial.is_empty() or i < 0 or i >= radial.wedges.size():
+		return
+	var w: Dictionary = radial.wedges[i]
+	if not w.ok:
+		_hud.add_toast({"text": w.why + ".", "res_id": 0, "site_id": 0})
+		return
+	var t: Dictionary = radial.target
+	var map: String = radial.map
+	close_radial()
+	sim.use_map(map)
+	match w.id:
+		"mark", "cancel":
+			if t.kind == "animal":
+				sim.designate_hunt(Rect2i(t.cell, Vector2i.ONE), t)
+			else:
+				sim.designate_mine(Rect2i(t.cell, Vector2i.ONE), t, [t.kind])
+		"nearby":
+			var n := Tuning.RADIAL_NEARBY
+			sim.designate_mine(Rect2i(t.cell - Vector2i(n, n), Vector2i(n * 2 + 1, n * 2 + 1)), null, [t.kind])
+		"now":
+			for id in selection.get("ids", []):
+				var r := sim.resident(id)
+				if not r.is_empty() and _now_blocker([id], t) == "":
+					sim.direct_order(r, t, t.cell)
+	sim.use_map("village")
+
+
+## Input while the radial is open; true when it took the event.
+func _radial_input(event: InputEvent) -> bool:
+	if radial.is_empty():
+		return false
+	if event is InputEventMouseMotion:
+		var at := radial_at(event.position)
+		radial.hover = at if at >= 0 else -1
+		if radial.held and at >= 0:
+			radial.dragged = true
+		return true
+	if event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
+		var at := radial_at(event.position)
+		if event.button_index == MOUSE_BUTTON_RIGHT and not event.pressed:
+			if radial.held and radial.dragged and at >= 0:  # press, drag to a wedge, release
+				pick_radial(at)
+			elif not radial.is_empty():
+				radial.held = false
+			return true
+		if not event.pressed:
+			return true
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			var hit = _pick(event.position, false)
+			close_radial()
+			if hit != null and hit.kind in ["tree", "boulder", "animal"] and not event.shift_pressed:
+				open_radial(hit, event.position, true)
+				return true
+			return at != -3  # a right-click on empty ground just closes it
+		if at >= 0:
+			pick_radial(at)
+		elif at == -2:
+			var t: Dictionary = radial.target
+			close_radial()
+			_select(t)
+		else:
+			close_radial()
+		return true
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE:
+			close_radial()
+			return true
+		if event.keycode >= KEY_1 and event.keycode <= KEY_4:
+			pick_radial(event.keycode - KEY_1)
+			return true
+	return false

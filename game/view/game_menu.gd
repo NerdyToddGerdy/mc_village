@@ -9,7 +9,8 @@ const FIXED_ROWS := {
 	"Orders": [["Shift-drag", "With Mine: trees only"], ["Alt-drag", "With Mine: boulders only (Option on a Mac)"],
 		["Esc", "Cancel the current order"]],
 	"Residents": [["Click", "Select a resident, tree, boulder or building"], ["Shift-drag", "Select several residents"],
-		["Right-click", "Order the selected residents"], ["Shift + right-click", "Queue an order after their current one"]],
+		["Right-click a tree, boulder or animal", "Its orders in a ring: click, 1–4, or drag and let go. Esc closes"],
+		["Right-click the ground", "Walk the selected residents there"], ["Shift + right-click", "Queue an order after their current one, skipping the ring"]],
 	"Time and camera": [["Drag", "Pan the map (middle-drag too)"], ["Wheel", "Zoom (pinch too)"]],
 	"Game": [["Esc", "Open the menu"]],
 }

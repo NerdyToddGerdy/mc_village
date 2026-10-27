@@ -486,31 +486,53 @@ func _test_right_click_never_silent(game: Game) -> void:
 	check(not tree.is_empty(), "a tree in view to right-click")
 	if tree.is_empty():
 		return
-	# Mine tool on, Ada selected: the order still goes through, and the tool stays on.
+	# Issue #176: right-click on a tree opens the radial Gather menu, with or without residents.
+	var ids := func() -> Array: return game.radial.get("wedges", []).map(func(w): return w.id)
 	game.selection = {"kind": "res", "ids": [ada.id]}
 	game.set_tool("mine")
 	_right(game, at)
-	check(ada.direct != null and is_same(ada.direct.target, tree), "with Mine on, right-click still orders Ada to mine the tree")
+	check(ids.call() == ["mark", "now", "nearby"] and game.radial.wedges[1].label == "Chop now", "with Ada selected and Mine on, right-click opens the radial: Chop, Chop now, Chop all trees nearby (%s)" % [ids.call()])
+	check(game.radial_title(tree).begins_with("Tree · ") and game.radial_title(tree).ends_with("logs"), "its middle names the tree and its logs (%s)" % game.radial_title(tree))
+	game.pick_radial(1)
+	check(game.radial.is_empty() and ada.direct != null and is_same(ada.direct.target, tree), "Chop now orders Ada to chop it, and closes the radial")
 	check(game.tool == "mine", "and the Mine tool stays on")
 	game.set_tool("")
-	# Something else selected: nothing silent, a message instead.
 	sim.fail_job(ada)
 	ada.direct = null
+	tree.des = false
 	game.selection = {"kind": "tree", "id": tree.id}
-	var toasts := game._hud._toast_list.size()
 	_right(game, at)
-	check(ada.direct == null and game._hud._toast_list.size() == toasts + 1, "with no resident selected, right-click says to select one")
+	check(ids.call() == ["mark", "nearby"], "with nobody selected, it has no Chop now (%s)" % [ids.call()])
+	game.pick_radial(0)
+	check(tree.des and ada.direct == null, "Chop marks the tree for anyone")
+	_right(game, at)
+	check(ids.call()[0] == "cancel", "once it's marked, Cancel takes Chop's place")
+	_key(game, KEY_1)
+	check(not tree.des and game.radial.is_empty(), "1 picks it: the mark is gone")
+	_right(game, at)
+	_key(game, KEY_ESCAPE)
+	check(game.radial.is_empty() and not game._menu.visible, "Esc closes the radial, and doesn't open the menu")
 	# Placing a building: right-click cancels the placement, as before.
 	game.selection = {"kind": "res", "ids": [ada.id]}
 	game.start_placing("house")
 	_right(game, at)
-	check(game.tool == "" and ada.direct == null, "while placing a building, right-click cancels the placement")
-	# Starving: says so instead of ignoring the order.
+	check(game.tool == "" and game.radial.is_empty() and ada.direct == null, "while placing a building, right-click cancels the placement")
+	# Starving: Chop now is greyed, with the reason, and picking it says so.
 	ada.hunger = 0.0
-	toasts = game._hud._toast_list.size()
 	_right(game, at)
-	check(ada.direct == null and game._hud._toast_list.size() == toasts + 1, "a starving resident's order explains why it won't happen")
+	var now: Dictionary = game.radial.wedges[1] if game.radial.get("wedges", []).size() > 1 else {}
+	check(not now.is_empty() and not now.ok and now.why == "Chop now: Ada is starving", "a starving resident's Chop now is greyed, with why (%s)" % [now])
+	var toasts := game._hud._toast_list.size()
+	game.pick_radial(1)
+	check(ada.direct == null and game._hud._toast_list.size() == toasts + 1, "picking it explains why it won't happen")
+	game.close_radial()
 	ada.hunger = 100.0
+	# Shift + right-click skips the radial and queues the order.
+	_right(game, at, true)
+	check(game.radial.is_empty() and (ada.orders.size() == 1 or ada.direct != null), "Shift + right-click skips the radial and gives the order")
+	sim.fail_job(ada)
+	ada.direct = null
+	ada.orders.clear()
 
 
 ## P picks the Farm tool, dragging paints plots, and a plot can be selected and removed (issue #45).
