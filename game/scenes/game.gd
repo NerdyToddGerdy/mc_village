@@ -999,6 +999,11 @@ func set_tool(t: String) -> void:
 	_drag = {}
 
 
+## A mason's bench becomes a mineshaft (issue #204).
+func upgrade_shaft(site: Dictionary) -> void:
+	sim.upgrade_to_shaft(site)
+
+
 ## Paints a workstation's work area (issue #203): drag to add cells, start on a painted cell to erase.
 func start_area(site: Dictionary) -> void:
 	if tool == "area" and area_site == site.id:

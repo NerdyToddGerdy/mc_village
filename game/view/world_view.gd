@@ -858,6 +858,15 @@ func _add_mason_bench(b: Batch, s: Dictionary) -> void:
 	if not s.done:
 		b.box(Vector3(o.x + 0.1, 0, o.y + 0.1), Vector3(o.x + 0.9, 0.2, o.y + 0.9), Color(Palette.BLUE, 0.45))
 		return
+	if s.get("shaft", false):  # a mineshaft (issue #204): a stone rim round a dark pit, under a timber frame
+		b.box(Vector3(o.x + 0.04, 0, o.y + 0.04), Vector3(o.x + 0.96, 0.16, o.y + 0.96), Palette.STONE, BlockTextures.ROCK)
+		b.box(Vector3(o.x + 0.22, 0.16, o.y + 0.22), Vector3(o.x + 0.78, 0.18, o.y + 0.78), Palette.SLATE_DEEP)
+		for k in [0.1, 0.8]:
+			b.box(Vector3(o.x + k, 0.16, o.y + 0.1), Vector3(o.x + k + 0.1, 0.85, o.y + 0.2), Palette.LOG, BlockTextures.LOG)
+			b.box(Vector3(o.x + k, 0.16, o.y + 0.8), Vector3(o.x + k + 0.1, 0.85, o.y + 0.9), Palette.LOG, BlockTextures.LOG)
+		b.box(Vector3(o.x + 0.1, 0.85, o.y + 0.1), Vector3(o.x + 0.9, 0.95, o.y + 0.2), Palette.PLANK, BlockTextures.BOARD)
+		b.box(Vector3(o.x + 0.1, 0.85, o.y + 0.8), Vector3(o.x + 0.9, 0.95, o.y + 0.9), Palette.PLANK, BlockTextures.BOARD)
+		return
 	for k in [0.15, 0.75]:
 		b.box(Vector3(o.x + k, 0, o.y + 0.15), Vector3(o.x + k + 0.1, 0.55, o.y + 0.85), Palette.LOG, BlockTextures.LOG)
 	b.box(Vector3(o.x + 0.08, 0.55, o.y + 0.1), Vector3(o.x + 0.92, 0.65, o.y + 0.9), Palette.PLANK, BlockTextures.BOARD)

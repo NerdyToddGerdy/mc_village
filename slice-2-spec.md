@@ -239,7 +239,7 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 - **Pile:** the two cells beside the workstation, inside its plot, hold up to 20 logs or cobblestone. Haulers carry logs and cobblestone to the nearest pile with room before the stockpile, and anything over goes to the stockpile. Builders, crafters and packing take from a pile like a stockpile.
 - **Keep-stock target:** each workstation keeps 20 by default, set in steps of 5 in its panel. Gatherers stop their own work once the village has that many (piles, stockpiles and loose items together). Marked work goes on regardless.
 - **Protected land:** a gatherer's own work never takes a tree or boulder that's marked **Keep**, or that stands in a building's footprint or reserved plot, on a stockpile, farm or pen, or beside a house's door. **Keep** is a Gather order (click or drag; clicking a kept one unmarks it) and a toggle in a tree's or boulder's panel. A kept tree shows a green ring. Kept trees are still felled when marked.
-- **Stone runs out, wood doesn't (settles #22, decided with the owner).** Trees regrow from saplings (above); boulders never come back. **Once every boulder on the village map is gone**, a mason's bench can be upgraded into a mineshaft, which digs stone from then on (#204). The shaft isn't available while any boulder is left anywhere on the map, and its cost, yield and rate are set when it's built (provisional: cobblestone only, slower than breaking boulders, so the old mine stays the place for coal and iron).
+- **Stone runs out, wood doesn't (settles #22, decided with the owner).** Trees regrow from saplings (above); boulders never come back. **Once every boulder on the village map is gone**, a mason's bench can be upgraded into a mineshaft, which digs stone from then on (#204). The shaft isn't available while any boulder is left anywhere on the map. **Built (#204):** the mineshaft takes the place of the mason's workshop as the bench's upgrade (the reserved plot is the mineshaft's). A selected mason's bench has **Dig out a mineshaft**, off with its reason until no boulder is alive on the village map and the village has the `SHAFT_COST` stone bricks (the bench is the only place they're cut, and it stands idle while it's rebuilt); the cost is 8 planks and 6 stone bricks, brought by builders as one more stage (`upgrading`; the bench keeps its worker, queue and work area). A finished shaft (`shaft`) is still the mason's workstation. Its stonemason digs **1 cobblestone every `SHAFT_DIG` (12 s)** onto the pile beside it, from where it stands, needing a pickaxe that wears once per `SHAFT_WEAR_EVERY` (6) cobblestone, as a boulder's yield does; it stops at the keep target or a full pile. Cobblestone only, never coal or iron, and far slower than breaking boulders, so it's a floor and the old mine stays the place for ore and stone by the cartload. Saving: v33 (nothing in an older save changes).
 - **Ada** works marked trees and boulders but never makes her own work, so she never clears the land on her own.
 - **Saplings (settles #22 for village trees):** a felled tree drops 1 sapling, with a 30% chance of a second. A lumberjack plants saplings on open grass in a chopping block's work area. The spot must be off protected land and off the map's edge, at least 3 cells from another tree and 2 from a boulder. A sapling grows into a full tree in 5 minutes: it shows as a sapling, then a young tree at half-time, then a full tree. Until then it can't be marked or chopped, though it blocks the way like a tree. A blueprint placed over a sapling lifts it back into a sapling item. Saplings are stockpiled and hauled like anything else.
 - **The workstation's panel** shows its pile, its target, the resident who has claimed it (#184), and its stuck reasons.
@@ -327,7 +327,7 @@ Once a crafting bench is finished, a **Craft** button appears in the orders tool
 | Fireplace (1×1) | Kitchen | 3×3, fireplace at its back wall |
 | Crafting bench (1×1) | Workshop | 3×3, bench at its back wall, for benches placed from Slice 2 on |
 | Chopping block (1×1, #177) | Sawmill | 3×3, block at its back wall; its pile sits on the two cells beside it |
-| Mason's bench (1×1, #177) | Mason's workshop | 3×3, bench at its back wall; its pile sits on the two cells beside it |
+| Mason's bench (1×1, #177) | Mineshaft (#204) | 3×3, bench at its back wall; its pile sits on the two cells beside it |
 
 | Storehouse (3×3, #189) | A bigger storehouse | 3×5: its footprint and two rows behind it, away from the door |
 
@@ -338,7 +338,7 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 | Bed | House stage 4 | 3 wool, 3 planks |
 | Fireplace | Build menu, K | 6 cobblestone (reserves a 3×3 kitchen plot) |
 | Chopping block | Build menu (#177) | 4 planks (reserves a 3×3 sawmill plot) |
-| Mason's bench | Build menu (#177) | 2 planks, 4 cobblestone (reserves a 3×3 mason's workshop plot) |
+| Mason's bench | Build menu (#177) | 2 planks, 4 cobblestone (reserves a 3×3 plot for a mineshaft) |
 | Storehouse | Build menu (#189) | 6 cobblestone, then 12 planks and 4 logs (reserves room behind it) |
 | Chest | Bench recipe (#189) | 8 planks |
 | Keep mark | Gather menu, Keep (click or drag) | — |
@@ -508,6 +508,7 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 | `skill_levels` | 8, 25, 50, 90 points |
 | `skill_speed` | +15% per level above 1 |
 | `arrival_delay` | 45 s per free bed |
+| `SHAFT_COST` / `SHAFT_DIG` / `SHAFT_WEAR_EVERY` | 8 planks and 6 stone bricks / 12 s per cobblestone / 6 cobblestone per pickaxe use (#204) |
 | `work_start_radius` / `work_reach` | 8 cells: the area a new chopping block or mason's bench starts with / 12 cells: the furthest a painted area may reach (#177, #203) |
 | `work_store` | 20 logs or cobblestone in a workstation's pile |
 | `keep_stock` / `keep_step` | 20 by default / steps of 5 |

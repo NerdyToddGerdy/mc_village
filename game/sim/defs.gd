@@ -158,7 +158,7 @@ const TEMPLATES := {
 		"work": {"job": "lumber", "kind": "tree", "item": "log"}, "stages": [
 		{"name": "Chopping block", "verb": "needs", "cost": {"plank": 4}},
 	]},
-	"mason_bench": {"name": "Mason's bench", "size": Vector2i(1, 1), "plot": "mason's workshop", "station": true, "makes": "stone_bricks",
+	"mason_bench": {"name": "Mason's bench", "size": Vector2i(1, 1), "plot": "mineshaft", "station": true, "makes": "stone_bricks",
 		"work": {"job": "mason", "kind": "boulder", "item": "cobble"}, "stages": [
 		{"name": "Mason's bench", "verb": "needs", "cost": {"plank": 2, "cobble": 4}},
 	]},

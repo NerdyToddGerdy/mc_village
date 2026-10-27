@@ -86,6 +86,7 @@ func _init() -> void:
 		"test_storehouse_chests",
 		"test_land_claims",
 		"test_blueprints_clear_their_footprint",
+		"test_mason_bench_becomes_a_mineshaft",
 		"test_work_areas_are_painted",
 		"test_work_areas_saved",
 		"test_worn_paths_wear_and_regrow",
@@ -3949,3 +3950,59 @@ func test_work_areas_saved() -> void:
 	var c0: Vector2i = b2.origin
 	big.m.grow("north", 8)
 	check(b2.area.has(b2.origin) and b2.origin == c0 + Vector2i(0, 8), "growing the map shifts the area with its station")
+
+
+## Issue #204: once every boulder on the village map is gone, a mason's bench is dug out into a
+## mineshaft, which digs cobblestone slowly from where it stands.
+func test_mason_bench_becomes_a_mineshaft() -> void:
+	var sim := Sim.new_game()
+	var bench := place_done(sim, "mason_bench")
+	check(Sim.station_name(bench) == "Mason's bench" and bench.get("shaft", null) == null, "a new mason's bench is a bench")
+	check(sim.shaft_check(bench).begins_with("Not while boulders are left"), "not while boulders are left: " + sim.shaft_check(bench))
+	check(not sim.upgrade_to_shaft(bench) and bench.done, "so the upgrade doesn't start")
+	# Every boulder on the map gone: the bricks are what's left to ask for.
+	for b in sim.boulders:
+		b.alive = false
+	sim._occ_dirty = true
+	check(sim.shaft_check(bench).begins_with("Cut %d more stone bricks" % Tuning.SHAFT_COST.stone_brick), "then it asks for the stone bricks first: " + sim.shaft_check(bench))
+	sim.paint_zone(open_rect(sim, Vector2i(4, 4)))
+	var zc: Vector2i = sim.zone.keys()[0]
+	sim.drop_items(zc, "stone_brick", Tuning.SHAFT_COST.stone_brick)
+	sim.drop_items(sim.zone.keys()[1], "plank", Tuning.SHAFT_COST.plank + 4)
+	check(sim.shaft_check(bench) == "", "with the bricks in stock it can start")
+	var queue_before: Array = bench.queue.duplicate()
+	check(sim.upgrade_to_shaft(bench) and not bench.done and bench.upgrading and Sim.station_name(bench) == "Mineshaft", "the upgrade starts, and the bench is rebuilt as a mineshaft")
+	check(sim.current_stage(bench).cost == Tuning.SHAFT_COST, "it asks for the planks and stone bricks of the upgrade")
+	run(sim, 150.0)
+	check(bench.done and bench.get("shaft", false) and not bench.get("upgrading", false), "builders finish it (done %s)" % bench.done)
+	check(bench.queue == queue_before and bench.has("area"), "it keeps its queue and its work area")
+	check(sim.shaft_check(bench) == "It's already a mineshaft", "and can't be dug out twice")
+	# A stonemason digs: slowly, a cobblestone at a time, onto the pile beside it.
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(bench.origin + Vector2i(0, 2)))
+	sim.set_role(tomas, "mason")
+	tomas.pick = {"type": "stone_pick", "tier": 2, "dur": 999}
+	bench.make_keep = 0
+	bench.keep = 40
+	for s in sim.sites:  # nothing else keeps him busy
+		if s.has("worker") and not is_same(s, bench) and s.worker == tomas.id:
+			s.worker = 0
+	sim.assign_workstations()
+	var cobble_before: int = sim.free_count("cobble")
+	run(sim, 120.0)
+	var dug: int = sim.free_count("cobble") - cobble_before
+	var most: int = int(120.0 / Tuning.SHAFT_DIG)
+	check(dug >= most / 2 and dug <= most, "he digs about one cobblestone every %d s (%d in 2 minutes)" % [int(Tuning.SHAFT_DIG), dug])
+	check(float(dug) / 120.0 < float(Tuning.BOULDER_COBBLE) / Tuning.BREAK_TIME[2] / 2.0, "which is a floor, much slower than breaking boulders")
+	check(sim.pile_count(bench) > 0, "onto the pile beside the shaft (%d)" % sim.pile_count(bench))
+	check(tomas.pick.dur < 999, "digging wears his pickaxe")
+	# Stops at the target.
+	bench.keep = sim.free_count("cobble")
+	var held := sim.free_count("cobble")
+	run(sim, 60.0)
+	check(sim.free_count("cobble") <= held + 1, "he stops when the village has what it keeps (%d, then %d)" % [held, sim.free_count("cobble")])
+	# Saved with the bench.
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	var again: Dictionary = back.sites.filter(func(st): return st.tpl == "mason_bench")[0]
+	check(again.get("shaft", false) and Sim.station_name(again) == "Mineshaft", "a mineshaft is saved and loaded")
+	var raw: Dictionary = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v32.save"))
+	check(not SaveFormat.upgrade(raw).has("error"), "a v32 save upgrades")

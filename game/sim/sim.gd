@@ -293,7 +293,7 @@ func role_text(r: Dictionary) -> String:
 ## A workstation's name with its resident's: "Bram's composter", or just "Composter" while it's free.
 func station_title(st: Dictionary) -> String:
 	var r := resident(st.get("worker", 0))
-	var tname: String = Defs.TEMPLATES[st.tpl].name
+	var tname: String = station_name(st)
 	return tname if r.is_empty() else "%s's %s" % [r.name, tname.substr(0, 1).to_lower() + tname.substr(1)]
 
 
@@ -712,6 +712,8 @@ func reserved_at(c: Vector2i):
 
 
 func current_stage(s: Dictionary) -> Dictionary:
+	if s.get("upgrading", false):
+		return {"name": "Mineshaft", "verb": "needs", "cost": Tuning.SHAFT_COST}
 	return Defs.TEMPLATES[s.tpl].stages[s.stage]
 
 
@@ -875,6 +877,17 @@ func _complete_stage(s: Dictionary) -> void:
 	var st := current_stage(s)
 	for k in st.cost:
 		s.store[k] -= st.cost[k]
+	if s.get("upgrading", false):  # the bench has become a mineshaft (issue #204)
+		s.upgrading = false
+		s.shaft = true
+		s.stage = Defs.TEMPLATES[s.tpl].stages.size()
+		s.done = true
+		s.store = {}
+		s.incoming = {}
+		_occ_dirty = true
+		rev += 1
+		_on_site_done(s)
+		return
 	s.stage += 1
 	_occ_dirty = true
 	rev += 1
@@ -923,6 +936,9 @@ func _on_site_done(s: Dictionary) -> void:
 		return
 	if s.tpl == "fireplace":
 		_toast("The fireplace is lit. It keeps %d meals in stock when there's wheat or mutton." % Tuning.MEAL_STOCK, 0, s.id)
+		return
+	if s.get("shaft", false):
+		_toast("The mineshaft is dug. Stonemasons dig cobblestone from it, slowly, until the village has %d." % s.keep, 0, s.id)
 		return
 	if not work_of(s).is_empty():
 		var wk := work_of(s)
@@ -1388,6 +1404,46 @@ static func gather_job_of(target: Dictionary) -> String:
 	return "lumber" if target.kind == "tree" else "mason"
 
 
+## A building's name: the mineshaft a mason's bench has become, or is becoming (issue #204).
+static func station_name(s: Dictionary) -> String:
+	return "Mineshaft" if s.get("shaft", false) or s.get("upgrading", false) else Defs.TEMPLATES[s.tpl].name
+
+
+## Why a mason's bench can't be upgraded into a mineshaft yet, or "" when it can (issue #204): only once
+## every boulder on the village map is gone, and with the stone bricks it takes cut already, since the
+## bench is the only place they're cut and it stands idle while it's rebuilt.
+func shaft_check(s: Dictionary) -> String:
+	if s.tpl != "mason_bench" or not s.done:
+		return "Only a finished mason's bench can be dug out"
+	if s.get("shaft", false):
+		return "It's already a mineshaft"
+	if m.kind != "village":
+		return "Only in the village"
+	var left := m.boulders.filter(func(b): return b.alive).size()
+	if left > 0:
+		return "Not while boulders are left on the map (%d)" % left
+	var short: int = Tuning.SHAFT_COST.stone_brick - free_count("stone_brick")
+	if short > 0:
+		return "Cut %d more stone bricks at the bench first" % short
+	return ""
+
+
+## Starts rebuilding a mason's bench as a mineshaft: it keeps its worker, queue and work area, and builders
+## bring the planks and stone bricks like any blueprint's stage. Returns whether it began.
+func upgrade_to_shaft(s: Dictionary) -> bool:
+	if shaft_check(s) != "":
+		return false
+	s.upgrading = true
+	s.done = false
+	s.stage = 0
+	s.store = {}
+	s.incoming = {}
+	s.builder = 0
+	_occ_dirty = true
+	rev += 1
+	return true
+
+
 ## A building's workstation: {job, kind, item}, or {} for a building that isn't one.
 static func work_of(s: Dictionary) -> Dictionary:
 	return Defs.TEMPLATES[s.tpl].get("work", {})
@@ -1579,6 +1635,10 @@ func _workstation_job(r: Dictionary, c: Vector2i):
 		return null
 	if job == "mason" and r.pick == null and tool_items("pick", 0).is_empty():
 		return null
+	if own.get("shaft", false):  # a mineshaft digs stone from where it stands (issue #204)
+		if free_count(item) >= own.keep or pile_count(own) >= Tuning.WORK_STORE:
+			return null
+		return _tagged(_dig_job(r, own), job)
 	var targets := auto_targets(stations)
 	if targets.is_empty():
 		return null
@@ -1681,6 +1741,19 @@ func designate_keep(rect: Rect2i, single = null) -> void:
 
 func _goto(cells: Array, adjacent: bool) -> Dictionary:
 	return {"op": "goto", "cells": cells, "adj": adjacent, "planned": false}
+
+
+## A stonemason digging 1 cobblestone at their mineshaft (issue #204).
+func _dig_job(r: Dictionary, shaft: Dictionary) -> Job:
+	var j := Job.new("gather", "Going to dig stone", "the mineshaft")
+	j.work = "mason"
+	var cur: int = r.pick.tier if r.pick != null else 0
+	var better := tool_items("pick", cur)
+	if not better.is_empty() and not (r.kept.pick and r.pick != null):
+		_fetch_tool(j, nearest(better, rcell(r)))
+	j.step(_goto([shaft.origin], true))
+	j.step({"op": "work", "what": "dig", "site": shaft, "tool": "pick", "label": "Digging stone"})
+	return j
 
 
 func _gather_job(r: Dictionary, target: Dictionary) -> Job:
@@ -2336,6 +2409,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			if st.tool == "axe":
 				return Tuning.CHOP_TIME[tier]
 			return Tuning.BREAK_TIME[tier] if tier > 0 else -1.0
+		"dig":
+			return Tuning.SHAFT_DIG if r.pick != null and r.pick.tier > 0 else -1.0
 		"build":
 			return Tuning.LAY_TIME if st.site.tpl == "track" else Tuning.STAGE_TIME
 		"hunt":
@@ -2386,6 +2461,21 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			if t.get("loose", false):  # issue #110
 				_hazard(r, cave_in_chance(m.level), Tuning.CAVE_IN_SERIOUS, "a cave-in")
 			_check_find(t.cell)  # issue #111
+		"dig":
+			var shaft: Dictionary = st.site
+			if not shaft.get("shaft", false):
+				return "gone"
+			var at: Vector2i = shaft.origin
+			for pc in pile_cells(shaft):  # onto the pile beside it, when there's room
+				var there = m.items.get(pc)
+				if there == null or (there.type == "cobble" and there.n < Defs.stack_cap("cobble")):
+					at = pc
+					break
+			drop_items(at, "cobble", 1)
+			shaft.digs = shaft.get("digs", 0) + 1
+			stats.stone_dug = stats.get("stone_dug", 0) + 1
+			if shaft.digs % Tuning.SHAFT_WEAR_EVERY == 0:
+				_wear(r, "pick")
 		"eat":
 			if r.carry == null:
 				return "gone"
@@ -3556,7 +3646,7 @@ func _stuck_on_map() -> void:
 			elif label == "Toolsmith":
 				var kind: String = Defs.ITEMS[Defs.recipe(s.queue[0]).out.keys()[0]].tool
 				why = "Toolsmith needs %d more %s for a spare %s" % [worst_n, it.one if worst_n == 1 else it.many, TOOL_NAMES[kind]]
-			_add_stuck(tpl.name, why,
+			_add_stuck(station_name(s), why,
 				mid, site_height(s) + 0.4, "site", s.id, false, standing)
 	_stuck_unstaffed()
 	_stuck_workstations()
@@ -3638,7 +3728,7 @@ func _stuck_workstations() -> void:
 		var wk := work_of(s)
 		if not s.done or wk.is_empty():
 			continue
-		var tname: String = Defs.TEMPLATES[s.tpl].name
+		var tname: String = station_name(s)
 		var at := Vector2(s.origin) + Vector2(0.5, 0.5)
 		var h := site_height(s) + 0.4
 		var item: Dictionary = Defs.ITEMS[wk.item]
@@ -3649,11 +3739,12 @@ func _stuck_workstations() -> void:
 		else:
 			var pool: Array = m.trees if wk.kind == "tree" else m.boulders
 			var left := pool.filter(func(t): return t.alive and not t.get("hidden", false) and in_area(s, t.cell) and not protected(t))
-			if left.is_empty():
-				var why := "No trees in the chopping block's area. Plant saplings, or paint more ground" if wk.kind == "tree" else "No boulders in the mason's bench's area"
-				_add_stuck(tname, why, at, h, "site", s.id)
-			elif not left.any(func(t): return grown(t)):
-				_add_stuck(tname, "Saplings growing: no grown trees in its area yet", at, h, "site", s.id, false, true)
+			if not s.get("shaft", false):  # a mineshaft digs where it stands: nothing needs to be in its area (issue #204)
+				if left.is_empty():
+					var why := "No trees in the chopping block's area. Plant saplings, or paint more ground" if wk.kind == "tree" else "No boulders in the mason's bench's area"
+					_add_stuck(tname, why, at, h, "site", s.id)
+				elif not left.any(func(t): return grown(t)):
+					_add_stuck(tname, "Saplings growing: no grown trees in its area yet", at, h, "site", s.id, false, true)
 		if pile_count(s) >= Tuning.WORK_STORE:
 			_add_stuck(tname, "Full (%d %s)" % [Tuning.WORK_STORE, item.many], at, h, "site", s.id, false, true)
 	var any_pick := not tool_items("pick", 0).is_empty()
