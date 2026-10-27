@@ -400,6 +400,22 @@ func _initialize() -> void:
 	if game.tool != "":
 		await key(KEY_ESCAPE)
 	check(await play_until(200, func(): return cblock != null and cblock.done and is_same(sim.claimed(tomas), cblock)), "it's built, and Tomas claims it")
+
+	# Work area (issue #203): select the block, Paint area, drag over painted cells to erase them, and drag again to paint them back
+	game.selection = {"kind": "site", "id": cblock.id}
+	check(cblock.area.size() > 100, "the chopping block starts with a painted work area (%d cells)" % cblock.area.size())
+	check(await click_button("Paint area"), "click Paint area on the chopping block's panel")
+	check(game.tool == "area", "it switches the area tool on")
+	await look_at(cblock.origin)
+	var wa: Vector2i = cblock.origin + Vector2i(2, 0)
+	var wb: Vector2i = cblock.origin + Vector2i(4, 1)
+	await drag(screen(wa), screen(wb))
+	check(not cblock.area.has(wa) and not cblock.area.has(wb), "dragging from a painted cell erases the cells it covers")
+	await drag(screen(wa), screen(wb))
+	check(cblock.area.has(wa) and cblock.area.has(wb), "dragging again, from an unpainted cell, paints them back")
+	check(await click_button("Done painting"), "click Done painting")
+	check(game.tool == "", "the tool is put away")
+	game.selection = {}
 	check(Goals.current(sim) < 0, "every founding goal is done (%s)" % Goals.progress_text(sim))
 	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
 	await frames(2)
@@ -519,7 +535,7 @@ func _initialize() -> void:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(game.selection.get("kind", "") == "site" and visible_label("Keep %d cobblestone" % mbench.keep), "selecting it shows its keep-stock target")
-	check(game._world.live_outlines.any(func(o): return o.has("radius")), "and draws its work area")
+	check(game._world.live_fills.size() > 3, "and draws its painted work area (%d washes)" % game._world.live_fills.size())
 	var keep_lbl: Array = _all(game._hud._sel).filter(func(n): return n is Label and n.text == "Keep %d cobblestone" % mbench.keep)
 	var keep_plus: Button = keep_lbl[0].get_parent().get_child(keep_lbl[0].get_index() + 1) if not keep_lbl.is_empty() else null
 	check(keep_plus != null, "with a + beside it")

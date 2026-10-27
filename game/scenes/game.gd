@@ -12,6 +12,7 @@ var last_speed := 1
 var tool := ""                          ## "", a Gather or Paint order (OrderMenus.MARK_TOOLS) or "build"
 var placing := ""                       ## Template being placed while tool == "build".
 var rot := 0
+var area_site := 0                      ## The workstation whose work area is being painted, while tool == "area" (issue #203).
 var menu_open := ""                     ## The toolbar menu that's open: "", "gather", "paint" or "build".
 var build_menu_open: bool:
 	get: return menu_open == "build"
@@ -215,18 +216,26 @@ func _update_live_overlays() -> void:
 	var hint_col := Palette.CHALK
 	if not _drag.is_empty() and _drag.kind == "rect":
 		if _drag.get("erase", false):  # erasing a zone: a red outline, and a red fill on each cell that goes
-			var cells: Dictionary = sim.farm if tool == "farm" else sim.zone
+			var cells: Dictionary = sim.farm if tool == "farm" else (_area_cells() if tool == "area" else sim.zone)
 			outlines.append({"rect": _drag.rect, "h": 0.03, "color": Palette.RED, "dashed": true})
 			for x in range(_drag.rect.position.x, _drag.rect.end.x):
 				for y in range(_drag.rect.position.y, _drag.rect.end.y):
 					if cells.has(Vector2i(x, y)):
 						fills.append({"rect": Rect2i(x, y, 1, 1), "h": 0.02, "color": Color(Palette.RED, 0.45)})
 			hint = "Release to erase these farm plots. Anything growing on them is lost." if tool == "farm" else "Release to erase these stockpile cells. Anything on them stays and is hauled to the rest."
+			if tool == "area":
+				hint = "Release to take these cells out of the work area."
 			if tool == "pen":
 				hint = "Release to take this pen down. Its fences come down and its animals go free."
 			hint_col = Palette.RED
 		else:
-			var col: Color = {"stock": Palette.GREEN, "farm": Palette.WHEAT, "lead": Palette.BLUE, "pen": Palette.BLUE}.get(tool, Palette.RED)
+			var col: Color = {"stock": Palette.GREEN, "farm": Palette.WHEAT, "lead": Palette.BLUE, "pen": Palette.BLUE, "area": Palette.CHALK}.get(tool, Palette.RED)
+			if tool == "area":
+				var site := sim.site(area_site)
+				if not site.is_empty():
+					var far := _cells_out_of_reach(site, _drag.rect)
+					hint = "Release to add these cells to the work area." if far == 0 else "%d of these cells are more than %d cells from it, and stay unpainted." % [far, int(Tuning.WORK_REACH)]
+					hint_col = Palette.CHALK if far == 0 else Palette.YELLOW
 			if tool == "pen":  # issue #139: red, with the reason, where a pen can't go
 				var why := sim.pen_check(_drag.rect)
 				if why != "":
@@ -267,8 +276,8 @@ func _update_live_overlays() -> void:
 		if plot != null:
 			outlines.append({"rect": plot, "h": 0.02, "color": Color(Palette.RED if err != "" else Palette.CHALK, 0.6), "dashed": true})
 		outlines.append({"rect": Rect2i(origin, size), "h": 0.03, "color": Palette.RED if err != "" else Palette.BLUE, "dashed": true})
-		if Defs.TEMPLATES[placing].has("work"):  # the work area it'll have (issue #177)
-			outlines.append({"center": Vector2(origin) + Vector2(0.5, 0.5), "radius": Tuning.WORK_RADIUS, "h": 0.02, "color": Color(Palette.CHALK, 0.5)})
+		if Defs.TEMPLATES[placing].has("work"):  # the work area it'll start with, which can be repainted (issues #177, #203)
+			fills.append_array(_area_fills(sim.work_area_start(placing, origin), _area_color(placing), 0.22))
 		if err == "" and placing == "house":
 			fills.append({"rect": Rect2i(sim.door_cell(origin, rot), Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.55)})
 		if err != "":
@@ -286,8 +295,8 @@ func _update_live_overlays() -> void:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
 	elif sel != null and sel.kind == "site":
 		outlines.append({"rect": Rect2i(sel.origin, sel.size), "h": 0.04, "color": Palette.CHALK, "dashed": false})
-		if not Sim.work_of(sel).is_empty():  # its work area (issue #177)
-			outlines.append({"center": Vector2(sel.origin) + Vector2(0.5, 0.5), "radius": Tuning.WORK_RADIUS, "h": 0.03, "color": Color(Palette.CHALK, 0.8)})
+		if not Sim.work_of(sel).is_empty() and sel.has("area"):  # its painted work area (issues #177, #203)
+			fills.append_array(_area_fills(sel.area, _area_color(sel.tpl), 0.3 if tool == "area" else 0.22))
 	elif sel != null and sel.kind == "pen":
 		outlines.append({"rect": sel.rect, "h": 0.04, "color": Palette.CHALK, "dashed": false})
 	if hint == "" and tool in ["chop", "break"] and _hover != null and _drag.is_empty():
@@ -300,6 +309,9 @@ func _update_live_overlays() -> void:
 			hint = "Drag to mark trees and boulders. Shift: trees only. Alt/Option: boulders only."
 	if hint == "" and tool == "stock" and _hover != null and _drag.is_empty():
 		hint = "Click or drag from a stockpile cell to erase." if sim.zone.has(_hover) else "Drag over open ground to paint a stockpile. Start on a stockpile to erase instead."
+	if hint == "" and tool == "area" and _hover != null and _drag.is_empty():
+		var site := sim.site(area_site)
+		hint = "Drag to paint the ground it works. Start on a painted cell to erase. Cells more than %d from it stay unpainted." % int(Tuning.WORK_REACH) if site.is_empty() or not site.has("area") or not Sim.in_area(site, _hover) else "Click or drag from a painted cell to erase."
 	if hint == "" and tool == "keep" and _hover != null and _drag.is_empty():
 		hint = "Click or drag over trees and boulders that lumberjacks and stonemasons should leave alone. Click a kept one to unmark it."
 	if hint == "" and tool == "hunt" and _hover != null and _drag.is_empty():
@@ -630,7 +642,7 @@ func _left_down(e: InputEventMouseButton) -> void:
 		return
 	if tool in OrderMenus.MARK_TOOLS and c != null:
 		# A drag that starts on a painted cell erases that zone instead (issues #63, #93).
-		var erase: bool = (tool == "stock" and sim.zone.has(c)) or (tool == "farm" and sim.farm.has(c)) or (tool == "pen" and sim.pen_at(c) != null)
+		var erase: bool = (tool == "stock" and sim.zone.has(c)) or (tool == "farm" and sim.farm.has(c)) or (tool == "pen" and sim.pen_at(c) != null) or (tool == "area" and sim.site(area_site).has("area") and Sim.in_area(sim.site(area_site), c))
 		_drag = {"kind": "rect", "a": c, "rect": Rect2i(c, Vector2i.ONE), "start": e.position, "erase": erase}
 		return
 	# Shift-drag box-selects residents; a plain drag pans the map; a click selects.
@@ -656,6 +668,10 @@ func _left_up(e: InputEventMouseButton) -> void:
 				sim.clear_farm(d.rect)
 			elif tool == "farm":
 				sim.paint_farm(d.rect)
+			elif tool == "area":
+				var site := sim.site(area_site)
+				if not site.is_empty():
+					sim.paint_work_area(site, d.rect, d.get("erase", false))
 			elif tool == "pen" and d.get("erase", false):
 				var p = sim.pen_at(d.a)
 				if p != null:
@@ -927,7 +943,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "keep"]
+const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -966,6 +982,61 @@ func set_tool(t: String) -> void:
 		tool = "" if tool == t else t
 		placing = ""
 	_drag = {}
+
+
+## Paints a workstation's work area (issue #203): drag to add cells, start on a painted cell to erase.
+func start_area(site: Dictionary) -> void:
+	if tool == "area" and area_site == site.id:
+		set_tool("")
+		return
+	menu_open = ""
+	craft_menu_open = false
+	placing = ""
+	tool = "area"
+	area_site = site.id
+	_drag = {}
+
+
+func _area_cells() -> Dictionary:
+	var site := sim.site(area_site)
+	return site.area if site.has("area") else {}
+
+
+func _cells_out_of_reach(site: Dictionary, rect: Rect2i) -> int:
+	var n := 0
+	for x in range(rect.position.x, rect.end.x):
+		for y in range(rect.position.y, rect.end.y):
+			if Vector2(Vector2i(x, y)).distance_to(Vector2(site.origin)) > Tuning.WORK_REACH:
+				n += 1
+	return n
+
+
+## The work area's colour: green for the lumberjack's, stone for the mason's.
+static func _area_color(tpl: String) -> Color:
+	return {"chopping_block": Palette.GREEN, "mason_bench": Palette.CHALK}.get(tpl, Palette.CHALK)
+
+
+## A work area as flat washes, one per row run, so it costs a handful of rects rather than a rect a cell.
+static func _area_fills(cells: Dictionary, col: Color, alpha: float) -> Array:
+	var rows := {}
+	for c in cells:
+		if not rows.has(c.y):
+			rows[c.y] = []
+		rows[c.y].append(c.x)
+	var out: Array = []
+	for y in rows:
+		var xs: Array = rows[y]
+		xs.sort()
+		var start: int = xs[0]
+		var prev: int = start
+		for i in range(1, xs.size() + 1):
+			if i == xs.size() or xs[i] != prev + 1:
+				out.append({"rect": Rect2i(start, y, prev - start + 1, 1), "h": 0.02, "color": Color(col, alpha)})
+				if i < xs.size():
+					start = xs[i]
+			if i < xs.size():
+				prev = xs[i]
+	return out
 
 
 ## Picks a row in a toolbar menu: switches its order on (or starts placing its building) and closes

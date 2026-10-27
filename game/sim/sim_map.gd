@@ -174,6 +174,8 @@ func shift(off: Vector2i) -> void:
 	farm = plots
 	for s in sites:
 		s.origin += off
+		if s.has("area"):  # a workstation's painted work area (issue #203)
+			s.area = _shifted_keys(s.area, off)
 		if s.get("plot") != null:
 			s.plot.position += off
 	for p in pens:

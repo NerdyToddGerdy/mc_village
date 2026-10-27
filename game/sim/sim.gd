@@ -926,9 +926,9 @@ func _on_site_done(s: Dictionary) -> void:
 		return
 	if not work_of(s).is_empty():
 		var wk := work_of(s)
-		_toast("The %s is ready. %ss %s within %d cells of it on their own, until the village has %d %s." % [
+		_toast("The %s is ready. %ss %s in its area on their own, until the village has %d %s. Select it to paint the area." % [
 			Defs.TEMPLATES[s.tpl].name.to_lower(), Defs.JOB_NAMES[wk.job], "fell trees" if wk.kind == "tree" else "break boulders",
-			int(Tuning.WORK_RADIUS), s.keep, Defs.ITEMS[wk.item].many], 0, s.id)
+			s.keep, Defs.ITEMS[wk.item].many], 0, s.id)
 		return
 	if s.tpl == "bridge":
 		_toast("The bridge over the stream is built: no more wading, and track can cross.", 0, s.id)
@@ -1393,9 +1393,54 @@ static func work_of(s: Dictionary) -> Dictionary:
 	return Defs.TEMPLATES[s.tpl].get("work", {})
 
 
-## Whether `c` is in a workstation's work area.
+## Whether `c` is in a workstation's work area: the cells painted for it (issue #203).
 static func in_area(s: Dictionary, c: Vector2i) -> bool:
-	return Vector2(c).distance_to(Vector2(s.origin)) <= Tuning.WORK_RADIUS
+	return s.area.has(c) if s.has("area") else Vector2(c).distance_to(Vector2(s.origin)) <= Tuning.WORK_START_RADIUS
+
+
+## The workstation of the same kind that owns work-area cell `c`, other than `except`, or {}.
+func _area_owner(tpl: String, c: Vector2i, except: Dictionary) -> Dictionary:
+	for o in m.sites:
+		if o.tpl == tpl and o.has("area") and not is_same(o, except) and o.area.has(c):
+			return o
+	return {}
+
+
+## The cells a new workstation starts with (issue #203): the circle around it that it always worked,
+## in bounds and not already another of its kind's.
+func work_area_start(tpl: String, origin: Vector2i) -> Dictionary:
+	var out := {}
+	var rr := ceili(Tuning.WORK_START_RADIUS)
+	for dx in range(-rr, rr + 1):
+		for dy in range(-rr, rr + 1):
+			var c := origin + Vector2i(dx, dy)
+			if m.in_bounds(c) and Vector2(c).distance_to(Vector2(origin)) <= Tuning.WORK_START_RADIUS and _area_owner(tpl, c, {}).is_empty():
+				out[c] = true
+	return out
+
+
+## Paints cells onto a workstation's work area, or erases them (issue #203). A cell belongs to at most one
+## workstation of a kind, so painting one another owns moves it here. Cells past WORK_REACH of the
+## workstation are left out; returns how many.
+func paint_work_area(s: Dictionary, rect: Rect2i, erase := false) -> int:
+	if not s.has("area"):
+		return 0
+	var out_of_reach := 0
+	for x in range(rect.position.x, rect.end.x):
+		for y in range(rect.position.y, rect.end.y):
+			var c := Vector2i(x, y)
+			if not m.in_bounds(c):
+				continue
+			if erase:
+				s.area.erase(c)
+			elif Vector2(c).distance_to(Vector2(s.origin)) > Tuning.WORK_REACH:
+				out_of_reach += 1
+			else:
+				var o := _area_owner(s.tpl, c, s)
+				if not o.is_empty():
+					o.area.erase(c)
+				s.area[c] = true
+	return out_of_reach
 
 
 ## The two cells beside a workstation, inside its plot, where its pile goes.
@@ -1547,22 +1592,19 @@ func plant_cell(stations: Array, c: Vector2i):
 		_recompute_occ()
 	var best = null
 	var bd := 1 << 30
-	var rr := ceili(Tuning.WORK_RADIUS)
 	for s in stations:
-		for dx in range(-rr, rr + 1):
-			for dy in range(-rr, rr + 1):
-				var p: Vector2i = s.origin + Vector2i(dx, dy)
-				var d := manhattan(p, c)
-				if d >= bd or p.x < 1 or p.y < 1 or p.x >= w - 1 or p.y >= h - 1 or not in_area(s, p):
-					continue
-				if not walkable(p) or m.items.has(p) or _plant_claims.has(p) or p == meadow_sign() or p == route_sign() or protected_cell(p):
-					continue
-				if m.trees.any(func(t): return t.alive and absi(t.cell.x - p.x) <= 2 and absi(t.cell.y - p.y) <= 2):
-					continue
-				if m.boulders.any(func(b): return b.alive and absi(b.cell.x - p.x) <= 1 and absi(b.cell.y - p.y) <= 1):
-					continue
-				best = p
-				bd = d
+		for p in s.area:
+			var d := manhattan(p, c)
+			if d >= bd or p.x < 1 or p.y < 1 or p.x >= w - 1 or p.y >= h - 1:
+				continue
+			if not walkable(p) or m.items.has(p) or _plant_claims.has(p) or p == meadow_sign() or p == route_sign() or protected_cell(p):
+				continue
+			if m.trees.any(func(t): return t.alive and absi(t.cell.x - p.x) <= 2 and absi(t.cell.y - p.y) <= 2):
+				continue
+			if m.boulders.any(func(b): return b.alive and absi(b.cell.x - p.x) <= 1 and absi(b.cell.y - p.y) <= 1):
+				continue
+			best = p
+			bd = d
 	return best
 
 
@@ -3608,10 +3650,10 @@ func _stuck_workstations() -> void:
 			var pool: Array = m.trees if wk.kind == "tree" else m.boulders
 			var left := pool.filter(func(t): return t.alive and not t.get("hidden", false) and in_area(s, t.cell) and not protected(t))
 			if left.is_empty():
-				var why := "No trees in range. Plant saplings or move the chopping block" if wk.kind == "tree" else "No boulders in range"
+				var why := "No trees in the chopping block's area. Plant saplings, or paint more ground" if wk.kind == "tree" else "No boulders in the mason's bench's area"
 				_add_stuck(tname, why, at, h, "site", s.id)
 			elif not left.any(func(t): return grown(t)):
-				_add_stuck(tname, "Saplings growing: no grown trees in range yet", at, h, "site", s.id, false, true)
+				_add_stuck(tname, "Saplings growing: no grown trees in its area yet", at, h, "site", s.id, false, true)
 		if pile_count(s) >= Tuning.WORK_STORE:
 			_add_stuck(tname, "Full (%d %s)" % [Tuning.WORK_STORE, item.many], at, h, "site", s.id, false, true)
 	var any_pick := not tool_items("pick", 0).is_empty()
@@ -3897,6 +3939,8 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 		s.keep = Tuning.KEEP_STOCK
 	if Defs.TEMPLATES[tpl].has("makes"):
 		s.make_keep = Tuning.MAKE_KEEP[tpl]
+	if not work_of(s).is_empty():
+		s.area = work_area_start(tpl, origin)  # painted from here on (issue #203)
 	m.sites.append(s)
 	_occ_dirty = true
 	for c in site_cells(s):

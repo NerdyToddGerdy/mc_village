@@ -28,7 +28,7 @@ var _hatch_mat: StandardMaterial3D
 var _person_mats := {}
 
 ## Set by the game each frame.
-var live_outlines: Array = []   ## {rect: Rect2i, h: float, color: Color, dashed: bool}, or a dashed circle {center: Vector2, radius, h, color}
+var live_outlines: Array = []   ## {rect: Rect2i, h: float, color: Color, dashed: bool}
 var live_fills: Array = []      ## {rect: Rect2i, h: float, color: Color}
 var selected_ids: Array = []    ## Resident ids with a selection ring.
 var hover_id := 0               ## The resident under the mouse, who shows a name tag; 0 for none.
@@ -1011,16 +1011,6 @@ func _outline(dark: Batch, col: Batch, rect: Rect2i, h: float, color: Color, das
 			_seg(col, p0, p1, h + 0.005, 0.06, color)
 
 
-## A dashed chalk circle on the ground, such as a workstation's work area (issue #177): short dashes,
-## each drawn as a small square, since segments are axis-aligned boxes.
-func _circle(dark: Batch, col: Batch, center: Vector2, radius: float, h: float, color: Color) -> void:
-	var n := int(TAU * radius / 0.52)
-	for i in n:
-		var p := center + Vector2.from_angle(TAU * i / n) * radius
-		_seg(dark, p, p, h, 0.2, Color(Palette.SLATE_DEEP, color.a))
-		_seg(col, p, p, h + 0.005, 0.11, color)
-
-
 func _seg(b: Batch, p0: Vector2, p1: Vector2, h: float, thick: float, color: Color) -> void:
 	var lo := Vector3(minf(p0.x, p1.x) - thick / 2, h, minf(p0.y, p1.y) - thick / 2)
 	var hi := Vector3(maxf(p0.x, p1.x) + thick / 2, h + 0.02, maxf(p0.y, p1.y) + thick / 2)
@@ -1406,10 +1396,7 @@ func _build_live() -> void:
 		var r: Rect2i = f.rect
 		col.box(Vector3(r.position.x, f.h, r.position.y), Vector3(r.end.x, f.h + 0.02, r.end.y), f.color)
 	for o in live_outlines:
-		if o.has("radius"):
-			_circle(dark, col, o.center, o.radius, o.h, o.color)
-		else:
-			_outline(dark, col, o.rect, o.h, o.color, o.dashed)
+		_outline(dark, col, o.rect, o.h, o.color, o.dashed)
 	dark.apply(_live_dark)
 	col.apply(_live_col)
 

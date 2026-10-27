@@ -231,7 +231,7 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 
 **Workstations: the chopping block and the mason's bench (#177).** A lumberjack or stonemason with no marked work finds their own, but only around a workstation the player has built.
 - **The buildings:** the chopping block (4 planks) and the mason's bench (2 planks, 4 cobblestone) are 1×1, from the Build menu. Each reserves a 3×3 plot for its upgrade, a sawmill or a mason's workshop (§8).
-- **Work area:** everything within 8 cells of the workstation. It's drawn as a dashed chalk circle while the workstation is selected or being placed.
+- **Work area (#203):** painted cells (`site.area`), not a circle. A new workstation starts with the cells within `WORK_START_RADIUS` (8) of it that no other workstation of its kind has, so it works straight away. Select it and press **Paint area** (the tool stays on until **Done painting** or Esc): drag to add cells, and start a drag on a painted cell to erase, like farms. Cells more than `WORK_REACH` (12) from the workstation stay unpainted, and the hint says so. A cell belongs to at most one chopping block and at most one mason's bench: painting one another owns moves it. An area may lie over stockpiles, farms and pens; lumberjacks still plant nothing on protected land. It's drawn as a flat chalk wash while the workstation is selected, while placing one (its starting area) and while painting. Saving: v32 gives every standing chopping block and mason's bench the circle it always worked.
 - **Their own work**, once nothing marked is left, in this order:
   1. carry logs or cobblestone lying in a work area to the workstation's pile;
   2. a lumberjack plants saplings (below);
@@ -384,7 +384,7 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 - "Toolsmith needs N more X for a spare Y".
 - "No one is a farmer" (or hunter, cook, and so on), when there's work of that type, no resident has the job, and Ada can't see to it (§5, #134).
 - "Meadow has no sheep left", when a trip is planned.
-- Workstations (#177): "Chopping block: No trees in range. Plant saplings or move the chopping block", "Mason's bench: No boulders in range", and "Stonemason: no pickaxe" on a stonemason with none to pick up. Waiting, not stuck: "Target reached (20 cobblestone)", "Full (20 logs)" (the overflow goes to the stockpile), "Saplings growing: no grown trees in range yet", and "No lumberjack to work it" while no one has claimed it.
+- Workstations (#177): "Chopping block: No trees in the chopping block's area. Plant saplings, or paint more ground", "Mason's bench: No boulders in the mason's bench's area", and "Stonemason: no pickaxe" on a stonemason with none to pick up. Waiting, not stuck: "Target reached (20 cobblestone)", "Full (20 logs)" (the overflow goes to the stockpile), "Saplings growing: no grown trees in its area yet", and "No lumberjack to work it" while no one has claimed it.
 - "Tomas: Build a composter to start work", for a resident whose job has no free workstation (#184).
 - Storehouses (#189): "The storehouse is full" when a loose item has nowhere to go (beside "Stockpile is full" when there's a stockpile too), "Can’t reach the storehouse: its door is blocked", and "No chests yet. Craft one at the bench (8 planks)".
 - "Tomas: Hunter: herd at its floor (2 sheep)" or "Hunter: no animals to hunt", waiting, for a hunter with nothing above the floor and nothing marked (#183).
@@ -506,7 +506,7 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 | `skill_levels` | 8, 25, 50, 90 points |
 | `skill_speed` | +15% per level above 1 |
 | `arrival_delay` | 45 s per free bed |
-| `work_radius` | 8 cells around a chopping block or mason's bench (#177) |
+| `work_start_radius` / `work_reach` | 8 cells: the area a new chopping block or mason's bench starts with / 12 cells: the furthest a painted area may reach (#177, #203) |
 | `work_store` | 20 logs or cobblestone in a workstation's pile |
 | `keep_stock` / `keep_step` | 20 by default / steps of 5 |
 | `make_keep` / `make_step` | 20 planks at a chopping block, 10 stone bricks at a mason's bench / steps of 5 (#178) |

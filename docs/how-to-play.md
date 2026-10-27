@@ -161,14 +161,14 @@ New residents arrive in the job they're skilled at, and haul until its workstati
 
 A lumberjack or stonemason works whatever you've marked first. With nothing marked, they find their own work around their **workstation**:
 - **Chopping block** (4 planks) for lumberjacks, and **mason's bench** (2 planks, 4 cobblestone) for stonemasons. Build them from the Build menu. Each reserves room for a later upgrade.
-- **Work area:** everything within 8 cells. Selecting the workstation, or placing one, draws it as a dashed circle. Put the workstation where you want the land cleared.
+- **Work area:** the ground it works, painted. A new one starts with the 8 cells around it, shown as a wash of colour while you place it or select it. Select it and choose **Paint area** to change it: drag to add ground, start a drag on painted ground to erase. Ground more than 12 cells from the workstation can't be painted, and two chopping blocks (or two mason's benches) can't share a cell: painting one takes it from the other.
 - **The pile:** the cells beside it hold up to 20 logs or cobblestone. Gatherers carry what they cut there first, which saves the walk to the stockpile. Builders and crafters take from it like a stockpile, and anything over 20 goes to the stockpile.
 - **Keep-stock target:** set in the workstation's panel ("Keep 20 logs", with − and +). Once the village has that many, its gatherers stop cutting so they don't strip the area for nothing.
 - **Left alone:** trees and boulders marked **Keep**, and anything on a building or its reserved plot, a stockpile, farm or pen, or beside a house's door.
 - **Processing:** a chopping block also saws planks, 5 from a log (the bench makes 4), and a mason's bench cuts cobblestone into **stone bricks**, 2 for 2. Each keeps a stock, set in its panel ("Keep 20 planks", with − and +), and its gatherer makes more while the village is short. Each also has a tab in the Craft panel, where you can queue more by hand. Stone bricks are for buildings still to come.
 - **Replanting:** a felled tree drops a sapling, sometimes two. Lumberjacks plant saplings on open grass in their chopping block's area. A sapling grows into a full tree in about 5 minutes. Until then it can't be chopped.
 
-The workstation's panel and the stuck list say what's holding it up: "No trees in range", "Target reached", "Full", or a stonemason with no pickaxe.
+The workstation's panel and the stuck list say what's holding it up: "No trees in the chopping block's area", "Target reached", "Full", or a stonemason with no pickaxe.
 
 ## Materials and stockpiles
 
