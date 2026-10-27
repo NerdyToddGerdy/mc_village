@@ -509,7 +509,10 @@ func _initialize() -> void:
 		await key(KEY_ESCAPE)
 	check(await choose_job(tomas, "mason"), "the jobs board: make Tomas the Stonemason (%s)" % tomas.role)
 	await key(KEY_ESCAPE)
-	check(await play_until(240, func(): return mbench != null and mbench.done and sim.pile_count(mbench) >= Tuning.BOULDER_COBBLE), "Tomas piles stone beside the mason's bench (%d; done %s, stage %d, Tomas %s with %s, claimed %s; %s)" % [sim.pile_count(mbench) if mbench != null else 0, mbench.done if mbench != null else false, mbench.stage if mbench != null else -1, tomas.role, tomas.pick, sim.claimed(tomas).get("tpl", ""), "; ".join(sim.stuck.map(func(x): return x.who + ": " + x.why))])
+	# The bench cuts bricks from its pile as the stone arrives, so with one boulder in range the pile may never
+	# reach a boulder's worth: the stone he's brought (piled, or already cut into bricks) is what counts.
+	var stone_in := func() -> int: return sim.pile_count(mbench) + sim.free_count("stone_brick") if mbench != null else 0
+	check(await play_until(240, func(): return mbench != null and mbench.done and stone_in.call() >= Tuning.BOULDER_COBBLE), "Tomas piles stone beside the mason's bench (%d; done %s, stage %d, Tomas %s with %s, claimed %s; %s)" % [stone_in.call(), mbench.done if mbench != null else false, mbench.stage if mbench != null else -1, tomas.role, tomas.pick, sim.claimed(tomas).get("tpl", ""), "; ".join(sim.stuck.map(func(x): return x.who + ": " + x.why)) + "; boulders alive %d, in its area %d, marked %d, kept %d" % [sim.boulders.filter(func(b): return b.alive).size(), sim.boulders.filter(func(b): return b.alive and mbench != null and sim.in_area(mbench, b.cell)).size(), sim.boulders.filter(func(b): return b.alive and b.des).size(), sim.boulders.filter(func(b): return b.alive and b.get("keep", false)).size()]])
 	check(sim.boulders.filter(func(b): return not b.alive and not b.des).size() > 0 or sim.stats.broken_boulders > 0, "breaking boulders nobody marked")
 	await look_at(mb_spot)
 	await click(screen(mb_spot, 0.5))
@@ -599,7 +602,8 @@ func _initialize() -> void:
 	check(await click_button("Load slot 1"), "confirm Load slot 1")
 	var slot_tick: int = game.read_slots()[0].tick
 	check(not game._menu.visible, "loading closes the menu")
-	check(game.sim.tick == slot_tick, "the saved game is back (tick %d, slot holds %d, tick before resuming %d)" % [game.sim.tick, slot_tick, saved_tick])
+	# Loading closes the menu and resumes, so a frame may tick once before this reads it: a few ticks of slack.
+	check(game.sim.tick >= slot_tick and game.sim.tick - slot_tick <= 3, "the saved game is back (tick %d, slot holds %d, tick before resuming %d)" % [game.sim.tick, slot_tick, saved_tick])
 	await key(KEY_SLASH, true)
 	check(game._menu.visible and game._menu.view == "keys", "? opens Controls")
 	check(visible_label("Mine trees and boulders"), "Controls lists the keys")
