@@ -25,7 +25,7 @@ var book_page := "goals"                ## Its open page: "goals", or a page's i
 var planner_open := false               ## The expedition planner above the toolbar (issue #106).
 var line_preview := false                ## The route panel shows the line's cost before it's planned (issue #121).
 var plan := {}                          ## The plan being drawn up in the planner; the sim's once confirmed.
-var adventure := ""                     ## The adventure the planner shows (issue #136); "" shows the list.
+var adventure := ""                     ## The destination the board's Location dropdown shows (issues #136, #181): the last one chosen.
 var selection := {}                     ## {} | {kind:"res", ids:[...]} | {kind:"tree"/"boulder"/"site", id}
 var radial := {}                        ## The open radial Gather menu (issue #176), or {}.
 ## The map in view (issue #101): "village" or a site map. The sim stays on the village between
@@ -489,7 +489,7 @@ func _select(hit) -> void:
 		if hit.kind == "site" and Sim.is_station(hit) and hit.done:
 			open_craft_menu(hit)
 		elif hit.kind == "site" and hit.tpl == "board" and hit.done:
-			adventure = ""
+			plan = {}  # a fresh plan each time the board is selected, on the last place chosen or the first (issue #181)
 			open_planner()
 		elif hit.kind == "meadow":  # the meadow's signpost opens its adventure on the board (issue #136)
 			open_adventure(Meadow.ID)
@@ -1199,6 +1199,10 @@ func open_planner() -> void:
 	menu_open = ""
 	if not sim.expedition.is_empty():
 		adventure = ""
+	else:
+		var known := sim.adventures()
+		if not known.any(func(a): return a.id == adventure):
+			adventure = known[0].id if not known.is_empty() else ""
 	if plan.is_empty() or not sim.expedition.is_empty() or plan.dest != adventure:
 		plan = sim.new_plan(adventure if adventure != "" else OldMine.ID)
 
@@ -1210,11 +1214,6 @@ func open_adventure(id: String) -> void:
 		return
 	adventure = id if sim.expedition.is_empty() else ""
 	open_planner()
-
-
-## Back to the adventures list.
-func close_adventure() -> void:
-	adventure = ""
 
 
 func close_planner() -> void:

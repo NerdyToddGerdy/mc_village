@@ -19,7 +19,7 @@ Every issue of the slice has its section here: the adventures list (#136), the m
 
 From a Slice 3 village, a player can:
 
-- [ ] Pick the meadow from the adventures list and run an expedition there.
+- [ ] Pick the meadow from the board's Location dropdown and run an expedition there.
 - [ ] Hunt cows, pigs and sheep, and bring back a full party's cargo.
 - [ ] Pen animals and breed them with wheat from the village farms (#139).
 - [ ] Cook beef and porkchops.
@@ -34,7 +34,7 @@ From a Slice 3 village, a player can:
 - **Packing to go**, **Party on the way**, **Party there now** or **Party heading home**, for the destination the party is bound for;
 - **Locked: the party is at the meadow** (or "packing for the meadow") for every other row.
 
-**Choosing a row** opens that destination's site report and planner. **All adventures** goes back to the list.
+**The Location dropdown (#181).** The list is a dropdown in the board's header instead of a page, to save space. Closed, it shows the chosen place and its walk ("Meadow · ~30 s each way"); open, it lists each destination as one line (name, walk, status, and a flag where hazards are known; the hazards themselves stay in the site report). Choosing one shows its site report and planner at once; there is no list page and no **All adventures** button. Opening the board picks `game.adventure`, the last place chosen or the first known, and a signpost opens the board on its own. While a party is packing or out, the dropdown shows the party's place and the other lines can't be chosen ("One expedition at a time"); with nowhere known it's disabled, "Nowhere known yet". The choice is view state, so no save change.
 
 **Built to grow.** Destinations are data: a later one (the Nether, an outpost) is a new entry in `ADVENTURES`, with a site report.
 

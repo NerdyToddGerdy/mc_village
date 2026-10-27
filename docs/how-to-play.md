@@ -254,7 +254,7 @@ Residents get hungry. A full resident empties in about 6 minutes of game time.
 
 The **expedition board** is where expeditions are planned. Once it's built, the village has word of an **old mine** a short walk east, with stone and coal, and a **meadow** a short walk west, with sheep, cows and pigs.
 
-**The adventures list.** Select the board and it opens on a list of everywhere the village knows of: each place's walk, what's there, its known hazards and whether anyone has been. Choose one to open its site report and planner; **All adventures** goes back. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open its adventure, or the old mine's for **Plan a trip to the old mine**. Only one expedition goes at a time, so while one is packing or out, the list says where the party is and nothing else can be planned.
+**The Location dropdown.** Select the board and it opens on the place you last planned for (the first one the first time), with a **Location** dropdown in its header showing it and its walk, such as "Meadow · ~30 s each way". Open the dropdown to see everywhere the village knows of, one line each with its walk and whether anyone has been, and a flag where hazards are known; choose one to see its site report and planner. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open the board on it, or the old mine's for **Plan a trip to the old mine**. Only one expedition goes at a time, so while one is packing or out, the dropdown shows where the party is and the other places are listed but can't be chosen.
 
 **The site report** (left) says what the village knows about the place: what it has been told, the walk there, and what can be gathered. Until someone has been, there are no estimates and no known hazards.
 
@@ -288,7 +288,7 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 
 ## The meadow
 
-The **meadow** is a short walk west, past the signpost on the village's left edge: open grass around a pond, with trees, a few old fences, and herds of sheep, cows and pigs. Plan a trip there from the adventures list, for wool, leather or meat. No spare pickaxes are needed.
+The **meadow** is a short walk west, past the signpost on the village's left edge: open grass around a pond, with trees, a few old fences, and herds of sheep, cows and pigs. Plan a trip there from the board's Location dropdown, for wool, leather or meat. No spare pickaxes are needed.
 
 The party carries the packs to the west signpost and walks off the map, about 30 seconds each way. At the meadow they hunt the animals that give what they were sent for, nearest first, follow them as they wander, and pack the drops. Once they have enough, they pack anything else lying about, such as the leather from the cows they hunted for beef. A full party brings back as much as its packs hold. You can mark more animals with Hunt while you're looking at the meadow.
 
