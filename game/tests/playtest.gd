@@ -112,8 +112,8 @@ func _initialize() -> void:
 	await run(150)
 	check(bench.done, "Ada builds the bench")
 
-	# Ada does everything (issue #134): the checklist goes straight on to the pickaxe
-	check(Goals.LIST[Goals.current(sim)].t == "Craft a pickaxe", "the checklist asks for a pickaxe next")
+	# Ada does everything (issue #134). The checklist asks for a stockpile before the tools (issue #182)
+	check(Goals.LIST[Goals.current(sim)].t == "Paint a stockpile", "the checklist asks for a stockpile next (%s)" % Goals.progress_text(sim))
 	await key(KEY_F)
 	check(game.selection.get("ids", []) == [ada.id], "F selects Ada")
 	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
@@ -131,14 +131,14 @@ func _initialize() -> void:
 	# Pause while queueing, so nothing gets crafted between clicks and the count is exact.
 	await key(KEY_QUOTELEFT)
 	check(game.speed == 0, "~ pauses")
-	for r in ["Planks", "Planks", "Sticks", "Wooden pickaxe"]:
-		check(await queue_recipe(r), "queue %s" % r)
-	check(bench.queue.size() == 4, "4 crafts queued (%s)" % [bench.queue])
+	for r in ["Wooden axe", "Wooden pickaxe"]:
+		check(await queue_recipe(r), "queue a %s" % r.to_lower())
+	check(bench.queue.has("wood_axe") and bench.queue.has("wood_pick") and bench.queue.has("planks") and bench.queue.has("sticks") and bench.autoq.has(true), "the bench queues their planks and sticks itself, from the start (%s)" % [bench.queue])
 	await key(KEY_ESCAPE)
 	check(not game.craft_menu_open, "Esc closes the craft panel")
 	await key(KEY_1)
-	await run(150)
-	check(sim.stats.pick_crafted, "a wooden pickaxe is crafted")
+	await run(200)
+	check(sim.stats.pick_crafted and sim.stats.axe_crafted, "a wooden axe and a wooden pickaxe are crafted")
 
 	# Stockpile and boulders
 	check(await click_button("Paint"), "click Paint in the toolbar")
@@ -207,14 +207,69 @@ func _initialize() -> void:
 	await key(KEY_1)
 	await run(700)
 	check(h1.done, "Ada builds her house")
-	check(sim.auto_craft, "auto ingredients unlock with the first house")
+
+	# Fireplace (issue #46): K, click open ground; it's built, and cooks the hunted mutton
+	await key(KEY_K)
+	check(game.placing == "fireplace", "K picks Fireplace")
+	var fp := build_spot("fireplace", at(9, 8))
+	check(fp.x >= 0, "an open spot for the fireplace")
+	await look_at(fp)
+	await click(screen(fp))
+	var fire = sim.site_at(fp)
+	check(fire != null and fire.tpl == "fireplace" and fire.plot != null, "the fireplace is placed with a kitchen plot reserved")
+	var cooked := false
+	for i in 120:
+		await run(1)
+		if fire != null and fire.done and sim.items.values().any(func(it): return it.type == "cooked_mutton"):
+			cooked = true
+			break
+	check(fire != null and fire.done, "the fireplace is built")
+	check(cooked, "and its standing order cooks the hunted mutton")
+
+	# The meadow (issue #182): the second bed needs more wool than the clearing's 3 sheep gave, so Ada
+	# builds the expedition board and fetches it, with the fireplace's mutton for the walk home
+	check(Goals.LIST[Goals.current(sim)].t == "Build an expedition board", "the checklist asks for the board next (%s)" % Goals.progress_text(sim))
+	check(await open_bench_panel(), "open the bench for the board's planks and sticks")
+	await queue_recipe("Planks", 2)
+	await queue_recipe("Sticks", 1)
+	await key(KEY_ESCAPE)
+	await key(KEY_B)
+	check(await click_button("Expedition board"), "the Build menu lists the expedition board once Ada's house is up")
+	var bp := build_spot("board", at(2, 13))  # clear of the second house's spot and the farm's
+	await look_at(bp)
+	await click(screen(bp))
+	var board = sim.site_at(bp)
+	check(board != null and board.tpl == "board", "the board is placed")
+	if game.tool != "":
+		await key(KEY_ESCAPE)
+	check(await play_until(300, func(): return board != null and board.done), "Ada builds the board")
+	await look_at(sim.meadow_sign())
+	await click(screen(sim.meadow_sign(), 1.4))
+	game._hud.refresh(sim)
+	await frames(2)
+	check(game.planner_open and game.adventure == Meadow.ID, "clicking the meadow's signpost opens its adventure on the board")
+	check(await click_button("Wool"), "send her for wool")
+	check(game.plan.party == [ada.id] and game.plan.target.item == "wool", "the plan: Ada, alone, for wool (%s)" % [game.plan])
+	if sim.free_count("cooked_mutton") < game.plan.meals:  # Ada may have eaten one: take what there is
+		check(await click_button("meals less"), "take one meal fewer")
+	check(await click_button("Start packing"), "click Start packing")
+	check(await play_until(240, func(): return sim.depart_blocker() == ""), "the cooked mutton is packed (%s)" % sim.depart_blocker())
+	check(await click_button("Depart"), "click Depart")
+	check(await play_until(Tuning.MEADOW_WALK * 2 + 300, func(): return sim.expedition.is_empty()), "she hunts sheep at the meadow and comes home")
+	check(sim.stats.meadow_wool and sim.free_count("wool") >= 3, "with the wool for the second bed (%d)" % sim.free_count("wool"))
+	if game.planner_open:
+		await click_button("Close")
+	await look_at(at(17, 17))
+	check(Goals.LIST[Goals.current(sim)].t == "Build a second house", "the checklist asks for the second house (%s)" % Goals.progress_text(sim))
 
 	# Second house and the traveler
 	await key(KEY_H)
 	var origin2 := open_cell(at(1, 4), Vector2i(5, 5))
+	await look_at(origin2 + Vector2i(2, 2))
 	await click(screen(origin2 + Vector2i(2, 2)))
 	var h2 = sim.site_at(origin2 + Vector2i(2, 2))
-	check(h2 != null, "second house placed")
+	check(h2 != null, "second house placed (tool %s, placing %s, planner %s, map %s, check \"%s\", menu %s, craft %s)" % [game.tool, game.placing, game.planner_open, game.view_map, sim.placement_check("house", origin2, game.rot), game._menu.visible, game.craft_menu_open])
+	await look_at(bench_cell)
 	await click(screen(bench_cell, 0.4))
 	await queue_recipe("Planks", 5)
 	await queue_recipe("Planks", 5)
@@ -288,7 +343,20 @@ func _initialize() -> void:
 		if sim.stats.division:
 			break
 	check(sim.stats.division, "both residents work at different jobs at once")
-	check(Goals.current(sim) < 0, "every founding goal is done")
+	# The founding's last goal (issue #182): a chopping block for Tomas, the lumberjack
+	check(tomas.get("role", "") == "lumber" and sim.needs_station(tomas), "Tomas arrived a lumberjack, waiting on a chopping block")
+	game.selection = {}
+	await key(KEY_B)
+	check(await click_button("Chopping block"), "the Build menu lists the chopping block")
+	var cb_near: Vector2i = Sim.nearest(sim.trees.filter(func(t): return t.alive), at(9, 9)).cell
+	var cb_spot := build_spot("chopping_block", cb_near + Vector2i(2, 0))
+	await look_at(cb_spot)
+	await click(screen(cb_spot))
+	var cblock = sim.site_at(cb_spot)
+	if game.tool != "":
+		await key(KEY_ESCAPE)
+	check(await play_until(200, func(): return cblock != null and cblock.done and is_same(sim.claimed(tomas), cblock)), "it's built, and Tomas claims it")
+	check(Goals.current(sim) < 0, "every founding goal is done (%s)" % Goals.progress_text(sim))
 	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
 	await frames(2)
 	check(visible_label("Founding  ✓") and not visible_label("Slice 1"), "the goals panel folds to a Founding chip")
@@ -298,6 +366,7 @@ func _initialize() -> void:
 	await key(KEY_P)
 	check(game.tool == "farm", "P picks Farm")
 	var fc := open_cell(at(12, 12), Vector2i(3, 2))
+	await look_at(fc)
 	await drag(screen(fc), screen(fc + Vector2i(2, 1)))
 	check(sim.farm.size() >= 4, "dragging paints farm plots (%d)" % sim.farm.size())
 	await key(KEY_ESCAPE)
@@ -306,29 +375,6 @@ func _initialize() -> void:
 		if sim.stats.get("planted", 0) > 0:
 			break
 	check(sim.stats.get("planted", 0) > 0, "residents plant wheat on the new farm")
-
-	# Fireplace (issue #46): K, click open ground; it's built, and cooks the hunted mutton
-	await key(KEY_K)
-	check(game.placing == "fireplace", "K picks Fireplace")
-	var fp := Vector2i(-1, -1)
-	for c in [at(9, 8), at(12, 9), at(6, 9), at(9, 13), at(13, 5)]:
-		var p: Vector2 = screen(c)
-		var vis := root.get_visible_rect().size
-		if sim.placement_check("fireplace", c, game.rot) == "" and sim.walkable(c) and Rect2(vis * Vector2(0.3, 0.25), vis * Vector2(0.4, 0.45)).has_point(p):
-			fp = c
-			break
-	check(fp.x >= 0, "an open spot for the fireplace")
-	await click(screen(fp))
-	var fire = sim.site_at(fp)
-	check(fire != null and fire.tpl == "fireplace" and fire.plot != null, "the fireplace is placed with a kitchen plot reserved")
-	var cooked := false
-	for i in 120:
-		await run(1)
-		if fire != null and fire.done and sim.items.values().any(func(it): return it.type == "cooked_mutton"):
-			cooked = true
-			break
-	check(fire != null and fire.done, "the fireplace is built")
-	check(cooked, "and its standing order cooks the hunted mutton")
 
 	# Jobs (issue #134): Tomas's one job, chosen from the dropdown on his panel, then on the board
 	game.selection = {"kind": "res", "ids": [tomas.id]}
@@ -385,6 +431,18 @@ func _initialize() -> void:
 			await run(10)
 			check(ada.kept.axe or ada.kept.pick, "Ada equips it and keeps it")
 
+	# Ada's wooden pickaxe is worn out by now: a new one, and boulders for the mason's bench's stone
+	if ada.pick == null and sim.tool_items("pick", 0).is_empty():
+		check(await open_bench_panel(), "open the bench for a new pickaxe")
+		await queue_recipe("Wooden pickaxe")
+		await key(KEY_ESCAPE)
+	game.selection = {}
+	await key(KEY_X)
+	await look_at(at(9, 9))
+	await drag(screen(Vector2i(0, 0)), screen(Vector2i(31, 31)), false, true)  # Alt: boulders only
+	await key(KEY_ESCAPE)
+	check(await play_until(240, func(): return sim.free_count("cobble") >= 9), "Ada breaks boulders for cobblestone (%d)" % sim.free_count("cobble"))
+
 	# Mason's bench (issue #177): built from the Build menu; Tomas, made the Stonemason, breaks the
 	# boulders around it on his own and piles the stone beside it
 	game.selection = {}
@@ -405,7 +463,7 @@ func _initialize() -> void:
 		await key(KEY_ESCAPE)
 	check(await choose_job(tomas, "mason"), "the jobs board: make Tomas the Stonemason (%s)" % tomas.role)
 	await key(KEY_ESCAPE)
-	check(await play_until(240, func(): return mbench != null and mbench.done and sim.pile_count(mbench) >= Tuning.BOULDER_COBBLE), "Tomas piles stone beside the mason's bench (%d)" % (sim.pile_count(mbench) if mbench != null else 0))
+	check(await play_until(240, func(): return mbench != null and mbench.done and sim.pile_count(mbench) >= Tuning.BOULDER_COBBLE), "Tomas piles stone beside the mason's bench (%d; done %s, stage %d, Tomas %s with %s, claimed %s; %s)" % [sim.pile_count(mbench) if mbench != null else 0, mbench.done if mbench != null else false, mbench.stage if mbench != null else -1, tomas.role, tomas.pick, sim.claimed(tomas).get("tpl", ""), "; ".join(sim.stuck.map(func(x): return x.who + ": " + x.why))])
 	check(sim.boulders.filter(func(b): return not b.alive and not b.des).size() > 0 or sim.stats.broken_boulders > 0, "breaking boulders nobody marked")
 	await look_at(mb_spot)
 	await click(screen(mb_spot, 0.5))

@@ -852,12 +852,12 @@ func _test_stuck_list(game: Game) -> void:
 	await _frames()
 	var texts: Array = _stuck_buttons(hud).map(func(b): return b.text)
 	check(hud._stuck_panel.visible and texts.any(func(t): return t.begins_with("1 waiting")), "a short standing order shows as one waiting line: %s" % [texts])
-	check(not texts.any(func(t): return "Stuck" in t or "for a spare" in t), "with nothing blocked there's no Stuck header, and the waiting tier starts closed")
+	check(not texts.any(func(t): return "Stuck" in t or "Planks needs" in t), "with nothing blocked there's no Stuck header, and the waiting tier starts closed")
 	check(world._flags.get_child_count() == 0, "a waiting order raises no flag on the map")
 	_stuck_buttons(hud).filter(func(b): return "waiting" in b.text)[0].pressed.emit()
 	hud.refresh(sim)
 	await _frames()
-	var spare: Array = _stuck_buttons(hud).filter(func(b): return "for a spare" in b.text)
+	var spare: Array = _stuck_buttons(hud).filter(func(b): return "Planks needs" in b.text)  # the spare's sticks' planks, made automatically (issue #182)
 	check(spare.size() == 1 and spare[0].icon == null, "the waiting line opens to its entries, dim and without a flag")
 	var spot := Vector2i(-1, -1)
 	for d in range(4, 20):  # open ground for a house, so its walls are what it's missing
@@ -951,9 +951,12 @@ func _test_after_the_founding(game: Game) -> void:
 	hud.refresh(sim)
 	await _frames()
 	check(_walk(hud._goals).any(func(n): return n is Label and n.text == "The founding"), "during the founding the goals panel shows the checklist")
-	var saved := sim.stats.duplicate()
+	var saved := sim.stats.duplicate(true)
 	sim.stats.felled = 1
 	sim.stats.pick_crafted = true
+	sim.stats.axe_crafted = true
+	sim.stats.meadow_wool = true
+	sim.stats.built = {"bench": true, "fireplace": true, "board": true, "chopping_block": true}
 	sim.stats.broken_boulders = 1
 	sim.stats.sheep_hunted = 1
 	sim.stats.houses = 2

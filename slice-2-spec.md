@@ -43,10 +43,33 @@ Slice 2 is done when, from a fresh start, a player can:
   - The bed sits in the house's **top corner**: the back corner, furthest from the camera.
   - It's two cells long, with a plank frame, a white pillow and a red blanket.
   - The roof is cut away while the bed is being built, and whenever the house is selected or hovered, so the bed can be seen.
-- **The clearing starts with 6 sheep**, enough wool for the two opening beds.
+- **The clearing starts with 3 sheep**, enough wool for Ada's bed. The second bed's wool comes from the meadow (#182, below). Saved games keep their sheep.
 - **Arrivals need a free bed** (§7). Tomas comes once the second house, bed included, is finished.
 - **Ada's house** is hers when its bed is finished, not when its roof is.
-- **Slice 1 goals** gain "Hunt sheep for wool" before Ada's house. ("Make Ada the toolsmith", added after the bench by #91, went again with #134: Ada makes tools herself.) The founding checklist otherwise stays, and its hints name the Gather and Paint menus (#93, #94).
+- **The founding (reworked in #182)** teaches the stockpile first, both tools together, a first trip to the meadow, and the chopping block:
+
+  | # | Goal | Done when |
+  |---|---|---|
+  | 1 | Chop a tree | a tree is felled |
+  | 2 | Paint a stockpile | a stockpile is painted |
+  | 3 | Build a crafting bench | a bench is finished |
+  | 4 | Craft an axe and a pickaxe | both have been crafted |
+  | 5 | Break a boulder | a boulder is broken |
+  | 6 | Hunt sheep for wool | a sheep is hunted (or Ada's house is finished, in saves from before sheep) |
+  | 7 | Build Ada's house | a house is finished |
+  | 8 | Build a fireplace | a fireplace is finished. It cooks the clearing's mutton, the trip's meals |
+  | 9 | Build an expedition board | a board is finished |
+  | 10 | Fetch wool from the meadow | a meadow trip comes home with wool |
+  | 11 | Build a second house | two houses are finished |
+  | 12 | Welcome a traveler | the traveler has moved in |
+  | 13 | Build Tomas a chopping block | a chopping block is finished |
+
+  - **Automatic ingredients from the start:** the bench queues a recipe's planks and sticks in a new game, marked **A**. The first house no longer unlocks it.
+  - **The board** shows in the Build menu once Ada's house is finished, rather than after the founding.
+  - **The first traveler is a lumberjack**, so the last goal gives him his workstation. Later arrivals are skilled in a random job, as before. The toast reads "Tomas, a skilled lumberjack, has arrived."
+  - The goals read the village's stats, including which buildings have ever been finished. The fireplace goal was added beside the issue's twelve, since a meadow trip packs a meal for the walk home.
+  - **Older saves** (v26→v27): automatic ingredients turn on. A save past the old pickaxe goal counts the new tools goal as done, and one with two houses counts the fireplace, board and meadow steps as done. A founding that was complete stays complete.
+  - "Make Ada the toolsmith" (added by #91) went with #134, and "Two residents at work" with #182. The hints name the Gather and Paint menus (#93, #94).
 - **After the founding (#81):** the goals panel folds to a small "Founding ✓" chip, since it has nothing left to guide. Whether Slice 2 gets a checklist of its own is still open. Saves made after the founding are labelled with facts about the village, "4 residents, 3 houses, 18 meals", rather than "Founding complete", so they can be told apart. The menu's subtitle reads "Your village: …" the same way. Older saves labelled "Founding complete" are listed by the same facts, read from the save.
 - **Tool breakage:** while a resident's job is Toolsmith, a resident whose tool breaks fetches a spare instead of stopping (§6). With no toolsmith, the Slice 1 rule holds: they stop and report, and the report says how to fix it: "Axe broke. Craft one at the bench, or make someone the toolsmith" (#91, #134).
 
@@ -348,6 +371,7 @@ Taken together, the upgrade steps:
 - Hands existing benches, fireplaces, chopping blocks and mason's benches to residents whose jobs match (v23→v24, #184; see §5).
 - Starts every species at the default herd floor (v24→v25, #183).
 - Gives each existing chopping block and mason's bench the default standing order: 20 planks, 10 stone bricks (v25→v26, #178).
+- Turns automatic ingredients on and carries the founding's progress over to the reworked goals (v26→v27, #182; see above).
 - Turns a Mine resident into a Lumberjack, with Mine's experience in both Lumberjack and Stonemason (v22→v23, #177; see §5). No village has a workstation, sapling or Keep mark yet.
 - Marks no tools as chosen (v11→v12, equipping).
 - Gives older saves a full meadow with nobody away (v12→v13, #50).

@@ -12,12 +12,36 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 26
+const VERSION := 27
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23, 23: _v23_to_v24, 24: _v24_to_v25, 25: _v25_to_v26}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23, 23: _v23_to_v24, 24: _v24_to_v25, 25: _v25_to_v26, 26: _v26_to_v27}
+
+
+## v27: the founding is reworked (issue #182). The bench makes a recipe's planks and sticks from the
+## start, and the goals read new stats. A village keeps its progress: what's built is recorded, the
+## pickaxe goal covers the new tools goal, a second house covers the fireplace, board and meadow steps
+## it skipped, and a founding that was complete stays complete.
+static func _v26_to_v27(d: Dictionary) -> Dictionary:
+	var st: Dictionary = d.state
+	st.auto_craft = true
+	var stats: Dictionary = st.stats
+	var built := {}
+	for s in st.maps.village.sites:
+		if s.done:
+			built[s.tpl] = true
+	var two_houses: bool = stats.get("houses", 0) >= 2
+	if two_houses:
+		built.fireplace = true
+		built.board = true
+	if stats.get("division", false):
+		built.chopping_block = true
+	stats.built = built
+	stats.axe_crafted = stats.get("pick_crafted", false)
+	stats.meadow_wool = two_houses
+	return d
 
 
 ## v26: chopping blocks saw planks and mason's benches cut stone bricks (issue #178). Each standing

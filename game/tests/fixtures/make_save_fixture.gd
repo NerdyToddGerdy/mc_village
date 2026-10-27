@@ -16,6 +16,8 @@ func _initialize() -> void:
 	_run(sim, 120)
 	for r in ["planks", "planks", "sticks", "wood_pick"]:
 		sim.queue_add(bench, r)
+	if SaveFormat.VERSION >= 27:  # the founding's tools goal is an axe and a pickaxe (#182)
+		sim.queue_add(bench, "wood_axe")
 	_run(sim, 120)
 	sim.paint_zone(area(10, 7, 4, 2))
 	sim.designate_mine(Rect2i(0, 0, sim.w, sim.h))
@@ -24,6 +26,8 @@ func _initialize() -> void:
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	_run(sim, 600)
+	if SaveFormat.VERSION >= 27:  # 3 sheep from #182: the second bed's wool, as if fetched from the meadow
+		sim.drop_items(at(10, 6), "wool", 3)
 	sim.place_site("house", at(1, 4), 1)
 	if SaveFormat.VERSION >= 8:
 		sim.paint_farm(area(15, 15, 2, 2))  # wheat planted and growing when saved

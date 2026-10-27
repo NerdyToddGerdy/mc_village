@@ -57,8 +57,8 @@ var next_id := 1
 var rng := RandomNumberGenerator.new()  ## Seeded and saved, so a game replays exactly.
 var seed := Tuning.SEED      ## The game's seed: the old mine's deeper levels are generated from it (issue #132).
 var residents: Array = []    ## Everyone, on every map; each has the `map` they're on.
-var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafted": false,
-	"houses": 0, "traveler_home": false, "division": false}
+var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafted": false, "axe_crafted": false,
+	"houses": 0, "traveler_home": false, "division": false, "built": {}, "meadow_wool": false}
 var arrival_at := -1
 var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
@@ -145,8 +145,9 @@ const RING_TREES := [[9, 2], [26, 2], [14, 3], [17, 3], [8, 5], [11, 5], [26, 7]
 	[4, 16], [27, 17], [30, 17], [5, 20], [27, 21], [30, 23], [5, 25], [26, 25], [11, 27], [14, 27], [30, 27],
 	[22, 28], [19, 29], [5, 30], [10, 30], [13, 30]]
 const RING_BOULDERS := [[6, 7], [3, 8], [28, 11], [25, 13], [3, 14], [14, 25], [19, 26], [21, 26], [17, 30], [24, 30]]
-## Six sheep around the opening (issue #42): wool for the two opening beds. Open ground, in map cells.
-const START_SHEEP := [[21, 8], [12, 24], [24, 19], [8, 12], [22, 24], [20, 20]]
+## Three sheep around the opening (issues #42, #182): wool for Ada's bed. The second bed's comes from the
+## meadow. Open ground, in map cells.
+const START_SHEEP := [[21, 8], [12, 24], [24, 19]]
 ## Berry bushes, in opening coordinates (like OPENING_TREES): early food before farms (issue #44).
 const START_BUSHES := [[5, 10], [12, 6], [4, 14], [13, 14], [8, 13], [16, 12]]
 
@@ -168,6 +169,7 @@ static func new_game() -> Sim:
 	for p in START_SHEEP:
 		s.add_sheep(Vector2i(p[0], p[1]))
 	s.add_resident("Ada", ADA_TUNIC, OPENING_START + o)
+	s.auto_craft = true  # the bench makes a recipe's planks and sticks from the start (issue #182)
 	s._add_site_maps()
 	return s
 
@@ -792,6 +794,9 @@ func _clear_footprint(s: Dictionary) -> void:
 
 func _on_site_done(s: Dictionary) -> void:
 	assign_workstations()
+	if not stats.has("built"):
+		stats.built = {}
+	stats.built[s.tpl] = true  # for the founding goals (issue #182)
 	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
 		var job: String = Defs.JOB_STATIONS.find_key(s.tpl)
 		var who := resident(s.get("worker", 0))
@@ -837,9 +842,6 @@ func _on_site_done(s: Dictionary) -> void:
 	if not ada_home:
 		s.owner = ada.id
 		_toast("Ada’s house is finished.", 0, s.id)
-		if not auto_craft:
-			auto_craft = true
-			_toast("The bench now makes the planks and sticks a recipe needs.")
 	else:
 		_toast("The house is finished, bed and all. Someone may come to live in it.", 0, s.id)
 
@@ -2071,6 +2073,8 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				drop_items(rcell(r), o, rec.out[o], uses)
 				if Defs.ITEMS[o].get("tool", "") == "pick":
 					stats.pick_crafted = true
+				if Defs.ITEMS[o].get("tool", "") == "axe":
+					stats.axe_crafted = true
 			if b.queue.is_empty():  # a skilled cook's spare wheat goes back out
 				for k in b.store:
 					if b.store[k] > 0:
@@ -2958,10 +2962,12 @@ func _arrive() -> void:
 	var who: Array = TRAVELERS[n % TRAVELERS.size()]
 	var t := add_resident(who[0] if n < TRAVELERS.size() else "%s %d" % [who[0], n / TRAVELERS.size() + 1], who[1], spawn)
 	var skill: String = Defs.JOBS[rng.randi_range(0, Defs.JOBS.size() - 1)]
+	if n == 0:
+		skill = "lumber"  # the first traveler fells trees from the chopping block the founding ends on (issue #182)
 	t.jobs[skill].xp = Tuning.SKILL_LEVELS[Tuning.ARRIVAL_LEVEL - 2]
 	t.role = skill  # an arrival starts with the job they're skilled in (issue #134)
 	walk_in(t)
-	_toast("A traveler named %s has arrived, a skilled %s." % [t.name, Defs.JOB_SKILLED[skill]], t.id)
+	_toast("%s, a skilled %s, has arrived." % [t.name, Defs.JOB_SKILLED[skill]], t.id)
 
 
 func walk_in(t: Dictionary) -> void:
@@ -4142,6 +4148,8 @@ func _finish_return() -> void:
 	var b := site(ex.board)
 	if not b.is_empty():
 		b.report = report
+	if ex.dest == Meadow.ID and ex.get("cargo", {}).get("wool", 0) > 0:
+		stats.meadow_wool = true  # a founding goal (issue #182)
 	expedition = {}
 	stats.expeditions = stats.get("expeditions", 0) + 1
 	rev += 1
@@ -5667,7 +5675,7 @@ func save_state() -> Dictionary:
 	for id in maps:
 		maps_out[id] = maps[id].save()
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
-		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
+		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
 		"herd_floor": herd_floor.duplicate(), "rng_state": rng.state, "seed": seed,
 		"expedition": expedition.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true)}
 
@@ -5685,7 +5693,7 @@ static func from_state(d: Dictionary) -> Sim:
 	for id in ids:
 		s.maps[id] = SimMap.from_save(d.maps[id])
 	s.use_map("village")
-	s.stats = d.stats.duplicate()
+	s.stats = d.stats.duplicate(true)
 	s.arrival_at = d.arrival_at
 	s.arrived = d.arrived
 	s.auto_craft = d.auto_craft
