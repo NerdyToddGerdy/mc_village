@@ -304,6 +304,31 @@ func _initialize() -> void:
 	await key(KEY_F)
 	check(game.selection.get("ids", []) == [ada.id], "F selects the next resident")
 
+	# Panel keys (issue #197): select a tree, and Q marks it to mine; select Tomas, and his job key opens the list
+	var pk_tree = Sim.nearest(sim.trees.filter(func(t): return t.alive and Sim.grown(t) and not t.des), Sim.rcell(ada))
+	game.selection = {"kind": "tree", "id": pk_tree.id}
+	game._hud.refresh(sim)
+	await frames(2)
+	await key(KEY_Q)
+	check(pk_tree.des, "selecting a tree and pressing Q marks it to mine")
+	await key(KEY_Q)
+	check(not pk_tree.des, "and Q again unmarks it")
+	game.selection = {"kind": "res", "ids": [tomas.id]}
+	game._hud.refresh(sim)
+	await frames(2)
+	var jk := -1
+	for i in game._hud._panel_btns.size():
+		if "▾" in game._hud._panel_btns[i].text:
+			jk = i
+	check(jk >= 0, "Tomas's job dropdown has a panel key")
+	if jk >= 0:
+		await key(game.keys.keys["panel%d" % (jk + 1)][0])
+		game._hud.refresh(sim)
+		check(game._hud.list_open(), "its key opens the job list")
+		await key(KEY_ESCAPE)
+		check(not game._hud.list_open(), "and Esc closes it")
+	game.selection = {}
+
 	# Right-click order with a hint
 	# A free tree that's actually what's under the cursor at its screen spot (not hidden behind a house).
 	var t2: Dictionary = {}

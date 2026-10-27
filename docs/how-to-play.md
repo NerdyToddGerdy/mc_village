@@ -338,6 +338,8 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 |---|---|
 | E / Z / B / C | Gather menu, Paint menu, Build menu, Craft panel |
 | 1 to 9, with a menu open | Pick that row |
+| Q E R Z X C V, with something selected | The selection panel's buttons, in order (see below) |
+| 1 to 9, with a list open | Pick that entry (a job, a tool to equip) |
 | X / G / P | Mine, Hunt, Farm plot, directly |
 | T / H / K | Place a crafting bench, a house or a fireplace (the expedition board has no key, but you can set one) |
 | R | Turn a building while placing it |
@@ -358,6 +360,8 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | M / ? | Menu, Controls |
 
 The **Menu** button at the top right, beside the speed buttons, opens the same menu with a click. It shows the menu key (M unless you've changed it), and Esc always works too.
+
+**Panel keys.** When something is selected, the first seven buttons in its panel each show a small key: **Q E R Z X C V**, in the order the buttons appear. Click a tree and press **Q** to mark it for chopping, and **Q** again to cancel. A key that opens a list, such as a resident's job, then lets **1 to 9** pick an entry (and the speed keys wait). Buttons that remove something, like a farm plot's, arm on the key and act on the same key again; any other key puts them away. The selection stays after a key, so you see the panel change. With nothing selected these keys keep their usual meanings (**E** gather, **Z** paint, **X** mine, **C** craft), **F** still cycles residents, and **Esc** clears the selection. The panel keys can be changed on the Controls page, under Selection.
 
 You can still give orders while the game is paused.
 
