@@ -1230,24 +1230,73 @@ func plan_toggle(id: int) -> void:
 
 ## Changes one of the plan's numbers by `by`, kept at 0 or more (the target at 1 or more).
 func plan_step(key: String, by: int) -> void:
-	if key == "target":
+	if key == "target":  # the herd size kept of each kind, when tending the pens
 		plan.target.n = maxi(1, plan.target.n + by)
 	else:
 		plan[key] = maxi(0, plan[key] + by)
 
 
+## Switches the plan to tending the pens (issue #139), or back to bringing things home.
 func plan_target(item: String) -> void:
-	plan.target.item = item
+	if item == "pens":
+		plan.target = {"item": "pens", "n": maxi(1, plan.target.n if plan.target.item == "pens" else 2)}
+	else:
+		_leave_tending()
 
 
-## Which level of the old mine the plan is for (issue #132). The objective stays if the level has it.
+## Back from tending the pens to the cargo list.
+func _leave_tending() -> void:
+	if plan.target.item == "pens":
+		plan.target = {"item": "wool", "n": 1}
+		Sim.sync_target(plan)
+
+
+## Turns a row of the cargo priority list on or off (issue #185).
+func plan_cargo_toggle(i: int) -> void:
+	_leave_tending()
+	plan.list[i].on = not plan.list[i].on
+	Sim.sync_target(plan)
+
+
+## Moves a row up (-1) or down (+1) the list: higher is brought back first.
+func plan_cargo_move(i: int, by: int) -> void:
+	var j := i + by
+	if j < 0 or j >= plan.list.size():
+		return
+	_leave_tending()
+	var row: Dictionary = plan.list[i]
+	plan.list[i] = plan.list[j]
+	plan.list[j] = row
+	Sim.sync_target(plan)
+
+
+## Changes how many of a row's item are wanted; 0 is as much as fits.
+func plan_cargo_amount(i: int, by: int) -> void:
+	_leave_tending()
+	plan.list[i].n = maxi(0, plan.list[i].n + by)
+	Sim.sync_target(plan)
+
+
+## Clear the level (issue #188): the party works every block of what the list asks for, then digs to the door and
+## goes down by itself, instead of bringing back set amounts. Not for the meadow.
+func plan_clear_toggle() -> void:
+	if plan.dest == Meadow.ID:
+		return
+	_leave_tending()
+	plan.clear = not plan.get("clear", false)
+	Sim.sync_target(plan)
+
+
+## Which level of the old mine the plan is for (issue #132). Its list is the one that place last used.
 func plan_dest(id: String) -> void:
+	var tending: bool = plan.target.item == "pens"
 	plan.dest = id
-	var items: Array = sim.plan_targets(id).map(func(x): return x.item)
+	plan.list = sim.cargo_list_for(id)
 	if id == Meadow.ID:
-		items.append("pens")  # issue #139
-	if not items.has(plan.target.item) and not items.is_empty():
-		plan.target.item = items[0]
+		plan.clear = false
+	if not tending or id != Meadow.ID:
+		plan.target = {"item": "coal", "n": 1}
+		Sim.sync_target(plan)
 
 
 ## The door at the end of the level the party is working (issue #132).

@@ -89,7 +89,7 @@ func _initialize() -> void:
 	var other: Dictionary = sim.residents.filter(func(r): return r.id != ada.id and sim.cant_join(r) == "")[0]
 	if not game.plan.party.has(other.id):
 		check(await click_button(other.name), "add %s" % other.name)
-	check(await click_button("Beef"), "send them for beef")
+	check(await plan_wants("Beef", 6, true), "send them for beef")
 	check(await click_button("wheat more") and await click_button("wheat more"), "and 2 wheat to feed the cows")
 	for i in 3:
 		await click_button("meals more")
@@ -158,7 +158,7 @@ func _initialize() -> void:
 	check(visible_label("Armor against the hazards: %s 15%%" % wearer.name), "the planner shows %s's armor against the mine's hazards" % wearer.name)
 	if wearer.pick == null:  # set up by command: whoever wears the tunic may have no pickaxe of their own
 		wearer.pick = {"type": "stone_pick", "tier": 2, "dur": 25}
-	check(await click_button("Coal") and await click_button("Start packing"), "send them for coal")
+	check(await plan_wants("Coal", 0, true) and await click_button("Start packing"), "send them for coal")
 	check(await play_until(240, func(): return sim.depart_blocker() == ""), "packed (%s)" % sim.depart_blocker())
 	check(await click_button("Depart"), "click Depart")
 	for i in 3:  # a serious injury on the way is luck: answered with Retreat

@@ -136,11 +136,7 @@ func trip(sim: Sim, ada: Dictionary, by_cart := false) -> Dictionary:
 	game.plan = sim.new_plan()
 	game._hud.refresh(sim)
 	await frames(2)
-	await click_button("Coal")
-	for i in 10:
-		if game.plan.target.n <= 3:
-			break
-		await click_button("target less")
+	await plan_wants("Coal", 3, true)
 	check(game.plan.party == [ada.id] and game.plan.target == {"item": "coal", "n": 3}, "the plan: Ada for 3 coal (%s)" % [game.plan])
 	if by_cart:
 		check(visible_label("Includes the cart's %d" % Tuning.CART_CAPACITY), "the packs include the cart's room")

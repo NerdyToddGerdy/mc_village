@@ -251,7 +251,7 @@ func _initialize() -> void:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(game.planner_open and game.adventure == Meadow.ID, "clicking the meadow's signpost opens its adventure on the board")
-	check(await click_button("Wool"), "send her for wool")
+	check(await plan_wants("Wool"), "send her for wool")
 	check(game.plan.party == [ada.id] and game.plan.target.item == "wool", "the plan: Ada, alone, for wool (%s)" % [game.plan])
 	if sim.free_count("cooked_mutton") < game.plan.meals:  # Ada may have eaten one: take what there is
 		check(await click_button("meals less"), "take one meal fewer")
@@ -262,6 +262,8 @@ func _initialize() -> void:
 	check(sim.stats.meadow_wool and sim.free_count("wool") >= 3, "with the wool for the second bed (%d)" % sim.free_count("wool"))
 	if game.planner_open:
 		await click_button("Close")
+	game._hud.refresh(sim)  # the board hides on the next refresh, and its plan is wide enough to sit under the click below
+	await frames(2)
 	await look_at(at(17, 17))
 	check(Goals.LIST[Goals.current(sim)].t == "Build a second house", "the checklist asks for the second house (%s)" % Goals.progress_text(sim))
 

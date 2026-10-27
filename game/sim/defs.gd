@@ -29,6 +29,8 @@ const ITEMS := {
 	"coal": {"one": "coal", "many": "coal", "label": "Coal", "group": "ores"},
 	"iron_ore": {"one": "iron ore", "many": "iron ore", "label": "Iron ore", "group": "ores"},
 	"iron_ingot": {"one": "iron ingot", "many": "iron ingots", "label": "Iron", "group": "ores"},
+	# From the deep levels of the old mine (issue #186): found only with an iron pickaxe, from level 4 down.
+	"diamond": {"one": "diamond", "many": "diamonds", "label": "Diamond", "group": "ores"},
 	# The line to the mine (Slice 4, issue #120). A minecart is one big item: one to a cell, hauled like a tool.
 	"rail": {"one": "rail", "many": "rails", "label": "Rails", "group": "building"},
 	"minecart": {"one": "minecart", "many": "minecarts", "label": "Minecarts", "single": true, "group": "building"},
@@ -38,6 +40,8 @@ const ITEMS := {
 	"stone_pick": {"one": "stone pickaxe", "many": "stone pickaxes", "tool": "pick", "tier": 2, "group": "tools"},
 	"iron_axe": {"one": "iron axe", "many": "iron axes", "tool": "axe", "tier": 3, "group": "tools"},
 	"iron_pick": {"one": "iron pickaxe", "many": "iron pickaxes", "tool": "pick", "tier": 3, "group": "tools"},
+	"diamond_axe": {"one": "diamond axe", "many": "diamond axes", "tool": "axe", "tier": 4, "group": "tools"},
+	"diamond_pick": {"one": "diamond pickaxe", "many": "diamond pickaxes", "tool": "pick", "tier": 4, "group": "tools"},
 	# Leather armor (Slice 3.5, issue #140): worn, one piece to a slot, and worn out by hazards.
 	"leather_cap": {"one": "leather cap", "many": "leather caps", "label": "Leather caps", "armor": "head", "tier": 1, "group": "tools"},
 	"leather_tunic": {"one": "leather tunic", "many": "leather tunics", "label": "Leather tunics", "armor": "chest", "tier": 1, "group": "tools"},
@@ -50,7 +54,7 @@ const ARMOR_SLOTS := ["head", "chest", "legs", "feet"]
 const SLOT_NAMES := {"head": "Cap", "chest": "Tunic", "legs": "Trousers", "feet": "Boots"}
 
 ## A tool tier's name: 1 wooden, 2 stone, 3 iron (issue #104).
-const TIER_NAMES := ["Bare", "Wooden", "Stone", "Iron"]
+const TIER_NAMES := ["Bare", "Wooden", "Stone", "Iron", "Diamond"]
 
 ## The tally bar's groups (issue #141), in order. Each item names its group in ITEMS; a group's
 ## dropdown lists its items in ITEMS order.
@@ -73,7 +77,7 @@ const SPECIES := {
 }
 
 ## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.
-const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}}
+const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}, "diamond": {"item": "diamond", "name": "Diamond ore"}}
 
 ## `pattern` (bench) and `fuel` (fireplace) are display only, for the Craft panel's crafting grid and
 ## furnace (issue #95); they never change what a recipe costs. A pattern is three rows of three, each
@@ -89,6 +93,9 @@ const RECIPES := [
 	# Iron tools (issue #104), from ingots smelted at the fireplace.
 	{"id": "iron_axe", "name": "Iron axe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_axe": 1}, "pattern": ["II ", "IS ", " S "]},
 	{"id": "iron_pick", "name": "Iron pickaxe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_pick": 1}, "pattern": ["III", " S ", " S "]},
+	# Diamond tools (issue #186): the best tier, from diamonds found on the deep levels.
+	{"id": "diamond_axe", "name": "Diamond axe", "inp": {"diamond": 3, "stick": 2}, "out": {"diamond_axe": 1}, "pattern": ["DD ", "DS ", " S "]},
+	{"id": "diamond_pick", "name": "Diamond pickaxe", "inp": {"diamond": 3, "stick": 2}, "out": {"diamond_pick": 1}, "pattern": ["DDD", " S ", " S "]},
 	# The line to the mine (issue #120): Craft work, not Toolsmith, since nobody carries them as tools.
 	{"id": "rails", "name": "Rails", "inp": {"iron_ingot": 6, "stick": 1}, "out": {"rail": 16}, "pattern": ["I I", "ISI", "I I"]},
 	{"id": "minecart", "name": "Minecart", "inp": {"iron_ingot": 5}, "out": {"minecart": 1}, "pattern": ["   ", "I I", "III"]},
@@ -109,7 +116,7 @@ const RECIPES := [
 	{"id": "stone_bricks", "name": "Stone bricks", "inp": {"cobble": 2}, "out": {"stone_brick": 2}, "at": "mason_bench", "doing": "Cutting stone bricks", "pattern": ["   ", "CC ", "   "]},
 ]
 
-const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot", "H": "leather"}
+const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot", "H": "leather", "D": "diamond"}
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
 ## Lumberjack and Stonemason replaced Mine in issue #177.

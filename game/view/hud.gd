@@ -2780,6 +2780,70 @@ func _refresh_loc_drop(sim: Sim) -> void:
 			c.add_child(b))
 
 
+## The cargo priority list (issue #185): what to bring back, best first. Each row has a toggle (an item that's
+## off is left), its name, how many are wanted (Max: as much as fits), and ▲ ▼ to reorder. The packs' bar below
+## shows the wanted amounts against the room.
+func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
+	var head := HBoxContainer.new()
+	var l := _label("Bring back, best first", true)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(l)
+	if tend:
+		head.add_child(_label("Tending the pens", false, Palette.CHALK_DIM, Palette.CAPTION))
+	c.add_child(head)
+	var clear: bool = plan.get("clear", false)
+	if plan.dest != Meadow.ID and not tend:  # clear the level (issue #188)
+		var cb := _button("Clear the level", func(): game.plan_clear_toggle(), "Secondary")
+		cb.toggle_mode = true
+		cb.set_pressed_no_signal(clear)
+		cb.tooltip_text = "Work every block of what's ticked below, nearest the entrance first. Once the level is cleared the party digs to the door itself and goes down, and carries on until the packs are full, the food runs low or someone is badly hurt."
+		c.add_child(cb)
+		if clear:
+			c.add_child(_label("Every amount below is as much as fits. They go down a level when this one's cleared.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	var list: Array = plan.get("list", [])
+	for i in list.size():
+		var row: Dictionary = list[i]
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 4)
+		var on := _button("✓" if row.on and not tend else "", func(): game.plan_cargo_toggle(i), "Secondary")
+		on.toggle_mode = true
+		on.set_pressed_no_signal(row.on and not tend)
+		on.custom_minimum_size = Vector2(28, 0)
+		on.set_meta("label", "Bring back: " + Defs.ITEMS[row.item].label)
+		on.tooltip_text = "Bring it back" if not row.on else "Leave it"
+		h.add_child(on)
+		var name := _label("%s%s" % [Defs.ITEMS[row.item].label, "  New" if row.get("new", false) else ""], false, Palette.CHALK if row.on and not tend else Palette.CHALK_DIM)
+		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(name)
+		var up := _button("▲", func(): game.plan_cargo_move(i, -1), "Secondary")
+		up.disabled = i == 0
+		up.tooltip_text = "Bring it back before the one above"
+		up.set_meta("label", "%s up" % Defs.ITEMS[row.item].label)
+		var down := _button("▼", func(): game.plan_cargo_move(i, 1), "Secondary")
+		down.disabled = i == list.size() - 1
+		down.tooltip_text = "Bring it back after the one below"
+		down.set_meta("label", "%s down" % Defs.ITEMS[row.item].label)
+		for b in [up, down]:
+			b.add_theme_font_size_override("font_size", Palette.CAPTION)
+		h.add_child(up)
+		h.add_child(down)
+		var less := _button("−", func(): game.plan_cargo_amount(i, -1), "Secondary")
+		less.disabled = row.n <= 0 or clear
+		less.set_meta("label", "%s less" % Defs.ITEMS[row.item].label)
+		var amount := _label("Max" if row.n <= 0 or clear else "%d" % row.n, false, Palette.CHALK if row.on and not tend else Palette.CHALK_DIM)
+		amount.custom_minimum_size.x = 34
+		amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		amount.tooltip_text = "How many to bring back. Max takes as much as fits."
+		amount.mouse_filter = Control.MOUSE_FILTER_STOP
+		var more := _button("+", func(): game.plan_cargo_amount(i, 1), "Secondary")
+		more.disabled = clear
+		more.set_meta("label", "%s more" % Defs.ITEMS[row.item].label)
+		h.add_child(less)
+		h.add_child(amount)
+		h.add_child(more)
+		c.add_child(h)
+
+
 ## Drawing up a plan (issue #106): the site report and the party on the left, the rest on the right.
 func _fill_plan(c: Container, sim: Sim) -> void:
 	var plan: Dictionary = game.plan
@@ -2882,20 +2946,7 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 	var tend: bool = plan.target.item == "pens"
 	if not plan.party.is_empty():  # issue #140: the party's armor against the hazards
 		c.add_child(_label(_protection_text(sim, plan.party), false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	c.add_child(_label("Bring back", true))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	for t in sim.plan_targets(plan.dest):
-		var b := _button(t.name, func(): game.plan_target(t.item), "Secondary")
-		b.toggle_mode = true
-		b.set_pressed_no_signal(t.item == plan.target.item)
-		row.add_child(b)
-	var gap := Control.new()
-	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(gap)
-	if not tend:
-		row.add_child(_stepper("%d" % plan.target.n, "target"))
-	c.add_child(row)
+	_add_cargo_list(c, plan, tend)
 	var meadow: bool = plan.dest == Meadow.ID and not sim.get_map(Meadow.ID).pens.is_empty()
 	if meadow:  # issue #139: or tend the pens
 		var pr := HBoxContainer.new()
@@ -3013,7 +3064,10 @@ func _add_packs(c: Container, plan: Dictionary) -> void:
 		return
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 1)
-	var cargo: int = 0 if plan.target.item == "pens" else mini(plan.target.n, room)
+	var wanted := 0  # the amounts the list asks for, against the room (issue #185)
+	for r in Sim.cargo_rows(plan):
+		wanted += r.n
+	var cargo: int = 0 if plan.target.item == "pens" else mini(wanted, room)
 	for seg in [[mini(sup, cap), Palette.YELLOW], [cargo, Palette.BLUE], [room - cargo, Palette.SLATE_DEEP]]:
 		if seg[0] <= 0:
 			continue
@@ -3023,7 +3077,7 @@ func _add_packs(c: Container, plan: Dictionary) -> void:
 		r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		r.size_flags_stretch_ratio = seg[0]
 		bar.add_child(r)
-	bar.tooltip_text = "Supplies take %d, the cargo target %d, and %d is spare" % [sup, cargo, room - cargo]
+	bar.tooltip_text = "Supplies take %d, the amounts wanted %d, and %d is spare" % [sup, cargo, room - cargo]
 	bar.mouse_filter = Control.MOUSE_FILTER_STOP
 	c.add_child(bar)
 
@@ -3060,7 +3114,7 @@ func _stepper(value: String, key: String) -> HBoxContainer:
 func _fill_staging(c: Container, sim: Sim) -> void:
 	var ex: Dictionary = sim.expedition
 	var p := sim.packed()
-	var aim := "to tend the pens" if ex.target.item == "pens" else "to bring back %s" % Defs.words(ex.target.item, ex.target.n)
+	var aim := "to tend the pens" if ex.target.item == "pens" else ("to clear the level" if ex.get("clear", false) else "to bring back %s" % Sim.list_text(ex))
 	c.add_child(_label("Packing for the %s, %s" % [sim.get_map(ex.dest).name.to_lower(), aim], false, Palette.CHALK, Palette.BODY, true))
 	c.add_child(_row("Meals", "%d / %d" % [p.meals, ex.meals]))
 	c.add_child(_bar(float(p.meals) / maxi(ex.meals, 1)))
@@ -3296,8 +3350,12 @@ func _fill_party(c: Container, sim: Sim) -> void:
 		c.add_child(_row("Tend the pens", "keep %d of each" % ex.target.n))
 		c.add_child(_label(_pens_text(sim), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	else:
-		c.add_child(_row("Bring back %s" % Defs.ITEMS[ex.target.item].many, "%d / %d" % [sim.objective_packed(), ex.target.n]))
-		c.add_child(_bar(float(sim.objective_packed()) / maxi(ex.target.n, 1), Palette.GREEN))
+		if ex.get("clear", false):  # clear the level (issue #188): what's left on the level being worked
+			c.add_child(_row("Clearing the level", "%d blocks left" % sim.level_left()))
+		for r in Sim.cargo_rows(ex):  # one line a row of the cargo list (issue #185)
+			c.add_child(_row("Bring back %s" % Defs.ITEMS[r.item].many, "%d / %s" % [sim.cargo_have(r.item), str(r.n) if r.n > 0 else "as much as fits"]))
+			if r.n > 0:
+				c.add_child(_bar(float(sim.cargo_have(r.item)) / r.n, Palette.GREEN))
 	var when: PackedStringArray = []
 	for k in [["target", "the target is reached"], ["full", "the packs are full"], ["low", "food runs low"]]:
 		if ex.policy.get(k[0], false):

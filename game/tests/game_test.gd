@@ -1140,6 +1140,37 @@ func _test_meadow(game: Game) -> void:
 	hud.refresh(sim)
 	await process_frame
 	check(game.adventure == OldMine.ID and game.plan.dest == OldMine.ID and not hud._loc_drop.visible, "choosing the old mine shows its planner and closes the list")
+	# The cargo priority list (issue #185): rows to turn on and off, reorder and set amounts.
+	var by_label := func(label: String) -> Button:
+		for n in _walk(hud._plan_box):
+			if n is Button and n.get_meta("label", "") == label and not n.is_queued_for_deletion():
+				return n
+		return null
+	check(game.plan.list.map(func(r): return r.item) == ["coal", "cobble"] and by_label.call("Bring back: Coal") != null, "the planner lists the old mine's cargo: coal, then cobblestone")
+	by_label.call("Cobblestone up").pressed.emit()
+	check(game.plan.list.map(func(r): return r.item) == ["cobble", "coal"], "▲ moves cobblestone above coal")
+	hud.refresh(sim)
+	await process_frame
+	by_label.call("Cobblestone more").pressed.emit()
+	check(game.plan.list[0].n == 1 and game.plan.target == {"item": "cobble", "n": 1}, "+ sets an amount, and the old target follows the list")
+	by_label.call("Cobblestone less").pressed.emit()
+	check(game.plan.list[0].n == 0, "− back to as much as fits")
+	hud.refresh(sim)
+	await process_frame
+	by_label.call("Bring back: Cobblestone").pressed.emit()
+	check(not game.plan.list[0].on and game.plan.target.item == "coal", "a row can be turned off")
+	hud.refresh(sim)
+	await process_frame
+	check(_walk(hud._plan_box).any(func(n): return n is Label and n.text == "Max" and not n.is_queued_for_deletion()), "a row with no amount reads Max")
+	# Clear the level (issue #188): a toggle that makes every amount Max.
+	var cl: Array = _walk(hud._plan_box).filter(func(n): return n is Button and n.text == "Clear the level" and not n.is_queued_for_deletion())
+	check(cl.size() == 1 and not game.plan.clear, "the old mine's planner has a Clear the level toggle, off at first")
+	cl[0].pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	check(game.plan.clear and Sim.list_text(game.plan) == "clear the level", "turning it on makes the plan clear the level")
+	check(_walk(hud._plan_box).filter(func(n): return n is Button and n.text == "+" and n.get_meta("label", "") in ["Coal more", "Cobblestone more"] and not n.is_queued_for_deletion()).all(func(n): return n.disabled), "and the amounts are fixed at Max")
+	game.plan_clear_toggle()
 
 
 func _frames(n := 3) -> void:

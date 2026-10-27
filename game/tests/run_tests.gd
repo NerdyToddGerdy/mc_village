@@ -86,6 +86,10 @@ func _init() -> void:
 		"test_storehouse_chests",
 		"test_land_claims",
 		"test_blueprints_clear_their_footprint",
+		"test_diamonds_deep_in_the_mine",
+		"test_clear_the_level",
+		"test_cargo_priority_list_plans",
+		"test_cargo_priority_list_at_the_site",
 		"test_mason_bench_becomes_a_mineshaft",
 		"test_work_areas_are_painted",
 		"test_work_areas_saved",
@@ -1723,8 +1727,8 @@ func test_planning_an_expedition() -> void:
 	plan.meals = 3
 	plan.picks = 1
 	check(Sim.pack_capacity(plan) == Tuning.PACK_CAPACITY and Sim.cargo_room(plan) == Tuning.PACK_CAPACITY - 4, "one member's packs: 4 supplies leave %d for cargo" % Sim.cargo_room(plan))
-	plan.target.n = Sim.cargo_room(plan) + 1
-	check(sim.plan_problems(plan).has("The packs only have room for %s" % Defs.words("coal", Sim.cargo_room(plan))), "a target bigger than the packs says so: %s" % [sim.plan_problems(plan)])
+	sim.aim_plan(plan, "coal", Sim.cargo_room(plan) + 1)
+	check(sim.plan_problems(plan).has("The packs only have room for %d of what's wanted" % Sim.cargo_room(plan)), "a target bigger than the packs says so: %s" % [sim.plan_problems(plan)])
 	plan.meals += 2
 	check(Sim.cargo_room(plan) == Tuning.PACK_CAPACITY - 6, "more provisions leave less room for cargo")
 	plan.party.append(tomas.id)
@@ -1737,7 +1741,7 @@ func test_planning_an_expedition() -> void:
 	plan.spend_return = true
 	check(Sim.site_minutes(plan) > kept and kept > 0.0, "spending the return food stretches the time on site (%.1f → %.1f min)" % [kept, Sim.site_minutes(plan)])
 	plan.spend_return = false
-	plan.target.n = 6
+	sim.aim_plan(plan, plan.target.item, 6)
 	for k in plan.policy:
 		plan.policy[k] = false
 	check(sim.plan_problems(plan).has("Choose when the party comes home"), "a plan needs a return policy")
@@ -1773,7 +1777,7 @@ func test_staging_and_departure() -> void:
 	plan.party = [ada.id]
 	plan.meals = 2
 	plan.picks = 1
-	plan.target.n = 6
+	sim.aim_plan(plan, plan.target.item, 6)
 	check(sim.plan_expedition(plan) == "", "planned")
 	run(sim, 1)
 	check(stuck_text(sim).contains("Expedition: No meals to pack. Cooks make them at the fireplace, or plan fewer"), "with no meals, it says so and how to fix it: " + stuck_text(sim))
@@ -1842,7 +1846,7 @@ func send_party(sim: Sim) -> Dictionary:
 	plan.party = [ada.id, tomas.id]
 	plan.meals = 4
 	plan.picks = 1
-	plan.target = {"item": "coal", "n": 6}
+	sim.aim_plan(plan, "coal", 6)
 	sim.plan_expedition(plan)
 	b.store = {"bread": 4, "stone_pick": 1}
 	b.tools = [{"type": "stone_pick", "dur": 9}]
@@ -1978,7 +1982,7 @@ func test_party_works_the_site() -> void:
 	var p2 := send_party(sim2)
 	until_at_site(sim2, [p2.ada, p2.tomas])
 	sim2.expedition.policy = {"target": false, "full": false, "low": false}
-	sim2.expedition.target.n = 99
+	sim2.aim_plan(sim2.expedition, sim2.expedition.target.item, 99)
 	p2.ada.hunger = 30.0
 	p2.tomas.hunger = 30.0
 	run(sim2, 5)
@@ -2000,7 +2004,7 @@ func test_party_works_the_site() -> void:
 	var p3 := send_party(sim3)
 	until_at_site(sim3, [p3.ada, p3.tomas])
 	sim3.expedition.policy = {"target": false, "full": true, "low": false}
-	sim3.expedition.target = {"item": "cobble", "n": 99}
+	sim3.aim_plan(sim3.expedition, "cobble", 99)
 	sim3.expedition.cargo = {"cobble": Sim.pack_capacity(sim3.expedition) - sim3.pack_load() - 3}  # nearly full already
 	for i in 300 * Tuning.TPS:
 		sim3.step()
@@ -2571,7 +2575,7 @@ func test_the_door_down_and_back() -> void:
 	check(ada.map == two_id and tomas.map == two_id and sim.at_site(ada) and two.visited, "the party walks down through the door into Level 2")
 	check(Sim.rcell(ada).x <= 3, "in at its entrance")
 	sim.expedition.policy = {"target": true, "full": true, "low": false}
-	sim.expedition.target = {"item": "coal", "n": sim.objective_packed() + 6}  # 6 more, from Level 2
+	sim.aim_plan(sim.expedition, "coal", sim.objective_packed() + 6)  # 6 more, from Level 2
 	run(sim, 5)
 	var mid := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(mid.maps.has(two_id) and mid.get_map(two_id).pattern == two.pattern and mid.get_map(two_id).level == 2 and mid.residents[0].map == two_id, "saving with two levels keeps both, and the party down on Level 2")
@@ -2664,7 +2668,10 @@ func send_party_to(sim: Sim, dest: String, target: Dictionary, meals := 4, solo 
 	var plan := sim.new_plan(dest)
 	plan.party = [ada.id] if solo else [ada.id, tomas.id]
 	plan.meals = meals
-	plan.target = target
+	if target.item == "pens":
+		plan.target = target
+	else:
+		sim.aim_plan(plan, target.item, target.n)
 	var err := sim.plan_expedition(plan)
 	b.store = {"bread": meals}
 	for i in 30 * Tuning.TPS:
@@ -4006,3 +4013,287 @@ func test_mason_bench_becomes_a_mineshaft() -> void:
 	check(again.get("shaft", false) and Sim.station_name(again) == "Mineshaft", "a mineshaft is saved and loaded")
 	var raw: Dictionary = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v32.save"))
 	check(not SaveFormat.upgrade(raw).has("error"), "a v32 save upgrades")
+
+
+## Issue #185: a plan carries a ranked list of what to bring back; each place starts from its defaults and
+## then remembers the last list used.
+func test_cargo_priority_list_plans() -> void:
+	var sim := Sim.new_game()
+	var board := built_board(sim)
+	var plan := sim.new_plan(OldMine.ID)
+	var items: Array = plan.list.map(func(r): return r.item)
+	check(items == ["coal", "cobble"] and plan.list[0].n == 8 and plan.list[1].n == 0, "the old mine starts with coal then cobblestone as much as fits, iron unknown yet (%s)" % [items])
+	var mead := sim.new_plan(Meadow.ID)
+	check(mead.list.map(func(r): return r.item) == ["wool", "leather", "beef", "porkchop", "mutton"] and mead.list[0].n == 6, "the meadow starts with wool, leather, then meat")
+	check(plan.target == {"item": "coal", "n": 8}, "the old single target is the first row with an amount")
+	# A row can be turned off, and an amount of 0 is as much as fits.
+	plan.list[0].on = false
+	Sim.sync_target(plan)
+	check(Sim.cargo_rows(plan).map(func(r): return r.item) == ["cobble"] and plan.target.item == "cobble", "an item that's off is left, and the target follows the list")
+	plan.list[1].on = false
+	plan.party = [sim.residents[0].id]
+	check(sim.plan_problems(plan).has("Choose something to bring back"), "with nothing on, the plan says so: %s" % [sim.plan_problems(plan)])
+	# Reordering, then confirming: the next plan for the place starts from that list.
+	plan.list[0].on = true
+	plan.list[1].on = true
+	var first: Dictionary = plan.list[0]
+	plan.list[0] = plan.list[1]
+	plan.list[1] = first
+	plan.list[0].n = 5
+	plan.list[1].n = 6
+	Sim.sync_target(plan)
+	plan.picks = 0
+	var confirmed := sim.plan_expedition(plan)
+	check(confirmed == "", "the plan is confirmed (%s)" % confirmed)
+	check(sim.cargo_lists[OldMine.ID].map(func(r): return r.item) == ["cobble", "coal"] and sim.cargo_lists[OldMine.ID][0].n == 5, "the place remembers the list")
+	sim.expedition = {}
+	var again := sim.new_plan(OldMine.ID)
+	check(again.list.map(func(r): return r.item) == ["cobble", "coal"] and again.list[0].n == 5, "and the next plan starts from it")
+	# A newly known item joins at the bottom, marked New.
+	sim.get_map(OldMine.ID).discovered = true
+	var learned := sim.new_plan(OldMine.ID)
+	check(learned.list.map(func(r): return r.item) == ["cobble", "coal", "iron_ore"] and learned.list[2].get("new", false) and learned.list[2].n == 0, "iron, once known, joins at the bottom marked New (%s)" % [learned.list.map(func(r): return r.item)])
+	# Target reached counts only the rows with an amount that are on.
+	sim.expedition = {"target": {"item": "coal", "n": 3}, "cargo": {"coal": 3}, "list": [{"item": "coal", "on": true, "n": 3}, {"item": "cobble", "on": true, "n": 0}, {"item": "iron_ore", "on": false, "n": 5}]}
+	check(sim.objective_met(), "target reached once the rows with an amount are packed, whatever as-much rows hold or off rows want")
+	sim.expedition.cargo = {"coal": 2}
+	check(not sim.objective_met(), "not before")
+	sim.expedition.list = [{"item": "coal", "on": true, "n": 0}]
+	check(not sim.objective_met(), "a list of as-much-as-fits rows is never reached: the packs filling is what ends it")
+	sim.expedition = {}
+	# An old save's trip in progress turns its single target into a one-row list.
+	var raw := {"state": {"expedition": {"dest": "old_mine", "state": "out", "target": {"item": "coal", "n": 5}}}}
+	var up := SaveFormat._v33_to_v34(raw)
+	check(up.state.expedition.list == [{"item": "coal", "on": true, "n": 5}, {"item": "iron_ore", "on": true, "n": 0}, {"item": "cobble", "on": true, "n": 0}] and up.state.cargo_lists == {}, "an old trip's target becomes a one-row list with the rest as much as fits (%s)" % [up.state.expedition.get("list")])
+	var pens := {"state": {"expedition": {"dest": "meadow", "state": "out", "target": {"item": "pens", "n": 2}}}}
+	check(not SaveFormat._v33_to_v34(pens).state.expedition.has("list"), "and a pen-tending trip needs none")
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(back.cargo_lists == sim.cargo_lists, "the remembered lists are saved")
+
+
+## Issue #185: at the site the party packs by the list, swaps a better find in for the lowest cargo, never packs
+## what's off, and marks down the list.
+func test_cargo_priority_list_at_the_site() -> void:
+	var sim := Sim.new_game()
+	var p := send_party(sim)
+	until_at_site(sim, [p.ada, p.tomas])
+	var ex: Dictionary = sim.expedition
+	ex.policy = {"target": false, "full": false, "low": false}
+	# Packing follows the order: cobblestone before coal, and the packs full of coal.
+	ex.list = [{"item": "cobble", "on": true, "n": 0}, {"item": "coal", "on": true, "n": 0}]
+	Sim.sync_target(ex)
+	ex.cargo = {"coal": sim.pack_room()}
+	check(sim.pack_room() == 0 and not sim.swap_candidate().is_empty() == false, "the packs are full of coal")
+	sim.on_map(OldMine.ID, func(): sim.drop_items(sim.nearest_walkable(sim.m.entrance + Vector2i(2, 0)), "cobble", 3))
+	var swap: Dictionary = sim.on_map(OldMine.ID, func(): return sim.swap_candidate())
+	check(not swap.is_empty() and swap.drop == "coal" and swap.stack.type == "cobble", "a better find would swap out the lowest cargo (%s)" % [swap.get("drop", "")])
+	run(sim, 90.0)
+	check(ex.cargo.get("cobble", 0) >= 3, "the party packs the cobblestone (%s)" % [ex.cargo])
+	check(sim.on_map(OldMine.ID, func(): return count(sim, "coal")) > 0, "and the coal it swapped out is left at the site as a stack")
+	# What's off is never packed, and several on are all packed.
+	var sim2 := Sim.new_game()
+	var p2 := send_party(sim2)
+	until_at_site(sim2, [p2.ada, p2.tomas])
+	var ex2: Dictionary = sim2.expedition
+	ex2.policy = {"target": false, "full": false, "low": false}
+	ex2.list = [{"item": "coal", "on": true, "n": 2}, {"item": "cobble", "on": false, "n": 0}, {"item": "iron_ore", "on": true, "n": 2}]
+	Sim.sync_target(ex2)
+	sim2.on_map(OldMine.ID, func():
+		sim2.drop_items(sim2.nearest_walkable(sim2.m.entrance + Vector2i(2, 0)), "cobble", 3)
+		sim2.drop_items(sim2.nearest_walkable(sim2.m.entrance + Vector2i(3, 1)), "coal", 2)
+		sim2.drop_items(sim2.nearest_walkable(sim2.m.entrance + Vector2i(4, 0)), "iron_ore", 2)
+		for b in sim2.boulders:
+			b.des = false)
+	ex2.cargo = {}
+	run(sim2, 60.0)
+	check(ex2.cargo.get("coal", 0) >= 2 and ex2.cargo.get("iron_ore", 0) >= 2, "several rows on are all packed (%s)" % [ex2.cargo])
+	check(ex2.cargo.get("cobble", 0) == 0, "an item that's off is never packed (%s)" % [ex2.cargo])
+	# Marking goes down the list: the row with an amount first, the next once it's packed.
+	var sim3 := Sim.new_game()
+	var p3 := send_party(sim3)
+	until_at_site(sim3, [p3.ada, p3.tomas])
+	var ex3: Dictionary = sim3.expedition
+	ex3.list = [{"item": "coal", "on": true, "n": 3}, {"item": "cobble", "on": true, "n": 0}]
+	Sim.sync_target(ex3)
+	ex3.cargo = {}
+	sim3.on_map(OldMine.ID, func():
+		for b in sim3.boulders:
+			b.des = false
+		sim3._mark_objective())
+	var marked_a: Array = sim3.on_map(OldMine.ID, func(): return sim3.boulders.filter(func(b): return b.alive and b.des))
+	check(not marked_a.is_empty() and marked_a.any(func(b): return b.get("ore", "") == "coal" or not b.has("ore")), "with coal short, what's marked is toward the coal (%d marked)" % marked_a.size())
+	ex3.cargo = {"coal": 3}
+	sim3.on_map(OldMine.ID, func():
+		for b in sim3.boulders:
+			b.des = false
+		sim3._mark_objective())
+	var marked_b: Array = sim3.on_map(OldMine.ID, func(): return sim3.boulders.filter(func(b): return b.alive and b.des))
+	check(not marked_b.is_empty() and marked_b.all(func(b): return not b.has("ore")), "with the coal packed, the next row's stone is what's marked (%d)" % marked_b.size())
+
+
+## Issue #188: a "Clear the level" trip works every block of what's on the list, then digs to the door by itself and
+## goes down with no pause, the objective carried over.
+func test_clear_the_level() -> void:
+	var sim := Sim.new_game()
+	var plan := sim.new_plan(OldMine.ID)
+	check(plan.clear == false and Sim.list_text(plan) == "8 coal", "a new plan isn't a clearing one (%s)" % Sim.list_text(plan))
+	plan.clear = true
+	check(Sim.list_text(plan) == "clear the level" and Sim.cargo_rows(plan).all(func(r): return r.n == 0), "clearing wants all of it: every amount is as much as fits")
+	var p := send_party(sim)
+	until_at_site(sim, [p.ada, p.tomas])
+	var ex: Dictionary = sim.expedition
+	ex.clear = true
+	ex.policy = {"target": false, "full": false, "low": false}
+	check(not sim.objective_met() and sim.objective_left() == 0, "there's no target to reach")
+	# With coal already packed, an ordinary trip moves on down its list; a clearing one keeps going for coal.
+	ex.cargo = {"coal": 99}
+	sim.on_map(OldMine.ID, func():
+		for b in sim.boulders:
+			b.des = false
+		sim._mark_objective())
+	var marked: Array = sim.on_map(OldMine.ID, func(): return sim.boulders.filter(func(b): return b.alive and b.des))
+	check(not marked.is_empty() and marked.any(func(b): return b.get("ore", "") == "coal"), "clearing keeps marking coal past any amount (%d marked)" % marked.size())
+	check(marked.all(func(b): return not b.get("loose", false)), "and never a block under a known loose ceiling")
+	var left: int = sim.on_map(OldMine.ID, func(): return sim.level_left())
+	check(left > 0 and left == sim.on_map(OldMine.ID, func(): return sim.boulders.filter(func(b): return b.alive and not b.get("hidden", false) and not b.get("loose", false)).size()), "the blocks left on the level are the ones the list asks for (%d)" % left)
+	# The level is cleared: no pause for the door, the party goes down with its packs.
+	sim.on_map(OldMine.ID, func():
+		for b in sim.boulders:
+			if not b.get("loose", false):
+				b.alive = false
+		sim._occ_dirty = true)
+	ex.cargo = {}
+	run(sim, 120.0)
+	var down := MineLevels.level_id(2)
+	check(sim.pending.is_empty() and ex.dest == down, "a cleared level goes down with no choice to make (dest %s, pending %d)" % [ex.dest, sim.pending.size()])
+	check(ex.get("clear", false) and ex.get("leg", "out") == "out", "and carries on, still clearing")
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(back.expedition.get("clear", false), "a clearing trip is saved")
+
+	# The packs, not the level, end it: full packs still send them home.
+	sim.on_map(down, func():
+		sim.m.known = true)
+	ex.policy.full = true
+	ex.cargo = {"coal": sim.pack_room()}
+	run(sim, 150.0)  # once they're all down on the new level
+	check(ex.get("leg", "") == "home" and ex.get("home_why", "") == "packs full", "full packs still bring them home (%s)" % ex.get("home_why", ""))
+	# Without it, the door still asks.
+	var sim2 := Sim.new_game()
+	var p2 := send_party(sim2)
+	until_at_site(sim2, [p2.ada, p2.tomas])
+	sim2.expedition.policy = {"target": false, "full": false, "low": false}
+	sim2.on_map(OldMine.ID, func():
+		for b in sim2.boulders:
+			if not b.get("loose", false):
+				b.alive = false
+		sim2._occ_dirty = true)
+	run(sim2, 120.0)
+	check(not sim2.pending.is_empty() and sim2.pending[0].kind == "door", "an ordinary trip still stops for the door choice")
+	# Saving: an older save's trip isn't a clearing one.
+	var up := SaveFormat._v34_to_v35({"state": {"expedition": {"dest": "old_mine"}}})
+	check(up.state.expedition.clear == false, "an older save's trip isn't a clearing one")
+
+
+## Issue #186: diamond ore on the deep levels, hidden until someone mines next to it, mined only with an iron
+## pickaxe, made into the best tools.
+func test_diamonds_deep_in_the_mine() -> void:
+	var sim := Sim.new_game()
+	for n in range(1, 4):
+		check(MineLevels.deep_ore_count(n, "diamond") == 0 and not "".join(MineLevels.layout(sim.seed, n).rows).contains("d"), "no diamond ore on level %d" % n)
+	check(MineLevels.deep_ore_count(4, "diamond") == 1 and MineLevels.deep_ore_count(6, "diamond") == 2 and MineLevels.deep_ore_count(20, "diamond") == 3, "from level 4: 1 block, more the deeper, 3 at most")
+	for n in range(4, 9):
+		var a: Dictionary = MineLevels.layout(sim.seed, n)
+		var b: Dictionary = MineLevels.layout(sim.seed, n)
+		var count: int = "".join(a.rows).count("d")
+		check(count == MineLevels.deep_ore_count(n, "diamond") and a.rows == b.rows, "level %d has its %d diamonds, the same every time" % [n, count])
+	var lvl: SimMap = MineLevels.build(sim, 4)
+	var rocks: Array = lvl.boulders.filter(func(x): return x.get("ore", "") == "diamond")
+	check(rocks.size() == 1 and rocks.all(func(x): return x.get("hidden", false)), "level 4's diamond is hidden like the vein")
+	sim.maps[lvl.id] = lvl
+	lvl.visited = true
+	check(not sim.site_report(lvl.id).resources.any(func(x): return x.item == "diamond"), "and not in the site report until it's found")
+	check(sim.get_map(lvl.id).level == 4, "(level 4)")
+	# An iron pickaxe is needed.
+	var ada: Dictionary = sim.residents[0]
+	var block: Dictionary = rocks[0]
+	var st := {"what": "gather", "tool": "pick", "target": block}
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 10}
+	check(sim._work_time(ada, st) < 0.0, "a stone pickaxe can't mine diamond ore")
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 10}
+	check(absf(sim._work_time(ada, st) - Tuning.BREAK_TIME[3]) < 0.01, "an iron pickaxe can")
+	ada.pick = {"type": "diamond_pick", "tier": 4, "dur": 10}
+	check(sim._work_time(ada, st) < Tuning.BREAK_TIME[3], "and a diamond one is quicker")
+	# The first find: revealed, a known resource of the level, and the game stops.
+	sim.expedition = {"state": "out", "leg": "out", "dest": lvl.id, "party": [ada.id], "target": {"item": "coal", "n": 1}, "list": [{"item": "coal", "on": true, "n": 1}], "cargo": {}, "policy": {"target": true, "full": true, "low": true}}
+	var near: Vector2i = block.cell + Vector2i(0, 1)
+	sim.on_map(lvl.id, func(): sim._check_find_diamond(near))
+	check(not sim.pending.is_empty() and sim.pending[0].kind == "discovery" and "diamonds on level 4" in sim.pending[0].text, "the first find stops the game: %s" % [sim.pending[0].text if not sim.pending.is_empty() else ""])
+	check(lvl.diamond_found and not block.get("hidden", false), "the diamond is revealed")
+	check(sim.site_report(lvl.id).resources.any(func(x): return x.item == "diamond" and x.known) and sim.plan_targets(lvl.id).any(func(x): return x.item == "diamond"), "diamonds are a known resource of the level, a row for the cargo list")
+	sim.pending.clear()
+	sim.on_map(lvl.id, func(): sim._check_find_diamond(near))
+	check(sim.pending.is_empty(), "it only stops for the first")
+	# Nobody with an iron pickaxe: it's said, and nothing is marked for diamonds.
+	sim.expedition.list = [{"item": "diamond", "on": true, "n": 0}]
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 10}
+	check(not sim.can_mine_diamond(), "no iron pickaxe in the party")
+	sim.on_map(lvl.id, func():
+		sim.compute_stuck()
+		for sx in sim.stuck:
+			pass)
+	ada.map = lvl.id
+	ada.arriving = false
+	sim.on_map(lvl.id, func(): sim._stuck_site())
+	check(sim.stuck.any(func(x): return x.why == "Diamond ore needs an iron pickaxe"), "the stuck list says what's missing: " + stuck_text(sim))
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 10}
+	check(sim.can_mine_diamond(), "with an iron pickaxe it can be mined")
+	sim.expedition = {}
+	# A party on level 4 with an iron pickaxe mines the diamond and packs it.
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 40}
+	sim._enter_level(ada, lvl.id)
+	sim.expedition = {"state": "out", "leg": "out", "dest": lvl.id, "party": [ada.id], "target": {"item": "diamond", "n": 1}, "list": [{"item": "diamond", "on": true, "n": 1}],
+		"cargo": {}, "provisions": {"bread": 3}, "tools": [], "supplies": {}, "meals": 3, "picks": 0, "sticks": 0, "wheat": 0,
+		"policy": {"target": false, "full": false, "low": false}, "spend_return": false, "cart_cap": false, "board": 0, "clear": false}
+	for i in 240 * Tuning.TPS:
+		sim.step()
+		if sim.expedition.get("cargo", {}).get("diamond", 0) >= 1:
+			break
+	check(sim.expedition.get("cargo", {}).get("diamond", 0) >= 1, "with an iron pickaxe the party mines the diamond and packs it (%s)" % [sim.expedition.get("cargo", {})])
+	sim.expedition = {}
+	# The recipes, the best tier.
+	check(Defs.recipe("diamond_pick").inp == {"diamond": 3, "stick": 2} and Defs.ITEMS.diamond_pick.tier == 4 and Defs.recipe("diamond_axe").inp == {"diamond": 3, "stick": 2}, "diamond tools: 3 diamonds and 2 sticks")
+	check(Sim.full_uses("diamond_pick") > Sim.full_uses("iron_pick") and Tuning.BREAK_TIME[4] < Tuning.BREAK_TIME[3], "the most uses and the most speed")
+	var vil := Sim.new_game()
+	var bench := vil.place_site("bench", open_rect(vil, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	var cook: Dictionary = vil.residents[0]
+	vil.drop_items(Sim.rcell(cook) + Vector2i(1, 0), "diamond", 3)
+	vil.drop_items(Sim.rcell(cook) + Vector2i(-1, 0), "stick", 2)
+	vil.queue_add(bench, "diamond_pick")
+	run(vil, 60.0)
+	var made := vil.tool_items("pick", 3)
+	check(made.any(func(t): return t.type == "diamond_pick" and t.dur == Sim.full_uses("diamond_pick")), "the bench makes a diamond pickaxe (%s)" % [made.map(func(t): return t.type)])
+	# The toolsmith prefers diamond when there's enough.
+	var ts := Sim.new_game()
+	hire_toolsmith(ts)
+	var b2 := ts.place_site("bench", open_rect(ts, Vector2i(3, 3)).position + Vector2i(1, 0))
+	b2.stage = 1
+	b2.done = true
+	ts.residents[0].pick = {"type": "wood_pick", "tier": 1, "dur": 1}
+	ts.drop_items(Sim.rcell(ts.residents[0]) + Vector2i(1, 0), "iron_ingot", 3)
+	ts.drop_items(Sim.rcell(ts.residents[0]) + Vector2i(-1, 0), "stick", 4)
+	ts.drop_items(Sim.rcell(ts.residents[0]) + Vector2i(2, 0), "diamond", 3)
+	run(ts, 1)
+	check(b2.queue.has("diamond_pick") and not b2.queue.has("iron_pick"), "the toolsmith queues a diamond pickaxe over an iron one (%s)" % [b2.queue])
+	var ts2 := Sim.new_game()
+	hire_toolsmith(ts2)
+	var b3 := ts2.place_site("bench", open_rect(ts2, Vector2i(3, 3)).position + Vector2i(1, 0))
+	b3.stage = 1
+	b3.done = true
+	ts2.residents[0].pick = {"type": "wood_pick", "tier": 1, "dur": 1}
+	ts2.drop_items(Sim.rcell(ts2.residents[0]) + Vector2i(1, 0), "iron_ingot", 3)
+	ts2.drop_items(Sim.rcell(ts2.residents[0]) + Vector2i(-1, 0), "stick", 4)
+	ts2.drop_items(Sim.rcell(ts2.residents[0]) + Vector2i(2, 0), "diamond", 2)
+	run(ts2, 1)
+	check(b3.queue.has("iron_pick") and not b3.queue.has("diamond_pick"), "with fewer than 3 diamonds it's iron (%s)" % [b3.queue])

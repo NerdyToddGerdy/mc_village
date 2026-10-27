@@ -185,3 +185,22 @@ Save format **v21** (#139, #140):
 | `FULL_SET_SERIOUS` | 0.5 | A full set multiplies the chance an injury is serious by this. |
 | `ARMOR_USES` | 8 | Hazards a piece takes before it wears out. |
 | `MAX_PINNED` | 4 | Items pinned to the tally bar. |
+
+
+## The cargo priority list (#185)
+
+A plan carries a **ranked list** of what to bring back (`plan.list`: rows `{item, on, n}`, `n` 0 for "as much as fits"), instead of one target. `plan.target` stays, kept in step by `Sim.sync_target`, as the first row that's on with an amount, for what shows only one item. Tending the pens (§ pens) has no list.
+- **Defaults and memory.** A place with no remembered list starts from `Tuning.CARGO_DEFAULTS` (the old mine: iron, coal, then cobblestone as much as fits; the meadow: wool 6, leather, then meat), kept to the items the village knows the place gives. Confirming a plan stores its list in `sim.cargo_lists[dest]`; the next plan starts from it, and an item newly known joins at the bottom with `new` set. Per level filtering and a toast for a newly found item aren't built yet.
+- **The planner.** The Bring back section is the list: a tick (off is left behind), the name, − amount + (Max at 0), ▲ ▼. The packs' bar shows the wanted amounts against the room.
+- **Packing.** The party stows only items that are on, best row first; the room the packs keep for the rows above an item is respected. A better item turning up when the packs are full **swaps out** the lowest-priority cargo, which is set down at the entrance as a stack (`Sim.swap_candidate`), and "packs full" waits while a swap is possible.
+- **Marking.** `_mark_objective` goes down the list: the first row that wants more gets its nearest blocks (or animals) marked, up to the party's size. A row with an amount that isn't packed yet holds the rows below it back, as the old single target did; once it's packed (or for a row set to Max) the marking moves down.
+- **Coming home.** "Target reached" is every row with an amount packed; at least one such row is needed, and Max rows never block it.
+- **Saving:** v34 keeps `cargo_lists`; a trip in progress turns its old target into a one-row list with the rest of its place's items at Max.
+
+## Clear the level (#188)
+
+A mine plan can be a **clearing** one (`plan.clear`, a toggle above the cargo list, off by default; not offered at the meadow or for tending the pens). While it's on, `cargo_rows` makes every row "as much as fits", so there's no target and "Target reached" can't happen.
+- **Marking.** The party works every block of what the list asks for, nearest the entrance first, never a block under a known loose ceiling, and the packs fill by the list (§ cargo priority list).
+- **A cleared level** is one where `_nothing_left()` holds: nobody busy, nothing marked or worth marking that can be reached, nothing lying about to pack. Then, after the packs, food and injuries have had their say, `_clear_step` takes over: with the door reached the party goes down (`go_down`, the objective carried over); otherwise it marks the way to the door (never through a loose ceiling) and someone goes to look. Reaching the door in a clearing trip goes straight down with no `_ask("door")`. A way down blocked by a loose ceiling sends the party home, "the level is cleared".
+- **Report.** The party panel shows "Clearing the level: N blocks left" (`Sim.level_left`).
+- **Saving:** v35 adds `clear` to a trip in progress, false for every older one.
