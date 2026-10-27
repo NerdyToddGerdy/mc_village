@@ -31,6 +31,10 @@ var _job_drop: PanelContainer       ## A resident's job dropdown (issue #134), u
 var _job_list := VBoxContainer.new()
 var _job_for := -1                  ## The resident whose job dropdown is open, or -1.
 var _job_anchor := Rect2()          ## The button it opened from, in global coordinates.
+var _loc_drop: PanelContainer       ## The expedition board's location dropdown (issue #181), under its button.
+var _loc_list := VBoxContainer.new()
+var _loc_open := false
+var _loc_anchor := Rect2()
 var _tally_panel: PanelContainer
 var _tally_seen := {}           ## Item types that have turned up in this game; the rest stay hidden.
 var _tally_sim := 0             ## Which sim _tally_seen belongs to (it resets for a new or loaded game).
@@ -151,6 +155,11 @@ func _ready() -> void:
 	_job_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))  # opaque: it lies over other panels
 	_job_drop.visible = false
 	_job_drop.top_level = true
+	_loc_list.add_theme_constant_override("separation", 2)
+	_loc_drop = _panel(_loc_list, Vector2(330, 0), 6)
+	_loc_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))  # opaque: it lies over the planner
+	_loc_drop.visible = false
+	_loc_drop.top_level = true
 	_goals_panel = _panel(_goals, Vector2(290, 0))
 	tl.add_child(_goals_panel)
 
@@ -242,6 +251,7 @@ func _ready() -> void:
 	_book_panel.visible = false
 	_root.add_child(_book_panel)
 	_root.add_child(_job_drop)
+	_root.add_child(_loc_drop)
 	_radial.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_radial.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_radial.draw.connect(_draw_radial)
@@ -874,6 +884,7 @@ func refresh(sim: Sim) -> void:
 	_refresh_stuck(sim)
 	_refresh_selection(sim)
 	_refresh_job_drop(sim)
+	_refresh_loc_drop(sim)
 	_refresh_toolbar(sim)
 	_refresh_board(sim)
 	_refresh_craft(sim)
@@ -1216,11 +1227,16 @@ func _input(event: InputEvent) -> void:
 			_close_tools()
 		if event.pressed and _job_drop.visible and not _job_drop.get_global_rect().has_point(event.position) and not _job_anchor.has_point(event.position):
 			_close_job_drop()
+		if event.pressed and _loc_drop.visible and not _loc_drop.get_global_rect().has_point(event.position) and not _loc_anchor.has_point(event.position):
+			_close_loc_drop()
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _tools_drop.visible:
 		_close_tools()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _job_drop.visible:
 		_close_job_drop()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _loc_drop.visible:
+		_close_loc_drop()
 		get_viewport().set_input_as_handled()
 
 
@@ -2674,7 +2690,7 @@ func _refresh_planner(sim: Sim) -> void:
 		return
 	_plan_panel.custom_minimum_size.x = 0 if sim.expedition.is_empty() else 400
 	var dest: String = sim.expedition.get("dest", game.plan.get("dest", OldMine.ID))
-	var sig := "%s|%s|%s|%s|%s|%s|%s|%s" % [game.plan, sim.expedition, board.store, board.get("report", []), sim.stuck.map(func(x): return x.why), sim.site_report(dest), game.adventure, sim.adventures()]
+	var sig := "%s|%s|%s|%s|%s|%s|%s|%s|%s" % [game.plan, sim.expedition, board.store, board.get("report", []), sim.stuck.map(func(x): return x.why), sim.site_report(dest), game.adventure, sim.adventures(), _loc_open]
 	for r in sim.residents:
 		sig += "%d%s%s%s%d%d%s%s;" % [r.id, sim.cant_join(r), sim.at_board(r), r.pick, int(r.hunger / 10), ceili(sim.back_in(r)), r.map, r.away]
 		sig += r.job.label if r.job != null else "Idle"
@@ -2682,59 +2698,86 @@ func _refresh_planner(sim: Sim) -> void:
 
 
 func _fill_planner(c: Container, sim: Sim) -> void:
+	var rows := sim.adventures()
 	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
 	var title := _label("Expedition board", true, Palette.CHALK, Palette.HEADING)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	if sim.expedition.is_empty() and game.adventure != "":  # back to the adventures list (issue #136)
-		head.add_child(_button("All adventures", func(): game.close_adventure(), "Secondary"))
+	head.add_child(_location_button(sim, rows))
 	head.add_child(_button("Close", func(): game.close_planner(), "Secondary"))
 	c.add_child(head)
 	match sim.expedition.get("state", ""):
 		"staging":
-			_fill_adventures(c, sim, true)
 			_fill_staging(c, sim)
 		"out":
-			_fill_adventures(c, sim, true)
 			_fill_out(c, sim)
 		_:
-			if game.adventure == "":
-				_fill_adventures(c, sim)
+			if rows.is_empty():
+				c.add_child(_label("Nobody knows of anywhere to go yet. Walk the signpost at the village's edge to learn of a place.", false, Palette.CHALK_DIM, Palette.BODY, true))
 				return
-			if game.plan.is_empty():  # the planner was left open while an expedition ended
+			if game.adventure == "" or not rows.any(func(a): return a.id == game.adventure):
+				game.adventure = rows[0].id
+			if game.plan.is_empty() or game.plan.dest != game.adventure:  # the planner was left open while an expedition ended
 				game.plan = sim.new_plan(game.adventure)
 			_fill_plan(c, sim)
 
 
-## The adventures list (issue #136): one row per known destination, with its travel time, what's there,
-## its known hazards and what's happening there. Choosing a row opens its site report and planner.
-## While an expedition is packing or out, `compact` lists each row's name and status only, since
-## planning is locked.
-func _fill_adventures(c: Container, sim: Sim, compact := false) -> void:
+## The board's Location dropdown (issue #181): the chosen place and its travel time, which opens a list of
+## every known destination. While a party is packing or out it shows theirs and the list is read-only.
+func _location_button(sim: Sim, rows: Array) -> Button:
+	var busy: bool = not sim.expedition.is_empty()
+	var here: String = sim.expedition.get("dest", game.adventure)
+	var cur := rows.filter(func(a): return a.id == here)
+	var text := "Nowhere known yet"
+	if not cur.is_empty():
+		text = "%s%s" % [cur[0].name, " · ~%d s each way" % roundi(cur[0].travel) if cur[0].travel >= 0.0 else ""]
+	var b := _button(text + "  ▾", func(): pass, "Secondary")
+	b.set_meta("label", "Location: " + text)
+	b.disabled = rows.is_empty()
+	b.tooltip_text = "One expedition at a time" if busy else "Choose where to go"
+	b.pressed.connect(func() -> void:
+		if _loc_open:
+			_close_loc_drop()
+		else:
+			_loc_open = true
+			_loc_anchor = b.get_global_rect())
+	return b
+
+
+func _close_loc_drop() -> void:
+	_loc_open = false
+	_loc_anchor = Rect2()
+	_loc_drop.visible = false
+
+
+## The list under the Location button: one line a destination, its travel time and status beside it, and a
+## yellow flag where hazards are known. While a party is out the lines are shown but can't be chosen.
+func _refresh_loc_drop(sim: Sim) -> void:
+	if not _loc_open or not _plan_panel.visible:
+		_close_loc_drop()
+		return
+	_loc_drop.visible = true
+	var h := _loc_drop.get_combined_minimum_size().y
+	var below := _loc_anchor.end.y + 4 + h <= get_viewport().get_visible_rect().size.y
+	_loc_drop.position = Vector2(maxf(8.0, _loc_anchor.end.x - _loc_drop.get_combined_minimum_size().x), _loc_anchor.end.y + 4 if below else _loc_anchor.position.y - 4 - h)
 	var rows := sim.adventures()
-	if not compact:
-		c.add_child(_label("Adventures", true))
-	for a in rows:
-		if compact:  # the party's own destination is the panel below; the rest say they're locked
-			if not a.here:
-				c.add_child(_row(a.name, a.status))
-			continue
-		var b := _button("%s\n%s" % [a.name, a.what], func(): game.open_adventure(a.id), "Secondary")
-		b.set_meta("label", "Adventure: " + a.name)
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.custom_minimum_size = Vector2(420, 0)
-		b.disabled = a.locked
-		var hz: String = "Hazards: " + "; ".join(a.hazards) if not a.hazards.is_empty() else "No hazards known yet"
-		b.tooltip_text = "About %d s walk each way. %s." % [roundi(a.travel), hz] if a.travel >= 0.0 else hz
-		c.add_child(b)
-		var line := "About %d s each way · %s" % [roundi(a.travel), a.status] if a.travel >= 0.0 else "The road isn’t walked yet · %s" % a.status
-		c.add_child(_label(line, false, Palette.CHALK_DIM, Palette.CAPTION, true))
-		for hz2 in a.hazards:
-			c.add_child(_label("Hazard: " + hz2, false, Palette.YELLOW, Palette.CAPTION, true))
-	if compact and rows.size() > 1:
-		c.add_child(_rule())
-	elif rows.is_empty():
-		c.add_child(_label("Nobody knows of anywhere to go yet.", false, Palette.CHALK_DIM, Palette.BODY, true))
+	_rebuild(_loc_list, "%s|%s" % [rows, game.adventure], func(c: Container) -> void:
+		for a in rows:
+			var line := "%s · %s · %s" % [a.name, "~%d s" % roundi(a.travel) if a.travel >= 0.0 else "road not walked", a.status]
+			if not a.hazards.is_empty():
+				line += "  ⚑"
+			var b := _button(line, func():
+				game.open_adventure(a.id)
+				_close_loc_drop(), "Secondary")
+			b.set_meta("label", "Adventure: " + a.name)
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.disabled = a.locked
+			b.toggle_mode = true
+			b.set_pressed_no_signal(a.id == game.adventure)
+			var hz: String = "Hazards: " + "; ".join(a.hazards) if not a.hazards.is_empty() else "No hazards known yet"
+			b.tooltip_text = ("One expedition at a time. " if a.locked else "") + hz
+			c.add_child(b))
 
 
 ## The cargo priority list (issue #185): what to bring back, best first. Each row has a toggle (an item that's

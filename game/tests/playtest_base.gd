@@ -118,6 +118,13 @@ func _all(n: Node) -> Array:
 	return out
 
 
+## Picks a destination from the expedition board's Location dropdown (issue #181).
+func pick_location(name: String) -> bool:
+	if not await click_button("Location"):
+		return false
+	return await click_button("Adventure: " + name)
+
+
 func click_button(text: String, near := "", last := false) -> bool:
 	await frames(2)
 	game._hud.refresh(game.sim)

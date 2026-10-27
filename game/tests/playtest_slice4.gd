@@ -103,7 +103,10 @@ func open_signpost(sim: Sim) -> void:
 	if game.view_map != "village":
 		await click_button("Village")
 	game.selection = {}
+	game.close_planner()  # the board's plan can cover the signpost
 	await look_at(sim.route_sign())
+	game._hud.refresh(sim)  # the planner hides on the next refresh, and would still be under the click
+	await frames(2)
 	await click(screen(sim.route_sign(), 1.4))
 	game._hud.refresh(sim)
 	await frames(2)
@@ -128,7 +131,7 @@ func trip(sim: Sim, ada: Dictionary, by_cart := false) -> Dictionary:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(game.planner_open, "selecting the board opens the planner")
-	check(await click_button("Adventure: Old mine"), "pick the old mine from the adventures list")
+	check(await pick_location("Old mine"), "pick the old mine from the Location dropdown")
 	await settle()
 	game.plan = sim.new_plan()
 	game._hud.refresh(sim)

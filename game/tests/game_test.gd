@@ -1127,15 +1127,19 @@ func _test_meadow(game: Game) -> void:
 	await process_frame
 	check(game.planner_open and game.adventure == Meadow.ID and game.plan.dest == Meadow.ID, "with a board, clicking the signpost opens the meadow's adventure")
 	check(_walk(hud._plan_box).any(func(n): return n is Label and n.text == "Meadow"), "its site report and planner")
-	var back: Array = _walk(hud._plan_box).filter(func(n): return n is Button and n.text == "All adventures")
-	check(back.size() == 1, "with a way back to the adventures list")
-	if back.is_empty():
+	var loc: Array = _walk(hud._plan_box).filter(func(n): return n is Button and n.get_meta("label", "").begins_with("Location: "))
+	check(loc.size() == 1 and "Meadow" in loc[0].text, "the board has a Location dropdown showing the meadow (%s)" % [loc.map(func(n): return n.text)])
+	if loc.is_empty():
 		return
-	back[0].pressed.emit()
+	loc[0].pressed.emit()
 	hud.refresh(sim)
 	await process_frame
-	var rows: Array = _walk(hud._plan_box).filter(func(n): return n is Button and n.has_meta("label"))
-	check(rows.map(func(n): return n.get_meta("label")) == ["Adventure: Old mine", "Adventure: Meadow"], "the board lists both adventures (%s)" % [rows.map(func(n): return n.get_meta("label"))])
+	var rows: Array = _walk(hud._loc_list).filter(func(n): return n is Button and n.has_meta("label") and not n.is_queued_for_deletion())
+	check(rows.map(func(n): return n.get_meta("label")) == ["Adventure: Old mine", "Adventure: Meadow"], "its list has both destinations (%s)" % [rows.map(func(n): return n.get_meta("label"))])
+	rows[0].pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	check(game.adventure == OldMine.ID and game.plan.dest == OldMine.ID and not hud._loc_drop.visible, "choosing the old mine shows its planner and closes the list")
 
 
 func _frames(n := 3) -> void:
