@@ -112,3 +112,13 @@ Section 13 defines prototype slices that are built one at a time, not as a singl
 6. Enchantments and one redstone automation chain.
 
 Scope new work to the current slice. Don't build ahead into later slices' systems.
+
+## Issues and milestones
+
+Each slice is a GitHub milestone, and finishing milestones in order matters more than starting the next one.
+- **A milestone at 100% is finished. Never add an issue to it, reopen it or move one into it.** That includes a slice whose open count has dropped to zero, even if nobody has closed it yet. Check with `gh api "repos/{owner}/{repo}/milestones?state=all"` before choosing a milestone.
+- A new issue goes in an **open milestone that has unfinished work and that it belongs to**, or in **no milestone** when it doesn't fit one. Leave it unassigned rather than force it into the nearest slice, and say so when filing it. Review unassigned issues with `gh issue list --search "no:milestone"`.
+- Give it the matching `slice-N` label only when it has that milestone. An unassigned issue has no slice label.
+- A bug in finished work is a new issue with the `bug` label, filed in the milestone being worked on now, or unassigned. Say it's a regression if it is.
+- Only small things the slice's own goal can't be met without may join an open, nearly finished milestone. Anything that merely improves it doesn't.
+- Never close or delete a milestone without being asked.
