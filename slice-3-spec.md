@@ -332,3 +332,12 @@ The first five levels down use each family once, in an order the seed picks. Aft
 | Torches on a level | 5 − level, at least 1 | Fewer the deeper it is. |
 | Loose ceilings on a level | 2 + level | Plus 6 in a collapsed chamber. |
 | Ledges on a level | 1 + level ÷ 2 | In the dark. |
+
+
+## Diamonds on the deep levels (#186)
+
+From **level 4** down (`MineLevels.DEEP_ORES`, data: the first level, a base count, one more every `every` levels, a maximum; a later ore is a new row), a level has **diamond ore**: 1 block on level 4, more the deeper (2 from level 6, 3 from level 8), placed from a stream of its own so every other part of a level, and every level above 4, is exactly as it was. The blocks are **hidden** like the iron vein: unseen, unmarked and not in any report until someone mines within `FIND_RADIUS` of one.
+- **The first find** on a level (`Sim._check_find_diamond`) reveals the level's diamonds, makes diamonds a known resource of that level (`SimMap.diamond_found`, the site report's resources, `plan_targets`, so a row for the cargo priority list, joining at the bottom marked New), and stops the game: "The party found diamonds on level 4 of the old mine", Keep mining or Mark it and return later.
+- **An iron pickaxe is needed** (`Tuning.DIAMOND_PICK_TIER` 3). With less, a gather job fails with "Diamond ore needs an iron pickaxe"; the party doesn't mark diamonds unless someone (or a spare in the packs) has one (`Sim.can_mine_diamond`), and the site's stuck list says "Diamond ore needs an iron pickaxe". A block gives 1 diamond.
+- **The item.** `diamond` (Ores group, so it's in the tally bar's dropdown; pale cyan, with a cut-stone icon). **Diamond axe and pickaxe**, tier 4 (3 diamonds and 2 sticks each, at the bench): `CHOP_TIME` 2.5 s, `BREAK_TIME` 2.5 s, 150 uses. **The toolsmith** queues a diamond spare when there are 3 diamonds, then iron, then stone. Later ore in `DEEP_ORES` (gold; redstone and lapis belong to Slice 6) is a new row.
+- **Saving:** v36; `diamond_found` on a level map. Levels already generated in an old save keep their layout, with no diamonds.

@@ -69,6 +69,12 @@ static func _draw(img: Image, type: String) -> void:
 			_box(img, Rect2i(8, 22, 48, 26), dark)
 			_box(img, Rect2i(11, 25, 42, 20), c.darkened(0.2))
 			_box(img, Rect2i(15, 25, 34, 10), c)
+		"diamond":  # a cut stone: a kite of facets, its top lighter
+			_disc(img, Vector2(32, 34), 22, dark)
+			_box(img, Rect2i(20, 22, 24, 24), c.darkened(0.15))
+			_box(img, Rect2i(26, 16, 12, 34), c.darkened(0.15))
+			_box(img, Rect2i(24, 20, 16, 14), c)
+			_box(img, Rect2i(28, 22, 8, 6), c.lightened(0.45))
 		"rail":  # two rails across three sleepers
 			for y in [18, 32, 46]:
 				_box(img, Rect2i(10, y - 5, 44, 10), dark)
@@ -149,11 +155,11 @@ static func _draw(img: Image, type: String) -> void:
 			for p in [Vector2(24, 36), Vector2(40, 36), Vector2(32, 24)]:
 				_disc(img, p, 10, dark)
 				_disc(img, p, 7, c)
-		"wood_axe", "stone_axe", "iron_axe":
+		"wood_axe", "stone_axe", "iron_axe", "diamond_axe":
 			_handle(img)
 			_box(img, Rect2i(30, 8, 22, 22), dark)
 			_box(img, Rect2i(33, 11, 16, 16), c)
-		"wood_pick", "stone_pick", "iron_pick":
+		"wood_pick", "stone_pick", "iron_pick", "diamond_pick":
 			_handle(img)
 			_line(img, Vector2(14, 22), Vector2(50, 14), 11, dark)
 			_line(img, Vector2(14, 22), Vector2(50, 14), 6, c)

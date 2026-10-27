@@ -86,6 +86,7 @@ func _init() -> void:
 		"test_storehouse_chests",
 		"test_land_claims",
 		"test_blueprints_clear_their_footprint",
+		"test_diamonds_deep_in_the_mine",
 		"test_clear_the_level",
 		"test_cargo_priority_list_plans",
 		"test_cargo_priority_list_at_the_site",
@@ -4191,3 +4192,108 @@ func test_clear_the_level() -> void:
 	# Saving: an older save's trip isn't a clearing one.
 	var up := SaveFormat._v34_to_v35({"state": {"expedition": {"dest": "old_mine"}}})
 	check(up.state.expedition.clear == false, "an older save's trip isn't a clearing one")
+
+
+## Issue #186: diamond ore on the deep levels, hidden until someone mines next to it, mined only with an iron
+## pickaxe, made into the best tools.
+func test_diamonds_deep_in_the_mine() -> void:
+	var sim := Sim.new_game()
+	for n in range(1, 4):
+		check(MineLevels.deep_ore_count(n, "diamond") == 0 and not "".join(MineLevels.layout(sim.seed, n).rows).contains("d"), "no diamond ore on level %d" % n)
+	check(MineLevels.deep_ore_count(4, "diamond") == 1 and MineLevels.deep_ore_count(6, "diamond") == 2 and MineLevels.deep_ore_count(20, "diamond") == 3, "from level 4: 1 block, more the deeper, 3 at most")
+	for n in range(4, 9):
+		var a: Dictionary = MineLevels.layout(sim.seed, n)
+		var b: Dictionary = MineLevels.layout(sim.seed, n)
+		var count: int = "".join(a.rows).count("d")
+		check(count == MineLevels.deep_ore_count(n, "diamond") and a.rows == b.rows, "level %d has its %d diamonds, the same every time" % [n, count])
+	var lvl: SimMap = MineLevels.build(sim, 4)
+	var rocks: Array = lvl.boulders.filter(func(x): return x.get("ore", "") == "diamond")
+	check(rocks.size() == 1 and rocks.all(func(x): return x.get("hidden", false)), "level 4's diamond is hidden like the vein")
+	sim.maps[lvl.id] = lvl
+	lvl.visited = true
+	check(not sim.site_report(lvl.id).resources.any(func(x): return x.item == "diamond"), "and not in the site report until it's found")
+	check(sim.get_map(lvl.id).level == 4, "(level 4)")
+	# An iron pickaxe is needed.
+	var ada: Dictionary = sim.residents[0]
+	var block: Dictionary = rocks[0]
+	var st := {"what": "gather", "tool": "pick", "target": block}
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 10}
+	check(sim._work_time(ada, st) < 0.0, "a stone pickaxe can't mine diamond ore")
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 10}
+	check(absf(sim._work_time(ada, st) - Tuning.BREAK_TIME[3]) < 0.01, "an iron pickaxe can")
+	ada.pick = {"type": "diamond_pick", "tier": 4, "dur": 10}
+	check(sim._work_time(ada, st) < Tuning.BREAK_TIME[3], "and a diamond one is quicker")
+	# The first find: revealed, a known resource of the level, and the game stops.
+	sim.expedition = {"state": "out", "leg": "out", "dest": lvl.id, "party": [ada.id], "target": {"item": "coal", "n": 1}, "list": [{"item": "coal", "on": true, "n": 1}], "cargo": {}, "policy": {"target": true, "full": true, "low": true}}
+	var near: Vector2i = block.cell + Vector2i(0, 1)
+	sim.on_map(lvl.id, func(): sim._check_find_diamond(near))
+	check(not sim.pending.is_empty() and sim.pending[0].kind == "discovery" and "diamonds on level 4" in sim.pending[0].text, "the first find stops the game: %s" % [sim.pending[0].text if not sim.pending.is_empty() else ""])
+	check(lvl.diamond_found and not block.get("hidden", false), "the diamond is revealed")
+	check(sim.site_report(lvl.id).resources.any(func(x): return x.item == "diamond" and x.known) and sim.plan_targets(lvl.id).any(func(x): return x.item == "diamond"), "diamonds are a known resource of the level, a row for the cargo list")
+	sim.pending.clear()
+	sim.on_map(lvl.id, func(): sim._check_find_diamond(near))
+	check(sim.pending.is_empty(), "it only stops for the first")
+	# Nobody with an iron pickaxe: it's said, and nothing is marked for diamonds.
+	sim.expedition.list = [{"item": "diamond", "on": true, "n": 0}]
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 10}
+	check(not sim.can_mine_diamond(), "no iron pickaxe in the party")
+	sim.on_map(lvl.id, func():
+		sim.compute_stuck()
+		for sx in sim.stuck:
+			pass)
+	ada.map = lvl.id
+	ada.arriving = false
+	sim.on_map(lvl.id, func(): sim._stuck_site())
+	check(sim.stuck.any(func(x): return x.why == "Diamond ore needs an iron pickaxe"), "the stuck list says what's missing: " + stuck_text(sim))
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 10}
+	check(sim.can_mine_diamond(), "with an iron pickaxe it can be mined")
+	sim.expedition = {}
+	# A party on level 4 with an iron pickaxe mines the diamond and packs it.
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 40}
+	sim._enter_level(ada, lvl.id)
+	sim.expedition = {"state": "out", "leg": "out", "dest": lvl.id, "party": [ada.id], "target": {"item": "diamond", "n": 1}, "list": [{"item": "diamond", "on": true, "n": 1}],
+		"cargo": {}, "provisions": {"bread": 3}, "tools": [], "supplies": {}, "meals": 3, "picks": 0, "sticks": 0, "wheat": 0,
+		"policy": {"target": false, "full": false, "low": false}, "spend_return": false, "cart_cap": false, "board": 0, "clear": false}
+	for i in 240 * Tuning.TPS:
+		sim.step()
+		if sim.expedition.get("cargo", {}).get("diamond", 0) >= 1:
+			break
+	check(sim.expedition.get("cargo", {}).get("diamond", 0) >= 1, "with an iron pickaxe the party mines the diamond and packs it (%s)" % [sim.expedition.get("cargo", {})])
+	sim.expedition = {}
+	# The recipes, the best tier.
+	check(Defs.recipe("diamond_pick").inp == {"diamond": 3, "stick": 2} and Defs.ITEMS.diamond_pick.tier == 4 and Defs.recipe("diamond_axe").inp == {"diamond": 3, "stick": 2}, "diamond tools: 3 diamonds and 2 sticks")
+	check(Sim.full_uses("diamond_pick") > Sim.full_uses("iron_pick") and Tuning.BREAK_TIME[4] < Tuning.BREAK_TIME[3], "the most uses and the most speed")
+	var vil := Sim.new_game()
+	var bench := vil.place_site("bench", open_rect(vil, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	var cook: Dictionary = vil.residents[0]
+	vil.drop_items(Sim.rcell(cook) + Vector2i(1, 0), "diamond", 3)
+	vil.drop_items(Sim.rcell(cook) + Vector2i(-1, 0), "stick", 2)
+	vil.queue_add(bench, "diamond_pick")
+	run(vil, 60.0)
+	var made := vil.tool_items("pick", 3)
+	check(made.any(func(t): return t.type == "diamond_pick" and t.dur == Sim.full_uses("diamond_pick")), "the bench makes a diamond pickaxe (%s)" % [made.map(func(t): return t.type)])
+	# The toolsmith prefers diamond when there's enough.
+	var ts := Sim.new_game()
+	hire_toolsmith(ts)
+	var b2 := ts.place_site("bench", open_rect(ts, Vector2i(3, 3)).position + Vector2i(1, 0))
+	b2.stage = 1
+	b2.done = true
+	ts.residents[0].pick = {"type": "wood_pick", "tier": 1, "dur": 1}
+	ts.drop_items(Sim.rcell(ts.residents[0]) + Vector2i(1, 0), "iron_ingot", 3)
+	ts.drop_items(Sim.rcell(ts.residents[0]) + Vector2i(-1, 0), "stick", 4)
+	ts.drop_items(Sim.rcell(ts.residents[0]) + Vector2i(2, 0), "diamond", 3)
+	run(ts, 1)
+	check(b2.queue.has("diamond_pick") and not b2.queue.has("iron_pick"), "the toolsmith queues a diamond pickaxe over an iron one (%s)" % [b2.queue])
+	var ts2 := Sim.new_game()
+	hire_toolsmith(ts2)
+	var b3 := ts2.place_site("bench", open_rect(ts2, Vector2i(3, 3)).position + Vector2i(1, 0))
+	b3.stage = 1
+	b3.done = true
+	ts2.residents[0].pick = {"type": "wood_pick", "tier": 1, "dur": 1}
+	ts2.drop_items(Sim.rcell(ts2.residents[0]) + Vector2i(1, 0), "iron_ingot", 3)
+	ts2.drop_items(Sim.rcell(ts2.residents[0]) + Vector2i(-1, 0), "stick", 4)
+	ts2.drop_items(Sim.rcell(ts2.residents[0]) + Vector2i(2, 0), "diamond", 2)
+	run(ts2, 1)
+	check(b3.queue.has("iron_pick") and not b3.queue.has("diamond_pick"), "with fewer than 3 diamonds it's iron (%s)" % [b3.queue])

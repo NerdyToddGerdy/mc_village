@@ -1082,7 +1082,7 @@ func keep_tools_stocked() -> void:
 		if not used or not tool_items(kind, 0).is_empty() or _spare_queued(kind):
 			continue
 		var id: String = "wood_" + kind
-		for tier in ["iron_", "stone_"]:  # the best tier there's material for (issue #104)
+		for tier in ["diamond_", "iron_", "stone_"]:  # the best tier there's material for (issues #104, #186)
 			var rec := Defs.recipe(tier + kind)
 			var mat: String = rec.inp.keys()[0]
 			var have: int = free_count(mat)
@@ -2020,7 +2020,10 @@ func fail_job(r: Dictionary, why := "") -> void:
 		if j.target != null:
 			j.target.unreach_until = until
 	elif why == "needs_pick":
-		r.note = {"text": "Needs a pickaxe", "until": tick + 4 * Tuning.TPS}
+		var diamond: bool = j.target != null and j.target.get("ore", "") == "diamond"
+		r.note = {"text": "Diamond ore needs an iron pickaxe" if diamond else "Needs a pickaxe", "until": tick + 4 * Tuning.TPS}
+		if diamond:
+			j.target.unreach_until = tick + int(Tuning.UNREACHABLE_COOLDOWN * Tuning.TPS)
 
 
 func _wear(r: Dictionary, kind: String) -> void:
@@ -2415,6 +2418,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			var tier: int = r[st.tool].tier if r[st.tool] != null else 0
 			if st.tool == "axe":
 				return Tuning.CHOP_TIME[tier]
+			if st.target.get("ore", "") == "diamond" and tier < Tuning.DIAMOND_PICK_TIER:  # only an iron pickaxe or better (issue #186)
+				return -1.0
 			return Tuning.BREAK_TIME[tier] if tier > 0 else -1.0
 		"dig":
 			return Tuning.SHAFT_DIG if r.pick != null and r.pick.tier > 0 else -1.0
@@ -2468,6 +2473,7 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			if t.get("loose", false):  # issue #110
 				_hazard(r, cave_in_chance(m.level), Tuning.CAVE_IN_SERIOUS, "a cave-in")
 			_check_find(t.cell)  # issue #111
+			_check_find_diamond(t.cell)  # issue #186
 		"dig":
 			var shaft: Dictionary = st.site
 			if not shaft.get("shaft", false):
@@ -4396,7 +4402,16 @@ func _reserve_above(item: String) -> int:
 
 ## Whether a block or an animal gives any item on the list (issue #185).
 func gives_wanted(b: Dictionary) -> bool:
-	return cargo_rows(expedition).any(func(r): return gives(b, r.item))
+	return cargo_rows(expedition).any(func(r): return gives(b, r.item) and (r.item != "diamond" or can_mine_diamond()))
+
+
+## Whether someone in the party, or a spare in the packs, has the iron pickaxe diamond ore needs (issue #186).
+func can_mine_diamond() -> bool:
+	for id in expedition.get("party", []):
+		var r := resident(id)
+		if not r.is_empty() and r.pick != null and r.pick.tier >= Tuning.DIAMOND_PICK_TIER and r.get("hurt", 0) == 0:
+			return true
+	return expedition.get("tools", []).any(func(t): return Defs.ITEMS[t.type].tier >= Tuning.DIAMOND_PICK_TIER)
 
 
 ## "3 coal and 2 iron ore", or "what's on the list": what a plan or the party is out for, in words.
@@ -5694,7 +5709,7 @@ static func block_yield(item: String) -> int:
 	for sp in Tuning.ANIMAL_DROPS:
 		if Tuning.ANIMAL_DROPS[sp].has(item):
 			return Tuning.ANIMAL_DROPS[sp][item]
-	return {"cobble": Tuning.BOULDER_COBBLE, "coal": Tuning.ORE_YIELD.coal, "iron_ore": Tuning.ORE_YIELD.iron}.get(item, 1)
+	return {"cobble": Tuning.BOULDER_COBBLE, "coal": Tuning.ORE_YIELD.coal, "iron_ore": Tuning.ORE_YIELD.iron, "diamond": Tuning.ORE_YIELD.diamond}.get(item, 1)
 
 
 ## Whether a block gives the objective's resource (stone, coal or iron ore), or an animal does when
@@ -5706,6 +5721,7 @@ static func gives(b: Dictionary, item: String) -> bool:
 		"cobble": return not b.has("ore")
 		"coal": return b.get("ore", "") == "coal"
 		"iron_ore": return b.get("ore", "") == "iron"
+		"diamond": return b.get("ore", "") == "diamond"
 	return false
 
 
@@ -5879,6 +5895,8 @@ func _mark_objective() -> void:
 	var party_size: int = expedition.party.size()
 	for row in cargo_rows(expedition):
 		var item: String = row.item
+		if item == "diamond" and not can_mine_diamond():  # nobody could mine it: left to the stuck list to say so
+			continue
 		var have := cargo_have(item)
 		for st in m.items.values():
 			if st.type == item:
@@ -6071,6 +6089,9 @@ func _stuck_site() -> void:
 		_add_stuck(m.name, "The packs are full", at, 1.6, "", 0, false, true)
 	if expedition.get("survey", false) and not party.any(func(r): return r.pick != null and r.get("hurt", 0) == 0):
 		_add_stuck(m.name, "Investigating the vein needs someone with a pickaxe", at, 1.6, "", 0)
+	var wants_diamond := cargo_rows(expedition).any(func(r): return r.item == "diamond") or m.boulders.any(func(b): return b.alive and b.des and b.get("ore", "") == "diamond")
+	if wants_diamond and m.boulders.any(func(b): return b.alive and not b.get("hidden", false) and b.get("ore", "") == "diamond") and not can_mine_diamond():  # issue #186
+		_add_stuck(m.name, "Diamond ore needs an iron pickaxe", at, 1.6, "", 0)
 	var sticks: int = expedition.get("supplies", {}).get("stick", 0)
 	if fence_left(map_id) > 0 and sticks < Tuning.FENCE_STICKS and not party.any(func(r): return r.job != null and r.job.kind == "fence"):
 		_add_stuck(m.name, "The pens need %s more. Pack them next time" % Defs.words("stick", fence_left(map_id)), at, 1.6, "", 0, false, true)
@@ -6291,11 +6312,32 @@ func _check_find(c: Vector2i) -> void:
 		])
 
 
+## Mining next to a hidden diamond finds the level's diamonds (issue #186): they're revealed, diamonds become
+## a known resource of the level, and, with the party working here, the game stops for the player.
+func _check_find_diamond(c: Vector2i) -> void:
+	if m.diamond_found or m.kind != "site":
+		return
+	if not m.boulders.any(func(b): return b.alive and b.get("ore", "") == "diamond" and b.get("hidden", false) and manhattan(b.cell, c) <= Tuning.FIND_RADIUS):
+		return
+	m.diamond_found = true
+	for b in m.boulders:
+		if b.get("ore", "") == "diamond":
+			b.erase("hidden")
+	rev += 1
+	_toast("The party found diamonds on level %d." % m.level)
+	if expedition.get("state", "") == "out" and expedition.dest == map_id:
+		_ask("discovery", "The party found diamonds on level %d of the old mine." % m.level, [
+			{"id": "keep", "label": "Keep mining", "cost": "Carry on for %s. Diamonds can only be mined with an iron pickaxe." % objective_text()},
+			{"id": "return", "label": "Mark it and return later", "cost": "The party heads home now, with what it has packed."},
+		])
+
+
 ## The vein is revealed: it can be seen, marked and mined, though its size isn't known yet.
 func _find_vein() -> void:
 	m.found = true
 	for b in m.boulders:
-		b.erase("hidden")
+		if b.get("ore", "") != "diamond":  # diamonds have a find of their own (issue #186)
+			b.erase("hidden")
 	rev += 1
 
 
@@ -6431,7 +6473,7 @@ static func block_name(b: Dictionary) -> String:
 ## Ore blocks of this kind left on a site map, counting hidden ones only once they're found.
 func ore_left(id: String, ore: String) -> int:
 	var mp: SimMap = maps[id]
-	return mp.boulders.filter(func(b): return b.alive and b.get("ore", "") == ore and (mp.discovered or not b.get("hidden", false))).size()
+	return mp.boulders.filter(func(b): return b.alive and b.get("ore", "") == ore and (mp.discovered or not b.get("hidden", false)) and not (ore == "diamond" and b.get("hidden", false))).size()
 
 
 ## The site report (brief §8) the expedition board shows before departure:
@@ -6456,6 +6498,8 @@ func site_report(id: String) -> Dictionary:
 		res.append({"item": "iron_ore", "name": "Iron", "reserve": -1, "known": false})
 	elif mp.visited:
 		res.append({"item": "iron_ore", "name": "?", "reserve": -1, "known": false})
+	if mp.diamond_found:  # a known resource of this level once someone has found it (issue #186)
+		res.append({"item": "diamond", "name": "Diamond", "reserve": ore_left(id, "diamond") * Tuning.ORE_YIELD.diamond, "known": true})
 	var hazards: Array = []
 	if mp.visited:
 		var dark := 0
@@ -6483,7 +6527,7 @@ func site_report(id: String) -> Dictionary:
 	var levels: Array = []
 	for lid in mine_levels():  # every level known so far (issue #132)
 		var lm: SimMap = maps[lid]
-		var left: int = lm.boulders.filter(func(b): return b.alive and b.has("ore") and (lm.discovered or not b.get("hidden", false))).size()
+		var left: int = lm.boulders.filter(func(b): return b.alive and b.has("ore") and (lm.discovered or not b.get("hidden", false)) and not (b.get("ore", "") == "diamond" and b.get("hidden", false))).size()
 		var door: String = {"open": "door open", "found": "door found"}.get(lm.door_state, "door not reached")
 		levels.append({"id": lid, "level": lm.level, "pattern": MineLevels.FAMILY_NAMES.get(lm.pattern, ""), "ore": left if lm.visited else -1, "door": door, "visited": lm.visited})
 	var travel := route_walk_time() + level_walk(id) if route_surveyed() else -1.0

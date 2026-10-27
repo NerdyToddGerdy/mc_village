@@ -70,6 +70,19 @@ static func _rng(seed: int, salt: int) -> RandomNumberGenerator:
 
 
 ## Coal and iron blocks on a level: Level 1's, and more for each level down.
+## Ores that only appear from a level down (issue #186), as data so a later one is a new row: the first level, how
+## many blocks that level has, one more every `every` levels, and at most `max`.
+const DEEP_ORES := {"diamond": {"from": 4, "base": 1, "every": 2, "max": 3}}
+
+
+## How many blocks of a deep ore a level has: none above its first level.
+static func deep_ore_count(n: int, ore: String) -> int:
+	var d: Dictionary = DEEP_ORES[ore]
+	if n < d.from:
+		return 0
+	return mini(d.max, d.base + (n - d.from) / d.every)
+
+
 static func ore_count(n: int, ore: String) -> int:
 	return {"coal": 6, "iron": 4}[ore] + Tuning.LEVEL_ORE[ore] * (n - 1)
 
@@ -113,6 +126,7 @@ static func layout(seed: int, n: int) -> Dictionary:
 	_torches(grid, g, n)
 	var loose := _loose(grid, g, n, fam)
 	var ledges := _ledges(grid, g, n)
+	_deep_ores(grid, seed, n)
 	var rows: Array = []
 	for row in cells:
 		rows.append("".join(row))
@@ -155,6 +169,10 @@ static func build(s: Sim, n: int) -> SimMap:
 					m.boulders.append(OldMine._block(s, c, "coal"))
 				"i":
 					m.boulders.append(OldMine._block(s, c, "iron"))
+				"d":  # diamond ore is hidden until someone mines next to it (issue #186)
+					var d := OldMine._block(s, c, "diamond")
+					d.hidden = true
+					m.boulders.append(d)
 	for b in m.boulders:
 		if b.cell in lay.loose:
 			b.loose = true
@@ -414,6 +432,30 @@ static func _ore(grid: Dictionary, g: RandomNumberGenerator, n: int, fam: String
 	for i in chosen.size():
 		var c: Vector2i = chosen[i]
 		grid.c[c.y][c.x] = "i" if i < ore_count(n, "iron") else "c"
+
+
+## Hidden deep ores (issue #186), placed last from a stream of their own so the rest of a level, and every level that
+## has none, is exactly as it was: the rock beside open floor, far from the entrance, not already ore.
+static func _deep_ores(grid: Dictionary, seed: int, n: int) -> void:
+	for ore in DEEP_ORES:
+		var count := deep_ore_count(n, ore)
+		if count <= 0:
+			continue
+		var g := _rng(seed ^ 0xD1A, n)
+		var spots: Array = []
+		for y in range(1, grid.h - 1):
+			for x in range(grid.w / 2, grid.w - 2):
+				if _at(grid, x, y) != "#":
+					continue
+				for d in Sim.DIRS:
+					if _at(grid, x + d.x, y + d.y) in [".", "o", "c", "i"]:  # beside open floor, or stone and ore a party mines through
+						spots.append(Vector2i(x, y))
+						break
+		for i in mini(count, spots.size()):
+			var at := g.randi_range(0, spots.size() - 1)
+			var c: Vector2i = spots[at]
+			spots.remove_at(at)
+			grid.c[c.y][c.x] = "d"
 
 
 ## Torches on the walls beside open floor, spread out, fewer the deeper the level.
