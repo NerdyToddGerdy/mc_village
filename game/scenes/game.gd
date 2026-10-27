@@ -1661,6 +1661,23 @@ func _screenshot_scene() -> void:
 		_target = Vector3(z.get_center().x, 0, z.get_center().y)
 		_place_camera()
 		selection = {}
+	if "--items" in OS.get_cmdline_user_args():  # every common loose item, in stacks of 1 and 16, for the item shapes (issue #206)
+		var spots: Array[Vector2i] = []
+		var from := Sim.rcell(sim.residents[0])
+		for d in 14:  # open grass, nearest to Ada first
+			for dx in range(-d, d + 1):
+				for dy in range(-d, d + 1):
+					var c := from + Vector2i(dx, dy)
+					if maxi(absi(dx), absi(dy)) == d and sim.farm_blocked(c) == "" and sim.walkable(c) and not spots.any(func(o): return absi(o.x - c.x) < 2 and absi(o.y - c.y) < 2):
+						spots.append(c)
+		var k := 0
+		for t in ["log", "plank", "cobble", "stick", "wheat", "coal", "iron_ore", "diamond", "sapling", "berries", "bread", "cooked_mutton", "wool", "leather", "chest", "stone_brick"]:
+			if k < spots.size():
+				sim.drop_items(spots[k], t, 16 if k % 2 == 0 else 3)
+			k += 1
+		_target = Vector3(Sim.rcell(sim.residents[0]).x + 0.5, 0, Sim.rcell(sim.residents[0]).y + 0.5)
+		_cam.size = 9.0
+		_place_camera()
 	if "--food" in OS.get_cmdline_user_args():  # meals and raw mutton for the tally bar's Food group (issue #73)
 		var z: Vector2i = area(10, 7, 4, 2).position
 		sim.drop_items(z, "bread", 2)

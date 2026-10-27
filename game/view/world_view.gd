@@ -655,8 +655,79 @@ func _add_item(b: Batch, s: Dictionary) -> void:
 				else:
 					b.box(Vector3(cx + off - 0.1, y, cz - 0.28), Vector3(cx + off + 0.1, y + 0.12, cz + 0.28), color.darkened(0.08))
 		return
+	if _add_loose_shape(b, s.type, cx, cz, levels, color):
+		return
 	for i in levels:
 		b.box(Vector3(cx - 0.26, i * 0.2, cz - 0.26), Vector3(cx + 0.26, i * 0.2 + 0.2, cz + 0.26), color)
+
+
+## Offsets and sizes of a heap's lumps, bottom to top (issue #206): uneven, and the same every time.
+const LUMPS := [Vector3(-0.1, -0.08, 0.17), Vector3(0.14, 0.1, 0.14), Vector3(0.1, -0.14, 0.12), Vector3(-0.12, 0.12, 0.11), Vector3(0.0, 0.0, 0.1)]
+const FOODS := ["berries", "bread", "mutton", "cooked_mutton", "beef", "cooked_beef", "porkchop", "cooked_porkchop"]
+
+
+## The shapes of the common loose materials (issue #206): each a few boxes, growing with the count
+## (up to 4 levels) so a stack still reads at a glance. Returns false for an item without one.
+func _add_loose_shape(b: Batch, type: String, cx: float, cz: float, levels: int, color: Color) -> bool:
+	if type == "log":  # lengths lying crosswise, a layer to every 4, end rings showing
+		for i in levels:
+			var y := i * 0.2
+			for k in 2:
+				var off := -0.14 + k * 0.28
+				if i % 2 == 0:
+					b.box(Vector3(cx - 0.3, y, cz + off - 0.1), Vector3(cx + 0.3, y + 0.2, cz + off + 0.1), color, BlockTextures.LOG)
+				else:
+					b.box(Vector3(cx + off - 0.1, y, cz - 0.3), Vector3(cx + off + 0.1, y + 0.2, cz + 0.3), color, BlockTextures.LOG)
+	elif type == "plank":  # a neat stack of boards, each a shade apart
+		for i in levels:
+			var y := i * 0.1
+			var off := 0.03 * (i % 2)
+			b.box(Vector3(cx - 0.3 + off, y, cz - 0.26), Vector3(cx + 0.3 + off, y + 0.1, cz + 0.26), color.darkened(0.05 * (i % 3)), BlockTextures.BOARD)
+	elif type in ["cobble", "coal", "iron_ore", "diamond"]:  # a heap of uneven lumps
+		var finish := BlockTextures.COBBLES if type == "cobble" else BlockTextures.ROCK
+		for i in levels + 1:
+			var l: Vector3 = LUMPS[i]
+			var r := 0.17 if i == 0 else 0.13
+			var base := 0.0 if i < 3 else 0.2
+			b.box(Vector3(cx + l.x - r, base, cz + l.y - r), Vector3(cx + l.x + r, base + r * 2.0, cz + l.y + r), color.darkened(0.06 * (i % 2)), finish)
+	elif type == "stick":  # a loose bundle, crossed
+		for i in levels:
+			var y := i * 0.1
+			for k in 2:
+				var off := -0.1 + k * 0.2
+				if i % 2 == 0:
+					b.box(Vector3(cx - 0.3, y, cz + off - 0.04), Vector3(cx + 0.3, y + 0.08, cz + off + 0.04), color, BlockTextures.LOG)
+				else:
+					b.box(Vector3(cx + off - 0.04, y, cz - 0.3), Vector3(cx + off + 0.04, y + 0.08, cz + 0.3), color, BlockTextures.LOG)
+	elif type == "wheat":  # upright sheaves, tied at the middle
+		for i in mini(levels, 2):
+			var x := cx - 0.14 + i * 0.28
+			b.box(Vector3(x - 0.07, 0, cz - 0.07), Vector3(x + 0.07, 0.4, cz + 0.07), color.darkened(0.1))
+			b.box(Vector3(x - 0.1, 0.4, cz - 0.1), Vector3(x + 0.1, 0.56, cz + 0.1), color.lightened(0.12))
+			b.box(Vector3(x - 0.09, 0.18, cz - 0.09), Vector3(x + 0.09, 0.24, cz + 0.09), Palette.STICK)
+	elif type == "sapling":  # a little tuft of leaves on a stem
+		b.box(Vector3(cx - 0.03, 0, cz - 0.03), Vector3(cx + 0.03, 0.2, cz + 0.03), Palette.LOG, BlockTextures.LOG)
+		b.box(Vector3(cx - 0.2, 0.18, cz - 0.2), Vector3(cx + 0.2, 0.4, cz + 0.2), color, BlockTextures.FOLIAGE)
+		b.box(Vector3(cx - 0.12, 0.38, cz - 0.12), Vector3(cx + 0.12, 0.5, cz + 0.12), color.lightened(0.1), BlockTextures.FOLIAGE)
+	elif type in FOODS:  # a few pieces on a cloth
+		b.box(Vector3(cx - 0.3, 0, cz - 0.26), Vector3(cx + 0.3, 0.03, cz + 0.26), Palette.CHALK.darkened(0.1), BlockTextures.FLEECE)
+		for i in levels:
+			var l: Vector3 = LUMPS[i]
+			var r := 0.1
+			b.box(Vector3(cx + l.x * 1.4 - r, 0.03, cz + l.y * 1.4 - r), Vector3(cx + l.x * 1.4 + r, 0.03 + r * 1.6, cz + l.y * 1.4 + r), color)
+	elif type == "wool":  # soft, so flat paint
+		for i in mini(levels, 2):
+			b.box(Vector3(cx - 0.26 + i * 0.04, i * 0.2, cz - 0.24), Vector3(cx + 0.26 + i * 0.04, i * 0.2 + 0.2, cz + 0.24), color.darkened(0.04 * i), BlockTextures.FLEECE)
+	elif type == "leather":  # a folded hide
+		for i in levels:
+			b.box(Vector3(cx - 0.28, i * 0.08, cz - 0.22), Vector3(cx + 0.28, i * 0.08 + 0.08, cz + 0.22), color.darkened(0.05 * (i % 2)))
+	elif type == "chest":
+		b.box(Vector3(cx - 0.3, 0, cz - 0.22), Vector3(cx + 0.3, 0.34, cz + 0.22), color, BlockTextures.BOARD)
+		b.box(Vector3(cx - 0.32, 0.3, cz - 0.24), Vector3(cx + 0.32, 0.42, cz + 0.24), color.darkened(0.12), BlockTextures.BOARD)
+		b.box(Vector3(cx - 0.04, 0.2, cz - 0.25), Vector3(cx + 0.04, 0.34, cz - 0.21), Palette.CHALK_DIM)
+	else:
+		return false
+	return true
 
 
 func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
