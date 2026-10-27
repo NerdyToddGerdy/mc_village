@@ -34,6 +34,11 @@ static var LEGS := Color("#3A3B45")
 static var SKIN := Color("#D9A77C")
 static var STICK := Color("#9C7A4E")
 
+## The mine levels' cold look (issue #206): blocks are multiplied by the grade, and their textures
+## are this much stronger (1 is the village's).
+static var MINE_GRADE := Color("#E0EAFF")
+const MINE_CONTRAST := 1.35
+
 static var ITEM_COLORS := {
 	"wool": Color("#ECEAE2"), "mutton": Color("#C2645A"), "berries": Color("#B23A5A"), "wheat": Color("#D8B65A"),
 	"bread": Color("#D9A35A"), "cooked_mutton": Color("#8C4A32"),

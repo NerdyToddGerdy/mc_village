@@ -178,11 +178,19 @@ func _draw_map() -> void:
 
 # ---------------------------------------------------------------- static world
 
+## The mines are colder and harsher than the village (issue #206): a blue-grey grade and stronger texture.
+func _grade_blocks(mine: bool) -> void:
+	for m in [_block_mat, _trees_faded.material_override]:
+		m.set_shader_parameter("grade", Palette.MINE_GRADE if mine else Color.WHITE)
+		m.set_shader_parameter("contrast", Palette.MINE_CONTRAST if mine else 1.0)
+
+
 func _build_static() -> void:
 	var solid := Batch.new()
 	var ghost := Batch.new()
 	var dark := Batch.new()
 	var col := Batch.new()
+	_grade_blocks(sim.m.kind == "site" and sim.m.id != Meadow.ID)
 	if sim.m.id == Meadow.ID:
 		_add_meadow_ground(solid)
 	elif sim.m.kind == "site":
@@ -257,7 +265,7 @@ func _add_site_ground(b: Batch) -> void:
 				_add_door(b, c, mp.door_state == "open", MINE_ROCK * Color(v, v, v))
 				continue
 			if mp.rock.has(c) or (sim.boulders.any(func(o): return o.alive and o.get("hidden", false) and o.cell == c)):
-				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.7, y + 1), MINE_ROCK * Color(v, v, v))
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.7, y + 1), MINE_ROCK * Color(v, v, v), BlockTextures.ROCK)
 				continue
 			if mp.water.has(c):  # an underground stream (issue #132), below the floor
 				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.45, y + 1), MINE_FLOOR.darkened(0.3))
@@ -267,10 +275,10 @@ func _add_site_ground(b: Batch) -> void:
 			if mp.is_dark(c):  # unlit: darker and a little cold, but still read as floor, not a hole
 				floor_col = floor_col.darkened(0.38).lerp(DARK_TINT, 0.25)
 			if c in mp.ledges and mp.visited:  # a ledge: the floor drops, with a pale lip (issue #110)
-				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.3, y + 1), floor_col.darkened(0.2))
-				b.box(Vector3(x, -0.3, y), Vector3(x + 1, 0, y + 0.12), floor_col.lightened(0.25))
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.3, y + 1), floor_col.darkened(0.2), BlockTextures.COBBLES)
+				b.box(Vector3(x, -0.3, y), Vector3(x + 1, 0, y + 0.12), floor_col.lightened(0.25), BlockTextures.COBBLES)
 				continue
-			b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0, y + 1), floor_col)
+			b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0, y + 1), floor_col, BlockTextures.COBBLES)
 	for t in mp.torches:
 		var x: float = t.x + 0.5
 		var z: float = t.y + 0.5
@@ -311,12 +319,12 @@ func _add_meadow_ground(b: Batch) -> void:
 			var c := Vector2i(x, y)
 			var v := 0.95 + _hash(x, y) * 0.1
 			if mp.water.has(c):
-				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.4, y + 1), MUD.darkened(0.2))
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.4, y + 1), MUD.darkened(0.2), BlockTextures.EARTH)
 				b.box(Vector3(x, -0.4, y), Vector3(x + 1, -0.22, y + 1), WATER * Color(v, v, v))
 				continue
-			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT)
+			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT, BlockTextures.EARTH)
 			var top := MUD * Color(v, v, v) if c in mp.banks else MEADOW_GRASS * Color(v, v, v)
-			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), top)
+			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), top, BlockTextures.EARTH if c in mp.banks else BlockTextures.GROUND)
 	for c in mp.fences:
 		var x: float = c.x + 0.5
 		var z: float = c.y + 0.5
@@ -418,15 +426,15 @@ func _add_route_ground(b: Batch) -> void:
 				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.05, y + 1), FOG * Color(v, v, v))
 				continue
 			if mp.rock.has(c):
-				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 1.2, y + 1), MINE_ROCK * Color(v, v, v))
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 1.2, y + 1), MINE_ROCK * Color(v, v, v), BlockTextures.ROCK)
 				continue
 			if mp.water.has(c):  # a little below the banks
-				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.4, y + 1), Palette.DIRT)
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.4, y + 1), Palette.DIRT, BlockTextures.EARTH)
 				b.box(Vector3(x, -0.4, y), Vector3(x + 1, -0.25, y + 1), WATER * Color(v, v, v))
 				continue
-			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT)
-			var top := TRODDEN if y == Road.LINE_ROW else Palette.GRASS
-			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), top * Color(v, v, v))
+			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT, BlockTextures.EARTH)
+			var on_line := y == Road.LINE_ROW
+			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (TRODDEN if on_line else Palette.GRASS) * Color(v, v, v), BlockTextures.EARTH if on_line else BlockTextures.GROUND)
 	_add_end_sign(b, Road.VILLAGE_END + Vector2i(0, -1), -1.0, Palette.GRASS)
 	_add_end_sign(b, Road.MINE_END + Vector2i(0, -1), 1.0, Palette.STONE)
 
