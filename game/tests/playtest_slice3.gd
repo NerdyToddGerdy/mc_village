@@ -98,7 +98,8 @@ func _initialize() -> void:
 	await click(screen(Sim.rcell(ada), 0.8))
 	game._hud.refresh(sim)
 	await frames(2)
-	check(game.selection.get("kind", "") == "res" and visible_label("On the road to the old mine"), "Ada can be selected on the road, and says where she's going")
+	# The party line ("Ada and Tomas are on the road to the old mine"), not Ada's own job: she may be eating from the packs just then.
+	check(game.selection.get("kind", "") == "res" and visible_label("on the road to the old mine"), "Ada can be selected on the road, and says where she's going")
 	check(await play_until(40, func(): return sim.at_site(ada) and sim.at_site(tomas)), "they reach the old mine")
 	check(sim.route_surveyed(), "walking it surveyed the road")
 	check(await click_button("Village"), "back to the village")
