@@ -43,6 +43,7 @@ var tick_fraction := 1.0
 var _prev_pos := {}             ## Resident id -> position before the latest tick.
 
 var _trees: MultiMeshInstance3D
+var _block_mat: ShaderMaterial
 var _trees_faded: MultiMeshInstance3D
 var _roofs: MultiMeshInstance3D
 var _occluder_sig := ""
@@ -51,11 +52,14 @@ var _occluder_sig := ""
 class Batch:
 	var xforms: Array[Transform3D] = []
 	var colors: Array[Color] = []
+	var finishes: Array[Color] = []
 
-	func box(lo: Vector3, hi: Vector3, col: Color) -> void:
+	## A box from `lo` to `hi` in `col`, textured with one of BlockTextures' finishes (issue #206).
+	func box(lo: Vector3, hi: Vector3, col: Color, finish := BlockTextures.PLAIN) -> void:
 		var size := hi - lo
 		xforms.append(Transform3D(Basis.from_scale(size), lo + size / 2.0))
 		colors.append(col)
+		finishes.append(Color(finish.x / 255.0, finish.y / 255.0, finish.z / 255.0, 0.0))
 
 	func apply(mmi: MultiMeshInstance3D) -> void:
 		var mm := mmi.multimesh
@@ -64,6 +68,7 @@ class Batch:
 		for i in xforms.size():
 			mm.set_instance_transform(i, xforms[i])
 			mm.set_instance_color(i, colors[i])
+			mm.set_instance_custom_data(i, finishes[i])
 
 
 ## Switches to another sim (after loading a save) and redraws everything.
@@ -82,13 +87,12 @@ func set_sim(s: Sim) -> void:
 
 
 func _ready() -> void:
-	_solid = _mm(_material(false, false, 0))
-	_cart = _mm(_material(false, false, 0))
-	_trees = _mm(_material(false, false, 0))
-	var faded := _material(true, false, 0)
-	faded.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
-	_trees_faded = _mm(faded)
-	_roofs = _mm(_material(false, false, 0))
+	_block_mat = _block_material(false)
+	_solid = _mm(_block_mat)
+	_cart = _mm(_block_mat)
+	_trees = _mm(_block_mat)
+	_trees_faded = _mm(_block_material(true))
+	_roofs = _mm(_block_mat)
 	_ghost = _mm(_material(true, false, 0))
 	_over_dark = _mm(_material(true, true, 9))
 	_over_col = _mm(_material(true, true, 10))
@@ -109,11 +113,26 @@ func _mm(mat: Material) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
+	mm.use_custom_data = true
 	mm.mesh = BoxMesh.new()
 	mmi.multimesh = mm
 	mmi.material_override = mat
 	add_child(mmi)
 	return mmi
+
+
+## The blocks' textured material (issue #206). The see-through one is for faded trees: the same
+## shader, blended by the colour's alpha and still writing depth, as their old material did.
+static func _block_material(transparent: bool) -> ShaderMaterial:
+	var base: Shader = load("res://view/block.gdshader")
+	var sh := base
+	if transparent:
+		sh = Shader.new()
+		sh.code = base.code.replace("render_mode cull_back;", "render_mode cull_back, blend_mix, depth_draw_always;").replace("//ALPHA", "ALPHA = base.a;")
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("layers", BlockTextures.array())
+	return m
 
 
 func _material(transparent: bool, overlay: bool, priority: int) -> StandardMaterial3D:
@@ -174,13 +193,13 @@ func _build_static() -> void:
 		for x in sim.w:
 			for y in sim.h:
 				var v := 0.96 + _hash(x, y) * 0.08
-				solid.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT)
-				solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), Palette.GRASS * Color(v, v, v))
+				solid.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT, BlockTextures.EARTH)
+				solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), Palette.GRASS * Color(v, v, v), BlockTextures.GROUND)
 	for b in sim.boulders:
 		if b.alive and not b.get("hidden", false) and not _in_fog(b.cell):
 			var c: Vector2i = b.cell
-			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), Palette.STONE)
-			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.STONE.lightened(0.06))
+			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), Palette.STONE, BlockTextures.ROCK)
+			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.STONE.lightened(0.06), BlockTextures.ROCK)
 			if b.has("ore"):  # flecks of ore on its faces and top (issue #103)
 				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[Defs.ORES[b.ore].item])
 			if b.get("loose", false) and sim.m.visited:  # a loose ceiling: cracks, and props holding it (issue #110)
@@ -250,14 +269,14 @@ func _add_site_ground(b: Batch) -> void:
 	for t in mp.torches:
 		var x: float = t.x + 0.5
 		var z: float = t.y + 0.5
-		b.box(Vector3(x - 0.06, 0.7, z - 0.06), Vector3(x + 0.06, 1.1, z + 0.06), Palette.LOG)
+		b.box(Vector3(x - 0.06, 0.7, z - 0.06), Vector3(x + 0.06, 1.1, z + 0.06), Palette.LOG, BlockTextures.LOG)
 		b.box(Vector3(x - 0.1, 1.1, z - 0.1), Vector3(x + 0.1, 1.3, z + 0.1), TORCH_FLAME)
 	# The way back to the village: a timber frame over the entrance, and the party's packs beside it.
 	var e := mp.entrance
 	_add_packs(b, mp, Vector2(e.x + 1.2, e.y + 0.17), 1.0)
-	b.box(Vector3(e.x, 0, e.y - 0.05), Vector3(e.x + 0.15, 1.4, e.y + 0.1), Palette.LOG)
-	b.box(Vector3(e.x, 0, e.y + 0.9), Vector3(e.x + 0.15, 1.4, e.y + 1.05), Palette.LOG)
-	b.box(Vector3(e.x - 0.05, 1.4, e.y - 0.1), Vector3(e.x + 0.2, 1.6, e.y + 1.1), Palette.LOG)
+	b.box(Vector3(e.x, 0, e.y - 0.05), Vector3(e.x + 0.15, 1.4, e.y + 0.1), Palette.LOG, BlockTextures.LOG)
+	b.box(Vector3(e.x, 0, e.y + 0.9), Vector3(e.x + 0.15, 1.4, e.y + 1.05), Palette.LOG, BlockTextures.LOG)
+	b.box(Vector3(e.x - 0.05, 1.4, e.y - 0.1), Vector3(e.x + 0.2, 1.6, e.y + 1.1), Palette.LOG, BlockTextures.LOG)
 
 
 static var WATER := Color("#4E7EA3")
@@ -274,8 +293,8 @@ func _add_packs(b: Batch, mp: SimMap, at: Vector2, dir: float) -> void:
 		var px: float = at.x + dir * float(i % 3) * 0.3
 		var pz: float = at.y
 		var py := float(i / 3) * 0.26
-		b.box(Vector3(px - 0.13, py, pz - 0.13), Vector3(px + 0.13, py + 0.26, pz + 0.13), CRATE)
-		b.box(Vector3(px - 0.135, py + 0.1, pz - 0.135), Vector3(px + 0.135, py + 0.14, pz + 0.135), Palette.LOG)
+		b.box(Vector3(px - 0.13, py, pz - 0.13), Vector3(px + 0.13, py + 0.26, pz + 0.13), CRATE, BlockTextures.BOARD)
+		b.box(Vector3(px - 0.135, py + 0.1, pz - 0.135), Vector3(px + 0.135, py + 0.14, pz + 0.135), Palette.LOG, BlockTextures.LOG)
 
 
 ## The meadow (issue #137): bright open grass, the pond set below its muddy bank, and old fences of
@@ -296,7 +315,7 @@ func _add_meadow_ground(b: Batch) -> void:
 	for c in mp.fences:
 		var x: float = c.x + 0.5
 		var z: float = c.y + 0.5
-		b.box(Vector3(x - 0.07, 0, z - 0.07), Vector3(x + 0.07, 0.75, z + 0.07), Palette.LOG)
+		b.box(Vector3(x - 0.07, 0, z - 0.07), Vector3(x + 0.07, 0.75, z + 0.07), Palette.LOG, BlockTextures.LOG)
 		for d in Sim.DIRS:  # rails toward each neighbouring fence or gate
 			if mp.fences.has(c + d) or mp.gates.has(c + d):
 				var lo := Vector3(x + minf(0.0, d.x * 0.5), 0.0, z + minf(0.0, d.y * 0.5))
@@ -315,10 +334,10 @@ func _add_gate(b: Batch, c: Vector2i, along_x: bool) -> void:
 	var a := Vector2(1, 0) if along_x else Vector2(0, 1)
 	for k in [-0.42, 0.42]:
 		var p: Vector2 = Vector2(x, z) + a * k
-		b.box(Vector3(p.x - 0.08, 0, p.y - 0.08), Vector3(p.x + 0.08, 0.85, p.y + 0.08), Palette.LOG)
+		b.box(Vector3(p.x - 0.08, 0, p.y - 0.08), Vector3(p.x + 0.08, 0.85, p.y + 0.08), Palette.LOG, BlockTextures.LOG)
 	var half := a * 0.34 + Vector2(a.y, a.x) * 0.04
 	for y in [0.22, 0.42, 0.62]:
-		b.box(Vector3(x - half.x, y, z - half.y), Vector3(x + half.x, y + 0.1, z + half.y), Palette.PLANK)
+		b.box(Vector3(x - half.x, y, z - half.y), Vector3(x + half.x, y + 0.1, z + half.y), Palette.PLANK, BlockTextures.BOARD)
 	var lo := Vector2(x, z) - a * 0.34
 	var hi := Vector2(x, z) + a * 0.34
 	_seg_box(b, lo, hi, 0.22, 0.62, Palette.PLANK.darkened(0.15))
@@ -361,7 +380,7 @@ func _add_door(b: Batch, c: Vector2i, open: bool, rock: Color) -> void:
 	var z := float(c.y)
 	b.box(Vector3(x, -0.6, z), Vector3(x + 1, 0, z + 1), rock.darkened(0.15))
 	for k in [0.0, 0.84]:  # the frame: two posts and a lintel
-		b.box(Vector3(x + 0.1, 0, z + k), Vector3(x + 0.9, 1.55, z + k + 0.16), Palette.LOG)
+		b.box(Vector3(x + 0.1, 0, z + k), Vector3(x + 0.9, 1.55, z + k + 0.16), Palette.LOG, BlockTextures.LOG)
 	b.box(Vector3(x + 0.05, 1.4, z - 0.04), Vector3(x + 0.95, 1.62, z + 1.04), Palette.LOG.darkened(0.1))
 	if open:
 		b.box(Vector3(x + 0.15, 0, z + 0.16), Vector3(x + 0.85, 1.4, z + 0.84), DOORWAY)
@@ -416,11 +435,11 @@ func _in_fog(c: Vector2i) -> bool:
 func _add_end_sign(b: Batch, c: Vector2i, dir: float, dab: Color) -> void:
 	var x := c.x + 0.5
 	var z := c.y + 0.5
-	b.box(Vector3(x - 0.09, 0, z - 0.09), Vector3(x + 0.09, 1.8, z + 0.09), Palette.LOG)
+	b.box(Vector3(x - 0.09, 0, z - 0.09), Vector3(x + 0.09, 1.8, z + 0.09), Palette.LOG, BlockTextures.LOG)
 	var a := x + 0.15 * -dir
 	var e := x + 0.7 * dir
-	b.box(Vector3(minf(a, e), 1.15, z - 0.06), Vector3(maxf(a, e), 1.6, z + 0.06), Palette.PLANK)
-	b.box(Vector3(minf(e, e + 0.15 * dir), 1.25, z - 0.05), Vector3(maxf(e, e + 0.15 * dir), 1.5, z + 0.05), Palette.PLANK)
+	b.box(Vector3(minf(a, e), 1.15, z - 0.06), Vector3(maxf(a, e), 1.6, z + 0.06), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(minf(e, e + 0.15 * dir), 1.25, z - 0.05), Vector3(maxf(e, e + 0.15 * dir), 1.5, z + 0.05), Palette.PLANK, BlockTextures.BOARD)
 	var m0 := x + 0.12 * dir
 	var m1 := x + 0.45 * dir
 	b.box(Vector3(minf(m0, m1), 1.24, z - 0.08), Vector3(maxf(m0, m1), 1.5, z + 0.08), dab)
@@ -438,7 +457,7 @@ func _add_bridge(b: Batch, s: Dictionary) -> void:
 	for k in range(o.x, o.x + s.size.x):
 		b.box(Vector3(k + 0.02, 0.14, o.y + 0.1), Vector3(k + 0.06, 0.15, o.y + s.size.y - 0.1), Palette.PLANK.darkened(0.25))
 	for z in [o.y + 0.1, o.y + s.size.y - 0.22]:
-		b.box(Vector3(x0, 0.14, z), Vector3(x1, 0.62, z + 0.12), Palette.LOG)
+		b.box(Vector3(x0, 0.14, z), Vector3(x1, 0.62, z + 0.12), Palette.LOG, BlockTextures.LOG)
 
 
 ## A segment of track (issues #121, #122): sleepers across the line and a rail each side where it's
@@ -468,10 +487,10 @@ func _add_station(b: Batch, s: Dictionary) -> void:
 	if not s.done:
 		b.box(Vector3(x0, 0, o.y + 0.05), Vector3(x1, 0.25, o.y + 0.95), Color(Palette.BLUE, 0.4))
 		return
-	b.box(Vector3(x0, 0, o.y + 0.05), Vector3(x1, 0.22, o.y + 0.95), Palette.COBBLE)
-	b.box(Vector3(x0, 0.22, o.y + 0.05), Vector3(x1, 0.3, o.y + 0.95), Palette.PLANK)
+	b.box(Vector3(x0, 0, o.y + 0.05), Vector3(x1, 0.22, o.y + 0.95), Palette.COBBLE, BlockTextures.COBBLES)
+	b.box(Vector3(x0, 0.22, o.y + 0.05), Vector3(x1, 0.3, o.y + 0.95), Palette.PLANK, BlockTextures.BOARD)
 	var stop := x0 if s.get("end", "village") == "village" else x1 - 0.25  # the buffer stop, at the line's end
-	b.box(Vector3(stop, 0, Road.LINE_ROW + 0.15), Vector3(stop + 0.25, 0.5, Road.LINE_ROW + 0.85), Palette.LOG)
+	b.box(Vector3(stop, 0, Road.LINE_ROW + 0.15), Vector3(stop + 0.25, 0.5, Road.LINE_ROW + 0.85), Palette.LOG, BlockTextures.LOG)
 	b.box(Vector3(stop - 0.02, 0.38, Road.LINE_ROW + 0.2), Vector3(stop + 0.27, 0.48, Road.LINE_ROW + 0.8), Palette.RED)
 
 
@@ -521,7 +540,7 @@ static var BUSH_GREEN := Color("#3F6B33")
 func _add_bush(b: Batch, bush: Dictionary) -> void:
 	var cx: float = bush.cell.x + 0.5
 	var cz: float = bush.cell.y + 0.5
-	b.box(Vector3(cx - 0.36, 0, cz - 0.36), Vector3(cx + 0.36, 0.42, cz + 0.36), BUSH_GREEN)
+	b.box(Vector3(cx - 0.36, 0, cz - 0.36), Vector3(cx + 0.36, 0.42, cz + 0.36), BUSH_GREEN, BlockTextures.FOLIAGE)
 	var spots := [Vector2(-0.18, 0.2), Vector2(0.2, -0.12), Vector2(0.05, 0.22)]
 	for i in bush.berries:
 		var p: Vector2 = spots[i % spots.size()]
@@ -532,11 +551,11 @@ func _add_bush(b: Batch, bush: Dictionary) -> void:
 func _add_signpost(b: Batch, c: Vector2i) -> void:
 	var x := c.x + 0.5
 	var z := c.y + 0.5
-	b.box(Vector3(x - 0.09, 0, z - 0.09), Vector3(x + 0.09, 1.8, z + 0.09), Palette.LOG)
+	b.box(Vector3(x - 0.09, 0, z - 0.09), Vector3(x + 0.09, 1.8, z + 0.09), Palette.LOG, BlockTextures.LOG)
 	# An arrow-shaped board pointing off the edge, with a sheep's white fleece painted on it.
-	b.box(Vector3(x - 0.7, 1.15, z - 0.06), Vector3(x + 0.15, 1.6, z + 0.06), Palette.PLANK)
-	b.box(Vector3(x - 0.85, 1.25, z - 0.05), Vector3(x - 0.7, 1.5, z + 0.05), Palette.PLANK)
-	b.box(Vector3(x - 0.45, 1.27, z - 0.08), Vector3(x - 0.12, 1.48, z + 0.08), SHEEP_WOOL)
+	b.box(Vector3(x - 0.7, 1.15, z - 0.06), Vector3(x + 0.15, 1.6, z + 0.06), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(x - 0.85, 1.25, z - 0.05), Vector3(x - 0.7, 1.5, z + 0.05), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(x - 0.45, 1.27, z - 0.08), Vector3(x - 0.12, 1.48, z + 0.08), SHEEP_WOOL, BlockTextures.FLEECE)
 	b.box(Vector3(x - 0.55, 1.33, z - 0.08), Vector3(x - 0.45, 1.44, z + 0.08), SHEEP_FACE)
 
 
@@ -545,10 +564,10 @@ func _add_signpost(b: Batch, c: Vector2i) -> void:
 func _add_route_sign(b: Batch, c: Vector2i) -> void:
 	var x := c.x + 0.5
 	var z := c.y + 0.5
-	b.box(Vector3(x - 0.09, 0, z - 0.09), Vector3(x + 0.09, 1.8, z + 0.09), Palette.LOG)
-	b.box(Vector3(x - 0.15, 1.15, z - 0.06), Vector3(x + 0.7, 1.6, z + 0.06), Palette.PLANK)
-	b.box(Vector3(x + 0.7, 1.25, z - 0.05), Vector3(x + 0.85, 1.5, z + 0.05), Palette.PLANK)
-	b.box(Vector3(x + 0.12, 1.24, z - 0.08), Vector3(x + 0.45, 1.5, z + 0.08), Palette.STONE)
+	b.box(Vector3(x - 0.09, 0, z - 0.09), Vector3(x + 0.09, 1.8, z + 0.09), Palette.LOG, BlockTextures.LOG)
+	b.box(Vector3(x - 0.15, 1.15, z - 0.06), Vector3(x + 0.7, 1.6, z + 0.06), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(x + 0.7, 1.25, z - 0.05), Vector3(x + 0.85, 1.5, z + 0.05), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(x + 0.12, 1.24, z - 0.08), Vector3(x + 0.45, 1.5, z + 0.08), Palette.STONE, BlockTextures.ROCK)
 	b.box(Vector3(x + 0.26, 1.33, z - 0.09), Vector3(x + 0.36, 1.42, z + 0.09), Palette.ITEM_COLORS.coal)
 
 
@@ -562,11 +581,11 @@ static var WHEAT_RIPE := Color("#D8B65A")
 func _add_crop(b: Batch, crop: Dictionary) -> void:
 	var x: float = crop.cell.x
 	var z: float = crop.cell.y
-	b.box(Vector3(x + 0.04, 0, z + 0.04), Vector3(x + 0.96, 0.03, z + 0.96), SOIL)
+	b.box(Vector3(x + 0.04, 0, z + 0.04), Vector3(x + 0.96, 0.03, z + 0.96), SOIL, BlockTextures.TILLED)
 	var stage := Sim.crop_stage(crop)
 	for row in 2:
 		var rz := z + 0.27 + row * 0.46
-		b.box(Vector3(x + 0.1, 0.03, rz - 0.09), Vector3(x + 0.9, 0.06, rz + 0.09), SOIL.darkened(0.18))
+		b.box(Vector3(x + 0.1, 0.03, rz - 0.09), Vector3(x + 0.9, 0.06, rz + 0.09), SOIL.darkened(0.18), BlockTextures.TILLED)
 		if stage == 0:
 			continue
 		var height: float = [0.0, 0.14, 0.3, 0.46, 0.58][stage]
@@ -587,7 +606,7 @@ func _add_item(b: Batch, s: Dictionary) -> void:
 		b.box(Vector3(cx - 0.25, 0.02, cz - 0.03), Vector3(cx + 0.25, 0.11, cz + 0.03), color.darkened(0.3))
 		return
 	if Defs.is_tool_item(s.type):
-		b.box(Vector3(cx - 0.3, 0, cz - 0.06), Vector3(cx + 0.3, 0.08, cz + 0.06), Palette.LOG)
+		b.box(Vector3(cx - 0.3, 0, cz - 0.06), Vector3(cx + 0.3, 0.08, cz + 0.06), Palette.LOG, BlockTextures.LOG)
 		b.box(Vector3(cx + 0.12, 0, cz - 0.16), Vector3(cx + 0.3, 0.14, cz + 0.16), color)
 		return
 	if s.type == "minecart":  # a tub on wheels, set down on the ground (issue #120)
@@ -600,7 +619,7 @@ func _add_item(b: Batch, s: Dictionary) -> void:
 	if s.type == "rail":  # rails lie in bundles: a pair of bars over a sleeper, a layer to every 4
 		for i in levels:
 			var y := i * 0.1
-			b.box(Vector3(cx - 0.3, y, cz - 0.08), Vector3(cx + 0.3, y + 0.05, cz + 0.08), Palette.LOG)
+			b.box(Vector3(cx - 0.3, y, cz - 0.08), Vector3(cx + 0.3, y + 0.05, cz + 0.08), Palette.LOG, BlockTextures.LOG)
 			for k in [-0.16, 0.16]:
 				b.box(Vector3(cx - 0.06 + k, y + 0.05, cz - 0.32), Vector3(cx + 0.06 + k, y + 0.1, cz + 0.32), color)
 		return
@@ -662,7 +681,7 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	for x in range(o.x, o.x + 5):
 		for y in range(o.y, o.y + 5):
 			if stage >= 1:
-				solid.box(Vector3(x, 0, y), Vector3(x + 1, 0.5, y + 1), Palette.COBBLE)
+				solid.box(Vector3(x, 0, y), Vector3(x + 1, 0.5, y + 1), Palette.COBBLE, BlockTextures.COBBLES)
 			else:
 				ghost.box(Vector3(x, 0, y), Vector3(x + 1, 0.5, y + 1), gcol)
 	if stage < 1:
@@ -678,7 +697,7 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 			var b := ghost if stage == 1 else solid
 			var cc := gcol if stage == 1 else c
 			var lo := 1.7 if Vector2i(x, y) == door else 0.5
-			b.box(Vector3(x, lo, y), Vector3(x + 1, 2.5, y + 1), cc)
+			b.box(Vector3(x, lo, y), Vector3(x + 1, 2.5, y + 1), cc, BlockTextures.LOG if corner else BlockTextures.BOARD)
 	if stage == 2:
 		_add_roof(ghost, o, gcol)
 	# A finished roof is drawn by _build_occluders, so it can be cut away.
@@ -697,12 +716,12 @@ func _add_fireplace(b: Batch, s: Dictionary) -> void:
 	var o: Vector2i = s.origin
 	var done: bool = s.done
 	var stone: Color = Palette.COBBLE if done else Color(Palette.BLUE, 0.45)
-	b.box(Vector3(o.x + 0.08, 0, o.y + 0.08), Vector3(o.x + 0.92, 0.5, o.y + 0.92), stone)
+	b.box(Vector3(o.x + 0.08, 0, o.y + 0.08), Vector3(o.x + 0.92, 0.5, o.y + 0.92), stone, BlockTextures.COBBLES)
 	# The back is away from the plot: rot 0 opens toward +y, 1 toward -x, 2 toward -y, 3 toward +x.
 	var back := [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)][int(s.get("rot", 0)) % 4] as Vector2
 	var c := Vector2(o.x + 0.5, o.y + 0.5)
 	var ch := c + back * 0.24
-	b.box(Vector3(ch.x - 0.2, 0.5, ch.y - 0.2), Vector3(ch.x + 0.2, 1.05, ch.y + 0.2), stone.darkened(0.08) if done else stone)
+	b.box(Vector3(ch.x - 0.2, 0.5, ch.y - 0.2), Vector3(ch.x + 0.2, 1.05, ch.y + 0.2), stone.darkened(0.08) if done else stone, BlockTextures.COBBLES)
 	if done:
 		var m := c - back * 0.3
 		b.box(Vector3(m.x - 0.2, 0.06, m.y - 0.2), Vector3(m.x + 0.2, 0.3, m.y + 0.2), EMBER)
@@ -726,16 +745,16 @@ func _add_board(b: Batch, s: Dictionary) -> void:
 		return
 	for k in [-1.0, 1.0]:
 		var p: Vector2 = c + side * 0.38 * k
-		b.box(Vector3(p.x - 0.06, 0, p.y - 0.06), Vector3(p.x + 0.06, 1.55, p.y + 0.06), Palette.LOG)
+		b.box(Vector3(p.x - 0.06, 0, p.y - 0.06), Vector3(p.x + 0.06, 1.55, p.y + 0.06), Palette.LOG, BlockTextures.LOG)
 	var half := side * 0.46 + depth * 0.04
-	b.box(Vector3(c.x - half.x, 0.7, c.y - half.y), Vector3(c.x + half.x, 1.45, c.y + half.y), Palette.PLANK)
+	b.box(Vector3(c.x - half.x, 0.7, c.y - half.y), Vector3(c.x + half.x, 1.45, c.y + half.y), Palette.PLANK, BlockTextures.BOARD)
 	var mc := c + front * 0.05
 	var sheet := side * 0.32 + depth * 0.01
 	b.box(Vector3(mc.x - sheet.x, 0.8, mc.y - sheet.y), Vector3(mc.x + sheet.x, 1.35, mc.y + sheet.y), MAP_SHEET)
 	# The route drawn on the map, and the red pin on the old mine at its end.
 	var route := c + front * 0.06
 	var line := side * 0.2 + depth * 0.012
-	b.box(Vector3(route.x - line.x, 1.0, route.y - line.y), Vector3(route.x + line.x, 1.04, route.y + line.y), Palette.LOG)
+	b.box(Vector3(route.x - line.x, 1.0, route.y - line.y), Vector3(route.x + line.x, 1.04, route.y + line.y), Palette.LOG, BlockTextures.LOG)
 	var pin := route + side * 0.2
 	b.box(Vector3(pin.x - 0.045, 0.98, pin.y - 0.045), Vector3(pin.x + 0.045, 1.08, pin.y + 0.045), Palette.RED)
 	var n := 0
@@ -746,8 +765,8 @@ func _add_board(b: Batch, s: Dictionary) -> void:
 	for i in crates:
 		var p: Vector2 = at + side * (float(i % 3) - 1.0) * 0.3
 		var y := float(i / 3) * 0.26
-		b.box(Vector3(p.x - 0.13, y, p.y - 0.13), Vector3(p.x + 0.13, y + 0.26, p.y + 0.13), CRATE)
-		b.box(Vector3(p.x - 0.135, y + 0.1, p.y - 0.135), Vector3(p.x + 0.135, y + 0.14, p.y + 0.135), Palette.LOG)
+		b.box(Vector3(p.x - 0.13, y, p.y - 0.13), Vector3(p.x + 0.13, y + 0.26, p.y + 0.13), CRATE, BlockTextures.BOARD)
+		b.box(Vector3(p.x - 0.135, y + 0.1, p.y - 0.135), Vector3(p.x + 0.135, y + 0.14, p.y + 0.135), Palette.LOG, BlockTextures.LOG)
 
 
 ## The chopping block (issue #177): a squat round of log with an axe bitten into its top.
@@ -756,9 +775,9 @@ func _add_chopping_block(b: Batch, s: Dictionary) -> void:
 	if not s.done:
 		b.box(Vector3(o.x + 0.15, 0, o.y + 0.15), Vector3(o.x + 0.85, 0.2, o.y + 0.85), Color(Palette.BLUE, 0.45))
 		return
-	b.box(Vector3(o.x + 0.2, 0, o.y + 0.2), Vector3(o.x + 0.8, 0.45, o.y + 0.8), Palette.LOG)
-	b.box(Vector3(o.x + 0.24, 0.45, o.y + 0.24), Vector3(o.x + 0.76, 0.48, o.y + 0.76), Palette.PLANK)
-	b.box(Vector3(o.x + 0.46, 0.48, o.y + 0.3), Vector3(o.x + 0.54, 0.62, o.y + 0.5), Palette.STONE)
+	b.box(Vector3(o.x + 0.2, 0, o.y + 0.2), Vector3(o.x + 0.8, 0.45, o.y + 0.8), Palette.LOG, BlockTextures.STUMP)
+	b.box(Vector3(o.x + 0.24, 0.45, o.y + 0.24), Vector3(o.x + 0.76, 0.48, o.y + 0.76), Palette.PLANK, BlockTextures.CUT)
+	b.box(Vector3(o.x + 0.46, 0.48, o.y + 0.3), Vector3(o.x + 0.54, 0.62, o.y + 0.5), Palette.STONE, BlockTextures.ROCK)
 	b.box(Vector3(o.x + 0.47, 0.55, o.y + 0.48), Vector3(o.x + 0.53, 0.6, o.y + 0.85), Palette.LOG.lightened(0.2))
 
 
@@ -769,10 +788,10 @@ func _add_mason_bench(b: Batch, s: Dictionary) -> void:
 		b.box(Vector3(o.x + 0.1, 0, o.y + 0.1), Vector3(o.x + 0.9, 0.2, o.y + 0.9), Color(Palette.BLUE, 0.45))
 		return
 	for k in [0.15, 0.75]:
-		b.box(Vector3(o.x + k, 0, o.y + 0.15), Vector3(o.x + k + 0.1, 0.55, o.y + 0.85), Palette.LOG)
-	b.box(Vector3(o.x + 0.08, 0.55, o.y + 0.1), Vector3(o.x + 0.92, 0.65, o.y + 0.9), Palette.PLANK)
-	b.box(Vector3(o.x + 0.25, 0.65, o.y + 0.3), Vector3(o.x + 0.6, 0.85, o.y + 0.65), Palette.COBBLE.lightened(0.15))
-	b.box(Vector3(o.x + 0.66, 0.65, o.y + 0.35), Vector3(o.x + 0.72, 0.69, o.y + 0.75), Palette.STONE)
+		b.box(Vector3(o.x + k, 0, o.y + 0.15), Vector3(o.x + k + 0.1, 0.55, o.y + 0.85), Palette.LOG, BlockTextures.LOG)
+	b.box(Vector3(o.x + 0.08, 0.55, o.y + 0.1), Vector3(o.x + 0.92, 0.65, o.y + 0.9), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(o.x + 0.25, 0.65, o.y + 0.3), Vector3(o.x + 0.6, 0.85, o.y + 0.65), Palette.COBBLE.lightened(0.15), BlockTextures.BRICKS)
+	b.box(Vector3(o.x + 0.66, 0.65, o.y + 0.35), Vector3(o.x + 0.72, 0.69, o.y + 0.75), Palette.STONE, BlockTextures.ROCK)
 
 
 static var COMPOST := Color("#4E3B28")
@@ -788,21 +807,21 @@ func _add_small_station(b: Batch, s: Dictionary) -> void:
 	var z := float(o.y)
 	match s.tpl:
 		"toolsmith_bench":  # a plank bench with a stone block for an anvil, and a hammer
-			b.box(Vector3(x + 0.1, 0, z + 0.15), Vector3(x + 0.9, 0.6, z + 0.85), Palette.PLANK)
-			b.box(Vector3(x + 0.25, 0.6, z + 0.3), Vector3(x + 0.6, 0.85, z + 0.7), Palette.STONE)
-			b.box(Vector3(x + 0.65, 0.6, z + 0.45), Vector3(x + 0.85, 0.66, z + 0.55), Palette.LOG)
+			b.box(Vector3(x + 0.1, 0, z + 0.15), Vector3(x + 0.9, 0.6, z + 0.85), Palette.PLANK, BlockTextures.BOARD)
+			b.box(Vector3(x + 0.25, 0.6, z + 0.3), Vector3(x + 0.6, 0.85, z + 0.7), Palette.STONE, BlockTextures.ROCK)
+			b.box(Vector3(x + 0.65, 0.6, z + 0.45), Vector3(x + 0.85, 0.66, z + 0.55), Palette.LOG, BlockTextures.LOG)
 		"composter":  # a plank bin full of dark compost
-			b.box(Vector3(x + 0.12, 0, z + 0.12), Vector3(x + 0.88, 0.7, z + 0.88), Palette.PLANK)
-			b.box(Vector3(x + 0.2, 0.2, z + 0.2), Vector3(x + 0.8, 0.72, z + 0.8), COMPOST)
+			b.box(Vector3(x + 0.12, 0, z + 0.12), Vector3(x + 0.88, 0.7, z + 0.88), Palette.PLANK, BlockTextures.BOARD)
+			b.box(Vector3(x + 0.2, 0.2, z + 0.2), Vector3(x + 0.8, 0.72, z + 0.8), COMPOST, BlockTextures.EARTH)
 		"lodge":  # a lean-to of logs with a hide stretched on its frame
-			b.box(Vector3(x + 0.1, 0, z + 0.1), Vector3(x + 0.9, 0.15, z + 0.9), Palette.LOG)
+			b.box(Vector3(x + 0.1, 0, z + 0.1), Vector3(x + 0.9, 0.15, z + 0.9), Palette.LOG, BlockTextures.LOG)
 			for k in [0.15, 0.75]:
-				b.box(Vector3(x + k, 0, z + 0.15), Vector3(x + k + 0.1, 1.0, z + 0.25), Palette.LOG)
-			b.box(Vector3(x + 0.2, 0.35, z + 0.17), Vector3(x + 0.8, 0.95, z + 0.23), Palette.ITEM_COLORS.leather)
+				b.box(Vector3(x + k, 0, z + 0.15), Vector3(x + k + 0.1, 1.0, z + 0.25), Palette.LOG, BlockTextures.LOG)
+			b.box(Vector3(x + 0.2, 0.35, z + 0.17), Vector3(x + 0.8, 0.95, z + 0.23), Palette.ITEM_COLORS.leather, BlockTextures.FLEECE)
 		"builder_table":  # a sawhorse and a trestle with a plank across them
 			for k in [0.12, 0.78]:
-				b.box(Vector3(x + k, 0, z + 0.2), Vector3(x + k + 0.1, 0.5, z + 0.8), Palette.LOG)
-			b.box(Vector3(x + 0.05, 0.5, z + 0.35), Vector3(x + 0.95, 0.58, z + 0.65), Palette.PLANK)
+				b.box(Vector3(x + k, 0, z + 0.2), Vector3(x + k + 0.1, 0.5, z + 0.8), Palette.LOG, BlockTextures.LOG)
+			b.box(Vector3(x + 0.05, 0.5, z + 0.35), Vector3(x + 0.95, 0.58, z + 0.65), Palette.PLANK, BlockTextures.BOARD)
 
 
 static var BED_BLANKET := Color("#B83A3A")
@@ -814,18 +833,18 @@ func _add_bed(b: Batch, o: Vector2i, ghost: bool) -> void:
 	var g := Color(Palette.BLUE, 0.45)
 	var x0 := float(o.x + 1) + 0.1
 	var z0 := float(o.y + 1) + 0.1
-	b.box(Vector3(x0, 0.5, z0), Vector3(x0 + 1.8, 0.72, z0 + 0.8), g if ghost else Palette.PLANK)
+	b.box(Vector3(x0, 0.5, z0), Vector3(x0 + 1.8, 0.72, z0 + 0.8), g if ghost else Palette.PLANK, BlockTextures.BOARD)
 	if ghost:
 		return
-	b.box(Vector3(x0 + 0.05, 0.72, z0 + 0.05), Vector3(x0 + 0.55, 0.84, z0 + 0.75), Palette.ITEM_COLORS.wool)
-	b.box(Vector3(x0 + 0.6, 0.72, z0 + 0.03), Vector3(x0 + 1.77, 0.82, z0 + 0.77), BED_BLANKET)
+	b.box(Vector3(x0 + 0.05, 0.72, z0 + 0.05), Vector3(x0 + 0.55, 0.84, z0 + 0.75), Palette.ITEM_COLORS.wool, BlockTextures.FLEECE)
+	b.box(Vector3(x0 + 0.6, 0.72, z0 + 0.03), Vector3(x0 + 1.77, 0.82, z0 + 0.77), BED_BLANKET, BlockTextures.FLEECE)
 
 
 func _add_roof(b: Batch, o: Vector2i, color: Color) -> void:
 	for a in 3:
 		for x in range(o.x + a, o.x + 5 - a):
 			for y in range(o.y + a, o.y + 5 - a):
-				b.box(Vector3(x, 2.5 + a * 0.5, y), Vector3(x + 1, 3.0 + a * 0.5, y + 1), color)
+				b.box(Vector3(x, 2.5 + a * 0.5, y), Vector3(x + 1, 3.0 + a * 0.5, y + 1), color, BlockTextures.SHINGLES)
 
 
 # ---------------------------------------------------------------- trees and roofs that get out of the way
@@ -881,9 +900,9 @@ func _build_occluders() -> void:
 		var b := see_through if fade else solid
 		var alpha := 0.3 if fade else 1.0
 		var boxes := _tree_boxes(t.cell, Sim.tree_stage(t))
-		b.box(boxes[0].position, boxes[0].end, Color(Palette.LOG, alpha))
-		b.box(boxes[1].position, boxes[1].end, Color(Palette.LEAVES, alpha))
-		b.box(boxes[2].position, boxes[2].end, Color(Palette.LEAVES, alpha))
+		b.box(boxes[0].position, boxes[0].end, Color(Palette.LOG, alpha), BlockTextures.LOG)
+		b.box(boxes[1].position, boxes[1].end, Color(Palette.LEAVES, alpha), BlockTextures.FOLIAGE)
+		b.box(boxes[2].position, boxes[2].end, Color(Palette.LEAVES, alpha), BlockTextures.FOLIAGE)
 	solid.apply(_trees)
 	see_through.apply(_trees_faded)
 	var roofs := Batch.new()

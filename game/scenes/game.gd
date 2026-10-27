@@ -1358,6 +1358,27 @@ func _screenshot_scene() -> void:
 				_target = Vector3(c.x + 0.5, 0, c.y + 1.5)
 				_place_camera()
 				break
+	if "--stations" in OS.get_cmdline_user_args():  # the house roofed and every workstation built, for the textures (issue #206)
+		house.store = {}
+		house.stage = 4
+		house.done = true
+		var near := at(6, 12)
+		for tpl in ["chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "fireplace", "board"]:
+			var spot = null
+			for d in 12:
+				for dx in range(-d, d + 1):
+					for dy in range(-d, d + 1):
+						var c := near + Vector2i(dx, dy)
+						if spot == null and sim.placement_check(tpl, c) == "" and sim.walkable(c):
+							spot = c
+			if spot != null:
+				var s := sim.place_site(tpl, spot)
+				s.stage = Defs.TEMPLATES[tpl].stages.size() - 1
+				s.done = true
+		sim.rev += 1
+		selection = {}
+		_target = Vector3(near.x + 0.5, 0, near.y + 0.5)
+		_place_camera()
 	if "--select-bench" in OS.get_cmdline_user_args():
 		_select(bench)
 	if "--craft" in OS.get_cmdline_user_args():
