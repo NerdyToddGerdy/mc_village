@@ -777,6 +777,16 @@ func open_menu(view: String) -> void:
 	_menu.show_view(view)
 
 
+## The HUD's Menu button (issue #216): opens the main menu as Esc does, or closes it again.
+func toggle_menu() -> void:
+	if not _menu.visible:
+		open_menu("main")
+	elif _menu.view == "main":
+		close_menu()
+	else:
+		_menu.back()
+
+
 func close_menu() -> void:
 	_menu.visible = false
 	speed = 1 if _menu.first else _menu_prev_speed
