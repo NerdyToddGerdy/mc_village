@@ -48,11 +48,33 @@ const ACTIONS := [
 	["pan_right", "Time and camera", "Pan right", [KEY_D, KEY_RIGHT]],
 	["zoom_in", "Time and camera", "Zoom in", [KEY_EQUAL, KEY_PLUS, KEY_KP_ADD]],
 	["zoom_out", "Time and camera", "Zoom out", [KEY_MINUS, KEY_KP_SUBTRACT]],
+	["panel1", "Selection", "Panel action 1", [KEY_Q]],
+	["panel2", "Selection", "Panel action 2", [KEY_E]],
+	["panel3", "Selection", "Panel action 3", [KEY_R]],
+	["panel4", "Selection", "Panel action 4", [KEY_Z]],
+	["panel5", "Selection", "Panel action 5", [KEY_X]],
+	["panel6", "Selection", "Panel action 6", [KEY_C]],
+	["panel7", "Selection", "Panel action 7", [KEY_V]],
+	["list1", "Selection", "List entry 1", [KEY_1]],
+	["list2", "Selection", "List entry 2", [KEY_2]],
+	["list3", "Selection", "List entry 3", [KEY_3]],
+	["list4", "Selection", "List entry 4", [KEY_4]],
+	["list5", "Selection", "List entry 5", [KEY_5]],
+	["list6", "Selection", "List entry 6", [KEY_6]],
+	["list7", "Selection", "List entry 7", [KEY_7]],
+	["list8", "Selection", "List entry 8", [KEY_8]],
+	["list9", "Selection", "List entry 9", [KEY_9]],
 	["menu", "Game", "Open the menu", [KEY_M]],
 	["controls", "Game", "Show the controls", [KEY_SLASH | KEY_MASK_SHIFT, KEY_QUESTION]],
 ]
 
 const FIXED := [KEY_ESCAPE]  ## Keys that can't be bound to anything.
+
+## The Selection group's keys act on the selection panel (issue #197), so they may share a key with an
+## order (Q E R Z X C V are the order keys too) or the speed keys (1 to 3, while a list is open), and
+## nothing else. They are looked up with panel_index() and list_index(), never action_for().
+const SELECTION := "Selection"
+const SHARED_WITH_SELECTION := ["speed1", "speed2", "speed3"]  ## besides the Orders group
 
 var path := "user://settings/keys.cfg"
 var keys := {}   ## action id -> Array of key codes
@@ -89,7 +111,7 @@ func load_file() -> void:
 	if fresh.has("paint") and keys.stock == [KEY_Z]:
 		keys.stock = []
 	for id in fresh:
-		keys[id] = keys[id].filter(func(k): return not keys.keys().any(func(o): return o != id and not fresh.has(o) and keys[o].has(k)))
+		keys[id] = keys[id].filter(func(k): return not keys.keys().any(func(o): return o != id and not fresh.has(o) and keys[o].has(k) and not may_share(id, o)))
 	var pins = cfg.get_value("tally", "pinned", [])
 	if pins is Array:
 		pinned = pins.filter(func(t): return t is String and Defs.ITEMS.has(t)).slice(0, Defs.MAX_PINNED)
@@ -115,6 +137,8 @@ func action_for(e: InputEventKey) -> String:
 	var code := event_code(e)
 	for exact in [true, false]:
 		for id in keys:
+			if group_of(id) == SELECTION:
+				continue
 			for k in keys[id]:
 				if (exact and k == code) or (not exact and k == e.keycode):
 					return id
@@ -128,10 +152,49 @@ func is_down(action: String) -> bool:
 	return false
 
 
-## The action already using `code`, other than `except`, or "".
+## The Selection action (panel1 to panel7) an event stands for, as an index from 0, or -1.
+func panel_index(e: InputEventKey) -> int:
+	return _selection_index(e, "panel", 7)
+
+
+## The list entry (list1 to list9) an event stands for, as an index from 0, or -1.
+func list_index(e: InputEventKey) -> int:
+	return _selection_index(e, "list", 9)
+
+
+func _selection_index(e: InputEventKey, prefix: String, n: int) -> int:
+	var code := event_code(e)
+	for exact in [true, false]:
+		for i in n:
+			for k in keys["%s%d" % [prefix, i + 1]]:
+				if (exact and k == code) or (not exact and k == e.keycode):
+					return i
+	return -1
+
+
+static func group_of(action: String) -> String:
+	for a in ACTIONS:
+		if a[0] == action:
+			return a[1]
+	return ""
+
+
+## Whether two actions may be bound to the same key: a Selection action and an order or a speed key.
+static func may_share(a: String, b: String) -> bool:
+	var ga := group_of(a)
+	var gb := group_of(b)
+	if ga == SELECTION and gb != SELECTION:
+		return gb == "Orders" or SHARED_WITH_SELECTION.has(b)
+	if gb == SELECTION and ga != SELECTION:
+		return ga == "Orders" or SHARED_WITH_SELECTION.has(a)
+	return false
+
+
+## The action already using `code`, other than `except`, or "". A Selection action and an order
+## don't count as using each other's keys (issue #197).
 func used_by(code: int, except := "") -> String:
 	for id in keys:
-		if id != except and keys[id].has(code):
+		if id != except and keys[id].has(code) and (except == "" or not may_share(id, except)):
 			return id
 	return ""
 

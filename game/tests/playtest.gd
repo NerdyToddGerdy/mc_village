@@ -304,6 +304,31 @@ func _initialize() -> void:
 	await key(KEY_F)
 	check(game.selection.get("ids", []) == [ada.id], "F selects the next resident")
 
+	# Panel keys (issue #197): select a tree, and Q marks it to mine; select Tomas, and his job key opens the list
+	var pk_tree = Sim.nearest(sim.trees.filter(func(t): return t.alive and Sim.grown(t) and not t.des), Sim.rcell(ada))
+	game.selection = {"kind": "tree", "id": pk_tree.id}
+	game._hud.refresh(sim)
+	await frames(2)
+	await key(KEY_Q)
+	check(pk_tree.des, "selecting a tree and pressing Q marks it to mine")
+	await key(KEY_Q)
+	check(not pk_tree.des, "and Q again unmarks it")
+	game.selection = {"kind": "res", "ids": [tomas.id]}
+	game._hud.refresh(sim)
+	await frames(2)
+	var jk := -1
+	for i in game._hud._panel_btns.size():
+		if "▾" in game._hud._panel_btns[i].text:
+			jk = i
+	check(jk >= 0, "Tomas's job dropdown has a panel key")
+	if jk >= 0:
+		await key(game.keys.keys["panel%d" % (jk + 1)][0])
+		game._hud.refresh(sim)
+		check(game._hud.list_open(), "its key opens the job list")
+		await key(KEY_ESCAPE)
+		check(not game._hud.list_open(), "and Esc closes it")
+	game.selection = {}
+
 	# Right-click order with a hint
 	# A free tree that's actually what's under the cursor at its screen spot (not hidden behind a house).
 	var t2: Dictionary = {}
@@ -590,15 +615,16 @@ func _initialize() -> void:
 	check(not game._hud._tools_drop.visible and not game._menu.visible, "pinned, Esc closes it (and doesn't open the menu)")
 
 	# Menu by mouse: save, load with confirmation, controls, start over
-	# Esc closes an open tool, menu or panel before it opens the game menu, and the real-time clicks
-	# above sometimes leave one open.
-	var still_open := {"tool": game.tool, "menu": game.menu_open, "jobs board": game.jobs_board_open, "craft panel": game.craft_menu_open, "planner": game.planner_open}
+	# Esc closes an open tool, menu, panel or selection before it opens the game menu (issue #197), and
+	# the real-time clicks above sometimes leave one open.
+	var still_open := {"tool": game.tool, "menu": game.menu_open, "jobs board": game.jobs_board_open, "craft panel": game.craft_menu_open, "planner": game.planner_open, "selection": game.selection}
 	for k in still_open.keys():
 		if not still_open[k]:
 			still_open.erase(k)
 	if not still_open.is_empty():
 		print("     (closing %s first)" % still_open)
-		await key(KEY_ESCAPE)
+		for i in still_open.size():
+			await key(KEY_ESCAPE)
 	await key(KEY_ESCAPE)
 	check(game._menu.visible and game.speed == 0, "Esc opens the menu and pauses (tool \"%s\", menu \"%s\", jobs board %s, craft %s, planner %s)" % [game.tool, game.menu_open, game.jobs_board_open, game.craft_menu_open, game.planner_open])
 	check(await click_button("Save game"), "click Save game")

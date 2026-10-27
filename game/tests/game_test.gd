@@ -329,6 +329,149 @@ func _test_work_area_painting(game: Game) -> void:
 	check(game.tool == "" and game.selection.get("id", 0) == block.id, "Esc puts the tool away and keeps the selection")
 
 
+## The key shown on a button's keycap, or "".
+func _cap_text(b: Button) -> String:
+	var cap = b.get_meta("keycap", null)
+	if cap == null:
+		return ""
+	return (cap.get_child(0) as Label).text
+
+
+## Issue #197: the selection panel's buttons have keys Q E R Z X C V, and 1–9 pick a list's entries.
+func _test_panel_keys(game: Game) -> void:
+	var hud: Hud = game._hud
+	var sim := game.sim
+	game.keys.reset()
+	game.set_tool("")
+	game.craft_menu_open = false
+	game.jobs_board_open = false
+	game.book_open = false
+	if game._menu.visible:
+		game.close_menu()
+	# The bindings: Selection keys share keys with orders and the speed keys, and with nothing else.
+	var kb: KeyBindings = game.keys
+	var x := InputEventKey.new()
+	x.keycode = KEY_X
+	check(kb.action_for(x) == "mine" and kb.panel_index(x) == 4, "X is both the Mine order and Panel action 5, told apart by context")
+	check(kb.used_by(KEY_Q, "mine") == "" and kb.used_by(KEY_1, "list1") == "" and kb.used_by(KEY_W, "panel1") == "pan_up", "a Selection key may share with an order or a speed key, not with panning (%s)" % kb.used_by(KEY_W, "panel1"))
+	check(kb.used_by(KEY_Q, "panel2") == "panel1", "two Selection keys can't share")
+	# A tree: Q marks it to mine, and again unmarks it; E keeps it.
+	var tree: Dictionary = sim.trees.filter(func(t): return t.alive and Sim.grown(t) and not t.des and not t.get("keep", false))[0]
+	game.selection = {"kind": "tree", "id": tree.id}
+	hud.refresh(sim)
+	await _frames()
+	check(hud._panel_btns.size() >= 2 and hud._panel_btns[0].text == "Mine" and _cap_text(hud._panel_btns[0]) == "Q", "a tree's Mine button shows Q (%s)" % [hud._panel_btns.map(func(b): return b.text)])
+	check(_cap_text(hud._panel_btns[1]) == "E", "and the next button shows E")
+	_key(game, KEY_Q)
+	check(tree.des, "Q marks the selected tree to mine")
+	hud.refresh(sim)
+	await _frames()
+	check(hud._panel_btns[0].text == "Cancel mining" and game.selection.get("id", 0) == tree.id, "the selection stays, and the button now reads Cancel mining")
+	_key(game, KEY_Q)
+	check(not tree.des, "Q again unmarks it")
+	hud.refresh(sim)
+	await _frames()
+	_key(game, KEY_E)
+	check(tree.get("keep", false) and game.menu_open == "", "E keeps it, and doesn't open the gather menu")
+	_key(game, KEY_E)
+	# A sheep: Q marks it to hunt.
+	var sheep: Dictionary = sim.sheep.filter(func(a): return a.alive)[0]
+	game.selection = {"kind": "animal", "id": sheep.id}
+	hud.refresh(sim)
+	await _frames()
+	var before: Variant = sheep.des
+	_key(game, KEY_Q)
+	check(sheep.des != before, "Q marks the selected sheep to hunt")
+	# A resident: a key opens the job dropdown, then a number picks a job, and the speed is untouched.
+	var res: Dictionary = sim.residents.filter(func(r): return r.role != "all")[0] if sim.residents.any(func(r): return r.role != "all") else sim.add_resident("Tester", Sim.TRAVELERS[0][1], sim.nearest_walkable(Vector2i(8, 8)))
+	game.selection = {"kind": "res", "ids": [res.id]}
+	hud.refresh(sim)
+	await _frames()
+	var drop_i := -1
+	for i in hud._panel_btns.size():
+		if "▾" in hud._panel_btns[i].text:
+			drop_i = i
+	check(drop_i >= 0, "the resident's job dropdown has a panel key (%s)" % [hud._panel_btns.map(func(b): return b.text)])
+	var speed_before := game.speed
+	_key(game, game.keys.keys["panel%d" % (drop_i + 1)][0])
+	hud.refresh(sim)
+	await _frames()
+	check(hud.list_open(), "its key opens the list")
+	var entries: Array = hud.list_entries()
+	var second_job: String = ""
+	for jb in Defs.JOBS + ["none"]:
+		if entries.size() > 1 and entries[1].get_meta("label", "").contains("Job choice: " + ("No job" if jb == "none" else Defs.JOB_NAMES[jb])):
+			second_job = jb
+	var old_role: String = res.role
+	_key(game, KEY_2)
+	check(game.speed == speed_before and res.role != old_role, "2 picks the list's second entry (%s to %s), not 2× speed" % [old_role, res.role])
+	hud.refresh(sim)
+	await _frames()
+	check(not hud.list_open(), "the list closes after a pick")
+	# F still cycles residents while one is selected.
+	if sim.residents.size() > 1:
+		game.selection = {"kind": "res", "ids": [sim.residents[0].id]}
+		_key(game, KEY_F)
+		check(game.selection.get("ids", []) != [sim.residents[0].id], "F selects the next resident")
+	# A farm plot: the Remove key arms it, another key disarms it, and twice removes it.
+	var farm_at: Vector2i = sim.nearest_walkable(Vector2i(14, 14))
+	sim.paint_farm(Rect2i(farm_at, Vector2i(1, 1)))
+	var crop: Dictionary = sim.farm[farm_at] if sim.farm.has(farm_at) else sim.farm.values()[0]
+	game.selection = {"kind": "crop", "id": crop.id}
+	hud.refresh(sim)
+	await _frames()
+	var rm_i := -1
+	for i in hud._panel_btns.size():
+		if hud._panel_btns[i].text == "Remove this plot":
+			rm_i = i
+	check(rm_i >= 0, "a farm plot's panel has Remove this plot with a key")
+	var rm_key: Key = game.keys.keys["panel%d" % (rm_i + 1)][0]
+	_key(game, rm_key)
+	check(sim.farm.has(crop.cell) and hud._panel_btns[rm_i].text.begins_with("Click again"), "the first press only arms it")
+	_key(game, KEY_W)
+	check(hud._panel_btns[rm_i].text == "Remove this plot", "another key disarms it")
+	_key(game, rm_key)
+	_key(game, rm_key)
+	check(not sim.farm.has(crop.cell), "the same key twice removes it")
+	# A bench: its key opens the craft menu.
+	var bench: Dictionary = sim.sites.filter(func(st): return st.tpl == "bench" and st.done)[0] if sim.sites.any(func(st): return st.tpl == "bench" and st.done) else {}
+	if not bench.is_empty():
+		game.selection = {"kind": "site", "id": bench.id}
+		hud.refresh(sim)
+		await _frames()
+		var cm_i := -1
+		for i in hud._panel_btns.size():
+			if hud._panel_btns[i].text == "Open the craft menu":
+				cm_i = i
+		check(cm_i >= 0, "a bench's panel has the craft menu button with a key")
+		_key(game, game.keys.keys["panel%d" % (cm_i + 1)][0])
+		check(game.craft_menu_open, "its key opens the craft menu")
+		game.craft_menu_open = false
+	# Nothing selected: the order keys keep their meanings. Esc clears a selection.
+	game.selection = {"kind": "tree", "id": tree.id}
+	_key(game, KEY_ESCAPE)
+	check(game.selection.is_empty() and not game._menu.visible, "Esc clears the selection first")
+	_key(game, KEY_X)
+	check(game.tool == "mine", "with nothing selected, X picks Mine")
+	game.set_tool("")
+	_key(game, KEY_E)
+	check(game.menu_open == "gather", "and E opens the gather menu")
+	game.set_tool("")
+	# Rebinding Panel action 1 moves the badge and the key.
+	game.keys.assign("panel1", KEY_T)
+	hud._keys_sig = ""
+	game.selection = {"kind": "tree", "id": tree.id}
+	hud.refresh(sim)
+	await _frames()
+	check(_cap_text(hud._panel_btns[0]) == "T", "after rebinding Panel action 1, the badge shows T")
+	_key(game, KEY_T)
+	check(tree.des and game.tool == "", "and T marks the tree, not placing a bench")
+	_key(game, KEY_T)
+	game.keys.reset()
+	hud._keys_sig = ""
+	game.selection = {}
+
+
 ## Issue #216: a Menu button on the HUD opens the Esc menu, shows the menu key and follows a rebind.
 func _test_menu_button(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -1344,6 +1487,7 @@ func _initialize() -> void:
 	_test_order_menus(game)
 	_test_menu_button(game)
 	await _test_work_area_painting(game)
+	await _test_panel_keys(game)
 	_test_key_migration()
 	await _test_craft_menu(game)
 	await _test_right_click_never_silent(game)
