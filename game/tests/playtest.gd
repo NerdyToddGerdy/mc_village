@@ -295,6 +295,9 @@ func _initialize() -> void:
 	check(Sim.level(ada, "lumber") >= 2, "Ada's Lumberjack level has risen with practice (level %d)" % Sim.level(ada, "lumber"))
 
 	# Toast button and next-resident key
+	for t in game._hud._toast_list:  # older toasts have Go to buttons too, and would be found first
+		t.node.queue_free()
+	game._hud._toast_list.clear()
 	game._hud.add_toast({"text": "Tomas moved into the new house.", "res_id": tomas.get("id", 0), "site_id": 0})
 	check(await click_button("Go to them"), "click a toast's Go to button")
 	check(game.selection.get("ids", []) == [tomas.get("id", -1)], "the toast selects Tomas")
@@ -483,6 +486,8 @@ func _initialize() -> void:
 	await drag(screen(Vector2i(0, 0)), screen(Vector2i(31, 31)), false, true)  # Alt: boulders only
 	await key(KEY_ESCAPE)
 	check(await play_until(240, func(): return sim.free_count("cobble") >= 9), "Ada breaks boulders for cobblestone (%d)" % sim.free_count("cobble"))
+	for b in sim.boulders:  # her stone is in: leave the rest for Tomas's own rounds, which the next steps check
+		b.des = false
 
 	# Mason's bench (issue #177): built from the Build menu; Tomas, made the Stonemason, breaks the
 	# boulders around it on his own and piles the stone beside it

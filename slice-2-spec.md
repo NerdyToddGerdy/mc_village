@@ -101,7 +101,7 @@ Slice 2 is done when, from a fresh start, a player can:
 - **Berries:** each holds up to 3, and one grows back every 45 seconds.
 - **Eating:** a hungry resident walks to the nearest food. At a bush, they eat berries one at a time, 15 each, until nearly full (90) or the bush is bare.
 - **Walking:** bushes don't block it.
-- **Buildings:** a building placed over a bush clears it.
+- **Buildings:** a building placed over a bush digs it up, and its berries are carried off like any debris (§8, #205).
 - **Older saves:** they get the same bushes, minus any that would sit on something.
 
 **Hunger** runs from 100 (full) to 0 and drops steadily, emptying in about 6 minutes of game time.
@@ -350,6 +350,15 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 - **Its panel** shows its chests, how many of their stacks are full, and what they hold.
 - **Before any storage:** the founding's first logs stay where they were dropped, as before.
 - **Later (each its own issue):** more chests or a bigger building, storehouses marked for food or crafting, a granary or pantry, and a loading dock by the village station.
+
+**Clearing the footprint (#205).** Whatever lies where a building goes is carried off before building starts, so nothing is left lying under or inside it, and nothing teleports.
+- **Debris** is anything on the footprint that isn't the building: loose stacks (including what felling, breaking and lifting a sapling drop there), berry bushes and crops. Trees and boulders are felled and broken as before.
+- **Clearing comes first.** A blueprint's first stage takes no deliveries and no build work until its footprint is clear. This covers walked-over buildings (the bridge, track and boundary stakes) too.
+- **Haulers carry the stacks off** to a stockpile, a workstation's pile or a storehouse, as ordinary haul jobs, ahead of ordinary hauling. If the village has no storage at all yet, they carry them to the nearest open cell beside the building instead (the first logs stay loose, as before).
+- **Bushes** are dug up when the blueprint is placed, and their berries are set beside it and carried off with the rest. Crops are dropped as before.
+- **Nothing new lands there:** items are never set down on an unfinished blueprint's footprint. Felling a tree on it drops the logs on the nearest open cell outside it. When a building turns solid, only residents and animals are moved off.
+- **The placement hint** names it all: "Clears 2 trees, 6 logs and a bush."
+- **The blueprint's panel and stuck list:** "Clearing: 2 trees, 6 logs and a bush to move" (waiting, since it's in hand), and "Clearing: no room in a stockpile for 6 logs", a real stall, when a stack has nowhere to go.
 
 **Land claims (#187).** The village isn't a fixed 32×32: it grows by strips as it gains residents. A save keeps its own size.
 - **Unlocking:** one **land claim** for every 2 residents beyond the founding pair, so a fourth resident earns the first. The top bar shows "1 land claim" while one is available.

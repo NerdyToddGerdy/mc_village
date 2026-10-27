@@ -150,8 +150,8 @@ One use is one tree felled or one boulder broken. When durability reaches 0, the
 - **Never blocked by:** trees, boulders or stockpile cells. Placing over them clears them:
   - Trees and boulders in the footprint are marked to chop and break.
   - Stockpile cells under the footprint are removed.
-  - Loose items are moved aside when the foundation goes down.
-  - The cursor hint says what will be cleared ("Clears 2 trees and 1 boulder").
+  - Loose items and berry bushes are cleared too: haulers carry the stacks off, and nothing jumps (slice-2-spec.md §8, #205). In the prototype they're still moved aside when the foundation goes down.
+  - The cursor hint says what will be cleared ("Clears 2 trees and 1 boulder"; the Godot game adds "6 logs and a bush").
 - **Blocked by (red outline, reason on hover):** another building, or the map edge.
 - **While clearing:**
   - The site takes no deliveries and no build work until its footprint is clear.
