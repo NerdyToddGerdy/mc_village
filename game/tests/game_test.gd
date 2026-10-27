@@ -1140,6 +1140,28 @@ func _test_meadow(game: Game) -> void:
 	hud.refresh(sim)
 	await process_frame
 	check(game.adventure == OldMine.ID and game.plan.dest == OldMine.ID and not hud._loc_drop.visible, "choosing the old mine shows its planner and closes the list")
+	# The cargo priority list (issue #185): rows to turn on and off, reorder and set amounts.
+	var by_label := func(label: String) -> Button:
+		for n in _walk(hud._plan_box):
+			if n is Button and n.get_meta("label", "") == label and not n.is_queued_for_deletion():
+				return n
+		return null
+	check(game.plan.list.map(func(r): return r.item) == ["coal", "cobble"] and by_label.call("Bring back: Coal") != null, "the planner lists the old mine's cargo: coal, then cobblestone")
+	by_label.call("Cobblestone up").pressed.emit()
+	check(game.plan.list.map(func(r): return r.item) == ["cobble", "coal"], "▲ moves cobblestone above coal")
+	hud.refresh(sim)
+	await process_frame
+	by_label.call("Cobblestone more").pressed.emit()
+	check(game.plan.list[0].n == 1 and game.plan.target == {"item": "cobble", "n": 1}, "+ sets an amount, and the old target follows the list")
+	by_label.call("Cobblestone less").pressed.emit()
+	check(game.plan.list[0].n == 0, "− back to as much as fits")
+	hud.refresh(sim)
+	await process_frame
+	by_label.call("Bring back: Cobblestone").pressed.emit()
+	check(not game.plan.list[0].on and game.plan.target.item == "coal", "a row can be turned off")
+	hud.refresh(sim)
+	await process_frame
+	check(_walk(hud._plan_box).any(func(n): return n is Label and n.text == "Max" and not n.is_queued_for_deletion()), "a row with no amount reads Max")
 
 
 func _frames(n := 3) -> void:

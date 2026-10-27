@@ -196,7 +196,7 @@ func _initialize() -> void:
 	check(find_button("Adventure: Old mine") != null and find_button("Adventure: Meadow") != null, "the dropdown lists the old mine and the meadow")
 	check(await click_button("Adventure: Meadow"), "pick the meadow")
 	check(await click_button("Tomas"), "add Tomas")
-	check(await click_button("Wool"), "send them for wool")
+	check(await plan_wants("Wool"), "send them for wool")
 	var plan: Dictionary = game.plan
 	check(plan.dest == Meadow.ID and plan.party.size() == 2 and plan.target.item == "wool" and plan.picks == 0, "the plan: two of them to the meadow, for wool (%s)" % [plan])
 	check(await click_button("Start packing"), "click Start packing")
@@ -260,7 +260,7 @@ func _initialize() -> void:
 	check(game.adventure == OldMine.ID and visible_label("Old mine"), "its report and planner open")
 	check(visible_label("“%s”" % OldMine.TOLD), "the report says what the village has been told")
 	check(await click_button("Tomas"), "add Tomas to the party")
-	check(await click_button("Coal"), "send them for coal")
+	check(await plan_wants("Coal"), "send them for coal")
 	check(await click_button("meals more"), "take one more meal")
 	check(game.plan.party == [ada.id, tomas.id] and game.plan.meals == 4 and game.plan.target.item == "coal", "the plan is Ada and Tomas, 4 meals, for coal (%s)" % [game.plan])
 	check(await click_button("Start packing"), "click Start packing")

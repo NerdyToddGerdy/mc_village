@@ -86,6 +86,8 @@ func _init() -> void:
 		"test_storehouse_chests",
 		"test_land_claims",
 		"test_blueprints_clear_their_footprint",
+		"test_cargo_priority_list_plans",
+		"test_cargo_priority_list_at_the_site",
 		"test_mason_bench_becomes_a_mineshaft",
 		"test_work_areas_are_painted",
 		"test_work_areas_saved",
@@ -1723,7 +1725,7 @@ func test_planning_an_expedition() -> void:
 	plan.meals = 3
 	plan.picks = 1
 	check(Sim.pack_capacity(plan) == Tuning.PACK_CAPACITY and Sim.cargo_room(plan) == Tuning.PACK_CAPACITY - 4, "one member's packs: 4 supplies leave %d for cargo" % Sim.cargo_room(plan))
-	Sim.aim_plan(plan, "coal", Sim.cargo_room(plan) + 1)
+	sim.aim_plan(plan, "coal", Sim.cargo_room(plan) + 1)
 	check(sim.plan_problems(plan).has("The packs only have room for %d of what's wanted" % Sim.cargo_room(plan)), "a target bigger than the packs says so: %s" % [sim.plan_problems(plan)])
 	plan.meals += 2
 	check(Sim.cargo_room(plan) == Tuning.PACK_CAPACITY - 6, "more provisions leave less room for cargo")
@@ -1737,7 +1739,7 @@ func test_planning_an_expedition() -> void:
 	plan.spend_return = true
 	check(Sim.site_minutes(plan) > kept and kept > 0.0, "spending the return food stretches the time on site (%.1f → %.1f min)" % [kept, Sim.site_minutes(plan)])
 	plan.spend_return = false
-	Sim.aim_plan(plan, plan.target.item, 6)
+	sim.aim_plan(plan, plan.target.item, 6)
 	for k in plan.policy:
 		plan.policy[k] = false
 	check(sim.plan_problems(plan).has("Choose when the party comes home"), "a plan needs a return policy")
@@ -1773,7 +1775,7 @@ func test_staging_and_departure() -> void:
 	plan.party = [ada.id]
 	plan.meals = 2
 	plan.picks = 1
-	Sim.aim_plan(plan, plan.target.item, 6)
+	sim.aim_plan(plan, plan.target.item, 6)
 	check(sim.plan_expedition(plan) == "", "planned")
 	run(sim, 1)
 	check(stuck_text(sim).contains("Expedition: No meals to pack. Cooks make them at the fireplace, or plan fewer"), "with no meals, it says so and how to fix it: " + stuck_text(sim))
@@ -1842,7 +1844,7 @@ func send_party(sim: Sim) -> Dictionary:
 	plan.party = [ada.id, tomas.id]
 	plan.meals = 4
 	plan.picks = 1
-	Sim.aim_plan(plan, "coal", 6)
+	sim.aim_plan(plan, "coal", 6)
 	sim.plan_expedition(plan)
 	b.store = {"bread": 4, "stone_pick": 1}
 	b.tools = [{"type": "stone_pick", "dur": 9}]
@@ -1978,7 +1980,7 @@ func test_party_works_the_site() -> void:
 	var p2 := send_party(sim2)
 	until_at_site(sim2, [p2.ada, p2.tomas])
 	sim2.expedition.policy = {"target": false, "full": false, "low": false}
-	Sim.aim_plan(sim2.expedition, sim2.expedition.target.item, 99)
+	sim2.aim_plan(sim2.expedition, sim2.expedition.target.item, 99)
 	p2.ada.hunger = 30.0
 	p2.tomas.hunger = 30.0
 	run(sim2, 5)
@@ -2000,7 +2002,7 @@ func test_party_works_the_site() -> void:
 	var p3 := send_party(sim3)
 	until_at_site(sim3, [p3.ada, p3.tomas])
 	sim3.expedition.policy = {"target": false, "full": true, "low": false}
-	Sim.aim_plan(sim3.expedition, "cobble", 99)
+	sim3.aim_plan(sim3.expedition, "cobble", 99)
 	sim3.expedition.cargo = {"cobble": Sim.pack_capacity(sim3.expedition) - sim3.pack_load() - 3}  # nearly full already
 	for i in 300 * Tuning.TPS:
 		sim3.step()
@@ -2571,7 +2573,7 @@ func test_the_door_down_and_back() -> void:
 	check(ada.map == two_id and tomas.map == two_id and sim.at_site(ada) and two.visited, "the party walks down through the door into Level 2")
 	check(Sim.rcell(ada).x <= 3, "in at its entrance")
 	sim.expedition.policy = {"target": true, "full": true, "low": false}
-	Sim.aim_plan(sim.expedition, "coal", sim.objective_packed() + 6)  # 6 more, from Level 2
+	sim.aim_plan(sim.expedition, "coal", sim.objective_packed() + 6)  # 6 more, from Level 2
 	run(sim, 5)
 	var mid := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(mid.maps.has(two_id) and mid.get_map(two_id).pattern == two.pattern and mid.get_map(two_id).level == 2 and mid.residents[0].map == two_id, "saving with two levels keeps both, and the party down on Level 2")
@@ -2667,7 +2669,7 @@ func send_party_to(sim: Sim, dest: String, target: Dictionary, meals := 4, solo 
 	if target.item == "pens":
 		plan.target = target
 	else:
-		Sim.aim_plan(plan, target.item, target.n)
+		sim.aim_plan(plan, target.item, target.n)
 	var err := sim.plan_expedition(plan)
 	b.store = {"bread": meals}
 	for i in 30 * Tuning.TPS:
@@ -4009,3 +4011,119 @@ func test_mason_bench_becomes_a_mineshaft() -> void:
 	check(again.get("shaft", false) and Sim.station_name(again) == "Mineshaft", "a mineshaft is saved and loaded")
 	var raw: Dictionary = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v32.save"))
 	check(not SaveFormat.upgrade(raw).has("error"), "a v32 save upgrades")
+
+
+## Issue #185: a plan carries a ranked list of what to bring back; each place starts from its defaults and
+## then remembers the last list used.
+func test_cargo_priority_list_plans() -> void:
+	var sim := Sim.new_game()
+	var board := built_board(sim)
+	var plan := sim.new_plan(OldMine.ID)
+	var items: Array = plan.list.map(func(r): return r.item)
+	check(items == ["coal", "cobble"] and plan.list[0].n == 8 and plan.list[1].n == 0, "the old mine starts with coal then cobblestone as much as fits, iron unknown yet (%s)" % [items])
+	var mead := sim.new_plan(Meadow.ID)
+	check(mead.list.map(func(r): return r.item) == ["wool", "leather", "beef", "porkchop", "mutton"] and mead.list[0].n == 6, "the meadow starts with wool, leather, then meat")
+	check(plan.target == {"item": "coal", "n": 8}, "the old single target is the first row with an amount")
+	# A row can be turned off, and an amount of 0 is as much as fits.
+	plan.list[0].on = false
+	Sim.sync_target(plan)
+	check(Sim.cargo_rows(plan).map(func(r): return r.item) == ["cobble"] and plan.target.item == "cobble", "an item that's off is left, and the target follows the list")
+	plan.list[1].on = false
+	plan.party = [sim.residents[0].id]
+	check(sim.plan_problems(plan).has("Choose something to bring back"), "with nothing on, the plan says so: %s" % [sim.plan_problems(plan)])
+	# Reordering, then confirming: the next plan for the place starts from that list.
+	plan.list[0].on = true
+	plan.list[1].on = true
+	var first: Dictionary = plan.list[0]
+	plan.list[0] = plan.list[1]
+	plan.list[1] = first
+	plan.list[0].n = 5
+	plan.list[1].n = 6
+	Sim.sync_target(plan)
+	plan.picks = 0
+	var confirmed := sim.plan_expedition(plan)
+	check(confirmed == "", "the plan is confirmed (%s)" % confirmed)
+	check(sim.cargo_lists[OldMine.ID].map(func(r): return r.item) == ["cobble", "coal"] and sim.cargo_lists[OldMine.ID][0].n == 5, "the place remembers the list")
+	sim.expedition = {}
+	var again := sim.new_plan(OldMine.ID)
+	check(again.list.map(func(r): return r.item) == ["cobble", "coal"] and again.list[0].n == 5, "and the next plan starts from it")
+	# A newly known item joins at the bottom, marked New.
+	sim.get_map(OldMine.ID).discovered = true
+	var learned := sim.new_plan(OldMine.ID)
+	check(learned.list.map(func(r): return r.item) == ["cobble", "coal", "iron_ore"] and learned.list[2].get("new", false) and learned.list[2].n == 0, "iron, once known, joins at the bottom marked New (%s)" % [learned.list.map(func(r): return r.item)])
+	# Target reached counts only the rows with an amount that are on.
+	sim.expedition = {"target": {"item": "coal", "n": 3}, "cargo": {"coal": 3}, "list": [{"item": "coal", "on": true, "n": 3}, {"item": "cobble", "on": true, "n": 0}, {"item": "iron_ore", "on": false, "n": 5}]}
+	check(sim.objective_met(), "target reached once the rows with an amount are packed, whatever as-much rows hold or off rows want")
+	sim.expedition.cargo = {"coal": 2}
+	check(not sim.objective_met(), "not before")
+	sim.expedition.list = [{"item": "coal", "on": true, "n": 0}]
+	check(not sim.objective_met(), "a list of as-much-as-fits rows is never reached: the packs filling is what ends it")
+	sim.expedition = {}
+	# An old save's trip in progress turns its single target into a one-row list.
+	var raw := {"state": {"expedition": {"dest": "old_mine", "state": "out", "target": {"item": "coal", "n": 5}}}}
+	var up := SaveFormat._v33_to_v34(raw)
+	check(up.state.expedition.list == [{"item": "coal", "on": true, "n": 5}, {"item": "iron_ore", "on": true, "n": 0}, {"item": "cobble", "on": true, "n": 0}] and up.state.cargo_lists == {}, "an old trip's target becomes a one-row list with the rest as much as fits (%s)" % [up.state.expedition.get("list")])
+	var pens := {"state": {"expedition": {"dest": "meadow", "state": "out", "target": {"item": "pens", "n": 2}}}}
+	check(not SaveFormat._v33_to_v34(pens).state.expedition.has("list"), "and a pen-tending trip needs none")
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(back.cargo_lists == sim.cargo_lists, "the remembered lists are saved")
+
+
+## Issue #185: at the site the party packs by the list, swaps a better find in for the lowest cargo, never packs
+## what's off, and marks down the list.
+func test_cargo_priority_list_at_the_site() -> void:
+	var sim := Sim.new_game()
+	var p := send_party(sim)
+	until_at_site(sim, [p.ada, p.tomas])
+	var ex: Dictionary = sim.expedition
+	ex.policy = {"target": false, "full": false, "low": false}
+	# Packing follows the order: cobblestone before coal, and the packs full of coal.
+	ex.list = [{"item": "cobble", "on": true, "n": 0}, {"item": "coal", "on": true, "n": 0}]
+	Sim.sync_target(ex)
+	ex.cargo = {"coal": sim.pack_room()}
+	check(sim.pack_room() == 0 and not sim.swap_candidate().is_empty() == false, "the packs are full of coal")
+	sim.on_map(OldMine.ID, func(): sim.drop_items(sim.nearest_walkable(sim.m.entrance + Vector2i(2, 0)), "cobble", 3))
+	var swap: Dictionary = sim.on_map(OldMine.ID, func(): return sim.swap_candidate())
+	check(not swap.is_empty() and swap.drop == "coal" and swap.stack.type == "cobble", "a better find would swap out the lowest cargo (%s)" % [swap.get("drop", "")])
+	run(sim, 90.0)
+	check(ex.cargo.get("cobble", 0) >= 3, "the party packs the cobblestone (%s)" % [ex.cargo])
+	check(sim.on_map(OldMine.ID, func(): return count(sim, "coal")) > 0, "and the coal it swapped out is left at the site as a stack")
+	# What's off is never packed, and several on are all packed.
+	var sim2 := Sim.new_game()
+	var p2 := send_party(sim2)
+	until_at_site(sim2, [p2.ada, p2.tomas])
+	var ex2: Dictionary = sim2.expedition
+	ex2.policy = {"target": false, "full": false, "low": false}
+	ex2.list = [{"item": "coal", "on": true, "n": 2}, {"item": "cobble", "on": false, "n": 0}, {"item": "iron_ore", "on": true, "n": 2}]
+	Sim.sync_target(ex2)
+	sim2.on_map(OldMine.ID, func():
+		sim2.drop_items(sim2.nearest_walkable(sim2.m.entrance + Vector2i(2, 0)), "cobble", 3)
+		sim2.drop_items(sim2.nearest_walkable(sim2.m.entrance + Vector2i(3, 1)), "coal", 2)
+		sim2.drop_items(sim2.nearest_walkable(sim2.m.entrance + Vector2i(4, 0)), "iron_ore", 2)
+		for b in sim2.boulders:
+			b.des = false)
+	ex2.cargo = {}
+	run(sim2, 60.0)
+	check(ex2.cargo.get("coal", 0) >= 2 and ex2.cargo.get("iron_ore", 0) >= 2, "several rows on are all packed (%s)" % [ex2.cargo])
+	check(ex2.cargo.get("cobble", 0) == 0, "an item that's off is never packed (%s)" % [ex2.cargo])
+	# Marking goes down the list: the row with an amount first, the next once it's packed.
+	var sim3 := Sim.new_game()
+	var p3 := send_party(sim3)
+	until_at_site(sim3, [p3.ada, p3.tomas])
+	var ex3: Dictionary = sim3.expedition
+	ex3.list = [{"item": "coal", "on": true, "n": 3}, {"item": "cobble", "on": true, "n": 0}]
+	Sim.sync_target(ex3)
+	ex3.cargo = {}
+	sim3.on_map(OldMine.ID, func():
+		for b in sim3.boulders:
+			b.des = false
+		sim3._mark_objective())
+	var marked_a: Array = sim3.on_map(OldMine.ID, func(): return sim3.boulders.filter(func(b): return b.alive and b.des))
+	check(not marked_a.is_empty() and marked_a.any(func(b): return b.get("ore", "") == "coal" or not b.has("ore")), "with coal short, what's marked is toward the coal (%d marked)" % marked_a.size())
+	ex3.cargo = {"coal": 3}
+	sim3.on_map(OldMine.ID, func():
+		for b in sim3.boulders:
+			b.des = false
+		sim3._mark_objective())
+	var marked_b: Array = sim3.on_map(OldMine.ID, func(): return sim3.boulders.filter(func(b): return b.alive and b.des))
+	check(not marked_b.is_empty() and marked_b.all(func(b): return not b.has("ore")), "with the coal packed, the next row's stone is what's marked (%d)" % marked_b.size())

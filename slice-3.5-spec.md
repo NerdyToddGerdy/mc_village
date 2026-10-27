@@ -185,3 +185,14 @@ Save format **v21** (#139, #140):
 | `FULL_SET_SERIOUS` | 0.5 | A full set multiplies the chance an injury is serious by this. |
 | `ARMOR_USES` | 8 | Hazards a piece takes before it wears out. |
 | `MAX_PINNED` | 4 | Items pinned to the tally bar. |
+
+
+## The cargo priority list (#185)
+
+A plan carries a **ranked list** of what to bring back (`plan.list`: rows `{item, on, n}`, `n` 0 for "as much as fits"), instead of one target. `plan.target` stays, kept in step by `Sim.sync_target`, as the first row that's on with an amount, for what shows only one item. Tending the pens (§ pens) has no list.
+- **Defaults and memory.** A place with no remembered list starts from `Tuning.CARGO_DEFAULTS` (the old mine: iron, coal, then cobblestone as much as fits; the meadow: wool 6, leather, then meat), kept to the items the village knows the place gives. Confirming a plan stores its list in `sim.cargo_lists[dest]`; the next plan starts from it, and an item newly known joins at the bottom with `new` set. Per level filtering and a toast for a newly found item aren't built yet.
+- **The planner.** The Bring back section is the list: a tick (off is left behind), the name, − amount + (Max at 0), ▲ ▼. The packs' bar shows the wanted amounts against the room.
+- **Packing.** The party stows only items that are on, best row first; the room the packs keep for the rows above an item is respected. A better item turning up when the packs are full **swaps out** the lowest-priority cargo, which is set down at the entrance as a stack (`Sim.swap_candidate`), and "packs full" waits while a swap is possible.
+- **Marking.** `_mark_objective` goes down the list: the first row that wants more gets its nearest blocks (or animals) marked, up to the party's size. A row with an amount that isn't packed yet holds the rows below it back, as the old single target did; once it's packed (or for a row set to Max) the marking moves down.
+- **Coming home.** "Target reached" is every row with an amount packed; at least one such row is needed, and Max rows never block it.
+- **Saving:** v34 keeps `cargo_lists`; a trip in progress turns its old target into a one-row list with the rest of its place's items at Max.

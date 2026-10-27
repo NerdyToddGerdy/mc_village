@@ -2809,21 +2809,25 @@ func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
 		var up := _button("▲", func(): game.plan_cargo_move(i, -1), "Secondary")
 		up.disabled = i == 0
 		up.tooltip_text = "Bring it back before the one above"
+		up.set_meta("label", "%s up" % Defs.ITEMS[row.item].label)
 		var down := _button("▼", func(): game.plan_cargo_move(i, 1), "Secondary")
 		down.disabled = i == list.size() - 1
 		down.tooltip_text = "Bring it back after the one below"
+		down.set_meta("label", "%s down" % Defs.ITEMS[row.item].label)
 		for b in [up, down]:
 			b.add_theme_font_size_override("font_size", Palette.CAPTION)
 		h.add_child(up)
 		h.add_child(down)
 		var less := _button("−", func(): game.plan_cargo_amount(i, -1), "Secondary")
 		less.disabled = row.n <= 0
+		less.set_meta("label", "%s less" % Defs.ITEMS[row.item].label)
 		var amount := _label("Max" if row.n <= 0 else "%d" % row.n, false, Palette.CHALK if row.on and not tend else Palette.CHALK_DIM)
 		amount.custom_minimum_size.x = 34
 		amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		amount.tooltip_text = "How many to bring back. Max takes as much as fits."
 		amount.mouse_filter = Control.MOUSE_FILTER_STOP
 		var more := _button("+", func(): game.plan_cargo_amount(i, 1), "Secondary")
+		more.set_meta("label", "%s more" % Defs.ITEMS[row.item].label)
 		h.add_child(less)
 		h.add_child(amount)
 		h.add_child(more)

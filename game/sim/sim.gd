@@ -4288,6 +4288,8 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 ## fits), and `new` on one the village has just learned the place gives. The old single `target` is kept as the
 ## first row that's on, for what shows only one item.
 static func cargo_rows(plan: Dictionary) -> Array:
+	if plan.target.item == "pens":  # tending the pens brings back whatever's hunted, with no list
+		return []
 	return plan.get("list", []).filter(func(r): return r.on)
 
 
@@ -4310,11 +4312,12 @@ static func sync_target(plan: Dictionary) -> void:
 
 ## Sets a plan's (or an expedition's) list to one wanted item first, then everything else its place gives as much
 ## as fits: the old single objective, for plans made in code.
-static func aim_plan(plan: Dictionary, item: String, n: int) -> void:
+func aim_plan(plan: Dictionary, item: String, n: int) -> void:
 	var rows: Array = [{"item": item, "on": true, "n": n}]
+	var known: Array = plan_targets(plan.dest).map(func(x): return x.item)
 	var others: Array = ["wool", "mutton", "leather", "beef", "porkchop"] if plan.dest == Meadow.ID else ["iron_ore", "coal", "cobble"]
 	for o in others:
-		if o != item:
+		if o != item and known.has(o):
 			rows.append({"item": o, "on": true, "n": 0})
 	plan.list = rows
 	plan.target = {"item": item, "n": n}
@@ -5789,6 +5792,8 @@ func _priority_stack(st: Dictionary) -> bool:
 ## Whether anything lying at the site can still go into the packs: an item on the list while there's room
 ## (the room kept for the rows above it aside), or one that outranks something in the packs.
 func _stowable() -> bool:
+	if tending():  # whatever the herd gives, in the room there is
+		return pack_room() > 0 and not stacks_where(func(s): return avail(s) > 0).is_empty()
 	if not swap_candidate().is_empty():
 		return true
 	var room := pack_room()
@@ -5811,6 +5816,8 @@ func _stow_job(r: Dictionary, c: Vector2i):
 	var loose: Array = [swap.stack] if not swap.is_empty() else stacks_where(func(s):
 		if avail(s) <= 0:
 			return false
+		if tending():
+			return true
 		for row in cargo_rows(expedition):
 			if row.item == s.type:
 				return row.n <= 0 or cargo_have(s.type) < row.n or not working
@@ -5841,6 +5848,17 @@ func _stow_job(r: Dictionary, c: Vector2i):
 	return j
 
 
+## An item the party learns the place gives while it's there (the iron vein, surveyed) joins its list at the
+## bottom, marked New, and a toast says so (issue #185).
+func _learn_items() -> void:
+	if tending() or not expedition.has("list"):
+		return
+	for x in plan_targets(expedition.dest):
+		if not expedition.list.any(func(r): return r.item == x.item):
+			expedition.list.append({"item": x.item, "on": true, "n": 0, "new": true})
+			_toast("%s is known in the %s now. It joins the list of what to bring back." % [Defs.ITEMS[x.item].label, maps[expedition.dest].name.to_lower()], expedition.party[0])
+
+
 ## Marks what the list asks for, going down it (issue #185): the first row that still wants more gets its
 ## nearest blocks marked, nearest the entrance first, a block at a time, until what's packed, lying about and
 ## marked will make its amount (an as-much-as-fits row always wants more). At the meadow an animal is hunted
@@ -5862,12 +5880,16 @@ func _mark_objective() -> void:
 				have += st.n
 		if m.sheep.any(func(a): return a.alive and gives(a, item)):  # the meadow: the animals that give it (issue #137)
 			var hunted := m.sheep.filter(func(a): return a.alive and a.des and gives(a, item))
+			if row.n > 0 and cargo_have(item) >= row.n:
+				continue  # that amount is packed: on to the next row
 			if row.n > 0 and have + hunted.size() * block_yield(item) >= row.n:
-				continue
+				return  # enough is marked or lying about: the next row waits until it's packed
 			if m.sheep.filter(func(a): return a.alive and a.des).size() >= party_size:
 				return
 			var herd := m.sheep.filter(func(a): return a.alive and not a.des and a.get("pen", 0) == 0 and gives(a, item))  # pens are the player's (issue #139)
 			if herd.is_empty():
+				if row.n > 0:
+					return  # a row with an amount holds the rows below it back until it's packed
 				continue
 			var a: Dictionary = nearest(herd, m.entrance)
 			a.des = true
@@ -5875,17 +5897,23 @@ func _mark_objective() -> void:
 			rev += 1
 			return
 		var marked := m.boulders.filter(func(b): return b.alive and b.des and gives(b, item))
+		if row.n > 0 and cargo_have(item) >= row.n:
+			continue  # that amount is packed: on to the next row
 		if row.n > 0 and have + marked.size() * block_yield(item) >= row.n:
-			continue
+			return  # enough is marked or lying about: the next row waits until it's packed
 		if m.boulders.filter(func(b): return b.alive and b.des).size() >= party_size:
 			return
 		var door := MineLevels.door_front(m) if m.door_state == "closed" else Vector2i(-1, -1)  # digging to the door is the player's call (#132)
 		var free := m.boulders.filter(func(b): return b.alive and not b.des and not b.get("hidden", false) and not b.get("loose", false) and gives(b, item) and b.cell != door)
 		if free.is_empty():
+			if row.n > 0:
+				return
 			continue
 		var b: Dictionary = nearest(free, m.entrance)
 		var way := _way_through(b.cell)
 		if way.is_empty():
+			if row.n > 0:
+				return
 			continue
 		b = way[0]  # the block itself, or the first boulder in the way to it
 		b.des = true
@@ -5977,6 +6005,7 @@ func _step_site() -> void:
 	if not expedition.party.all(func(id): return at_site(resident(id))):
 		return
 	if tick % 10 == 0:
+		_learn_items()
 		_mark_objective()
 		var why := policy_met()
 		if why != "":

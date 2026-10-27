@@ -118,6 +118,42 @@ func _all(n: Node) -> Array:
 	return out
 
 
+## Sets the plan's cargo list through the board's buttons (issue #185): `label` (an item's label, such as "Coal") on, at
+## the top of the list, with `n` wanted (0 leaves the amount alone). With `only`, the other rows that want an amount are
+## turned off.
+func plan_wants(label: String, n := 0, only := false) -> bool:
+	var item := ""
+	for k in Defs.ITEMS:
+		if Defs.ITEMS[k].get("label", "") == label:
+			item = k
+	var at := func() -> int:
+		for i in game.plan.list.size():
+			if game.plan.list[i].item == item:
+				return i
+		return -1
+	if at.call() < 0:
+		return false
+	if not game.plan.list[at.call()].on and not await click_button("Bring back: " + label):
+		return false
+	for i in 10:
+		if at.call() == 0:
+			break
+		if not await click_button(label + " up"):
+			return false
+	if n > 0:
+		for i in 40:
+			var have: int = game.plan.list[0].n
+			if have == n:
+				break
+			if not await click_button(label + (" more" if have < n else " less")):
+				return false
+	for i in range(1, game.plan.list.size() if only else 1):  # with `only`, the other rows that want an amount are off: this is the one thing the trip is for
+		var other: Dictionary = game.plan.list[i]
+		if other.on and other.n > 0 and not await click_button("Bring back: " + Defs.ITEMS[other.item].label):
+			return false
+	return game.plan.list[0].item == item and game.plan.list[0].on
+
+
 ## Picks a destination from the expedition board's Location dropdown (issue #181).
 func pick_location(name: String) -> bool:
 	if not await click_button("Location"):

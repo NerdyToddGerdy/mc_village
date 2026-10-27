@@ -72,9 +72,7 @@ func _initialize() -> void:
 	await settle()
 	check(game.adventure == OldMine.ID and visible_label("Old mine"), "its site report and planner open (%s)" % game.adventure)
 	check(await click_button("Tomas"), "add Tomas")
-	check(await click_button("Stone"), "send them for stone")
-	for i in 2:
-		await click_button("target more")
+	check(await plan_wants("Cobblestone", 10), "send them for 10 cobblestone")
 	check(await click_button("picks less"), "no spare pickaxe: both have their own")
 	for i in 3:
 		await click_button("meals more")
@@ -219,7 +217,7 @@ func _initialize() -> void:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(await pick_location("Old mine"), "the board: pick the old mine again")
-	check(await click_button("Coal"), "send the party for coal")
+	check(await plan_wants("Coal", 0, true), "send the party for coal")
 	check(await click_button("picks less"), "no spare pickaxe")
 	var goer0 := sim.resident(game.plan.party[0])
 	if goer0.pick == null:  # set up by command: whoever's free first may have lost theirs on the last trip
