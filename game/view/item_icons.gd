@@ -37,6 +37,11 @@ static func _draw(img: Image, type: String) -> void:
 				_disc(img, p, 12, dark)
 			for p in [Vector2(22, 26), Vector2(41, 24), Vector2(30, 42), Vector2(46, 41)]:
 				_disc(img, p, 9, c.lightened(0.1 if p.x > 35 else 0.0))
+		"stone_brick":  # two courses of dressed stone, offset like a wall (issue #178)
+			for row in [[Rect2i(6, 14, 26, 16), Rect2i(34, 14, 24, 16)], [Rect2i(6, 34, 14, 16), Rect2i(22, 34, 26, 16), Rect2i(50, 34, 8, 16)]]:
+				for rc in row:
+					_box(img, rc, dark)
+					_box(img, rc.grow(-3), c)
 		"sapling":  # a thin stem with two leaves (issue #177)
 			_line(img, Vector2(32, 54), Vector2(32, 22), 9, dark)
 			_line(img, Vector2(32, 54), Vector2(32, 22), 4, Palette.LOG)

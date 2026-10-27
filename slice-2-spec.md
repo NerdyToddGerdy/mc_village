@@ -215,6 +215,11 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 - **Ada** works marked trees and boulders but never makes her own work, so she never clears the land on her own.
 - **Saplings (settles #22 for village trees):** a felled tree drops 1 sapling, with a 30% chance of a second. A lumberjack plants saplings on open grass in a chopping block's work area. The spot must be off protected land and off the map's edge, at least 3 cells from another tree and 2 from a boulder. A sapling grows into a full tree in 5 minutes: it shows as a sapling, then a young tree at half-time, then a full tree. Until then it can't be marked or chopped, though it blocks the way like a tree. A blueprint placed over a sapling lifts it back into a sapling item. Saplings are stockpiled and hauled like anything else.
 - **The workstation's panel** shows its pile, its target, the resident who has claimed it (#184), and its stuck reasons.
+- **Processing (#178):** each workstation is also a station with a queue, and gets a tab in the Craft panel.
+  - The chopping block saws **5 planks from a log** ("Sawn planks"), against the bench's 4. A level-4 lumberjack saws 6. The bench's Planks recipe stays.
+  - The mason's bench cuts **2 cobblestone into 2 stone bricks**. Stone bricks are a new building material. Nothing uses them yet; the mason's workshop, the kitchen and a sturdier house will.
+  - Sawing is Lumberjack work and cutting is Stonemason work, so their levels speed it up. Ada does it too, like all station work.
+  - **Standing order:** a chopping block keeps 20 planks and a mason's bench 10 stone bricks, set in steps of 5 in its panel and its Craft panel tab (0 is off). While the village has fewer, it queues one batch at a time, like the fireplace's meals, when the inputs are on hand. Batches queued by hand are made regardless.
 
 **Jobs make their own work (#183).** A resident whose job has no marked work finds work of that job by themselves, but only within limits the player has set up. Marks come first, and anyone whose job fits can work them. Ada never makes her own work.
 
@@ -342,6 +347,7 @@ Taken together, the upgrade steps:
 - Gives each resident one job, and Ada Everything, in place of the switches and priorities (v21→v22, #134; see §5).
 - Hands existing benches, fireplaces, chopping blocks and mason's benches to residents whose jobs match (v23→v24, #184; see §5).
 - Starts every species at the default herd floor (v24→v25, #183).
+- Gives each existing chopping block and mason's bench the default standing order: 20 planks, 10 stone bricks (v25→v26, #178).
 - Turns a Mine resident into a Lumberjack, with Mine's experience in both Lumberjack and Stonemason (v22→v23, #177; see §5). No village has a workstation, sapling or Keep mark yet.
 - Marks no tools as chosen (v11→v12, equipping).
 - Gives older saves a full meadow with nobody away (v12→v13, #50).
@@ -414,6 +420,7 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 | `work_radius` | 8 cells around a chopping block or mason's bench (#177) |
 | `work_store` | 20 logs or cobblestone in a workstation's pile |
 | `keep_stock` / `keep_step` | 20 by default / steps of 5 |
+| `make_keep` / `make_step` | 20 planks at a chopping block, 10 stone bricks at a mason's bench / steps of 5 (#178) |
 | `herd_floor` | 2 wild animals of each species, until changed on the jobs board (#183) |
 | `saplings` / `sapling_extra` | 1 per felled tree / 30% chance of a second |
 | `sapling_grow` / `plant_tree_time` | 300 s / 2 s |

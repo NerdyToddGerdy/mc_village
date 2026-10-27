@@ -9,6 +9,8 @@ const ITEMS := {
 	"cobble": {"one": "cobblestone", "many": "cobblestone", "label": "Cobblestone", "group": "building"},
 	# Dropped by a felled tree, and planted by a lumberjack (issue #177).
 	"sapling": {"one": "sapling", "many": "saplings", "label": "Saplings", "group": "building"},
+	# Cut at the mason's bench (issue #178), for the upgrades to come.
+	"stone_brick": {"one": "stone brick", "many": "stone bricks", "label": "Stone bricks", "group": "building"},
 	"wool": {"one": "wool", "many": "wool", "label": "Wool", "group": "animal"},
 	"mutton": {"one": "raw mutton", "many": "raw mutton", "label": "Mutton", "group": "food"},
 	"wheat": {"one": "wheat", "many": "wheat", "label": "Wheat", "group": "food"},
@@ -99,6 +101,9 @@ const RECIPES := [
 	{"id": "cooked_porkchop", "name": "Cooked porkchop", "inp": {"porkchop": 1, "log": 1}, "out": {"cooked_porkchop": 1}, "at": "fireplace", "doing": "Cooking a porkchop", "fuel": "log"},
 	# Smelting (issue #104): coal is the fuel. It's Cook work, like everything at the fireplace.
 	{"id": "smelt_iron", "name": "Smelt iron", "inp": {"iron_ore": 1, "coal": 1}, "out": {"iron_ingot": 1}, "at": "fireplace", "doing": "Smelting iron", "fuel": "coal"},
+	# Workstations process their material (issue #178): Lumberjack and Stonemason work.
+	{"id": "saw_planks", "name": "Sawn planks", "inp": {"log": 1}, "out": {"plank": 5}, "at": "chopping_block", "doing": "Sawing planks", "pattern": ["   ", " L ", "   "]},
+	{"id": "stone_bricks", "name": "Stone bricks", "inp": {"cobble": 2}, "out": {"stone_brick": 2}, "at": "mason_bench", "doing": "Cutting stone bricks", "pattern": ["   ", "CC ", "   "]},
 ]
 
 const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot", "H": "leather"}
@@ -144,12 +149,13 @@ const TEMPLATES := {
 		{"name": "Fireplace", "verb": "needs", "cost": {"cobble": 6}},
 	]},
 	# Workstations (issue #177): a gatherer's job building. `work` names the job whose gatherers use it,
-	# what they gather in its work area, and the item it stores in a pile beside it.
-	"chopping_block": {"name": "Chopping block", "size": Vector2i(1, 1), "plot": "sawmill",
+	# what they gather in its work area, and the item it stores in a pile beside it. Each is also a
+	# station that processes what it gathers (issue #178): `makes` is its standing order's recipe.
+	"chopping_block": {"name": "Chopping block", "size": Vector2i(1, 1), "plot": "sawmill", "station": true, "makes": "saw_planks",
 		"work": {"job": "lumber", "kind": "tree", "item": "log"}, "stages": [
 		{"name": "Chopping block", "verb": "needs", "cost": {"plank": 4}},
 	]},
-	"mason_bench": {"name": "Mason's bench", "size": Vector2i(1, 1), "plot": "mason's workshop",
+	"mason_bench": {"name": "Mason's bench", "size": Vector2i(1, 1), "plot": "mason's workshop", "station": true, "makes": "stone_bricks",
 		"work": {"job": "mason", "kind": "boulder", "item": "cobble"}, "stages": [
 		{"name": "Mason's bench", "verb": "needs", "cost": {"plank": 2, "cobble": 4}},
 	]},

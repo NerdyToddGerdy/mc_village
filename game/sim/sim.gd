@@ -304,11 +304,14 @@ static func role_name(r: Dictionary) -> String:
 	return Defs.JOB_SKILLED[r.role].capitalize()
 
 
-## Which job a recipe's work belongs to: the fireplace's is Cook, the bench's tools are Toolsmith,
-## and the rest (planks, sticks) is Craft.
+## Which job a recipe's work belongs to: the fireplace's is Cook, a workstation's is its gatherers'
+## (issue #178), the bench's tools are Toolsmith, and the rest (planks, sticks) is Craft.
 static func recipe_job(rec: Dictionary) -> String:
-	if rec.get("at", "bench") == "fireplace":
+	var at: String = rec.get("at", "bench")
+	if at == "fireplace":
 		return "cook"
+	if Defs.TEMPLATES[at].has("work"):
+		return Defs.TEMPLATES[at].work.job
 	for o in rec.out:
 		if Defs.is_tool_item(o):
 			return "toolsmith"
@@ -362,7 +365,7 @@ static func carry_cap(r: Dictionary) -> int:
 
 
 ## A recipe's inputs and outputs as this resident makes it: a level-4 cook bakes bread from 2
-## wheat, and a level-4 crafter gets 5 planks from a log.
+## wheat, a level-4 crafter gets 5 planks from a log, and a level-4 lumberjack saws 6 (issue #178).
 static func recipe_for(r: Dictionary, rec: Dictionary) -> Dictionary:
 	var out := rec.duplicate(true)
 	if r.is_empty():
@@ -371,6 +374,8 @@ static func recipe_for(r: Dictionary, rec: Dictionary) -> Dictionary:
 		out.inp.wheat = 2
 	if rec.id == "planks" and level(r, "craft") >= 4:
 		out.out.plank = 5
+	if rec.id == "saw_planks" and level(r, "lumber") >= 4:
+		out.out.plank = 6
 	return out
 
 
@@ -981,6 +986,31 @@ func keep_meals_stocked() -> void:
 				f.autoq.append(true)
 				meals += 1
 				break
+
+
+## The workstations' standing orders (issue #178): while the village has fewer planks (or stone bricks)
+## than a chopping block's (or mason's bench's) target, queue one batch whose inputs are on hand. One
+## at a time, like the fireplace's meals.
+func keep_made_stocked() -> void:
+	for s in m.sites:
+		if not s.done or s.get("make_keep", 0) <= 0 or s.autoq.has(true):
+			continue
+		var rec := Defs.recipe(Defs.TEMPLATES[s.tpl].get("makes", ""))
+		if rec.is_empty() or free_count(rec.out.keys()[0]) >= s.make_keep:
+			continue
+		var ok := true
+		for k in rec.inp:
+			if s.store.get(k, 0) + s.incoming.get(k, 0) + free_count(k) < rec.inp[k]:
+				ok = false
+		if ok:
+			s.queue.append(rec.id)
+			s.autoq.append(true)
+
+
+## Sets a workstation's standing order target (issue #178); 0 turns it off.
+func set_make_keep(s: Dictionary, n: int) -> void:
+	s.make_keep = maxi(0, n)
+	rev += 1
 
 
 # ---------------------------------------------------------------- workstations (issue #177)
@@ -2108,6 +2138,7 @@ func _claim(r: Dictionary) -> void:
 	if auto_craft:
 		expand_queues()
 	keep_meals_stocked()
+	keep_made_stocked()
 	keep_tools_stocked()
 	# Their job's work, then hauling; Ada everything, in Slice 1's order (spec §5, issue #134).
 	var jobs := job_list(r)
@@ -2127,7 +2158,7 @@ const CLAIM_ORDER := ["station", "build", "farm", "gather", "haul"]
 func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 	match kind:
 		"station":
-			var st_jobs: Array = jobs.filter(func(jb): return jb in ["craft", "toolsmith", "cook"])
+			var st_jobs: Array = jobs.filter(func(jb): return jb in ["craft", "toolsmith", "cook", "lumber", "mason"])
 			if st_jobs.is_empty():
 				return null
 			var benches := m.sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty() and s.crafter == 0 and not bench_craftable(s, st_jobs).is_empty() and not _cooling(s))
@@ -2363,6 +2394,7 @@ func _step_map() -> void:
 		expand_queues()
 	if tick % 10 == 0:
 		keep_meals_stocked()
+		keep_made_stocked()
 		keep_tools_stocked()
 	if tick % 10 == 0:
 		for s in m.sites:
@@ -3413,6 +3445,8 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 		s.keep_meals = true
 	if not work_of(s).is_empty():
 		s.keep = Tuning.KEEP_STOCK
+	if Defs.TEMPLATES[tpl].has("makes"):
+		s.make_keep = Tuning.MAKE_KEEP[tpl]
 	m.sites.append(s)
 	_occ_dirty = true
 	for c in site_cells(s):

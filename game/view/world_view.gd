@@ -604,6 +604,14 @@ func _add_item(b: Batch, s: Dictionary) -> void:
 			for k in [-0.16, 0.16]:
 				b.box(Vector3(cx - 0.06 + k, y + 0.05, cz - 0.32), Vector3(cx + 0.06 + k, y + 0.1, cz + 0.32), color)
 		return
+	if s.type == "stone_brick":  # bricks lie in courses, each offset from the one below (issue #178)
+		for i in levels:
+			var y := i * 0.13
+			var off := 0.0 if i % 2 == 0 else 0.12
+			for k in 2:
+				var x0 := cx - 0.3 + off + k * 0.3
+				b.box(Vector3(x0, y, cz - 0.26), Vector3(minf(x0 + 0.28, cx + 0.3), y + 0.12, cz + 0.26), color if k == 0 else color.darkened(0.08))
+		return
 	if s.type == "iron_ingot":  # ingots lie as bars, two to a layer, crossing each layer (issue #103)
 		for i in levels:
 			var y := i * 0.12
