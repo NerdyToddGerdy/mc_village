@@ -1723,8 +1723,8 @@ func test_planning_an_expedition() -> void:
 	plan.meals = 3
 	plan.picks = 1
 	check(Sim.pack_capacity(plan) == Tuning.PACK_CAPACITY and Sim.cargo_room(plan) == Tuning.PACK_CAPACITY - 4, "one member's packs: 4 supplies leave %d for cargo" % Sim.cargo_room(plan))
-	plan.target.n = Sim.cargo_room(plan) + 1
-	check(sim.plan_problems(plan).has("The packs only have room for %s" % Defs.words("coal", Sim.cargo_room(plan))), "a target bigger than the packs says so: %s" % [sim.plan_problems(plan)])
+	Sim.aim_plan(plan, "coal", Sim.cargo_room(plan) + 1)
+	check(sim.plan_problems(plan).has("The packs only have room for %d of what's wanted" % Sim.cargo_room(plan)), "a target bigger than the packs says so: %s" % [sim.plan_problems(plan)])
 	plan.meals += 2
 	check(Sim.cargo_room(plan) == Tuning.PACK_CAPACITY - 6, "more provisions leave less room for cargo")
 	plan.party.append(tomas.id)
@@ -1737,7 +1737,7 @@ func test_planning_an_expedition() -> void:
 	plan.spend_return = true
 	check(Sim.site_minutes(plan) > kept and kept > 0.0, "spending the return food stretches the time on site (%.1f → %.1f min)" % [kept, Sim.site_minutes(plan)])
 	plan.spend_return = false
-	plan.target.n = 6
+	Sim.aim_plan(plan, plan.target.item, 6)
 	for k in plan.policy:
 		plan.policy[k] = false
 	check(sim.plan_problems(plan).has("Choose when the party comes home"), "a plan needs a return policy")
@@ -1773,7 +1773,7 @@ func test_staging_and_departure() -> void:
 	plan.party = [ada.id]
 	plan.meals = 2
 	plan.picks = 1
-	plan.target.n = 6
+	Sim.aim_plan(plan, plan.target.item, 6)
 	check(sim.plan_expedition(plan) == "", "planned")
 	run(sim, 1)
 	check(stuck_text(sim).contains("Expedition: No meals to pack. Cooks make them at the fireplace, or plan fewer"), "with no meals, it says so and how to fix it: " + stuck_text(sim))
@@ -1842,7 +1842,7 @@ func send_party(sim: Sim) -> Dictionary:
 	plan.party = [ada.id, tomas.id]
 	plan.meals = 4
 	plan.picks = 1
-	plan.target = {"item": "coal", "n": 6}
+	Sim.aim_plan(plan, "coal", 6)
 	sim.plan_expedition(plan)
 	b.store = {"bread": 4, "stone_pick": 1}
 	b.tools = [{"type": "stone_pick", "dur": 9}]
@@ -1978,7 +1978,7 @@ func test_party_works_the_site() -> void:
 	var p2 := send_party(sim2)
 	until_at_site(sim2, [p2.ada, p2.tomas])
 	sim2.expedition.policy = {"target": false, "full": false, "low": false}
-	sim2.expedition.target.n = 99
+	Sim.aim_plan(sim2.expedition, sim2.expedition.target.item, 99)
 	p2.ada.hunger = 30.0
 	p2.tomas.hunger = 30.0
 	run(sim2, 5)
@@ -2000,7 +2000,7 @@ func test_party_works_the_site() -> void:
 	var p3 := send_party(sim3)
 	until_at_site(sim3, [p3.ada, p3.tomas])
 	sim3.expedition.policy = {"target": false, "full": true, "low": false}
-	sim3.expedition.target = {"item": "cobble", "n": 99}
+	Sim.aim_plan(sim3.expedition, "cobble", 99)
 	sim3.expedition.cargo = {"cobble": Sim.pack_capacity(sim3.expedition) - sim3.pack_load() - 3}  # nearly full already
 	for i in 300 * Tuning.TPS:
 		sim3.step()
@@ -2571,7 +2571,7 @@ func test_the_door_down_and_back() -> void:
 	check(ada.map == two_id and tomas.map == two_id and sim.at_site(ada) and two.visited, "the party walks down through the door into Level 2")
 	check(Sim.rcell(ada).x <= 3, "in at its entrance")
 	sim.expedition.policy = {"target": true, "full": true, "low": false}
-	sim.expedition.target = {"item": "coal", "n": sim.objective_packed() + 6}  # 6 more, from Level 2
+	Sim.aim_plan(sim.expedition, "coal", sim.objective_packed() + 6)  # 6 more, from Level 2
 	run(sim, 5)
 	var mid := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(mid.maps.has(two_id) and mid.get_map(two_id).pattern == two.pattern and mid.get_map(two_id).level == 2 and mid.residents[0].map == two_id, "saving with two levels keeps both, and the party down on Level 2")
@@ -2664,7 +2664,10 @@ func send_party_to(sim: Sim, dest: String, target: Dictionary, meals := 4, solo 
 	var plan := sim.new_plan(dest)
 	plan.party = [ada.id] if solo else [ada.id, tomas.id]
 	plan.meals = meals
-	plan.target = target
+	if target.item == "pens":
+		plan.target = target
+	else:
+		Sim.aim_plan(plan, target.item, target.n)
 	var err := sim.plan_expedition(plan)
 	b.store = {"bread": meals}
 	for i in 30 * Tuning.TPS:

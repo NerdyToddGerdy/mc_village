@@ -121,6 +121,12 @@ const WORK_REACH := 12.0                ## The furthest from its workstation a p
 const WORK_STORE := 20                  ## Logs or cobblestone a workstation's pile holds.
 const KEEP_STOCK := 20                  ## A new workstation's keep-stock target: gatherers stop once the village has this many.
 const KEEP_STEP := 5                    ## The keep-stock target's step in the workstation's panel.
+## The cargo priority list a location starts with (issue #185): the items it can give, best first, each with the
+## amount wanted (0: as much as fits). Only the items the village knows the location gives are listed.
+const CARGO_DEFAULTS := {
+	"mine": [["iron_ore", 8], ["coal", 8], ["cobble", 0]],
+	"meadow": [["wool", 6], ["leather", 0], ["beef", 0], ["porkchop", 0], ["mutton", 0]],
+}
 const SHAFT_COST := {"plank": 8, "stone_brick": 6}  ## Upgrading a mason's bench into a mineshaft (issue #204).
 const SHAFT_DIG := 12.0                 ## Seconds of digging for 1 cobblestone at a mineshaft: slower than breaking boulders.
 const SHAFT_WEAR_EVERY := 6             ## Cobblestone dug per use of a pickaxe, as a boulder's yield.

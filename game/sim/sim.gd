@@ -1261,6 +1261,7 @@ func _chest_job(r: Dictionary, c: Vector2i):
 
 ## Claims made so far: strips added to the village. Saved.
 var claims_made := 0
+var cargo_lists := {}               ## Destination -> its last cargo priority list, for the next plan to start from (issue #185).
 
 
 ## Boundary stakes still going in or standing ready to apply: they count against the claims available.
@@ -2270,6 +2271,12 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 		"stow":  # what's carried goes into the packs: meals, spare tools or cargo (issue #109)
 			if r.carry == null:
 				return "gone"
+			if st.has("swap") and cargo_have(st.swap) > 0:  # a better item swaps out the lowest cargo, left here (issue #185)
+				var freed := mini(st.n, cargo_have(st.swap))
+				expedition.cargo[st.swap] -= freed
+				if expedition.cargo[st.swap] <= 0:
+					expedition.cargo.erase(st.swap)
+				drop_items(m.entrance, st.swap, freed)
 			var over: int = r.carry.n - maxi(0, pack_room())
 			if over > 0:  # the packs filled up on the way: the rest is set down here
 				drop_items(rcell(r), r.carry.type, over, r.carry.get("dur", -1))
@@ -3278,11 +3285,6 @@ func tending() -> bool:
 	return expedition.get("target", {}).get("item", "") == "pens"
 
 
-## How much of the objective is still to pack: none when tending the pens.
-func objective_left() -> int:
-	return 0 if tending() else maxi(0, expedition.target.n - objective_packed())
-
-
 ## Penned animals over the herd size the party keeps of each kind, when tending the pens: grown ones
 ## that aren't waiting to breed.
 func pen_surplus() -> Array:
@@ -4272,9 +4274,155 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 	var meadow := dest == Meadow.ID  # issue #137: wool, and no pickaxes, for the meadow
 	var sticks := fence_left() if meadow else 0  # issue #139: what the pens need
 	var wheat := wheat_wanted() if meadow else 0
-	return {"dest": dest, "party": party, "target": {"item": "wool" if meadow else "coal", "n": 6 if meadow else 8}, "meals": 3, "picks": 0 if meadow else 1,
+	var plan := {"dest": dest, "party": party, "target": {"item": "wool" if meadow else "coal", "n": 6 if meadow else 8}, "meals": 3, "picks": 0 if meadow else 1,
 		"sticks": sticks, "wheat": wheat,
 		"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": cart_adds_room()}
+	plan.list = cargo_list_for(dest)
+	sync_target(plan)
+	return plan
+
+
+# ---------------------------------------------------------------- the cargo priority list (issue #185)
+
+## A plan's list of what to bring back, best first: rows {item, on, n} (n: how many are wanted, 0 for as much as
+## fits), and `new` on one the village has just learned the place gives. The old single `target` is kept as the
+## first row that's on, for what shows only one item.
+static func cargo_rows(plan: Dictionary) -> Array:
+	return plan.get("list", []).filter(func(r): return r.on)
+
+
+## Keeps `target` in step with the list: its first row that's on, preferring one with an amount. Tending the
+## pens isn't a list, so it's left alone.
+static func sync_target(plan: Dictionary) -> void:
+	if plan.target.item == "pens":
+		return
+	var rows := cargo_rows(plan)
+	var pick: Dictionary = {}
+	for r in rows:
+		if r.n > 0:
+			pick = r
+			break
+	if pick.is_empty() and not rows.is_empty():
+		pick = rows[0]
+	if not pick.is_empty():
+		plan.target = {"item": pick.item, "n": maxi(1, pick.n)}
+
+
+## Sets a plan's (or an expedition's) list to one wanted item first, then everything else its place gives as much
+## as fits: the old single objective, for plans made in code.
+static func aim_plan(plan: Dictionary, item: String, n: int) -> void:
+	var rows: Array = [{"item": item, "on": true, "n": n}]
+	var others: Array = ["wool", "mutton", "leather", "beef", "porkchop"] if plan.dest == Meadow.ID else ["iron_ore", "coal", "cobble"]
+	for o in others:
+		if o != item:
+			rows.append({"item": o, "on": true, "n": 0})
+	plan.list = rows
+	plan.target = {"item": item, "n": n}
+
+
+## The list a new plan for `dest` starts with: the last one used there, kept to the items the village knows the
+## place gives, with newly known ones added at the bottom marked New (issue #185).
+func cargo_list_for(dest: String) -> Array:
+	var known: Array = plan_targets(dest).map(func(x): return x.item)
+	var out: Array = []
+	var kept: Array = cargo_lists.get(dest, [])
+	for r in kept:
+		if known.has(r.item):
+			out.append({"item": r.item, "on": r.on, "n": r.n})
+	if kept.is_empty():  # never planned here: the defaults, in their order
+		for d in Tuning.CARGO_DEFAULTS["meadow" if dest == Meadow.ID else "mine"]:
+			if known.has(d[0]):
+				out.append({"item": d[0], "on": true, "n": d[1]})
+	for item in known:
+		if not out.any(func(r): return r.item == item):
+			out.append({"item": item, "on": true, "n": 0, "new": not kept.is_empty()})
+	return out
+
+
+## Where an item stands in the party's list, from 0 (the best) among the rows that are on, or -1 when it isn't
+## wanted at all: off, or not listed.
+static func cargo_rank(plan: Dictionary, item: String) -> int:
+	var i := 0
+	for r in cargo_rows(plan):
+		if r.item == item:
+			return i
+		i += 1
+	return -1
+
+
+## How many of a row's item the packs hold.
+func cargo_have(item: String) -> int:
+	return expedition.get("cargo", {}).get(item, 0)
+
+
+## How many of a row's amount is still to pack; a row for as much as fits is never done.
+func row_left(row: Dictionary) -> int:
+	return maxi(0, row.n - cargo_have(row.item)) if row.n > 0 else 1 << 20
+
+
+## Whether every row with an amount has its amount packed (and there is one): the policy "Target reached".
+func objective_met() -> bool:
+	var rows := cargo_rows(expedition).filter(func(r): return r.n > 0)
+	return not rows.is_empty() and rows.all(func(r): return cargo_have(r.item) >= r.n)
+
+
+## What's still to pack for the rows with an amount, together; as-much-as-fits rows don't count.
+func objective_left() -> int:
+	if tending():
+		return 0
+	var n := 0
+	for r in cargo_rows(expedition):
+		if r.n > 0:
+			n += maxi(0, r.n - cargo_have(r.item))
+	return n
+
+
+## Room the packs should keep for the rows above an item's, which come first.
+func _reserve_above(item: String) -> int:
+	var n := 0
+	for r in cargo_rows(expedition):
+		if r.item == item:
+			break
+		if r.n > 0:
+			n += maxi(0, r.n - cargo_have(r.item))
+	return n
+
+
+## Whether a block or an animal gives any item on the list (issue #185).
+func gives_wanted(b: Dictionary) -> bool:
+	return cargo_rows(expedition).any(func(r): return gives(b, r.item))
+
+
+## "3 coal and 2 iron ore", or "what's on the list": what a plan or the party is out for, in words.
+static func list_text(plan: Dictionary) -> String:
+	var parts: PackedStringArray = []
+	for r in cargo_rows(plan):
+		if r.n > 0:
+			parts.append(Defs.words(r.item, r.n))
+	return " and ".join(parts) if not parts.is_empty() else "what's on the list"
+
+
+func objective_text() -> String:
+	return list_text(expedition)
+
+
+## A loose stack at the site that outranks something in the packs, with the cargo it would swap out: the
+## lowest-priority item held, as {stack, drop}, or {}.
+func swap_candidate() -> Dictionary:
+	var rows := cargo_rows(expedition)
+	var held: Array = rows.filter(func(r): return cargo_have(r.item) > 0)
+	if held.is_empty():
+		return {}
+	var worst: Dictionary = held[-1]
+	var worst_rank := cargo_rank(expedition, worst.item)
+	var best := {}
+	var best_rank := worst_rank
+	for st in stacks_where(func(s): return avail(s) > 0):
+		var rk := cargo_rank(expedition, st.type)
+		if rk >= 0 and rk < best_rank:
+			best = st
+			best_rank = rk
+	return {} if best.is_empty() else {"stack": best, "drop": worst.item}
 
 
 ## The party's packs: each member carries PACK_CAPACITY items, shared by supplies and cargo.
@@ -4334,8 +4482,14 @@ func plan_problems(plan: Dictionary) -> Array:
 		var room := cargo_room(plan)
 		if room < 1:
 			out.append("The supplies fill the packs. Take fewer, or more people")
-		elif plan.target.n > room and plan.target.item != "pens":
-			out.append("The packs only have room for %s" % Defs.words(plan.target.item, room))
+		elif plan.target.item != "pens":
+			var wanted := 0
+			for r in cargo_rows(plan):
+				wanted += r.n
+			if cargo_rows(plan).is_empty():
+				out.append("Choose something to bring back")
+			elif wanted > room:
+				out.append("The packs only have room for %d of what's wanted" % room)
 	if not plan.policy.values().has(true):
 		out.append("Choose when the party comes home")
 	return out
@@ -4347,6 +4501,8 @@ func plan_expedition(plan: Dictionary) -> String:
 	var problems := plan_problems(plan)
 	if not problems.is_empty():
 		return problems[0]
+	if plan.target.item != "pens":  # each place keeps its last list (issue #185)
+		cargo_lists[plan.dest] = plan.get("list", []).map(func(r): return {"item": r.item, "on": r.on, "n": r.n})
 	expedition = plan.duplicate(true)
 	expedition.board = expedition_board().id
 	expedition.state = "staging"
@@ -5576,7 +5732,7 @@ func _site_job(r: Dictionary):
 		t.step({"op": "take_tool"})
 		return t
 	var pj = _stow_job(r, c)
-	if pj != null and (not can_mine or r.pick == null or (pj.target.type == expedition.target.item and objective_packed() < expedition.target.n) or pack_load() + 4 >= pack_capacity(expedition)):
+	if pj != null and (not can_mine or r.pick == null or _priority_stack(pj.target) or pack_load() + 4 >= pack_capacity(expedition)):
 		return pj
 	if can_mine and r.pick != null and expedition.get("survey", false) and not residents.any(func(o): return o.job != null and o.job.kind == "survey"):
 		var sj = _survey_job(r)
@@ -5602,7 +5758,7 @@ func _site_job(r: Dictionary):
 ## build the pens, lead marked animals in, feed pairs, hunt what's marked, then pack the rest.
 func _meadow_job(r: Dictionary, c: Vector2i):
 	var pk = _stow_job(r, c)
-	if pk != null and ((pk.target.type == expedition.target.item and objective_left() > 0) or pack_load() + 4 >= pack_capacity(expedition)):
+	if pk != null and (_priority_stack(pk.target) or pack_load() + 4 >= pack_capacity(expedition)):
 		return pk
 	for f in [_fence_job, _lead_job, _feed_job]:
 		var j = f.call(r, c)
@@ -5622,35 +5778,54 @@ func _drop_unused(r: Dictionary, j) -> void:
 		_release(r, j)
 
 
-## Whether anything lying at the site can still go into the packs: the objective's resource while
-## there's room, anything else only in the room the rest of the objective doesn't need.
+## Whether a stack is one a row with an amount still wants: packed before more mining (issue #185).
+func _priority_stack(st: Dictionary) -> bool:
+	for r in cargo_rows(expedition):
+		if r.item == st.type:
+			return r.n > 0 and cargo_have(r.item) < r.n
+	return false
+
+
+## Whether anything lying at the site can still go into the packs: an item on the list while there's room
+## (the room kept for the rows above it aside), or one that outranks something in the packs.
 func _stowable() -> bool:
-	var item: String = expedition.target.item
-	var spare := pack_room() - objective_left()
-	return not stacks_where(func(s): return avail(s) > 0 and ((s.type == item and pack_room() > 0) or spare > 0)).is_empty()
+	if not swap_candidate().is_empty():
+		return true
+	var room := pack_room()
+	return not stacks_where(func(s): return avail(s) > 0 and cargo_rank(expedition, s.type) >= 0 and room - _reserve_above(s.type) > 0).is_empty()
 
 
-## Carrying a loose stack at the site into the packs at the entrance.
+## Carrying a loose stack at the site into the packs at the entrance (issue #185): the items on the list, best
+## first, the packs keeping room for the rows above each; when they're full, a better item swaps out the
+## lowest-priority cargo, which is left here as a stack.
 func _stow_job(r: Dictionary, c: Vector2i):
 	var room := _room_to_promise()
+	var swap := {}
 	if room <= 0:
-		return null
-	# The objective's resource until there's enough of it, then anything else mined, then more of it,
-	# but only once nothing else is marked to mine, so the packs keep room for what's still to come.
-	var item: String = expedition.target.item
-	var short: bool = objective_left() > 0
+		swap = swap_candidate()
+		if swap.is_empty():
+			return null
+	# An amount already packed is only topped up once nothing else is marked to mine, so the packs keep
+	# room for what's still to come.
 	var working := m.boulders.any(func(b): return b.alive and b.des) or m.sheep.any(func(a): return a.alive and a.des)
-	var loose := stacks_where(func(s): return avail(s) > 0 and (short or s.type != item or not working))
+	var loose: Array = [swap.stack] if not swap.is_empty() else stacks_where(func(s):
+		if avail(s) <= 0:
+			return false
+		for row in cargo_rows(expedition):
+			if row.item == s.type:
+				return row.n <= 0 or cargo_have(s.type) < row.n or not working
+		return false)
 	if loose.is_empty():
 		return null
-	var rank := func(st: Dictionary) -> int: return (0 if short else 2) if st.type == item else 1
-	loose.sort_custom(func(a, b): return rank.call(a) < rank.call(b) or (rank.call(a) == rank.call(b) and manhattan(a.cell, c) < manhattan(b.cell, c)))
+	loose.sort_custom(func(a, b): return cargo_rank(expedition, a.type) < cargo_rank(expedition, b.type) or (cargo_rank(expedition, a.type) == cargo_rank(expedition, b.type) and manhattan(a.cell, c) < manhattan(b.cell, c)))
 	var st: Dictionary = loose[0]
-	var n: int = mini(mini(avail(st), carry_cap(r)), room)
-	if st.type != item:  # the packs keep room for the rest of the objective; anything else takes what's spare
-		n = mini(n, room - objective_left())
-		if n <= 0:
-			return null
+	var n: int = mini(avail(st), carry_cap(r))
+	if swap.is_empty():
+		n = mini(n, room - _reserve_above(st.type))
+	else:
+		n = mini(n, cargo_have(swap.drop))
+	if n <= 0:
+		return null
 	var j := Job.new("stow", "Packing %s" % Defs.ITEMS[st.type].many, "the packs")
 	j.target = st
 	j.work = "haul"
@@ -5659,13 +5834,17 @@ func _stow_job(r: Dictionary, c: Vector2i):
 	j.step(_goto(reach(st.cell), false))
 	j.step({"op": "pickup", "stack": st, "n": n, "hold": hd})
 	j.step(_goto([m.entrance], false))
-	j.step({"op": "stow", "n": n})
+	var stow := {"op": "stow", "n": n}
+	if not swap.is_empty():
+		stow.swap = swap.drop
+	j.step(stow)
 	return j
 
 
-## Marks the objective's resource for mining, nearest the entrance first, a block at a time, until
-## what's packed, lying about and marked will make the target (issue #109). Blocks under a known
-## loose ceiling are left for the player to choose.
+## Marks what the list asks for, going down it (issue #185): the first row that still wants more gets its
+## nearest blocks marked, nearest the entrance first, a block at a time, until what's packed, lying about and
+## marked will make its amount (an as-much-as-fits row always wants more). At the meadow an animal is hunted
+## for the highest row among what it drops. Blocks under a known loose ceiling are left for the player to choose.
 func _mark_objective() -> void:
 	if tending():  # the penned animals over the herd size kept (issue #139)
 		for a in pen_surplus():
@@ -5674,37 +5853,45 @@ func _mark_objective() -> void:
 				a.unreach_until = 0
 				rev += 1
 		return
-	var item: String = expedition.target.item
-	var have := objective_packed()
-	for st in m.items.values():
-		if st.type == item:
-			have += st.n
-	if m.sheep.any(func(a): return a.alive and gives(a, item)):  # the meadow: the animals that give it (issue #137)
-		var hunted := m.sheep.filter(func(a): return a.alive and a.des and gives(a, item))
-		if have + hunted.size() * block_yield(item) >= expedition.target.n or hunted.size() >= expedition.party.size():
-			return
-		var herd := m.sheep.filter(func(a): return a.alive and not a.des and a.get("pen", 0) == 0 and gives(a, item))  # pens are the player's (issue #139)
-		if not herd.is_empty():
+	var party_size: int = expedition.party.size()
+	for row in cargo_rows(expedition):
+		var item: String = row.item
+		var have := cargo_have(item)
+		for st in m.items.values():
+			if st.type == item:
+				have += st.n
+		if m.sheep.any(func(a): return a.alive and gives(a, item)):  # the meadow: the animals that give it (issue #137)
+			var hunted := m.sheep.filter(func(a): return a.alive and a.des and gives(a, item))
+			if row.n > 0 and have + hunted.size() * block_yield(item) >= row.n:
+				continue
+			if m.sheep.filter(func(a): return a.alive and a.des).size() >= party_size:
+				return
+			var herd := m.sheep.filter(func(a): return a.alive and not a.des and a.get("pen", 0) == 0 and gives(a, item))  # pens are the player's (issue #139)
+			if herd.is_empty():
+				continue
 			var a: Dictionary = nearest(herd, m.entrance)
 			a.des = true
 			a.unreach_until = 0
 			rev += 1
+			return
+		var marked := m.boulders.filter(func(b): return b.alive and b.des and gives(b, item))
+		if row.n > 0 and have + marked.size() * block_yield(item) >= row.n:
+			continue
+		if m.boulders.filter(func(b): return b.alive and b.des).size() >= party_size:
+			return
+		var door := MineLevels.door_front(m) if m.door_state == "closed" else Vector2i(-1, -1)  # digging to the door is the player's call (#132)
+		var free := m.boulders.filter(func(b): return b.alive and not b.des and not b.get("hidden", false) and not b.get("loose", false) and gives(b, item) and b.cell != door)
+		if free.is_empty():
+			continue
+		var b: Dictionary = nearest(free, m.entrance)
+		var way := _way_through(b.cell)
+		if way.is_empty():
+			continue
+		b = way[0]  # the block itself, or the first boulder in the way to it
+		b.des = true
+		b.unreach_until = 0
+		rev += 1
 		return
-	var marked := m.boulders.filter(func(b): return b.alive and b.des and gives(b, item))
-	if have + marked.size() * block_yield(item) >= expedition.target.n or marked.size() >= expedition.party.size():
-		return
-	var door := MineLevels.door_front(m) if m.door_state == "closed" else Vector2i(-1, -1)  # digging to the door is the player's call (#132)
-	var free := m.boulders.filter(func(b): return b.alive and not b.des and not b.get("hidden", false) and not b.get("loose", false) and gives(b, item) and b.cell != door)
-	if free.is_empty():
-		return
-	var b: Dictionary = nearest(free, m.entrance)
-	var way := _way_through(b.cell)
-	if way.is_empty():
-		return
-	b = way[0]  # the block itself, or the first boulder in the way to it
-	b.des = true
-	b.unreach_until = 0
-	rev += 1
 
 
 ## The way from the entrance to a block, as the blocks to mine to get there: the first boulder in
@@ -5751,16 +5938,16 @@ func policy_met() -> String:
 	var ex := expedition
 	if not pending.is_empty():
 		return ""
-	if ex.policy.get("target", false) and not tending() and objective_packed() >= ex.target.n:
+	if ex.policy.get("target", false) and not tending() and objective_met():
 		return "target reached"
-	if ex.policy.get("full", false) and pack_room() <= 0:
+	if ex.policy.get("full", false) and pack_room() <= 0 and swap_candidate().is_empty():  # a better find would swap in (issue #185)
 		return "packs full"
 	if ex.policy.get("low", false) and spendable_meals() <= 0:
 		return "provisions low"
 	var party: Array = ex.party.map(func(id): return resident(id))
 	var busy := party.any(func(r): return r.job != null and r.job.kind in ["gather", "stow", "survey", "eat", "equip", "door", "fence", "lead", "feed"])
-	var to_mine := m.boulders.any(func(b): return b.alive and not b.get("hidden", false) and ((b.des and not _cooling(b)) or (not b.get("loose", false) and gives(b, ex.target.item) and not _way_through(b.cell).is_empty())))
-	to_mine = to_mine or m.sheep.any(func(a): return a.alive and ((a.des and not _cooling(a)) or (a.get("pen", 0) == 0 and gives(a, ex.target.item))))
+	var to_mine := m.boulders.any(func(b): return b.alive and not b.get("hidden", false) and ((b.des and not _cooling(b)) or (not b.get("loose", false) and gives_wanted(b) and not _way_through(b.cell).is_empty())))
+	to_mine = to_mine or m.sheep.any(func(a): return a.alive and ((a.des and not _cooling(a)) or (a.get("pen", 0) == 0 and gives_wanted(a))))
 	if m.id == Meadow.ID and tending():  # issue #139
 		to_mine = to_mine or pen_work() or not pen_surplus().is_empty()
 	var loose := _stowable()
@@ -6027,7 +6214,7 @@ func _check_find(c: Vector2i) -> void:
 	_toast("The party found iron in the %s." % m.name.to_lower())
 	if expedition.get("state", "") == "out" and expedition.dest == map_id:
 		_ask("discovery", "The party found an iron vein in the %s." % m.name.to_lower(), [
-			{"id": "keep", "label": "Keep mining", "cost": "Carry on for %s. The vein stays marked." % Defs.words(expedition.target.item, expedition.target.n)},
+			{"id": "keep", "label": "Keep mining", "cost": "Carry on for %s. The vein stays marked." % objective_text()},
 			{"id": "investigate", "label": "Investigate", "cost": "Someone spends about %d s and %d pickaxe uses surveying it. Iron becomes a resource you can send a party for." % [int(Tuning.SURVEY_TIME), Tuning.SURVEY_USES]},
 			{"id": "return", "label": "Mark it and return later", "cost": "The party heads home now, with what it has packed."},
 		])
@@ -6095,7 +6282,7 @@ func _find_door(r: Dictionary) -> void:
 	_ask("door", "%s reached a heavy door at the far end of the %s. Below it lies level %d." % [r.name, m.name.to_lower(), m.level + 1], [
 		{"id": "down", "label": "Go down now", "cost": "The party opens it and works level %d instead: richer and riskier. What they mine comes back up the same way." % (m.level + 1)},
 		{"id": "later", "label": "Mark it for later", "cost": "The party heads home now, with what it has packed. Level %d can be planned at the board." % (m.level + 1)},
-		{"id": "keep", "label": "Keep mining here", "cost": "Carry on for %s. The door stays marked." % Defs.words(expedition.target.item, expedition.target.n)},
+		{"id": "keep", "label": "Keep mining here", "cost": "Carry on for %s. The door stays marked." % objective_text()},
 	], r.id)
 
 
@@ -6323,7 +6510,7 @@ func save_state() -> Dictionary:
 	for id in maps:
 		maps_out[id] = maps[id].save()
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
-		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made,
+		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made, "cargo_lists": cargo_lists.duplicate(true),
 		"herd_floor": herd_floor.duplicate(), "rng_state": rng.state, "seed": seed,
 		"expedition": expedition.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true)}
 
@@ -6346,6 +6533,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.arrived = d.arrived
 	s.auto_craft = d.auto_craft
 	s.claims_made = d.get("claims_made", 0)
+	s.cargo_lists = d.get("cargo_lists", {}).duplicate(true)
 	s.herd_floor = d.herd_floor.duplicate()
 	# Bushes added to older saves (v7) may sit where something now stands; drop those.
 	s.bushes = s.bushes.filter(func(b):
