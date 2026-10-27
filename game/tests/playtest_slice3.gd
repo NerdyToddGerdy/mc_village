@@ -94,11 +94,12 @@ func _initialize() -> void:
 	# ---- The road to the mine (issues #118, #119): watch them walk it, surveying as they go
 	check(await click_button("Road to the mine"), "the map switcher shows the road")
 	check(game.view_map == Road.ID and game._world._people[ada.id].visible, "the party is drawn walking the road")
+	await play_until(20, func(): return ada.job == null or not ada.job.label.begins_with("Eating"))  # a meal on the way shows instead
 	await look_at(Sim.rcell(ada))
 	await click(screen(Sim.rcell(ada), 0.8))
 	game._hud.refresh(sim)
 	await frames(2)
-	check(game.selection.get("kind", "") == "res" and visible_label("On the road to the old mine"), "Ada can be selected on the road, and says where she's going")
+	check(game.selection.get("kind", "") == "res" and visible_label("On the road to the old mine"), "Ada can be selected on the road, and says where she's going (%s; %s)" % [game.selection, ada.job.label if ada.job != null else "idle"])
 	check(await play_until(40, func(): return sim.at_site(ada) and sim.at_site(tomas)), "they reach the old mine")
 	check(sim.route_surveyed(), "walking it surveyed the road")
 	check(await click_button("Village"), "back to the village")

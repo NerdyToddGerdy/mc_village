@@ -16,8 +16,9 @@ const ROAD := 30.0
 func _init() -> void:
 	var tests := [
 		"test_full_opening",
+		"test_founding_goals",
 		"test_bench_skips_blocked_recipes_and_comes_before_building",
-		"test_auto_ingredients_unlock_with_first_house",
+		"test_auto_ingredients_from_the_start",
 		"test_blueprint_clears_trees_and_boulders",
 		"test_bigger_clearing",
 		"test_sheep_wander_and_replay",
@@ -130,6 +131,9 @@ func stuck_text(sim: Sim) -> String:
 
 ## The founding moment, played: a fresh copy of it for each test, as {sim, bench, h1, h2}. It's
 ## played once and loaded from its save after that, because it's 1,900 seconds of play.
+var _goal_trace: Array = []  ## Goals.current() after each step of the played opening (issue #182).
+
+
 func opening() -> Dictionary:
 	if _opening == null:
 		var sim := Sim.new_game()
@@ -144,27 +148,93 @@ func opening() -> Dictionary:
 	return out
 
 
-## Plays the founding moment the way a player would, end to end.
+## Plays the founding moment the way a player would, end to end (issue #182): a stockpile, the bench,
+## an axe and a pickaxe, the clearing's sheep for Ada's bed, a fireplace for the trip's meals, the
+## board, the meadow for the second bed's wool, then the second house.
 func play_opening(sim: Sim) -> Dictionary:
 	sim.designate_mine(area(0, 0, 10, 18))
-	sim.designate_hunt(whole_map())  # wool for the two beds
+	sim.designate_hunt(whole_map())  # wool for Ada's bed
+	sim.paint_zone(area(10, 7, 4, 2))
 	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
-	for r in ["planks", "planks", "sticks", "wood_pick"]:
+	_goal_trace.append(Goals.current(sim))
+	for r in ["wood_axe", "wood_pick"]:
 		sim.queue_add(bench, r)
 	run(sim, 120)
-	sim.paint_zone(area(10, 7, 4, 2))
+	_goal_trace.append(Goals.current(sim))
 	sim.designate_mine(whole_map())
 	run(sim, 150)
+	_goal_trace.append(Goals.current(sim))
 	var h1 := sim.place_site("house", at(11, 0))
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	run(sim, 600)
+	_goal_trace.append(Goals.current(sim))
+	var fire := sim.place_site("fireplace", spot(sim, "fireplace", at(6, 12)))
+	var board := sim.place_site("board", spot(sim, "board", at(4, 9)))
+	for r in ["sticks", "planks", "planks"]:  # the board's 4 sticks and 6 planks
+		sim.queue_add(bench, r)
+	run_until(sim, 400, func(): return board.done and fire.done and sim.free_count("cooked_mutton") >= 3)
+	_goal_trace.append(Goals.current(sim))
+	var plan := sim.new_plan(Meadow.ID)
+	sim.plan_expedition(plan)
+	run_until(sim, 200, func(): return sim.depart_blocker() == "")
+	_goal_trace.append(Goals.current(sim))
+	sim.depart()
+	run_until(sim, 400, func(): return sim.expedition.is_empty())
+	_goal_trace.append(Goals.current(sim))
 	var h2 := sim.place_site("house", at(1, 4), 1)
-	for i in 8:
+	for i in 9:
 		sim.queue_add(bench, "planks")
+	for r in ["stone_pick", "stone_axe"]:  # her wooden tools are worn out by now
+		sim.queue_add(bench, r)
 	run(sim, 900)
-	return {"bench": bench, "h1": h1, "h2": h2}
+	_goal_trace.append(Goals.current(sim))
+	return {"bench": bench, "h1": h1, "h2": h2, "fire": fire, "board": board}
+
+
+## Runs until `cond` holds, for at most `seconds`.
+func run_until(sim: Sim, seconds: float, cond: Callable) -> void:
+	for i in int(seconds * Tuning.TPS):
+		if i % Tuning.TPS == 0 and cond.call():
+			return
+		sim.step()
+
+
+## Open ground for a building of `tpl` near `near`, clear of the stockpile, farms and loose items.
+func spot(sim: Sim, tpl: String, near: Vector2i) -> Vector2i:
+	var size: Vector2i = Defs.TEMPLATES[tpl].size
+	for d in range(0, 12):
+		for dx in range(-d, d + 1):
+			for dy in range(-d, d + 1):
+				var o := near + Vector2i(dx, dy)
+				if sim.placement_check(tpl, o) != "":
+					continue
+				var ok := true
+				for x in size.x:
+					for y in size.y:
+						var c := o + Vector2i(x, y)
+						ok = ok and sim.walkable(c) and not sim.items.has(c) and not sim.in_zone(c) and not sim.farm.has(c)
+				if ok:
+					return o
+	return near
+
+
+## Issue #182: a new game's founding, and finished villages from older saves stay finished.
+func test_founding_goals() -> void:
+	var sim := Sim.new_game()
+	check(sim.sheep.size() == 3 and sim.auto_craft and Goals.current(sim) == 0, "a new game: 3 sheep, auto ingredients on, the first goal")
+	var s := opening()
+	check(_goal_trace.size() > 3 and range(_goal_trace.size() - 1).all(func(i): return _goal_trace[i] <= _goal_trace[i + 1]), "the founding's goals complete in order (%s)" % [_goal_trace])
+	check(_goal_trace.back() == Goals.LIST.size() - 1, "and it ends on the chopping block")
+	var town: Sim = s.sim
+	town.place_site("chopping_block", spot(town, "chopping_block", at(2, 14)))
+	run(town, 120)
+	check(Goals.current(town) == -1 and Goals.progress_text(town).contains("resident"), "the chopping block finishes the founding: %s" % Goals.progress_text(town))
+	for f in ["slice2_village", "slice3_village"]:
+		var r := SaveFormat.read("res://tests/fixtures/%s.save" % f)
+		var v := Sim.from_state(r.data.state)
+		check(Goals.current(v) == -1, "%s: a finished founding stays finished (%s)" % [f, Goals.progress_text(v)])
 
 
 func test_full_opening() -> void:
@@ -178,7 +248,11 @@ func test_full_opening() -> void:
 	check(sim.residents.size() == 2 and sim.residents[1].name == "Tomas", "Tomas arrived")
 	check(sim.stats.traveler_home, "Tomas moved in")
 	check(s.h2.owner == sim.residents[1].id, "Tomas owns the second house")
-	check(sim.auto_craft, "auto ingredients unlocked")
+	check(sim.auto_craft, "auto ingredients are on")
+	check(sim.stats.axe_crafted and s.fire.done and s.board.done and sim.stats.meadow_wool, "an axe, the fireplace, the board, and wool from the meadow (%s)" % [sim.stats])
+	check(Goals.current(sim) == Goals.LIST.size() - 1, "the founding is at its last goal, the chopping block (%d: %s)" % [Goals.current(sim), Goals.progress_text(sim)])
+	if sim.residents.size() == 2:
+		check(sim.residents[1].role == "lumber", "the first traveler is a lumberjack (%s)" % sim.residents[1].role)
 	# Skills (issue #48): Ada learned by doing, and Tomas arrived skilled in one job.
 	check(Sim.level(sim.residents[0], "lumber") >= 2, "Ada's Lumberjack level rose with practice (level %d)" % Sim.level(sim.residents[0], "lumber"))
 	if sim.residents.size() == 2:
@@ -213,8 +287,9 @@ func test_bench_skips_blocked_recipes_and_comes_before_building() -> void:
 	check(house_at < 0 or house_at > axe_at, "nothing hauled to the house before the bench queue was done: " + seq)
 
 
-func test_auto_ingredients_unlock_with_first_house() -> void:
+func test_auto_ingredients_from_the_start() -> void:
 	var sim := Sim.new_game()
+	check(sim.auto_craft, "a new game makes a recipe's planks and sticks automatically (issue #182)")
 	sim.designate_mine(area(0, 0, 10, 18))
 	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
@@ -222,11 +297,6 @@ func test_auto_ingredients_unlock_with_first_house() -> void:
 		if sim.items[k].type != "log":
 			sim.items.erase(k)
 	sim.queue_add(bench, "wood_pick")
-	run(sim, 1)
-	check(bench.queue == ["wood_pick"], "no auto ingredients before the first house")
-	check(stuck_text(sim).contains("Wooden pickaxe needs 3 more planks"), "blocked recipe reported: " + stuck_text(sim))
-	sim.auto_craft = true
-	sim.expand_queues()
 	check(bench.queue.has("planks") and bench.queue.has("sticks"), "planks and sticks queued automatically: %s" % [bench.queue])
 	check(bench.autoq.has(true), "auto entries are marked")
 	run(sim, 80)
@@ -331,6 +401,8 @@ func test_every_save_fixture_still_loads() -> void:
 		var size := Vector2i(sim.w, sim.h)
 		check(size == (Vector2i(18, 18) if v < 4 else Vector2i(Tuning.MAP_W, Tuning.MAP_H)), "v%d: map size is %s" % [v, size])
 		check(sim.residents.size() == (3 if v >= 15 else 2) and sim.residents[1].arriving, "v%d: Tomas is walking in again after loading" % v)
+		if v < 27:  # upgraded from before the founding's rework (issue #182): two houses cover the steps it added
+			check(Goals.current(sim) == Goals.LIST.size() - 2 and sim.auto_craft, "v%d: the founding lands on Welcome a traveler, with auto ingredients on (%s)" % [v, Goals.progress_text(sim)])
 		var mine := sim.get_map(OldMine.ID)
 		if v >= 15:  # issues #100-#102: Mira at the old mine, with coal she's mined
 			var mira: Dictionary = sim.residents[2]
@@ -515,7 +587,7 @@ func test_standing_orders_wait_rather_than_block() -> void:
 	ada.pick = {"type": "wood_pick", "tier": 1, "dur": 5}
 	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "cobble", 3)
 	run(sim, 1)
-	var spare: Array = sim.stuck.filter(func(s): return s.why.contains("for a spare"))
+	var spare: Array = sim.stuck.filter(func(s): return s.focus_kind == "site" and s.focus_id == bench.id)  # the spare's sticks, waiting on a log
 	check(spare.size() == 1 and spare[0].waiting, "the toolsmith's spare waits: " + stuck_text(sim))
 	var house := sim.place_site("house", open_rect(sim, Vector2i(7, 7)).position + Vector2i(1, 1))
 	house.stage = 1  # walls, with no planks anywhere
@@ -525,7 +597,7 @@ func test_standing_orders_wait_rather_than_block() -> void:
 	check(walls[0].since > spare[0].since, "the walls showed later than the spare (%d, %d)" % [walls[0].since, spare[0].since])
 	var since: int = walls[0].since
 	var why: String = walls[0].why
-	sim.drop_items(Sim.rcell(ada) + Vector2i(0, 2), "plank", 2)  # fewer missing, same problem
+	house.store.plank = house.store.get("plank", 0) + 2  # fewer missing, same problem (dropped ones would go to the spare's sticks)
 	run(sim, 2)
 	walls = sim.stuck.filter(func(s): return s.focus_kind == "site" and s.focus_id == house.id)
 	check(walls.size() == 1 and walls[0].why != why and walls[0].since == since, "a changing count keeps the entry's age (%s, %s)" % [walls[0].why if walls.size() else "", walls[0].since if walls.size() else -1])
@@ -692,7 +764,7 @@ static func area(x: int, y: int, w: int, h: int) -> Rect2i:
 func test_sheep_wander_and_replay() -> void:
 	var a := Sim.new_game()
 	var b := Sim.new_game()
-	check(a.sheep.size() == 6, "six sheep at the start")
+	check(a.sheep.size() == 3, "three sheep at the start (issue #182)")
 	var start: Array = a.sheep.map(func(sh): return sh.cell)
 	for i in 60 * Tuning.TPS:
 		a.step()
@@ -728,7 +800,7 @@ func test_hunting_sheep() -> void:
 	check(count(sim, "wool") >= 1 and count(sim, "mutton") >= 1, "a hunted sheep drops wool and raw mutton")
 	run(sim, 300)
 	check(sim.sheep.all(func(x): return not x.alive), "she hunts every marked sheep")
-	check(count(sim, "wool") == 6 and count(sim, "mutton") >= 5, "six sheep give 6 wool and 6 mutton, less any Ada ate (%d, %d)" % [count(sim, "wool"), count(sim, "mutton")])
+	check(count(sim, "wool") == 3 and count(sim, "mutton") >= 2, "three sheep give 3 wool and 3 mutton, less any Ada ate (%d, %d)" % [count(sim, "wool"), count(sim, "mutton")])
 	var sim2 := Sim.new_game()
 	var ada2: Dictionary = sim2.residents[0]
 	var far: Dictionary = sim2.sheep[0]
@@ -745,7 +817,7 @@ func test_beds_and_free_bed_arrivals() -> void:
 	var s := opening()
 	var sim: Sim = s.sim
 	check(s.h1.stage == 4 and s.h2.stage == 4, "both opening houses got their beds")
-	check(sim.stats.get("sheep_hunted", 0) == 6, "the six sheep were hunted for wool")
+	check(sim.stats.get("sheep_hunted", 0) >= 3 and sim.sheep.all(func(x): return not x.alive), "the clearing's three sheep were hunted for wool, and more at the meadow (%d)" % sim.stats.get("sheep_hunted", 0))
 	var wool: int = Goals.LIST.map(func(g): return g.t).find("Hunt sheep for wool")
 	check(wool >= 0 and Goals.done(sim, wool), "the founding goals include hunting for wool")
 	# A house with no wool for its bed: finished up to the roof, never done, and nobody comes.
@@ -1119,8 +1191,13 @@ func test_spares_need_a_resident_toolsmith() -> void:
 		var tr: Dictionary = t.residents.back()
 		var skill: String = Defs.JOBS.filter(func(jb): return tr.jobs[jb].xp > 0)[0]
 		check(tr.role == skill, "an arrival skilled at %s has that job (%s)" % [skill, tr.role])
+		check(skill == "lumber", "the first traveler is always a lumberjack (issue #182)")
+		t._arrive()
+		tr = t.residents.back()
+		skill = Defs.JOBS.filter(func(jb): return tr.jobs[jb].xp > 0)[0]
+		check(tr.role == skill, "a later arrival skilled at %s has that job (%s)" % [skill, tr.role])
 		seen[skill] = true
-	check(seen.has("toolsmith"), "some seed brings a skilled toolsmith")
+	check(seen.has("toolsmith"), "for some seed, the second traveler is a skilled toolsmith")
 
 
 ## Experience that puts a resident at `lv` in a job.
@@ -1281,7 +1358,7 @@ func test_toolsmith_keeps_spares() -> void:
 	sim2.drop_items(Sim.rcell(a2) + Vector2i(1, 0), "cobble", 3)
 	run(sim2, 1)
 	check(b2.queue.has("stone_pick"), "with cobblestone about, the spare is a stone pickaxe (%s)" % [b2.queue])
-	check(stuck_text(sim2).contains("Toolsmith needs 2 more sticks for a spare pickaxe"), "short of sticks, it says so: " + stuck_text(sim2))
+	check(stuck_text(sim2).contains("Planks needs 1 more log"), "short of sticks, the bench queues them and says what their planks need: " + stuck_text(sim2))
 	# No toolsmith: Slice 1's rule. Nothing is queued, and a broken tool stops the resident.
 	var sim3 := Sim.new_game()
 	var a3: Dictionary = sim3.residents[0]
@@ -2671,7 +2748,8 @@ func test_meadow_expedition() -> void:
 	check(sim.herds().get("pig", 0) == 1, "the pigs come back one at a time (%d after %d s)" % [sim.herds().get("pig", 0), int(Tuning.MEADOW_REGROW.pig)])
 	run(sim, Tuning.MEADOW_REGROW.pig * (Meadow.herd().pig + 2))
 	check(sim.herds().pig == Meadow.herd().pig and sim.herds().sheep == Meadow.herd().sheep, "up to their herd, and no more")
-	check(sim.herds().get("cow", 0) == Meadow.herd().cow, "the cows grew back too, at their own pace")
+	run(sim, Tuning.MEADOW_REGROW.cow * Meadow.herd().cow)  # however many the party took
+	check(sim.herds().get("cow", 0) == Meadow.herd().cow, "the cows grew back too, at their own pace (%d of %d)" % [sim.herds().get("cow", 0), Meadow.herd().cow])
 	# The hazards: an angry bull and the pond bank, which hurt, but never seriously.
 	sim.on_map(Meadow.ID, func():
 		var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], mp.banks[0] + Vector2i(1, 0))
@@ -3055,6 +3133,8 @@ func test_saplings_and_replanting() -> void:
 func test_hunters_keep_a_herd_floor() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
+	for i in 3:  # six in all: a new game has only 3 (issue #182)
+		sim.add_sheep(sim.nearest_walkable(Sim.rcell(ada) + Vector2i(4 + i * 2, 4)))
 	var wild := func() -> int: return sim.sheep.filter(func(a): return a.alive and a.get("pen", 0) == 0).size()
 	var flock: int = wild.call()
 	run(sim, 30)

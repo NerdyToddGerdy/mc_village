@@ -6,7 +6,7 @@ extends RefCounted
 ## Each entry: id (the tool it switches on, or the template it places), name, sub (one line under
 ## the name), mark (the icon drawn for it), and optionally `unlock`, a condition it waits for:
 ##   "animals": a live animal exists on the map in view.
-##   "founded": the founding is done (Slice 3's expedition board, issue #105).
+##   "house": Ada's house is finished, so the founding's next goals can use it (the board, issue #182).
 ##   "village": the map in view is the village; "meadow": it's the meadow (issue #139).
 ##   "pens": a pen is painted on the map in view (issue #139).
 
@@ -34,7 +34,7 @@ const MENUS := {
 		{"id": "composter", "name": "Composter", "sub": "4 planks. A farmer works from it. Reserves room for a granary", "mark": "build"},
 		{"id": "lodge", "name": "Hunter's lodge", "sub": "6 logs and 2 planks. A hunter works from it. Reserves room for a tannery", "mark": "build"},
 		{"id": "builder_table", "name": "Builder's table", "sub": "4 planks and 2 logs. A builder works from it. Reserves room for a builder's yard", "mark": "build"},
-		{"id": "board", "name": "Expedition board", "sub": "6 planks and 4 sticks. Plans trips to the old mine. Reserves room for a map room", "mark": "build", "unlock": "founded"},
+		{"id": "board", "name": "Expedition board", "sub": "6 planks and 4 sticks. Plans trips off the map. Reserves room for a map room", "mark": "build", "unlock": "house"},
 	]},
 }
 
@@ -60,8 +60,8 @@ static func unlocked(e: Dictionary, sim: Sim) -> bool:
 	match e.get("unlock", ""):
 		"animals":
 			return sim.sheep.any(func(sh): return sh.alive)
-		"founded":
-			return Goals.current(sim) < 0
+		"house":
+			return sim.stats.houses >= 1
 		"village":
 			return sim.map_id == "village"
 		"meadow":
