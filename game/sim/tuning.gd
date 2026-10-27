@@ -68,6 +68,15 @@ const TORCH_LIGHT := 3.0                ## Cells a torch lights; open cells furt
 const LEVEL_ORE := {"coal": 2, "iron": 1}  ## Ore blocks each level down adds to Level 1's 6 coal and 4 iron.
 const LEVEL_RISK := 0.25                ## Each level down raises the cave-in and fall chances by this share of Level 1's.
 # The road to the mine (Slice 4, issues #118-#121).
+# Worn paths (issue #196): the village's ground packs down where residents walk.
+const WEAR_STEP := 1                    ## Wear a resident's step adds to the cell they step onto.
+const WEAR_CAP := 100
+const WEAR_WORN := 10                   ## Wear at which grass is worn.
+const WEAR_DIRT := 30                   ## ...a dirt path.
+const WEAR_PACKED := 60                 ## ...a packed path.
+const WEAR_DECAY_SECS := 20.0           ## A cell nobody stepped on loses 1 wear this often.
+const PATH_SPEED_DIRT := 1.15           ## Walking speed on a dirt path, as a share of WALK.
+const PATH_SPEED_PACKED := 1.3
 const FORD_SPEED := 0.4                 ## Walking speed wading the stream, before the bridge is built.
 const RAILS_PER_SEGMENT := 2            ## Rails one segment of track takes.
 const CART_SPEED := 8.0                 ## Cells per second riding a minecart over finished track.

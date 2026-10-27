@@ -441,6 +441,8 @@ func walkable(c: Vector2i) -> bool:
 func find_path(start: Vector2i, goals: Dictionary):
 	if goals.has(start):
 		return []
+	if not m.wear.is_empty():
+		return _find_path_weighted(start, goals)
 	var prev := {start: start}
 	var queue: Array = [start]
 	var qi := 0
@@ -460,6 +462,66 @@ func find_path(start: Vector2i, goals: Dictionary):
 					p = prev[p]
 				return path
 			queue.append(n)
+	return null
+
+
+## The same, once the village has worn paths (issue #196): the quickest path, each step costing the time
+## to cross the cell, so a path that's a little longer but quicker is chosen and busy routes reinforce
+## themselves. A step costs 100 on grass and a little less on a path, so this is Dial's algorithm: buckets
+## by cost, which is much cheaper than a heap and keeps the tick fast.
+func _find_path_weighted(start: Vector2i, goals: Dictionary):
+	if m.occ_dirty:
+		_recompute_occ()
+	var w := m.w
+	var size := w * m.h
+	var dist := PackedInt32Array()
+	dist.resize(size)
+	dist.fill(1 << 30)
+	var prev := PackedInt32Array()
+	prev.resize(size)
+	var cost_by_stage := [100, 100, roundi(100.0 / Tuning.PATH_SPEED_DIRT), roundi(100.0 / Tuning.PATH_SPEED_PACKED)]
+	var si := start.y * w + start.x
+	dist[si] = 0
+	prev[si] = si
+	var buckets: Array = []
+	for i in 101:
+		buckets.append([])
+	buckets[0].append(si)
+	var pending := 1
+	var d := 0
+	while pending > 0:
+		var b: Array = buckets[d % 101]
+		if b.is_empty():
+			d += 1
+			continue
+		buckets[d % 101] = []
+		pending -= b.size()
+		for ci in b:
+			if dist[ci] != d:
+				continue  # a quicker way here was found since
+			var cx: int = ci % w
+			var cy: int = ci / w
+			if goals.has(Vector2i(cx, cy)):
+				var path: Array = []
+				var p: int = ci
+				while p != si:
+					path.push_front(Vector2i(p % w, p / w))
+					p = prev[p]
+				return path
+			for dir in DIRS:
+				var nx: int = cx + dir.x
+				var ny: int = cy + dir.y
+				if nx < 0 or ny < 0 or nx >= w or ny >= m.h:
+					continue
+				var ni := ny * w + nx
+				if m.occ[ni] != 0:
+					continue
+				var nd: int = d + cost_by_stage[wear_stage(m.wear.get(Vector2i(nx, ny), 0))]
+				if nd < dist[ni]:
+					dist[ni] = nd
+					prev[ni] = ci
+					buckets[nd % 101].append(ni)
+					pending += 1
 	return null
 
 
@@ -1887,6 +1949,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			if dist <= step_len:
 				r.pos = Vector2(nxt)
 				r.path.pop_front()
+				_wear_step(nxt)
 			else:
 				r.pos += to / dist * step_len
 			return false
@@ -1914,6 +1977,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			if dist <= step_len:
 				r.pos = Vector2(nxt)
 				r.path.pop_front()
+				_wear_step(nxt)
 				if m.kind == "route":
 					_reveal(nxt)
 				if m.kind == "site":
@@ -2707,6 +2771,8 @@ func step() -> void:
 
 ## One tick of the current map: what grows, the sheep, and the residents on it.
 func _step_map() -> void:
+	if m.kind == "village" and tick % int(Tuning.WEAR_DECAY_SECS * Tuning.TPS) == 0 and not m.wear.is_empty():
+		_decay_wear()
 	for b in m.bushes:
 		if b.berries < Tuning.BUSH_MAX:
 			b.regrow += Tuning.DT
@@ -3680,6 +3746,7 @@ func paint_zone(rect: Rect2i) -> void:
 			var c := Vector2i(x, y)
 			if walkable(c) and site_at(c) == null and not m.farm.has(c) and reserved_at(c) == null and c != meadow_sign() and c != route_sign():
 				m.zone[c] = true
+				_clear_wear(c)
 	rev += 1
 
 
@@ -3763,6 +3830,7 @@ func paint_farm(rect: Rect2i) -> int:
 			if farm_blocked(c) != "":
 				continue
 			m.farm[c] = {"id": _id(), "kind": "crop", "cell": c, "grow": -1.0, "claim": 0, "unreach_until": 0}
+			_clear_wear(c)
 			n += 1
 	rev += 1
 	return n
@@ -3834,6 +3902,7 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 	for c in site_cells(s):
 		m.zone.erase(c)
 		_drop_crop(c)
+		_clear_wear(c)
 	if s.plot != null:  # the reserved plot is kept clear of stockpiles and farms
 		for x in range(s.plot.position.x, s.plot.end.x):
 			for y in range(s.plot.position.y, s.plot.end.y):
@@ -4613,9 +4682,77 @@ func road_eta(r: Dictionary) -> float:
 	return absf(r.pos.x - end.x) / (Tuning.WALK * hurt_speed(r))
 
 
-## Walking speed on a cell, as a share of WALK: wading the stream is slow until it's bridged.
+## Walking speed on a cell, as a share of WALK: wading the stream is slow until it's bridged, and a
+## worn path is quicker (issue #196).
 func ground_speed(c: Vector2i) -> float:
-	return Tuning.FORD_SPEED if m.water.has(c) and not bridged(c) else 1.0
+	return (Tuning.FORD_SPEED if m.water.has(c) and not bridged(c) else 1.0) * path_speed(c)
+
+
+## How worn a stretch of ground is, as a stage: 0 grass, 1 worn grass, 2 dirt path, 3 packed path.
+static func wear_stage(wear: int) -> int:
+	if wear >= Tuning.WEAR_PACKED:
+		return 3
+	if wear >= Tuning.WEAR_DIRT:
+		return 2
+	return 1 if wear >= Tuning.WEAR_WORN else 0
+
+
+## The stage of the ground at `c` on the current map.
+func path_stage(c: Vector2i) -> int:
+	return wear_stage(m.wear.get(c, 0))
+
+
+## The speed a worn path gives on `c`, as a share of WALK; 1 on grass.
+func path_speed(c: Vector2i) -> float:
+	if m.wear.is_empty():
+		return 1.0
+	match path_stage(c):
+		3: return Tuning.PATH_SPEED_PACKED
+		2: return Tuning.PATH_SPEED_DIRT
+	return 1.0
+
+
+## Whether walking wears the ground at `c`: grass in the village, not under a building, stockpile or farm.
+func _wears(c: Vector2i) -> bool:
+	return m.kind == "village" and not m.zone.has(c) and not m.farm.has(c) and site_at(c) == null
+
+
+## A resident has stepped onto `c`: the ground there packs down a little (issue #196). The ground is
+## only redrawn when a cell changes stage.
+func _wear_step(c: Vector2i) -> void:
+	if m.kind != "village" or not _wears(c):
+		return
+	var before: int = m.wear.get(c, 0)
+	var now := mini(before + Tuning.WEAR_STEP, Tuning.WEAR_CAP)
+	m.wear[c] = now
+	m.wear_touched[c] = true
+	if wear_stage(now) != wear_stage(before):
+		rev += 1
+
+
+## Wear grows back over cells nobody walked on since the last pass: 1 each (issue #196).
+func _decay_wear() -> void:
+	var gone: Array = []
+	for c in m.wear:
+		if m.wear_touched.has(c):
+			continue
+		var before: int = m.wear[c]
+		m.wear[c] = before - 1
+		if before - 1 <= 0:
+			gone.append(c)
+		if wear_stage(before - 1) != wear_stage(before):
+			rev += 1
+	for c in gone:
+		m.wear.erase(c)
+	m.wear_touched = {}
+
+
+## Putting a building or a stockpile on the ground clears the wear under it.
+func _clear_wear(c: Vector2i) -> void:
+	if m.wear.has(c):
+		if path_stage(c) != 0:
+			rev += 1
+		m.wear.erase(c)
 
 
 func bridged(c: Vector2i) -> bool:

@@ -194,7 +194,11 @@ func _build_static() -> void:
 			for y in sim.h:
 				var v := 0.96 + _hash(x, y) * 0.08
 				solid.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT, BlockTextures.EARTH)
-				solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), Palette.GRASS * Color(v, v, v), BlockTextures.GROUND)
+				var stage := sim.path_stage(Vector2i(x, y))  # the ground packs down where residents walk (issue #196)
+				if stage >= 2:
+					solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (TRODDEN if stage == 2 else PACKED) * Color(v, v, v), BlockTextures.EARTH)
+				else:
+					solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (Palette.GRASS.lerp(TRODDEN, 0.35) if stage == 1 else Palette.GRASS) * Color(v, v, v), BlockTextures.GROUND)
 	for b in sim.boulders:
 		if b.alive and not b.get("hidden", false) and not _in_fog(b.cell):
 			var c: Vector2i = b.cell
@@ -397,6 +401,7 @@ func _add_door(b: Batch, c: Vector2i, open: bool, rock: Color) -> void:
 
 
 static var TRODDEN := Color("#8C7B58")
+static var PACKED := Color("#74664A")  ## A packed village path, darker than a dirt one (issue #196).
 static var FOG := Color("#A9B3AF")
 static var SLEEPER := Color("#6A4A2E")
 

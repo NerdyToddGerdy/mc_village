@@ -22,6 +22,8 @@ var boulders: Array = []
 var sheep: Array = []
 var bushes: Array = []       ## {id, kind:"bush", cell, berries, regrow}: berry bushes (issue #44)
 var items := {}              ## Vector2i -> {cell, type, n, res}
+var wear := {}               ## Vector2i -> how worn the ground is from being walked on: the village's paths (issue #196).
+var wear_touched := {}       ## Cells stepped on since the last decay (not saved).
 var zone := {}               ## Vector2i -> true: stockpile cells
 var zone_res := {}           ## Vector2i -> resident id hauling into that cell
 var farm := {}               ## Vector2i -> {id, kind:"crop", cell, grow, claim, unreach_until}: farm plots (issue #45)
@@ -63,7 +65,7 @@ func _init(p_w := Tuning.MAP_W, p_h := Tuning.MAP_H) -> void:
 	occ.resize(w * h)
 
 
-const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "ledges", "water", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates"]
+const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "ledges", "water", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear"]
 
 
 ## The map as plain data. Reservations and job bookkeeping aren't saved (spec §2, Saving).
@@ -179,6 +181,8 @@ func shift(off: Vector2i) -> void:
 		p.gate += off
 		p.built = _shifted_keys(p.get("built", {}), off)
 	gates = _shifted_keys(gates, off)
+	wear = _shifted_keys(wear, off)
+	wear_touched = {}
 	rock = _shifted_keys(rock, off)
 	water = _shifted_keys(water, off)
 	fences = _shifted_keys(fences, off)

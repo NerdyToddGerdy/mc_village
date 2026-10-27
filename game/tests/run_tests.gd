@@ -86,6 +86,9 @@ func _init() -> void:
 		"test_storehouse_chests",
 		"test_land_claims",
 		"test_blueprints_clear_their_footprint",
+		"test_worn_paths_wear_and_regrow",
+		"test_worn_paths_pathing_and_speed",
+		"test_worn_paths_saved",
 		"test_founding_book_chapter_and_pages",
 		"test_founding_book_save_upgrade",
 	]
@@ -3695,3 +3698,166 @@ func test_founding_book_save_upgrade() -> void:
 	check(up.data.state.stats.meals_cooked == 1 and up.data.state.stats.ore_home == true, "a village with iron and bread on hand counts as having cooked and brought ore home")
 	var sim := Sim.from_state(up.data.state)
 	check(Goals.village_done(sim, 1) and Goals.village_done(sim, 3), "so those two chapter goals are done")
+
+
+## Issue #196: walking packs the village's ground into paths, which grow back when nobody walks them.
+func test_worn_paths_wear_and_regrow() -> void:
+	var sim := Sim.new_game()
+	var c: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(3, 3))
+	var rev := sim.rev
+	for i in Tuning.WEAR_WORN - 1:
+		sim._wear_step(c)
+	check(sim.path_stage(c) == 0 and sim.rev == rev, "%d steps leave it grass, and the ground isn't redrawn (rev %d)" % [Tuning.WEAR_WORN - 1, sim.rev - rev])
+	sim._wear_step(c)
+	check(sim.path_stage(c) == 1 and sim.rev == rev + 1, "step %d makes it worn grass, and redraws once" % Tuning.WEAR_WORN)
+	for i in Tuning.WEAR_DIRT - Tuning.WEAR_WORN:
+		sim._wear_step(c)
+	check(sim.path_stage(c) == 2 and absf(sim.path_speed(c) - Tuning.PATH_SPEED_DIRT) < 0.001, "%d wear is a dirt path, a little quicker" % Tuning.WEAR_DIRT)
+	for i in Tuning.WEAR_PACKED - Tuning.WEAR_DIRT:
+		sim._wear_step(c)
+	check(sim.path_stage(c) == 3 and absf(sim.path_speed(c) - Tuning.PATH_SPEED_PACKED) < 0.001, "%d wear is a packed path, quicker still" % Tuning.WEAR_PACKED)
+	for i in 200:
+		sim._wear_step(c)
+	check(sim.m.wear[c] == Tuning.WEAR_CAP, "wear stops at the cap (%d)" % sim.m.wear[c])
+	# A cell nobody walks on loses wear, never below zero; one that's walked holds.
+	var other: Vector2i = c + Vector2i(1, 0) if sim.walkable(c + Vector2i(1, 0)) else c + Vector2i(0, 1)
+	sim._wear_step(other)
+	sim.m.wear_touched = {}
+	sim._wear_step(c)  # walked this pass, so it holds
+	sim._decay_wear()
+	check(sim.m.wear[c] == Tuning.WEAR_CAP and not sim.m.wear.has(other), "a walked cell holds, an unwalked one with 1 wear is gone")
+	sim._decay_wear()
+	check(sim.m.wear[c] == Tuning.WEAR_CAP - 1, "and once nobody walks it, it loses 1 a pass")
+	for i in 150:
+		sim._decay_wear()
+	check(not sim.m.wear.has(c) and sim.path_stage(c) == 0, "it grows back to grass and is forgotten, never below zero")
+	# The decay runs by itself.
+	sim._wear_step(c)
+	sim.m.wear_touched = {}
+	var every := int(Tuning.WEAR_DECAY_SECS * Tuning.TPS)
+	sim.tick = every - 1
+	sim.step()
+	check(not sim.m.wear.has(c), "the sim decays wear every %d s" % int(Tuning.WEAR_DECAY_SECS))
+	# What doesn't wear: a stockpile, a farm, a building; building on a path clears it.
+	var z: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(5, 0))
+	sim.m.zone[z] = true
+	sim._wear_step(z)
+	check(not sim.m.wear.has(z), "a stockpile cell doesn't wear")
+	var f: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(0, 6))
+	sim.paint_farm(Rect2i(f, Vector2i.ONE))
+	sim._wear_step(f)
+	check(not sim.m.wear.has(f), "a farm plot doesn't wear")
+	var spot := open_cell_for(sim, Vector2i(1, 1))
+	for i in 40:
+		sim._wear_step(spot)
+	check(sim.path_stage(spot) == 2, "a path forms")
+	var rev2 := sim.rev
+	sim.place_site("bench", spot)
+	check(not sim.m.wear.has(spot) and sim.rev > rev2, "putting a building on it clears the wear under it")
+	var zr := open_cell_for(sim, Vector2i(1, 1))
+	for i in 12:
+		sim._wear_step(zr)
+	sim.paint_zone(Rect2i(zr, Vector2i.ONE))
+	check(not sim.m.wear.has(zr), "so does painting a stockpile over it")
+	# Only the village wears: site maps and the road don't.
+	var mine_worn: bool = sim.on_map("old_mine", func():
+		sim._wear_step(Vector2i(1, 1))
+		return not sim.m.wear.is_empty())
+	check(not mine_worn, "the old mine doesn't wear")
+	var road_worn: bool = sim.on_map(Road.ID, func():
+		sim._wear_step(Vector2i(2, Road.LINE_ROW))
+		return not sim.m.wear.is_empty())
+	check(not road_worn, "nor does the road")
+	# Walking does it: a resident who walks about wears the ground.
+	var walk := Sim.new_game()
+	walk.designate_mine(Rect2i(0, 0, walk.w, walk.h))
+	run(walk, 120.0)
+	check(not walk.m.wear.is_empty(), "two minutes of the opening leave worn ground (%d cells)" % walk.m.wear.size())
+
+
+## Issue #196: residents prefer a path that's a little longer but quicker, and a worn path walks faster.
+func test_worn_paths_pathing_and_speed() -> void:
+	var sim := _bare_ground()
+	var a := Vector2i(8, 8)
+	var b := a + Vector2i(8, 0)
+	var straight: Array = sim.find_path(a, {b: true})
+	check(straight.size() == 8 and straight.all(func(c): return c.y == a.y), "on bare grass the shortest path is straight (%d steps)" % straight.size())
+	# A packed row one cell off the line: two steps longer, but quicker.
+	for x in range(a.x, b.x + 1):
+		sim.m.wear[Vector2i(x, a.y + 1)] = Tuning.WEAR_CAP
+	var via: Array = sim.find_path(a, {b: true})
+	check(via.size() == 10 and via.any(func(c): return c.y == a.y + 1), "a path two steps longer but packed is taken (%d steps)" % via.size())
+	var cost := 0.0
+	for c in via:
+		cost += 1.0 / sim.path_speed(c)
+	check(cost < 8.0, "and it really is quicker (%.2f against 8)" % cost)
+	# Too long a detour isn't worth it.
+	sim.m.wear.clear()
+	for x in range(a.x, b.x + 1):
+		sim.m.wear[Vector2i(x, a.y + 2)] = Tuning.WEAR_CAP
+	var far: Array = sim.find_path(a, {b: true})
+	check(far.size() == 8 and far.all(func(c): return c.y == a.y), "a detour of four more steps stays on the grass (%d steps)" % far.size())
+	check(sim.find_path(a, {a: true}).is_empty(), "no path is needed to where you stand")
+	var shut := Sim.new_game()
+	check(shut.find_path(Sim.rcell(shut.residents[0]), {Vector2i(-5, -5): true}) == null, "an unreachable goal is still null, worn paths or not")
+	# Walking speed multiplies: a path on the ford is still slow, but quicker than the ford alone.
+	var ford := a
+	sim.m.water[ford] = true
+	check(absf(sim.ground_speed(ford) - Tuning.FORD_SPEED) < 0.001, "wading is slow")
+	sim.m.wear[ford] = Tuning.WEAR_CAP
+	check(absf(sim.ground_speed(ford) - Tuning.FORD_SPEED * Tuning.PATH_SPEED_PACKED) < 0.001, "path speed multiplies with the ford's")
+	# The same walk takes fewer ticks on a path.
+	var s1 := _bare_ground()
+	var s2 := _bare_ground()
+	var from := Vector2i(6, 8)
+	var to := from + Vector2i(13, 0)
+	for x in range(from.x, to.x + 1):
+		s2.m.wear[Vector2i(x, from.y)] = Tuning.WEAR_CAP
+	var t1 := _ticks_to_walk(s1, from, to)
+	var t2 := _ticks_to_walk(s2, from, to)
+	check(t2 < t1 and float(t2) / t1 < 0.9, "a packed path is walked in fewer ticks (%d against %d)" % [t2, t1])
+
+
+## A new game with every tree and boulder cleared, for tests that need open ground.
+func _bare_ground() -> Sim:
+	var sim := Sim.new_game()
+	sim.m.trees = []
+	sim.m.boulders = []
+	sim.m.bushes = []
+	sim.m.occ_dirty = true
+	return sim
+
+
+func _ticks_to_walk(sim: Sim, from: Vector2i, to: Vector2i) -> int:
+	var ada: Dictionary = sim.residents[0]
+	ada.pos = Vector2(from)
+	var job := Job.new("move", "Walking", "")
+	job.step({"op": "goto", "cells": [to], "adj": false, "planned": false})
+	ada.job = job
+	ada.hunger = 100.0
+	var n := 0
+	while ada.job == job and n < 2000:
+		sim.step()
+		ada.hunger = 100.0
+		n += 1
+	return n
+
+
+## Issue #196: the wear is saved with the village, and older saves start on bare grass.
+func test_worn_paths_saved() -> void:
+	var sim := Sim.new_game()
+	var c: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(3, 3))
+	for i in 35:
+		sim._wear_step(c)
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(back.m.wear.get(c, 0) == 35 and back.path_stage(c) == 2, "the wear is saved and loaded (%d)" % back.m.wear.get(c, 0))
+	var raw: Dictionary = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v30.save"))
+	var up := SaveFormat.upgrade(raw)
+	check(not up.has("error") and up.data.state.maps.village.wear.is_empty(), "an older save starts on bare grass")
+	var old := Sim.from_state(up.data.state)
+	check(old.m.wear.is_empty(), "and loads")
+	# A claim on the north or west edge moves the wear with everything else.
+	var big := Sim.new_game()
+	big.m.wear[Vector2i(4, 5)] = 50
+	big.m.grow("north", 8)
+	check(big.m.wear.has(Vector2i(4, 13)) and not big.m.wear.has(Vector2i(4, 5)), "growing the map shifts the wear")
