@@ -384,12 +384,21 @@ func _initialize() -> void:
 		ada.orders.clear()
 
 	# Shift + right-click queues orders; the panel lists them and can clear them
-	var vis2 := root.get_visible_rect().size
 	if true:
 		game.selection = {"kind": "res", "ids": [ada.id]}
-		# Two walks to open ground in the middle of the screen, queued with Shift + right-click
-		for spot in [Vector2(0.45, 0.45), Vector2(0.55, 0.5)]:
-			await click(vis2 * spot, MOUSE_BUTTON_RIGHT, true)
+		# Two walks to open ground near Ada, queued with Shift + right-click. The cells are picked from the sim
+		# (a fixed screen spot can land on a house or a tree, which isn't an order target, depending on how the
+		# game got here), with the camera on her so they sit mid-screen, clear of the panels.
+		await look_at(Sim.rcell(ada))
+		var spots: Array = []
+		for d in range(2, 8):
+			for off in [Vector2i(d, 0), Vector2i(0, d), Vector2i(-d, 0), Vector2i(0, -d), Vector2i(d, d), Vector2i(-d, -d)]:
+				var qc: Vector2i = Sim.rcell(ada) + off
+				if spots.size() < 2 and sim.walkable(qc) and in_middle(screen(qc)) and spots.all(func(o): return Sim.manhattan(o, qc) >= 2):
+					spots.append(qc)
+		check(spots.size() == 2, "two open cells near Ada to queue walks to (%d)" % spots.size())
+		for qc in spots:
+			await click(screen(qc), MOUSE_BUTTON_RIGHT, true)
 		check(ada.orders.size() >= 1, "Shift + right-click queues orders (%d)" % ada.orders.size())
 		game._hud.refresh(sim)
 		await frames(2)
