@@ -536,13 +536,14 @@ func drop_items(c: Vector2i, type: String, n: int, uses := -1) -> void:
 	if _occ_dirty:
 		_recompute_occ()
 	var cap := Defs.stack_cap(type)
+	var clearing := _clearing_cells()  # never onto a blueprint's footprint (issue #205)
 	var seen := {c: true}
 	var queue: Array = [c]
 	var qi := 0
 	while n > 0 and qi < queue.size() and qi < 400:
 		var cur: Vector2i = queue[qi]
 		qi += 1
-		if walkable(cur):
+		if walkable(cur) and not clearing.has(cur):
 			var s = m.items.get(cur)
 			if s == null:
 				var put := mini(n, cap)
@@ -659,14 +660,29 @@ func door_cell(origin: Vector2i, rot: int) -> Vector2i:
 		_: return origin + Vector2i(0, 2)
 
 
+## What's on a rect that a building put there has to clear (issue #205): trees and boulders to fell
+## or break, and the debris: loose stacks and berry bushes.
 func obstacles_in(rect: Rect2i) -> Dictionary:
-	var out := {"trees": [], "boulders": []}
+	var out := {"trees": [], "boulders": [], "items": [], "bushes": []}
 	for t in m.trees:
 		if t.alive and rect.has_point(t.cell):
 			out.trees.append(t)
 	for b in m.boulders:
 		if b.alive and rect.has_point(b.cell):
 			out.boulders.append(b)
+	if rect.get_area() <= m.items.size():
+		for x in range(rect.position.x, rect.end.x):
+			for y in range(rect.position.y, rect.end.y):
+				var it = m.items.get(Vector2i(x, y))
+				if it != null:
+					out.items.append(it)
+	else:
+		for k in m.items:
+			if rect.has_point(k):
+				out.items.append(m.items[k])
+	for b in m.bushes:
+		if rect.has_point(b.cell):
+			out.bushes.append(b)
 	return out
 
 
@@ -674,11 +690,13 @@ func site_obstacles(s: Dictionary) -> Dictionary:
 	return obstacles_in(Rect2i(s.origin, s.size))
 
 
+## Whether a blueprint's footprint is clear of trees, boulders and debris, so building can start.
 func footprint_clear(s: Dictionary) -> bool:
 	var o := site_obstacles(s)
-	return o.trees.is_empty() and o.boulders.is_empty()
+	return o.trees.is_empty() and o.boulders.is_empty() and o.items.is_empty() and o.bushes.is_empty()
 
 
+## "2 trees, 6 logs and a bush": what's in the way, for the placement hint and the blueprint's panel.
 static func clearing_text(o: Dictionary) -> String:
 	var parts: PackedStringArray = []
 	var t: int = o.trees.size()
@@ -687,11 +705,43 @@ static func clearing_text(o: Dictionary) -> String:
 		parts.append("%d %s" % [t, "tree" if t == 1 else "trees"])
 	if b:
 		parts.append("%d %s" % [b, "boulder" if b == 1 else "boulders"])
-	return " and ".join(parts)
+	parts.append_array(stacks_text(o.get("items", [])))
+	var bushes: int = o.get("bushes", []).size()
+	if bushes:
+		parts.append("a bush" if bushes == 1 else "%d bushes" % bushes)
+	if parts.size() < 2:
+		return "".join(parts)
+	return ", ".join(parts.slice(0, parts.size() - 1)) + " and " + parts[-1]
+
+
+## "6 logs", "3 wool": what the loose stacks add up to, a line a kind.
+static func stacks_text(stacks: Array) -> PackedStringArray:
+	var totals := {}
+	for st in stacks:
+		totals[st.type] = totals.get(st.type, 0) + st.n
+	var out: PackedStringArray = []
+	for k in totals:
+		out.append(Defs.words(k, totals[k]))
+	return out
+
+
+## The cells of every unfinished blueprint on this map. Nothing is set down on them (issue #205): they're
+## being cleared, and what lies there is carried off before building starts.
+func _clearing_cells() -> Dictionary:
+	var out := {}
+	for s in m.sites:
+		if not s.done:
+			for c in site_cells(s):
+				out[c] = true
+	return out
 
 
 func _mark_obstacles(s: Dictionary) -> void:
 	var o := site_obstacles(s)
+	for b in o.bushes:  # a bush on the footprint is dug up; its berries are carried off with the rest (issue #205)
+		m.bushes.erase(b)
+		if b.berries > 0:
+			drop_items(b.cell, "berries", b.berries)
 	for t in o.trees + o.boulders:
 		if not grown(t):  # a sapling in the way is lifted, not felled (issue #177)
 			t.alive = false
@@ -777,14 +827,8 @@ func _complete_stage(s: Dictionary) -> void:
 ## Moves items, stockpile cells and residents off a footprint that has just become solid.
 func _clear_footprint(s: Dictionary) -> void:
 	_recompute_occ()
-	var exit: Vector2i = s.origin + Vector2i(s.size.x / 2, s.size.y)
 	for c in site_cells(s):
-		m.zone.erase(c)
-		if m.items.has(c):
-			var it: Dictionary = m.items[c]
-			m.items.erase(c)
-			drop_items(exit, it.type, it.n, it.get("dur", -1))
-	m.bushes = m.bushes.filter(func(b): return not Rect2i(s.origin, s.size).has_point(b.cell))
+		m.zone.erase(c)  # nothing is left lying here to move: the footprint was cleared before building started (issue #205)
 	for r in residents + sheep:
 		var c := rcell(r)
 		if Rect2i(s.origin, s.size).has_point(c):
@@ -1723,7 +1767,7 @@ func _craft_job(r: Dictionary, b: Dictionary, rec: Dictionary) -> Job:
 
 ## Carrying a stack to a stockpile cell, or to a workstation's pile (`pile`, issue #177).
 func _haul_job(r: Dictionary, stack: Dictionary, dest: Vector2i, n: int, pile := {}) -> Job:
-	var where: String = "the storehouse" if in_store(dest) else "the stockpile" if pile.is_empty() else "the " + Defs.TEMPLATES[pile.tpl].name.to_lower()
+	var where: String = "the storehouse" if in_store(dest) else ("the stockpile" if in_zone(dest) else "clear ground") if pile.is_empty() else "the " + Defs.TEMPLATES[pile.tpl].name.to_lower()
 	var j := Job.new("haul", "Hauling %s to %s" % [Defs.ITEMS[stack.type].many, where], where)
 	stack.res += n
 	m.zone_res[dest] = r.id
@@ -2520,10 +2564,22 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 			piled[ls.type] = pile_dest(ls.type, c) != null
 			stores[ls.type] = store_dest(ls.type, c) != null
 			anywhere = anywhere or dests[ls.type] != null or piled[ls.type] or stores[ls.type]
-	if not anywhere:
+	var clearing := _clearing_cells()
+	var bare: bool = m.zone.is_empty() and piles.is_empty() and not m.sites.any(func(s): return s.tpl == "storehouse" and s.done)
+	if not anywhere and (not bare or clearing.is_empty() or not loose.any(func(s): return clearing.has(s.cell))):
 		return null
-	# An expedition's unloaded cargo goes first (issue #112), then the nearest.
-	loose.sort_custom(func(a, b): return a.get("cargo", false) and not b.get("cargo", false) or (a.get("cargo", false) == b.get("cargo", false) and manhattan(a.cell, c) < manhattan(b.cell, c)))
+	# An expedition's unloaded cargo goes first (issue #112), then what lies on a blueprint's footprint
+	# (issue #205), then the nearest.
+	loose.sort_custom(func(a, b):
+		var ca: bool = a.get("cargo", false)
+		var cb: bool = b.get("cargo", false)
+		if ca != cb:
+			return ca
+		var fa: bool = clearing.has(a.cell)
+		var fb: bool = clearing.has(b.cell)
+		if fa != fb:
+			return fa
+		return manhattan(a.cell, c) < manhattan(b.cell, c))
 	for ls in loose:
 		var pd = pile_dest(ls.type, ls.cell) if piled[ls.type] else null  # a workstation's pile before the stockpile
 		if pd != null:
@@ -2533,11 +2589,37 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 			return {"stack": ls, "dest": sd.cell, "n": mini(mini(avail(ls), carry), sd.room)}
 		var dest = dests[ls.type]
 		if dest == null:
+			if bare and clearing.has(ls.cell):  # no storage at all: carried clear of the building, not teleported
+				var spot = _clear_spot(ls.cell, clearing)
+				if spot != null:
+					return {"stack": ls, "dest": spot, "n": mini(avail(ls), carry)}
 			continue
 		var cap := Defs.stack_cap(ls.type)
 		var here = m.items.get(dest)
 		var room: int = cap - (here.n if here != null else 0)
 		return {"stack": ls, "dest": dest, "n": mini(mini(avail(ls), carry), room)}
+	return null
+
+
+## Whether a loose stack has somewhere to be carried: a stockpile, a pile or a storehouse with room, or,
+## with no storage at all, open ground beside the building.
+func _stack_has_home(st: Dictionary) -> bool:
+	if zone_dest(st.type) != null or pile_dest(st.type, st.cell) != null or store_dest(st.type, st.cell) != null:
+		return true
+	return m.zone.is_empty() and pile_map().is_empty() and not m.sites.any(func(s): return s.tpl == "storehouse" and s.done)
+
+
+## The nearest open cell to `c` outside every footprint being cleared, for a stack that has no storage
+## to go to yet (issue #205), or null.
+func _clear_spot(c: Vector2i, clearing: Dictionary):
+	for d in range(1, 9):
+		for dx in range(-d, d + 1):
+			for dy in range(-d, d + 1):
+				if maxi(absi(dx), absi(dy)) != d:
+					continue
+				var p := c + Vector2i(dx, dy)
+				if walkable(p) and not clearing.has(p) and not m.items.has(p) and not m.zone_res.has(p) and reserved_at(p) == null:
+					return p
 	return null
 
 
@@ -3319,6 +3401,12 @@ func _stuck_on_map() -> void:
 			var nb: int = ob.boulders.size()
 			if nb and not any_pick:
 				_add_stuck(tpl.name, "Needs a pickaxe to clear " + ("a boulder" if nb == 1 else "%d boulders" % nb), mid, 0.6, "site", s.id)
+			if not ob.items.is_empty():  # loose stacks to carry off (issue #205)
+				var homeless: Array = ob.items.filter(func(st): return not _stack_has_home(st))
+				if not homeless.is_empty():
+					_add_stuck(tpl.name, "Clearing: no room in a stockpile for %s" % ", ".join(stacks_text(homeless)), mid, 0.6, "site", s.id)
+				else:
+					_add_stuck(tpl.name, "Clearing: %s to move" % clearing_text(ob), mid, 0.6, "site", s.id, false, true)
 			continue
 		var cost := {}
 		var label := ""

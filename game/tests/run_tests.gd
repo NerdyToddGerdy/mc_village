@@ -85,6 +85,7 @@ func _init() -> void:
 		"test_workstations_process_materials",
 		"test_storehouse_chests",
 		"test_land_claims",
+		"test_blueprints_clear_their_footprint",
 	]
 	var only := Array(OS.get_cmdline_user_args())
 	if not only.is_empty():
@@ -3451,6 +3452,104 @@ func test_land_claims() -> void:
 	check(old.w == Tuning.MAP_W and old.claims_made == 0 and old.claims_available() == maxi(0, (old.residents.size() - 2) / Tuning.CLAIM_EVERY), "an older save keeps its size, with claims for its residents (%d)" % old.claims_available())
 	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(back.w == sim.w and back.claims_made == 1, "the grown size and the claims made are saved")
+
+
+## Issue #205: a building's debris is carried off before building starts, and nothing jumps.
+func test_blueprints_clear_their_footprint() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	sim.paint_zone(open_rect(sim, Vector2i(4, 2)))
+	var spot := open_cell_for(sim, Vector2i(3, 3))
+	# A tree felled on a blueprint: its logs land beside it and are carried to the stockpile.
+	var tree := {"id": sim._id(), "kind": "tree", "cell": spot + Vector2i(1, 1), "logs": 9, "alive": true, "des": false, "claim": 0, "unreach_until": 0}
+	sim.trees.append(tree)
+	var house := sim.place_site("bench", tree.cell)
+	check(tree.des, "a tree under a blueprint is marked to fell")
+	var on_footprint := 0
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if not tree.alive and sim.items.has(tree.cell):
+			on_footprint += 1
+	check(not tree.alive and on_footprint == 0, "its logs never land on the footprint (%d ticks with a stack there)" % on_footprint)
+	run(sim, 40)
+	check(sim.stacks_where(func(st): return st.type == "log" and sim.in_zone(st.cell)).size() > 0 and house.done, "they're carried to the stockpile, and the building goes up (done %s, logs %s, stuck %s)" % [house.done, sim.stacks_where(func(st): return st.type == "log").map(func(st): return [st.cell, st.n, sim.in_zone(st.cell)]), stuck_text(sim)])
+	# A stack lying on a blueprint: building waits until it's hauled off, and nothing jumps.
+	var sim2 := Sim.new_game()
+	sim2.paint_zone(open_rect(sim2, Vector2i(4, 2)))
+	var cell := open_cell_for(sim2, Vector2i(1, 1))
+	sim2.drop_items(cell, "log", 6)
+	sim2.drop_items(Sim.rcell(sim2.residents[0]) + Vector2i(0, 1), "log", 8)
+	check(sim2.items.has(cell), "a stack is lying where the blueprint goes")
+	var bench := sim2.place_site("bench", cell)
+	check(not sim2.footprint_clear(bench) and not sim2.site_ready(bench), "the blueprint can't start with it there")
+	check(Sim.clearing_text(sim2.obstacles_in(Rect2i(cell, Vector2i.ONE))) == "6 logs", "and the hint names it (%s)" % Sim.clearing_text(sim2.obstacles_in(Rect2i(cell, Vector2i.ONE))))
+	sim2.compute_stuck()
+	check(stuck_text(sim2).contains("Clearing: 6 logs to move"), "the stuck list says so: " + stuck_text(sim2))
+	var started_early := false
+	for i in 60 * Tuning.TPS:
+		sim2.step()
+		if sim2.items.has(cell) and (bench.builder != 0 or not bench.store.is_empty() or bench.stage > 0):
+			started_early = true
+	check(not started_early and not sim2.items.has(cell) and bench.done, "it's hauled off first, then the bench is built (done %s)" % bench.done)
+	var logs := 0
+	for st in sim2.stacks_where(func(x): return x.type == "log"):
+		logs += st.n
+	check(logs >= 6 and sim2.stacks_where(func(st): return st.type == "log" and sim2.in_zone(st.cell)).size() > 0, "the logs were carried, not lost (%d)" % logs)
+	check(not sim2.items.has(cell) and not sim2.items.has(cell + Vector2i(0, 1)), "none jumped to the door of the finished bench")
+	# A berry bush: dug up, its berries carried off.
+	var sim3 := Sim.new_game()
+	sim3.paint_zone(open_rect(sim3, Vector2i(4, 2)))
+	var bcell := open_cell_for(sim3, Vector2i(1, 1))
+	var bush := sim3.add_bush(bcell)
+	check(Sim.clearing_text(sim3.obstacles_in(Rect2i(bcell, Vector2i.ONE))) == "a bush", "the hint names a bush")
+	sim3.drop_items(Sim.rcell(sim3.residents[0]) + Vector2i(1, 1), "log", 4)  # the bench's logs
+	var b3 := sim3.place_site("bench", bcell)
+	check(not sim3.bushes.has(bush) and not sim3.items.has(bcell), "a bush under a blueprint is dug up, its berries set beside it")
+	run(sim3, 60)
+	check(sim3.stacks_where(func(st): return st.type == "berries" and sim3.in_zone(st.cell)).size() > 0, "and carried to the stockpile")
+	check(b3.done, "the building goes up")
+	# Somewhere to put it: with no room, the blueprint says so; with no storage at all, it's carried clear.
+	var sim4 := Sim.new_game()
+	var zc := open_cell_for(sim4, Vector2i(1, 1))
+	sim4.paint_zone(Rect2i(zc, Vector2i.ONE))
+	sim4.drop_items(zc, "cobble", Defs.stack_cap("cobble"))  # a full stockpile
+	var c4 := open_cell_for(sim4, Vector2i(1, 1))
+	sim4.drop_items(c4, "log", 6)
+	sim4.place_site("bench", c4)
+	sim4.compute_stuck()
+	check(stuck_text(sim4).contains("Clearing: no room in a stockpile for 6 logs"), "a full stockpile: " + stuck_text(sim4))
+	var sim5 := Sim.new_game()
+	var c5 := open_cell_for(sim5, Vector2i(1, 1))
+	sim5.drop_items(c5, "log", 6)
+	sim5.drop_items(Sim.rcell(sim5.residents[0]) + Vector2i(1, 2), "log", 4)
+	var b5 := sim5.place_site("bench", c5)
+	run(sim5, 60)
+	check(not sim5.items.has(c5) and b5.done and sim5.free_count("log") >= 6, "no storage at all: the logs are carried to open ground beside it and the bench goes up (%d logs about)" % sim5.free_count("log"))
+	# A walked-over building clears its footprint too.
+	var sim6 := Sim.new_game()
+	sim6.paint_zone(open_rect(sim6, Vector2i(4, 2)))
+	var c6 := open_cell_for(sim6, Vector2i(1, 1))
+	sim6.drop_items(c6, "cobble", 5)
+	var stakes := sim6.place_site("claim_stakes", c6)
+	check(not sim6.footprint_clear(stakes), "boundary stakes wait for the ground to be cleared too")
+
+
+## An open cell for a `size` building near the middle of the village, with nothing on it.
+func open_cell_for(sim: Sim, size: Vector2i) -> Vector2i:
+	var start := Sim.rcell(sim.residents[0]) + Vector2i(5, 5)
+	for d in range(0, 14):
+		for x in range(start.x - d, start.x + d + 1):
+			for y in range(start.y - d, start.y + d + 1):
+				var r := Rect2i(Vector2i(x, y), size)
+				var ok := true
+				for cx in range(r.position.x - 1, r.end.x + 1):
+					for cy in range(r.position.y - 1, r.end.y + 1):
+						var c := Vector2i(cx, cy)
+						if not sim.walkable(c) or sim.in_zone(c) or sim.items.has(c) or sim.farm_blocked(c) != "" or sim.reserved_at(c) != null:
+							ok = false
+				if ok:
+					return r.position
+	return start
 
 
 func test_jobs_need_their_workstation() -> void:
