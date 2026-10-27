@@ -1277,11 +1277,23 @@ func plan_cargo_amount(i: int, by: int) -> void:
 	Sim.sync_target(plan)
 
 
+## Clear the level (issue #188): the party works every block of what the list asks for, then digs to the door and
+## goes down by itself, instead of bringing back set amounts. Not for the meadow.
+func plan_clear_toggle() -> void:
+	if plan.dest == Meadow.ID:
+		return
+	_leave_tending()
+	plan.clear = not plan.get("clear", false)
+	Sim.sync_target(plan)
+
+
 ## Which level of the old mine the plan is for (issue #132). Its list is the one that place last used.
 func plan_dest(id: String) -> void:
 	var tending: bool = plan.target.item == "pens"
 	plan.dest = id
 	plan.list = sim.cargo_list_for(id)
+	if id == Meadow.ID:
+		plan.clear = false
 	if not tending or id != Meadow.ID:
 		plan.target = {"item": "coal", "n": 1}
 		Sim.sync_target(plan)

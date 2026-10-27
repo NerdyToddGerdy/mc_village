@@ -4276,7 +4276,7 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 	var wheat := wheat_wanted() if meadow else 0
 	var plan := {"dest": dest, "party": party, "target": {"item": "wool" if meadow else "coal", "n": 6 if meadow else 8}, "meals": 3, "picks": 0 if meadow else 1,
 		"sticks": sticks, "wheat": wheat,
-		"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": cart_adds_room()}
+		"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": cart_adds_room(), "clear": false}
 	plan.list = cargo_list_for(dest)
 	sync_target(plan)
 	return plan
@@ -4290,7 +4290,10 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 static func cargo_rows(plan: Dictionary) -> Array:
 	if plan.target.item == "pens":  # tending the pens brings back whatever's hunted, with no list
 		return []
-	return plan.get("list", []).filter(func(r): return r.on)
+	var rows: Array = plan.get("list", []).filter(func(r): return r.on)
+	if plan.get("clear", false):  # clearing the level wants all of it: every amount is "as much as fits" (issue #188)
+		return rows.map(func(r): return {"item": r.item, "on": true, "n": 0})
+	return rows
 
 
 ## Keeps `target` in step with the list: its first row that's on, preferring one with an amount. Tending the
@@ -4398,6 +4401,8 @@ func gives_wanted(b: Dictionary) -> bool:
 
 ## "3 coal and 2 iron ore", or "what's on the list": what a plan or the party is out for, in words.
 static func list_text(plan: Dictionary) -> String:
+	if plan.get("clear", false):
+		return "clear the level"
 	var parts: PackedStringArray = []
 	for r in cargo_rows(plan):
 		if r.n > 0:
@@ -4406,7 +4411,7 @@ static func list_text(plan: Dictionary) -> String:
 
 
 func objective_text() -> String:
-	return list_text(expedition)
+	return "what clears the level" if expedition.get("clear", false) else list_text(expedition)
 
 
 ## A loose stack at the site that outranks something in the packs, with the cargo it would swap out: the
@@ -5742,7 +5747,7 @@ func _site_job(r: Dictionary):
 		if sj != null:
 			_drop_unused(r, pj)
 			return sj
-	if m.door_state == "closed" and walkable(MineLevels.door_front(m)) and not residents.any(func(o): return o.job != null and o.job.kind == "door"):
+	if m.door_state == "closed" and walkable(MineLevels.door_front(m)) and (not expedition.get("clear", false) or _nothing_left()) and not residents.any(func(o): return o.job != null and o.job.kind == "door"):
 		var dj := Job.new("door", "Going to the door", "the door")  # the way is open: someone goes to look (issue #132)
 		dj.step(_goto([m.door], true))
 		dj.step({"op": "at_door"})
@@ -5972,18 +5977,53 @@ func policy_met() -> String:
 		return "packs full"
 	if ex.policy.get("low", false) and spendable_meals() <= 0:
 		return "provisions low"
+	if _nothing_left() and not ex.get("survey", false):
+		if tending():
+			return "the pens are tended"
+		if ex.get("clear", false) and level_of(ex.dest) > 0:
+			return "the level is cleared"
+		return "nothing left to hunt" if m.id == Meadow.ID else "nothing left to mine"
+	return ""
+
+
+## Whether the party has nothing left to do here: no one busy, nothing marked or worth marking that can be reached,
+## and nothing lying about that would go into the packs.
+func _nothing_left() -> bool:
+	var ex := expedition
 	var party: Array = ex.party.map(func(id): return resident(id))
 	var busy := party.any(func(r): return r.job != null and r.job.kind in ["gather", "stow", "survey", "eat", "equip", "door", "fence", "lead", "feed"])
 	var to_mine := m.boulders.any(func(b): return b.alive and not b.get("hidden", false) and ((b.des and not _cooling(b)) or (not b.get("loose", false) and gives_wanted(b) and not _way_through(b.cell).is_empty())))
 	to_mine = to_mine or m.sheep.any(func(a): return a.alive and ((a.des and not _cooling(a)) or (a.get("pen", 0) == 0 and gives_wanted(a))))
 	if m.id == Meadow.ID and tending():  # issue #139
 		to_mine = to_mine or pen_work() or not pen_surplus().is_empty()
-	var loose := _stowable()
-	if not busy and not to_mine and not loose and not ex.get("survey", false):
-		if tending():
-			return "the pens are tended"
-		return "nothing left to hunt" if m.id == Meadow.ID else "nothing left to mine"
-	return ""
+	return not busy and not to_mine and not _stowable()
+
+
+## How many blocks of what the party is after are left to mine on the level being worked, out of the loose ceilings'
+## reach (issue #188).
+func level_left() -> int:
+	var map_here: SimMap = maps[expedition.dest] if expedition.get("dest", "") != "" and maps.has(expedition.dest) else m
+	return map_here.boulders.filter(func(b): return b.alive and not b.get("hidden", false) and not b.get("loose", false) and cargo_rows(expedition).any(func(r): return gives(b, r.item))).size()
+
+
+## A cleared level (issue #188): with nothing left to mine on it, the party digs to the door itself and goes down, the
+## objective carried over. Returns whether it's busy with that, so the party isn't sent home for having nothing to mine.
+func _clear_step() -> bool:
+	var ex := expedition
+	if not ex.get("clear", false) or level_of(ex.dest) == 0 or not pending.is_empty() or not _nothing_left():
+		return false
+	if m.door_state != "closed":  # the door's been reached: through it
+		go_down()
+		return true
+	var front := MineLevels.door_front(m)
+	var way := _way_through(front)  # never through a loose ceiling: that's the player's call
+	if way.is_empty():
+		return walkable(front)  # open to the door: someone is on their way to look; blocked: home it is
+	for b in way:
+		b.des = true
+		b.unreach_until = 0
+	rev += 1
+	return true
 
 
 ## Sends the party home from the site, saying why ("target reached", "retreat"...).
@@ -6008,6 +6048,8 @@ func _step_site() -> void:
 		_learn_items()
 		_mark_objective()
 		var why := policy_met()
+		if why == "the level is cleared" and _clear_step():  # the packs, food and injuries still come first (issue #188)
+			return
 		if why != "":
 			_head_home(why)
 
@@ -6307,6 +6349,9 @@ func _find_door(r: Dictionary) -> void:
 	rev += 1
 	_toast("%s reached the door at the end of the %s." % [r.name, m.name.to_lower()], r.id)
 	if not at_site(r):
+		return
+	if expedition.get("clear", false):  # a cleared level: down it goes, with no pause for the choice (issue #188)
+		go_down()
 		return
 	_ask("door", "%s reached a heavy door at the far end of the %s. Below it lies level %d." % [r.name, m.name.to_lower(), m.level + 1], [
 		{"id": "down", "label": "Go down now", "cost": "The party opens it and works level %d instead: richer and riskier. What they mine comes back up the same way." % (m.level + 1)},

@@ -86,6 +86,7 @@ func _init() -> void:
 		"test_storehouse_chests",
 		"test_land_claims",
 		"test_blueprints_clear_their_footprint",
+		"test_clear_the_level",
 		"test_cargo_priority_list_plans",
 		"test_cargo_priority_list_at_the_site",
 		"test_mason_bench_becomes_a_mineshaft",
@@ -4127,3 +4128,66 @@ func test_cargo_priority_list_at_the_site() -> void:
 		sim3._mark_objective())
 	var marked_b: Array = sim3.on_map(OldMine.ID, func(): return sim3.boulders.filter(func(b): return b.alive and b.des))
 	check(not marked_b.is_empty() and marked_b.all(func(b): return not b.has("ore")), "with the coal packed, the next row's stone is what's marked (%d)" % marked_b.size())
+
+
+## Issue #188: a "Clear the level" trip works every block of what's on the list, then digs to the door by itself and
+## goes down with no pause, the objective carried over.
+func test_clear_the_level() -> void:
+	var sim := Sim.new_game()
+	var plan := sim.new_plan(OldMine.ID)
+	check(plan.clear == false and Sim.list_text(plan) == "8 coal", "a new plan isn't a clearing one (%s)" % Sim.list_text(plan))
+	plan.clear = true
+	check(Sim.list_text(plan) == "clear the level" and Sim.cargo_rows(plan).all(func(r): return r.n == 0), "clearing wants all of it: every amount is as much as fits")
+	var p := send_party(sim)
+	until_at_site(sim, [p.ada, p.tomas])
+	var ex: Dictionary = sim.expedition
+	ex.clear = true
+	ex.policy = {"target": false, "full": false, "low": false}
+	check(not sim.objective_met() and sim.objective_left() == 0, "there's no target to reach")
+	# With coal already packed, an ordinary trip moves on down its list; a clearing one keeps going for coal.
+	ex.cargo = {"coal": 99}
+	sim.on_map(OldMine.ID, func():
+		for b in sim.boulders:
+			b.des = false
+		sim._mark_objective())
+	var marked: Array = sim.on_map(OldMine.ID, func(): return sim.boulders.filter(func(b): return b.alive and b.des))
+	check(not marked.is_empty() and marked.any(func(b): return b.get("ore", "") == "coal"), "clearing keeps marking coal past any amount (%d marked)" % marked.size())
+	check(marked.all(func(b): return not b.get("loose", false)), "and never a block under a known loose ceiling")
+	var left: int = sim.on_map(OldMine.ID, func(): return sim.level_left())
+	check(left > 0 and left == sim.on_map(OldMine.ID, func(): return sim.boulders.filter(func(b): return b.alive and not b.get("hidden", false) and not b.get("loose", false)).size()), "the blocks left on the level are the ones the list asks for (%d)" % left)
+	# The level is cleared: no pause for the door, the party goes down with its packs.
+	sim.on_map(OldMine.ID, func():
+		for b in sim.boulders:
+			if not b.get("loose", false):
+				b.alive = false
+		sim._occ_dirty = true)
+	ex.cargo = {}
+	run(sim, 120.0)
+	var down := MineLevels.level_id(2)
+	check(sim.pending.is_empty() and ex.dest == down, "a cleared level goes down with no choice to make (dest %s, pending %d)" % [ex.dest, sim.pending.size()])
+	check(ex.get("clear", false) and ex.get("leg", "out") == "out", "and carries on, still clearing")
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(back.expedition.get("clear", false), "a clearing trip is saved")
+
+	# The packs, not the level, end it: full packs still send them home.
+	sim.on_map(down, func():
+		sim.m.known = true)
+	ex.policy.full = true
+	ex.cargo = {"coal": sim.pack_room()}
+	run(sim, 150.0)  # once they're all down on the new level
+	check(ex.get("leg", "") == "home" and ex.get("home_why", "") == "packs full", "full packs still bring them home (%s)" % ex.get("home_why", ""))
+	# Without it, the door still asks.
+	var sim2 := Sim.new_game()
+	var p2 := send_party(sim2)
+	until_at_site(sim2, [p2.ada, p2.tomas])
+	sim2.expedition.policy = {"target": false, "full": false, "low": false}
+	sim2.on_map(OldMine.ID, func():
+		for b in sim2.boulders:
+			if not b.get("loose", false):
+				b.alive = false
+		sim2._occ_dirty = true)
+	run(sim2, 120.0)
+	check(not sim2.pending.is_empty() and sim2.pending[0].kind == "door", "an ordinary trip still stops for the door choice")
+	# Saving: an older save's trip isn't a clearing one.
+	var up := SaveFormat._v34_to_v35({"state": {"expedition": {"dest": "old_mine"}}})
+	check(up.state.expedition.clear == false, "an older save's trip isn't a clearing one")

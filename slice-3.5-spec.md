@@ -196,3 +196,11 @@ A plan carries a **ranked list** of what to bring back (`plan.list`: rows `{item
 - **Marking.** `_mark_objective` goes down the list: the first row that wants more gets its nearest blocks (or animals) marked, up to the party's size. A row with an amount that isn't packed yet holds the rows below it back, as the old single target did; once it's packed (or for a row set to Max) the marking moves down.
 - **Coming home.** "Target reached" is every row with an amount packed; at least one such row is needed, and Max rows never block it.
 - **Saving:** v34 keeps `cargo_lists`; a trip in progress turns its old target into a one-row list with the rest of its place's items at Max.
+
+## Clear the level (#188)
+
+A mine plan can be a **clearing** one (`plan.clear`, a toggle above the cargo list, off by default; not offered at the meadow or for tending the pens). While it's on, `cargo_rows` makes every row "as much as fits", so there's no target and "Target reached" can't happen.
+- **Marking.** The party works every block of what the list asks for, nearest the entrance first, never a block under a known loose ceiling, and the packs fill by the list (§ cargo priority list).
+- **A cleared level** is one where `_nothing_left()` holds: nobody busy, nothing marked or worth marking that can be reached, nothing lying about to pack. Then, after the packs, food and injuries have had their say, `_clear_step` takes over: with the door reached the party goes down (`go_down`, the objective carried over); otherwise it marks the way to the door (never through a loose ceiling) and someone goes to look. Reaching the door in a clearing trip goes straight down with no `_ask("door")`. A way down blocked by a loose ceiling sends the party home, "the level is cleared".
+- **Report.** The party panel shows "Clearing the level: N blocks left" (`Sim.level_left`).
+- **Saving:** v35 adds `clear` to a trip in progress, false for every older one.

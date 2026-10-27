@@ -2791,6 +2791,15 @@ func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
 	if tend:
 		head.add_child(_label("Tending the pens", false, Palette.CHALK_DIM, Palette.CAPTION))
 	c.add_child(head)
+	var clear: bool = plan.get("clear", false)
+	if plan.dest != Meadow.ID and not tend:  # clear the level (issue #188)
+		var cb := _button("Clear the level", func(): game.plan_clear_toggle(), "Secondary")
+		cb.toggle_mode = true
+		cb.set_pressed_no_signal(clear)
+		cb.tooltip_text = "Work every block of what's ticked below, nearest the entrance first. Once the level is cleared the party digs to the door itself and goes down, and carries on until the packs are full, the food runs low or someone is badly hurt."
+		c.add_child(cb)
+		if clear:
+			c.add_child(_label("Every amount below is as much as fits. They go down a level when this one's cleared.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	var list: Array = plan.get("list", [])
 	for i in list.size():
 		var row: Dictionary = list[i]
@@ -2819,14 +2828,15 @@ func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
 		h.add_child(up)
 		h.add_child(down)
 		var less := _button("−", func(): game.plan_cargo_amount(i, -1), "Secondary")
-		less.disabled = row.n <= 0
+		less.disabled = row.n <= 0 or clear
 		less.set_meta("label", "%s less" % Defs.ITEMS[row.item].label)
-		var amount := _label("Max" if row.n <= 0 else "%d" % row.n, false, Palette.CHALK if row.on and not tend else Palette.CHALK_DIM)
+		var amount := _label("Max" if row.n <= 0 or clear else "%d" % row.n, false, Palette.CHALK if row.on and not tend else Palette.CHALK_DIM)
 		amount.custom_minimum_size.x = 34
 		amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		amount.tooltip_text = "How many to bring back. Max takes as much as fits."
 		amount.mouse_filter = Control.MOUSE_FILTER_STOP
 		var more := _button("+", func(): game.plan_cargo_amount(i, 1), "Secondary")
+		more.disabled = clear
 		more.set_meta("label", "%s more" % Defs.ITEMS[row.item].label)
 		h.add_child(less)
 		h.add_child(amount)
@@ -3104,7 +3114,7 @@ func _stepper(value: String, key: String) -> HBoxContainer:
 func _fill_staging(c: Container, sim: Sim) -> void:
 	var ex: Dictionary = sim.expedition
 	var p := sim.packed()
-	var aim := "to tend the pens" if ex.target.item == "pens" else "to bring back %s" % Sim.list_text(ex)
+	var aim := "to tend the pens" if ex.target.item == "pens" else ("to clear the level" if ex.get("clear", false) else "to bring back %s" % Sim.list_text(ex))
 	c.add_child(_label("Packing for the %s, %s" % [sim.get_map(ex.dest).name.to_lower(), aim], false, Palette.CHALK, Palette.BODY, true))
 	c.add_child(_row("Meals", "%d / %d" % [p.meals, ex.meals]))
 	c.add_child(_bar(float(p.meals) / maxi(ex.meals, 1)))
@@ -3340,6 +3350,8 @@ func _fill_party(c: Container, sim: Sim) -> void:
 		c.add_child(_row("Tend the pens", "keep %d of each" % ex.target.n))
 		c.add_child(_label(_pens_text(sim), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	else:
+		if ex.get("clear", false):  # clear the level (issue #188): what's left on the level being worked
+			c.add_child(_row("Clearing the level", "%d blocks left" % sim.level_left()))
 		for r in Sim.cargo_rows(ex):  # one line a row of the cargo list (issue #185)
 			c.add_child(_row("Bring back %s" % Defs.ITEMS[r.item].many, "%d / %s" % [sim.cargo_have(r.item), str(r.n) if r.n > 0 else "as much as fits"]))
 			if r.n > 0:

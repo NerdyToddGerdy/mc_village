@@ -1162,6 +1162,15 @@ func _test_meadow(game: Game) -> void:
 	hud.refresh(sim)
 	await process_frame
 	check(_walk(hud._plan_box).any(func(n): return n is Label and n.text == "Max" and not n.is_queued_for_deletion()), "a row with no amount reads Max")
+	# Clear the level (issue #188): a toggle that makes every amount Max.
+	var cl: Array = _walk(hud._plan_box).filter(func(n): return n is Button and n.text == "Clear the level" and not n.is_queued_for_deletion())
+	check(cl.size() == 1 and not game.plan.clear, "the old mine's planner has a Clear the level toggle, off at first")
+	cl[0].pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	check(game.plan.clear and Sim.list_text(game.plan) == "clear the level", "turning it on makes the plan clear the level")
+	check(_walk(hud._plan_box).filter(func(n): return n is Button and n.text == "+" and n.get_meta("label", "") in ["Coal more", "Cobblestone more"] and not n.is_queued_for_deletion()).all(func(n): return n.disabled), "and the amounts are fixed at Max")
+	game.plan_clear_toggle()
 
 
 func _frames(n := 3) -> void:

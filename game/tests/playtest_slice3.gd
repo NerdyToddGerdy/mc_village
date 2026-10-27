@@ -14,7 +14,7 @@ extends "res://tests/playtest_base.gd"
 const ACTIONABLE := ["more ", "Needs a pickaxe", "No one is a ", "Stockpile is full", "Starving", "Hungry",
 	" broke", "Can’t reach", "No meals to pack", "No spare pickaxes to pack", "No pickaxe left",
 	"Everyone is hurt", "Investigating the vein needs", "Harvested wheat needs a stockpile",
-	"Injured: can't mine", "Track: needs"]
+	"Injured: can't mine", "Track: needs", "Track: no one is a builder"]
 var _blockers := {}         ## Every blocker reason seen, so the run can check each one is actionable.
 
 
@@ -252,6 +252,36 @@ func _initialize() -> void:
 		check(await click_button("Call the party home"), "call the party home")
 	check(await play_until(200, func(): return sim.expedition.is_empty()), "home up through Level 1 and the road")
 	check(seen("Back from the old mine, level 2: "), "the report is from Level 2")
+
+	# ---- Clear the level (issue #188): a trip that clears Level 1 and carries on to Level 2 by itself
+	await look_at(board.origin)
+	await click(screen(board.origin, 1.0))
+	game._hud.refresh(sim)
+	await frames(2)
+	check(await pick_location("Old mine"), "the board: pick the old mine for a clearing trip")
+	check(await click_button("Clear the level"), "click Clear the level")
+	check(game.plan.clear and Sim.list_text(game.plan) == "clear the level", "the plan clears the level")
+	check(await click_button("picks less"), "no spare pickaxe")
+	var clearer := sim.resident(game.plan.party[0])
+	if clearer.pick == null:
+		clearer.pick = {"type": "stone_pick", "tier": 2, "dur": 25}
+	check(await click_button("Start packing"), "click Start packing")
+	check(await play_until(240, func(): return sim.depart_blocker() == ""), "packed for the clearing trip (%s)" % sim.depart_blocker())
+	check(await click_button("Depart"), "click Depart")
+	var clearer_now: Dictionary = sim.resident(sim.expedition.party[0])
+	check(await play_until(120, func(): return sim.at_site(clearer_now)), "%s reaches the old mine" % clearer_now.name)
+	check(visible_label("Clearing the level"), "the party panel says it's clearing the level")
+	# The level's blocks are cleared by command, since working through them takes minutes.
+	sim.on_map(OldMine.ID, func():
+		for b in sim.boulders:
+			if not b.get("loose", false):
+				b.alive = false
+		sim._occ_dirty = true)
+	check(await play_until(150, func(): return sim.expedition.get("dest", "") == two_id), "with the level cleared, the party goes down by itself")
+	check(sim.pending.is_empty(), "with no choice at the door")
+	if sim.expedition.get("leg", "") != "home":
+		game.call_home()  # the party panel's button, with the site not in view
+	check(await play_until(250, func(): return sim.expedition.is_empty()), "home from the clearing trip")
 
 	# ---- Every stall had a reason the player could act on
 	var unknown: Array = _blockers.keys().filter(func(why): return not ACTIONABLE.any(func(a): return a in why))
