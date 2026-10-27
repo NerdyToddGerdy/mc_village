@@ -41,6 +41,7 @@ var _pointer := Vector2(-1, -1)
 var _goals := VBoxContainer.new()
 var _speed_btns := {}
 var _menu_btn: Button                ## The on-screen button for the Esc menu (issue #216), beside the speed buttons.
+var _menu_panel: PanelContainer
 var _menu_cap: PanelContainer        ## Its key badge, which follows the "menu" binding.
 var _menu_cap_label: Label
 var _stuck_panel: PanelContainer
@@ -178,9 +179,10 @@ func _ready() -> void:
 		_menu_cap.position = Vector2(_menu_btn.size.x - cs.x - 10, (_menu_btn.size.y - cs.y) / 2)
 	_menu_btn.resized.connect(place_cap)
 	_menu_cap.minimum_size_changed.connect(place_cap)
-	speed.add_child(_menu_btn)
 	_speed_panel = _panel(speed, Vector2.ZERO, 4)
 	tr.add_child(_speed_panel)
+	_menu_panel = _panel(_menu_btn, Vector2.ZERO, 4)  # its own panel under the speed buttons, so the speed row stays narrow
+	tr.add_child(_menu_panel)
 	_stuck_panel = _panel(_stuck, Vector2(250, 0))
 	tr.add_child(_stuck_panel)
 

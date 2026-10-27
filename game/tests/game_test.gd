@@ -298,9 +298,10 @@ func _test_menu_button(game: Game) -> void:
 	check(hud._menu_cap_label.text == game.keys.first("menu"), "it shows the menu key (%s)" % hud._menu_cap_label.text)
 	var r := b.get_global_rect()
 	check(get_root().get_visible_rect().encloses(r), "it's on screen")
-	for other in [hud._speed_panel, hud._stuck_panel]:
-		if other.visible and other != hud._speed_panel:
-			check(not other.get_global_rect().intersects(r), "it doesn't cover the stuck list")
+	for other in [hud._speed_panel, hud._stuck_panel, hud._tally_panel]:
+		check(not other.visible or not other.get_global_rect().intersects(hud._menu_panel.get_global_rect()), "it covers neither the speed buttons, the stuck list nor the tally bar")
+	for m in hud._maps.get_children():  # the map switcher runs along the top (the slice 3.5 bot's Meadow button)
+		check(not m is Button or not m.is_visible_in_tree() or not m.get_global_rect().intersects(hud._menu_panel.get_global_rect()), "nor the %s button of the map switcher" % m.name)
 	b.pressed.emit()
 	check(game._menu.visible and game._menu.view == "main", "clicking it opens the main menu")
 	game.toggle_menu()
