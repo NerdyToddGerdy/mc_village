@@ -1042,7 +1042,50 @@ func _test_after_the_founding(game: Game) -> void:
 	hud.refresh(sim)
 	await _frames()
 	var labels: Array = _walk(hud._goals).filter(func(n): return n is Label and not n.is_queued_for_deletion()).map(func(l): return l.text)
-	check(labels == ["Founding  ✓"] and hud._goals_panel.get_global_rect().size.x < 200, "afterwards it folds to a small Founding chip (%s)" % [labels])
+	check(labels.size() == 5 and labels[0] == "The village" and labels[2] == "1  Paint a farm plot", "the village chapter follows the founding, with a why (%s)" % [labels])
+	# The book opens from the panel's Book button, shows a building's page, and the "?" on a bench opens it (issue #198).
+	var book_btn: Array = _walk(hud._goals).filter(func(n): return n is Button and n.text == "Book" and not n.is_queued_for_deletion())
+	check(book_btn.size() == 1, "the goals panel has a Book button")
+	book_btn[0].pressed.emit()
+	hud.refresh(sim)
+	await _frames()
+	check(game.book_open and hud._book_panel.visible and not hud._goals_panel.visible, "it opens the book in the goals panel's place")
+	var tabs: Array = _walk(hud._book).filter(func(n): return n is Button and not n.is_queued_for_deletion()).map(func(b): return b.text)
+	check("Goals" in tabs and "Crafting bench" in tabs and "Fireplace" in tabs and "Expedition board" in tabs, "with a page for each building known (%s)" % [tabs])
+	check(not "The road" in tabs, "and none for the road before a party has been to the mine")
+	game.open_book("bench")
+	hud.refresh(sim)
+	await _frames()
+	var text: Array = _walk(hud._book).filter(func(n): return n is Label and not n.is_queued_for_deletion()).map(func(l): return l.text)
+	check("Crafting bench" in text and "Who works it" in text and "A crafter, or Ada" in text, "the bench's page says who works it")
+	game.open_book("goals", false)
+	game.selection = {"kind": "site", "id": bench.id}
+	hud.refresh(sim)
+	await _frames()
+	var about: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text.begins_with("?") and not n.is_queued_for_deletion())
+	check(about.size() == 1, "a selected bench has a ? button")
+	about[0].pressed.emit()
+	check(game.book_open and game.book_page == "bench", "it opens the bench's page")
+	game.open_book("goals", false)
+	game.selection = {}
+	# Chapter two done: the chip.
+	sim.stats.meals_cooked = 1
+	sim.stats.ore_home = true
+	sim.paint_farm(Rect2i(sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(-6, 6)), Vector2i(2, 2)))
+	for st in sim.sites:
+		if st.tpl == "bench":
+			st.done = true
+	var made := 0
+	for tpl in ["chopping_block", "mason_bench"]:
+		var s2 := sim.place_site(tpl, sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(6 + made * 2, 4)))
+		s2.done = true
+		s2.worker = sim.residents[0].id
+		made += 1
+	check(Goals.village_current(sim) < 0, "every village step is done")
+	hud.refresh(sim)
+	await _frames()
+	labels = _walk(hud._goals).filter(func(n): return n is Button and not n.is_queued_for_deletion()).map(func(l): return l.text)
+	check(labels == ["The village  ✓"] and hud._goals_panel.get_global_rect().size.x < 200, "afterwards it folds to a small chip that opens the book (%s)" % [labels])
 	check(Goals.progress_text(sim) == Goals.village_text(sim) and Goals.village_text(sim).begins_with("%d resident" % sim.residents.size()), "the save label is the village's facts: %s" % Goals.progress_text(sim))
 	check(game.save_slot(3) == "" and game.read_slots()[2].summary == Goals.village_text(sim), "a new save carries that label")
 	var old: Dictionary = SaveFormat.read(game._slot_path(3)).data
