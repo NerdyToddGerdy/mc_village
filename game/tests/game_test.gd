@@ -286,6 +286,38 @@ func _menu_caps(game: Game, menu: String, row: String) -> Array:
 	return []
 
 
+## Issue #204: the mason's bench offers a mineshaft once every boulder is gone and the bricks are cut.
+func _test_mineshaft_button(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	game.set_tool("")
+	var at: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(-3, 3))
+	var bench: Dictionary = sim.place_site("mason_bench", at)
+	bench.stage = Defs.TEMPLATES["mason_bench"].stages.size()
+	bench.done = true
+	sim._occ_dirty = true
+	game.selection = {"kind": "site", "id": bench.id}
+	hud.refresh(sim)
+	await _frames()
+	var btn: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text == "Dig out a mineshaft" and not n.is_queued_for_deletion())
+	check(btn.size() == 1 and btn[0].disabled, "a mason's bench has a Dig out a mineshaft button, off while boulders are left")
+	check(_walk(hud._sel).any(func(n): return n is Label and n.text.begins_with("Not while boulders are left") and not n.is_queued_for_deletion()), "and it says why")
+	for b in sim.boulders:
+		b.alive = false
+	sim._occ_dirty = true
+	sim.drop_items(sim.nearest_walkable(at + Vector2i(2, 0)), "stone_brick", Tuning.SHAFT_COST.stone_brick)
+	hud.refresh(sim)
+	await _frames()
+	btn = _walk(hud._sel).filter(func(n): return n is Button and n.text == "Dig out a mineshaft" and not n.is_queued_for_deletion())
+	check(btn.size() == 1 and not btn[0].disabled, "with the boulders gone and the bricks cut, it's on")
+	btn[0].pressed.emit()
+	check(bench.get("upgrading", false) and not bench.done, "pressing it starts the rebuild")
+	hud.refresh(sim)
+	await _frames()
+	check(_walk(hud._sel).any(func(n): return n is Label and n.text == "Mineshaft" and not n.is_queued_for_deletion()) or _walk(hud._sel).any(func(n): return n is Label and "Digging it out" in n.text and not n.is_queued_for_deletion()), "and its panel calls it a mineshaft")
+	game.selection = {}
+
+
 ## Issue #203: select a workstation, Paint area, then drag to add cells and drag from a painted one to erase.
 func _test_work_area_painting(game: Game) -> void:
 	var sim := game.sim
@@ -1344,6 +1376,7 @@ func _initialize() -> void:
 	_test_order_menus(game)
 	_test_menu_button(game)
 	await _test_work_area_painting(game)
+	await _test_mineshaft_button(game)
 	_test_key_migration()
 	await _test_craft_menu(game)
 	await _test_right_click_never_silent(game)

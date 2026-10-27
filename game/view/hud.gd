@@ -1446,6 +1446,8 @@ func _refresh_selection(sim: Sim) -> void:
 		sig += "%s%d%s" % [target, sim.tick / Tuning.TPS, sim.on_map(game.view_map, func(): return sim.m.sheep.map(func(a): return [a.alive, a.get("pen", 0), a.get("young", false), a.get("fed_at", -1)]))]
 	elif target != null:
 		sig += "%s" % [target]
+		if target.get("tpl", "") == "mason_bench":  # whether it can be dug out depends on the map's boulders and the bricks
+			sig += sim.shaft_check(target)
 	for s in sim.stuck:
 		sig += s.why
 	sig += game.tool + str(game.area_site)  # the Paint area button reads Done painting while it's on (issue #203)
@@ -2044,7 +2046,9 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	if not s.done:
 		var st := sim.current_stage(s)
 		var stage_line: String = "Stage %d of %d: %s" % [s.stage + 1, tpl.stages.size(), st.name.to_lower()] if tpl.stages.size() > 1 else "Blueprint"
-		c.add_child(_head(tpl.name, stage_line))
+		if s.get("upgrading", false):
+			stage_line = "Digging it out"
+		c.add_child(_head(Sim.station_name(s), stage_line))
 		if not sim.footprint_clear(s):
 			c.add_child(_label("Clearing the ground first: %s." % Sim.clearing_text(sim.site_obstacles(s)), false, Palette.CHALK, Palette.BODY, true))
 		for k in st.cost:
@@ -2148,13 +2152,25 @@ func _fill_workstation(c: Container, sim: Sim, s: Dictionary, reasons: Array) ->
 	more.tooltip_text = "Keep %d more" % Tuning.KEEP_STEP
 	keep.add_child(more)
 	c.add_child(keep)
-	c.add_child(_label("The village has %d. %ss %s in its area on their own until it has %d." % [
-		sim.free_count(wk.item), Defs.JOB_NAMES[wk.job], "fell trees" if wk.kind == "tree" else "break boulders",
-		s.keep], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	if s.get("shaft", false):
+		c.add_child(_label("The village has %d. %ss dig 1 cobblestone every %d s from where it stands until it has %d." % [
+			sim.free_count(wk.item), Defs.JOB_NAMES[wk.job], int(Tuning.SHAFT_DIG), s.keep], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	else:
+		c.add_child(_label("The village has %d. %ss %s in its area on their own until it has %d." % [
+			sim.free_count(wk.item), Defs.JOB_NAMES[wk.job], "fell trees" if wk.kind == "tree" else "break boulders",
+			s.keep], false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	var painting: bool = game.tool == "area" and game.area_site == s.id  # its work area is painted (issue #203)
 	var paint := _button("Done painting" if painting else "Paint area", func(): game.start_area(s), "Primary" if painting else "Secondary")
 	paint.tooltip_text = "Drag over the ground it works (%d cells of it, within %d of it). Start on a painted cell to erase." % [s.get("area", {}).size(), int(Tuning.WORK_REACH)]
 	c.add_child(paint)
+	if s.tpl == "mason_bench" and not s.get("shaft", false):  # issue #204: dug out into a mineshaft once every boulder is gone
+		var why := sim.shaft_check(s)
+		var up := _button("Dig out a mineshaft", func(): game.upgrade_shaft(s), "Secondary" if why != "" else "Primary")
+		up.disabled = why != ""
+		up.tooltip_text = why if why != "" else "Rebuild it as a mineshaft (%s). It digs cobblestone from where it stands, slowly, with no boulders needed." % Defs.cost_text(Tuning.SHAFT_COST)
+		c.add_child(up)
+		if why != "":
+			c.add_child(_label(why, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	c.add_child(_label(_station_line(sim, s), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	for x in reasons:
 		c.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
