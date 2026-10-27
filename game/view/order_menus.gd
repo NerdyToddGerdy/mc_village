@@ -42,7 +42,7 @@ const MENUS := {
 }
 
 ## The tools a Gather or Paint entry switches on: they mark or paint by dragging over the map.
-const MARK_TOOLS := ["mine", "chop", "break", "keep", "hunt", "lead", "stock", "farm", "pen"]
+const MARK_TOOLS := ["mine", "chop", "break", "keep", "hunt", "lead", "stock", "farm", "pen", "area"]
 
 
 ## The menu an order tool belongs to, or "".

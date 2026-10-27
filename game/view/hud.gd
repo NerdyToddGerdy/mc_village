@@ -1558,6 +1558,7 @@ func _refresh_selection(sim: Sim) -> void:
 		sig += "%s" % [target]
 	for s in sim.stuck:
 		sig += s.why
+	sig += game.tool + str(game.area_site)  # the Paint area button reads Done painting while it's on (issue #203)
 	sig += _keys_sig
 	_rebuild(_sel, sig, func(c: Container) -> void:
 		_fill_selection(c, sim, sel, target)
@@ -2261,9 +2262,13 @@ func _fill_workstation(c: Container, sim: Sim, s: Dictionary, reasons: Array) ->
 	more.tooltip_text = "Keep %d more" % Tuning.KEEP_STEP
 	keep.add_child(more)
 	c.add_child(keep)
-	c.add_child(_label("The village has %d. %ss %s within %d cells on their own until it has %d." % [
+	c.add_child(_label("The village has %d. %ss %s in its area on their own until it has %d." % [
 		sim.free_count(wk.item), Defs.JOB_NAMES[wk.job], "fell trees" if wk.kind == "tree" else "break boulders",
-		int(Tuning.WORK_RADIUS), s.keep], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+		s.keep], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	var painting: bool = game.tool == "area" and game.area_site == s.id  # its work area is painted (issue #203)
+	var paint := _button("Done painting" if painting else "Paint area", func(): game.start_area(s), "Primary" if painting else "Secondary")
+	paint.tooltip_text = "Drag over the ground it works (%d cells of it, within %d of it). Start on a painted cell to erase." % [s.get("area", {}).size(), int(Tuning.WORK_REACH)]
+	c.add_child(paint)
 	c.add_child(_label(_station_line(sim, s), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	for x in reasons:
 		c.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))

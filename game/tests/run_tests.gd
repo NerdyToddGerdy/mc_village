@@ -86,6 +86,8 @@ func _init() -> void:
 		"test_storehouse_chests",
 		"test_land_claims",
 		"test_blueprints_clear_their_footprint",
+		"test_work_areas_are_painted",
+		"test_work_areas_saved",
 		"test_worn_paths_wear_and_regrow",
 		"test_worn_paths_pathing_and_speed",
 		"test_worn_paths_saved",
@@ -3090,7 +3092,7 @@ func test_lumberjacks_and_stonemasons() -> void:
 			b.alive = false
 	sim._occ_dirty = true
 	sim.compute_stuck()
-	check(stuck_text(sim).contains("Mason's bench: No boulders in range") or stuck_text(sim).contains("Mason's bench: Target reached"), "with none left in range, the bench says so: " + stuck_text(sim))
+	check(stuck_text(sim).contains("Mason's bench: No boulders in the mason's bench's area") or stuck_text(sim).contains("Mason's bench: Target reached"), "with none left in its area, the bench says so: " + stuck_text(sim))
 
 
 func test_saplings_and_replanting() -> void:
@@ -3134,7 +3136,7 @@ func test_saplings_and_replanting() -> void:
 			t.alive = false
 	sim._occ_dirty = true
 	sim.compute_stuck()
-	check(stuck_text(sim).contains("Chopping block: No trees in range. Plant saplings or move the chopping block"), "with none left in range, the block says so: " + stuck_text(sim))
+	check(stuck_text(sim).contains("Chopping block: No trees in the chopping block's area. Plant saplings, or paint more ground"), "with none left in its area, the block says so: " + stuck_text(sim))
 
 
 # ---------------------------------------------------------------- workstations claimed (issue #184)
@@ -3861,3 +3863,89 @@ func test_worn_paths_saved() -> void:
 	big.m.wear[Vector2i(4, 5)] = 50
 	big.m.grow("north", 8)
 	check(big.m.wear.has(Vector2i(4, 13)) and not big.m.wear.has(Vector2i(4, 5)), "growing the map shifts the wear")
+
+
+## Issue #203: a workstation's work area is painted cells, which start as the old circle.
+func test_work_areas_are_painted() -> void:
+	var sim := Sim.new_game()
+	var block := place_done(sim, "chopping_block")
+	block.make_keep = 0
+	var circle := 0
+	var all_in := true
+	for x in sim.w:
+		for y in sim.h:
+			var c := Vector2i(x, y)
+			var near := Vector2(c).distance_to(Vector2(block.origin)) <= Tuning.WORK_START_RADIUS
+			circle += 1 if near else 0
+			all_in = all_in and (near == block.area.has(c))
+	check(all_in and block.area.size() == circle and circle > 100, "a new workstation starts with the old circle (%d cells)" % block.area.size())
+	# Reach: cells past WORK_REACH stay unpainted, and the count says how many.
+	var far: Vector2i = block.origin + Vector2i(int(Tuning.WORK_REACH) + 1, 0)
+	var near_edge: Vector2i = block.origin + Vector2i(int(Tuning.WORK_REACH) - 1, 0)
+	if sim.m.in_bounds(far) and sim.m.in_bounds(near_edge):
+		var left := sim.paint_work_area(block, Rect2i(near_edge, Vector2i(3, 1)))
+		check(block.area.has(near_edge) and not block.area.has(far) and left >= 1, "a cell past %d cells away isn't painted (%d left out)" % [int(Tuning.WORK_REACH), left])
+	# Gatherers read the painted cells: a tree just outside is left alone, and felled once it's painted.
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(block.origin + Vector2i(0, 2)))
+	sim.set_role(tomas, "lumber")
+	tomas.axe = {"type": "stone_axe", "tier": 2, "dur": 999}
+	var trees: Array = sim.trees.filter(func(t): return t.alive and Sim.in_area(block, t.cell) and Sim.grown(t) and not sim.protected(t))
+	check(trees.size() >= 2, "there are trees in the starting area (%d)" % trees.size())
+	var t0: Dictionary = trees[0]
+	sim.paint_work_area(block, Rect2i(t0.cell, Vector2i.ONE), true)
+	check(not Sim.in_area(block, t0.cell) and not sim.auto_targets([block]).any(func(t): return is_same(t, t0)), "a tree just outside the painted area isn't a target")
+	sim.paint_work_area(block, Rect2i(t0.cell, Vector2i.ONE))
+	check(sim.auto_targets([block]).any(func(t): return is_same(t, t0)), "and is again once its cell is painted")
+	# Erase the whole area: nothing to do, and the stuck list says so.
+	sim.paint_work_area(block, Rect2i(0, 0, sim.w, sim.h), true)
+	check(block.area.is_empty() and sim.auto_targets([block]).is_empty(), "with the area erased there are no targets")
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("No trees in the chopping block's area"), "and the stuck list says so: " + stuck_text(sim))
+	# Saplings are planted only in the painted cells.
+	var spot: Vector2i = sim.nearest_walkable(block.origin + Vector2i(2, 2))
+	sim.paint_work_area(block, Rect2i(spot, Vector2i(2, 2)))
+	var planted = sim.plant_cell([block], spot)
+	check(planted == null or Sim.in_area(block, planted), "a sapling goes only in the painted cells (%s)" % [planted])
+	# One owner per kind: a second block starts without the first's cells, and painting takes them.
+	check(block.area.has(spot), "(the painted cell is the first block's)")
+	var second := place_done(sim, "chopping_block")
+	check(second.area.keys().all(func(c): return not block.area.has(c)), "a second chopping block starts without the first one's cells")
+	var shared := spot
+	sim.paint_work_area(second, Rect2i(shared, Vector2i.ONE))
+	check(second.area.has(shared) and not block.area.has(shared), "painting a cell another block owns moves it")
+	# A different kind of station may overlap: a mason's bench keeps its own.
+	var mason := place_done(sim, "mason_bench")
+	sim.paint_work_area(mason, Rect2i(shared, Vector2i.ONE))
+	check(mason.area.has(shared) and second.area.has(shared), "a mason's bench can share a cell with a chopping block")
+	# A painted area may lie over a stockpile: lumberjacks still plant nothing there.
+	sim.paint_zone(Rect2i(shared, Vector2i.ONE))
+	check(sim.protected_cell(shared) and second.area.has(shared), "a work area can lie over a stockpile, which stays protected")
+
+
+## Issue #203: a work area is saved with its workstation, and older saves get the circle they worked.
+func test_work_areas_saved() -> void:
+	var sim := Sim.new_game()
+	var block := place_done(sim, "chopping_block")
+	sim.paint_work_area(block, Rect2i(block.origin, Vector2i(1, 1)), true)
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	var again: Dictionary = back.sites.filter(func(st): return st.tpl == "chopping_block")[0]
+	check(again.area.size() == block.area.size() and not again.area.has(block.origin), "the painted area is saved and loaded (%d cells)" % again.area.size())
+	var raw := {"state": {"maps": {"village": {"w": 32, "h": 32, "sites": [
+		{"tpl": "chopping_block", "origin": Vector2i(10, 10)},
+		{"tpl": "chopping_block", "origin": Vector2i(15, 10)},
+		{"tpl": "mason_bench", "origin": Vector2i(10, 10)},
+		{"tpl": "bench", "origin": Vector2i(2, 2)}]}}}}
+	var up := SaveFormat._v31_to_v32(raw)
+	var sites: Array = up.state.maps.village.sites
+	var circle := 0
+	for x in range(2, 19):
+		for y in range(2, 19):
+			circle += 1 if Vector2(x, y).distance_to(Vector2(10, 10)) <= 8.0 else 0
+	check(sites[0].area.size() == circle and sites[2].area.size() == circle and not sites[3].has("area"), "an older village's blocks and benches get their old circle (%d cells)" % sites[0].area.size())
+	check(sites[1].area.keys().all(func(c): return not sites[0].area.has(c)) and sites[1].area.size() > 0, "an overlap stays with the older block")
+	# Growing the map shifts the areas with it.
+	var big := Sim.new_game()
+	var b2 := place_done(big, "chopping_block")
+	var c0: Vector2i = b2.origin
+	big.m.grow("north", 8)
+	check(b2.area.has(b2.origin) and b2.origin == c0 + Vector2i(0, 8), "growing the map shifts the area with its station")

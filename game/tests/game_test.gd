@@ -286,6 +286,49 @@ func _menu_caps(game: Game, menu: String, row: String) -> Array:
 	return []
 
 
+## Issue #203: select a workstation, Paint area, then drag to add cells and drag from a painted one to erase.
+func _test_work_area_painting(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	game.set_tool("")
+	if game._menu.visible:
+		game.close_menu()
+	var at: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(2, 2))
+	var block: Dictionary = sim.place_site("chopping_block", at)
+	block.stage = Defs.TEMPLATES["chopping_block"].stages.size()
+	block.done = true
+	sim._occ_dirty = true
+	game.selection = {"kind": "site", "id": block.id}
+	game.focus_on("site", block.id)
+	hud.refresh(sim)
+	await _frames()
+	var btns: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text == "Paint area" and not n.is_queued_for_deletion())
+	check(btns.size() == 1, "a chopping block's panel has Paint area")
+	btns[0].pressed.emit()
+	check(game.tool == "area" and game.area_site == block.id, "it switches the area-painting tool on")
+	hud.refresh(sim)
+	await _frames()
+	check(_walk(hud._sel).any(func(n): return n is Button and n.text == "Done painting" and not n.is_queued_for_deletion()), "and the button reads Done painting")
+	# Erase by dragging from a painted cell, then paint the cells back by dragging from an unpainted one.
+	var a: Vector2i = block.origin + Vector2i(3, 0)
+	var b: Vector2i = block.origin + Vector2i(5, 1)
+	check(block.area.has(a) and block.area.has(b), "the cells to drag over start painted")
+	var pa: Vector2 = game._cam.unproject_position(Vector3(a.x + 0.5, 0.0, a.y + 0.5))
+	var pb: Vector2 = game._cam.unproject_position(Vector3(b.x + 0.5, 0.0, b.y + 0.5))
+	_mouse(game, "move", pa)
+	_mouse(game, "down", pa)
+	_mouse(game, "move", pb)
+	_mouse(game, "up", pb)
+	check(not block.area.has(a) and not block.area.has(b) and not block.area.has(a + Vector2i(1, 0)), "a drag from a painted cell erases the cells it covers")
+	_mouse(game, "move", pa)
+	_mouse(game, "down", pa)
+	_mouse(game, "move", pb)
+	_mouse(game, "up", pb)
+	check(block.area.has(a) and block.area.has(b) and block.area.has(a + Vector2i(1, 0)), "a drag from an unpainted cell paints them again")
+	game.set_tool("")
+	check(game.tool == "" and game.selection.get("id", 0) == block.id, "Esc puts the tool away and keeps the selection")
+
+
 ## The key shown on a button's keycap, or "".
 func _cap_text(b: Button) -> String:
 	var cap = b.get_meta("keycap", null)
@@ -1443,6 +1486,7 @@ func _initialize() -> void:
 	await _test_rebinding(game)
 	_test_order_menus(game)
 	_test_menu_button(game)
+	await _test_work_area_painting(game)
 	await _test_panel_keys(game)
 	_test_key_migration()
 	await _test_craft_menu(game)

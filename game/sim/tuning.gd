@@ -116,7 +116,8 @@ const SMELT_TIME := 5.0                 ## Seconds to smelt one iron ingot at th
 const STAGE_TIME := 10.0                ## Seconds of build work per construction stage.
 const ARRIVAL_DELAY := 45.0             ## Seconds after a house with a free bed is finished, per traveler.
 # Workstations (issue #177).
-const WORK_RADIUS := 8.0                ## Cells from a chopping block or mason's bench that its gatherers work on their own.
+const WORK_START_RADIUS := 8.0          ## A new chopping block or mason's bench starts with the cells this near it (issue #203).
+const WORK_REACH := 12.0                ## The furthest from its workstation a painted work area may reach.
 const WORK_STORE := 20                  ## Logs or cobblestone a workstation's pile holds.
 const KEEP_STOCK := 20                  ## A new workstation's keep-stock target: gatherers stop once the village has this many.
 const KEEP_STEP := 5                    ## The keep-stock target's step in the workstation's panel.
