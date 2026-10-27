@@ -141,7 +141,7 @@ func _initialize() -> void:
 	check(await play_until(200, func(): return sim.residents.any(func(r): return Sim.armor_worn(r).has("chest"))), "the tunic is crafted and someone puts it on")
 	var wearer: Dictionary = sim.residents.filter(func(r): return Sim.armor_worn(r).has("chest"))[0]
 	await frames(2)
-	check((game._world._people[wearer.id].get_node("Body/Shirt") as MeshInstance3D).material_override.albedo_color == Palette.ITEM_COLORS.leather, "%s is drawn in it" % wearer.name)
+	check((game._world._people[wearer.id].get_node("Body/Shirt") as MeshInstance3D).material_override.get_shader_parameter("tint") == Palette.ITEM_COLORS.leather, "%s is drawn in it" % wearer.name)
 	await select_resident(wearer)
 	check(visible_label("15% guard"), "%s's panel shows the tunic's guard" % wearer.name)
 

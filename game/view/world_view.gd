@@ -655,8 +655,79 @@ func _add_item(b: Batch, s: Dictionary) -> void:
 				else:
 					b.box(Vector3(cx + off - 0.1, y, cz - 0.28), Vector3(cx + off + 0.1, y + 0.12, cz + 0.28), color.darkened(0.08))
 		return
+	if _add_loose_shape(b, s.type, cx, cz, levels, color):
+		return
 	for i in levels:
 		b.box(Vector3(cx - 0.26, i * 0.2, cz - 0.26), Vector3(cx + 0.26, i * 0.2 + 0.2, cz + 0.26), color)
+
+
+## Offsets and sizes of a heap's lumps, bottom to top (issue #206): uneven, and the same every time.
+const LUMPS := [Vector3(-0.1, -0.08, 0.17), Vector3(0.14, 0.1, 0.14), Vector3(0.1, -0.14, 0.12), Vector3(-0.12, 0.12, 0.11), Vector3(0.0, 0.0, 0.1)]
+const FOODS := ["berries", "bread", "mutton", "cooked_mutton", "beef", "cooked_beef", "porkchop", "cooked_porkchop"]
+
+
+## The shapes of the common loose materials (issue #206): each a few boxes, growing with the count
+## (up to 4 levels) so a stack still reads at a glance. Returns false for an item without one.
+func _add_loose_shape(b: Batch, type: String, cx: float, cz: float, levels: int, color: Color) -> bool:
+	if type == "log":  # lengths lying crosswise, a layer to every 4, end rings showing
+		for i in levels:
+			var y := i * 0.2
+			for k in 2:
+				var off := -0.14 + k * 0.28
+				if i % 2 == 0:
+					b.box(Vector3(cx - 0.3, y, cz + off - 0.1), Vector3(cx + 0.3, y + 0.2, cz + off + 0.1), color, BlockTextures.LOG)
+				else:
+					b.box(Vector3(cx + off - 0.1, y, cz - 0.3), Vector3(cx + off + 0.1, y + 0.2, cz + 0.3), color, BlockTextures.LOG)
+	elif type == "plank":  # a neat stack of boards, each a shade apart
+		for i in levels:
+			var y := i * 0.1
+			var off := 0.03 * (i % 2)
+			b.box(Vector3(cx - 0.3 + off, y, cz - 0.26), Vector3(cx + 0.3 + off, y + 0.1, cz + 0.26), color.darkened(0.05 * (i % 3)), BlockTextures.BOARD)
+	elif type in ["cobble", "coal", "iron_ore", "diamond"]:  # a heap of uneven lumps
+		var finish := BlockTextures.COBBLES if type == "cobble" else BlockTextures.ROCK
+		for i in levels + 1:
+			var l: Vector3 = LUMPS[i]
+			var r := 0.17 if i == 0 else 0.13
+			var base := 0.0 if i < 3 else 0.2
+			b.box(Vector3(cx + l.x - r, base, cz + l.y - r), Vector3(cx + l.x + r, base + r * 2.0, cz + l.y + r), color.darkened(0.06 * (i % 2)), finish)
+	elif type == "stick":  # a loose bundle, crossed
+		for i in levels:
+			var y := i * 0.1
+			for k in 2:
+				var off := -0.1 + k * 0.2
+				if i % 2 == 0:
+					b.box(Vector3(cx - 0.3, y, cz + off - 0.04), Vector3(cx + 0.3, y + 0.08, cz + off + 0.04), color, BlockTextures.LOG)
+				else:
+					b.box(Vector3(cx + off - 0.04, y, cz - 0.3), Vector3(cx + off + 0.04, y + 0.08, cz + 0.3), color, BlockTextures.LOG)
+	elif type == "wheat":  # upright sheaves, tied at the middle
+		for i in mini(levels, 2):
+			var x := cx - 0.14 + i * 0.28
+			b.box(Vector3(x - 0.07, 0, cz - 0.07), Vector3(x + 0.07, 0.4, cz + 0.07), color.darkened(0.1))
+			b.box(Vector3(x - 0.1, 0.4, cz - 0.1), Vector3(x + 0.1, 0.56, cz + 0.1), color.lightened(0.12))
+			b.box(Vector3(x - 0.09, 0.18, cz - 0.09), Vector3(x + 0.09, 0.24, cz + 0.09), Palette.STICK)
+	elif type == "sapling":  # a little tuft of leaves on a stem
+		b.box(Vector3(cx - 0.03, 0, cz - 0.03), Vector3(cx + 0.03, 0.2, cz + 0.03), Palette.LOG, BlockTextures.LOG)
+		b.box(Vector3(cx - 0.2, 0.18, cz - 0.2), Vector3(cx + 0.2, 0.4, cz + 0.2), color, BlockTextures.FOLIAGE)
+		b.box(Vector3(cx - 0.12, 0.38, cz - 0.12), Vector3(cx + 0.12, 0.5, cz + 0.12), color.lightened(0.1), BlockTextures.FOLIAGE)
+	elif type in FOODS:  # a few pieces on a cloth
+		b.box(Vector3(cx - 0.3, 0, cz - 0.26), Vector3(cx + 0.3, 0.03, cz + 0.26), Palette.CHALK.darkened(0.1), BlockTextures.FLEECE)
+		for i in levels:
+			var l: Vector3 = LUMPS[i]
+			var r := 0.1
+			b.box(Vector3(cx + l.x * 1.4 - r, 0.03, cz + l.y * 1.4 - r), Vector3(cx + l.x * 1.4 + r, 0.03 + r * 1.6, cz + l.y * 1.4 + r), color)
+	elif type == "wool":  # soft, so flat paint
+		for i in mini(levels, 2):
+			b.box(Vector3(cx - 0.26 + i * 0.04, i * 0.2, cz - 0.24), Vector3(cx + 0.26 + i * 0.04, i * 0.2 + 0.2, cz + 0.24), color.darkened(0.04 * i), BlockTextures.FLEECE)
+	elif type == "leather":  # a folded hide
+		for i in levels:
+			b.box(Vector3(cx - 0.28, i * 0.08, cz - 0.22), Vector3(cx + 0.28, i * 0.08 + 0.08, cz + 0.22), color.darkened(0.05 * (i % 2)))
+	elif type == "chest":
+		b.box(Vector3(cx - 0.3, 0, cz - 0.22), Vector3(cx + 0.3, 0.34, cz + 0.22), color, BlockTextures.BOARD)
+		b.box(Vector3(cx - 0.32, 0.3, cz - 0.24), Vector3(cx + 0.32, 0.42, cz + 0.24), color.darkened(0.12), BlockTextures.BOARD)
+		b.box(Vector3(cx - 0.04, 0.2, cz - 0.25), Vector3(cx + 0.04, 0.34, cz - 0.21), Palette.CHALK_DIM)
+	else:
+		return false
+	return true
 
 
 func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
@@ -1103,13 +1174,24 @@ func drawn_pos(r: Dictionary) -> Vector2:
 
 ## A resident's body part. Parts hidden behind a tree or wall show as a faint silhouette in the
 ## resident's tunic colour, so who is who reads even under a canopy (issue #79).
-func _person_mat(color: Color, tunic: Color) -> StandardMaterial3D:
-	var key := color.to_html() + tunic.to_html()
+func _person_mat(color: Color, tunic: Color, finish := BlockTextures.PLAIN) -> Material:
+	var key := color.to_html() + tunic.to_html() + str(finish)
 	if not _person_mats.has(key):
-		var m := StandardMaterial3D.new()
-		m.albedo_color = color
-		m.roughness = 1.0
-		m.next_pass = _xray_material(tunic)
+		var m: Material
+		if finish == BlockTextures.PLAIN:
+			var sm := StandardMaterial3D.new()
+			sm.albedo_color = color
+			sm.roughness = 1.0
+			sm.next_pass = _xray_material(tunic)
+			m = sm
+		else:  # a pixel texture (issue #206, phase 4), through the blocks' shader
+			var shm := _block_material(false)
+			shm.set_shader_parameter("from_instance", false)
+			shm.set_shader_parameter("local_uv", true)
+			shm.set_shader_parameter("tint", color)
+			shm.set_shader_parameter("finish", Vector3(finish))
+			shm.next_pass = _xray_material(tunic)
+			m = shm
 		_person_mats[key] = m
 	return _person_mats[key]
 
@@ -1149,12 +1231,12 @@ void fragment() {
 	return _xrays[key]
 
 
-func _part(parent: Node3D, size: Vector3, y: float, color: Color, tunic := Palette.CHALK) -> MeshInstance3D:
+func _part(parent: Node3D, size: Vector3, y: float, color: Color, tunic := Palette.CHALK, finish := BlockTextures.PLAIN) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	bm.size = size
 	mi.mesh = bm
-	mi.material_override = _person_mat(color, tunic)
+	mi.material_override = _person_mat(color, tunic, finish)
 	mi.position = Vector3(0, y + size.y / 2, 0)
 	parent.add_child(mi)
 	return mi
@@ -1169,8 +1251,8 @@ func _make_person(r: Dictionary) -> Node3D:
 	var tunic := Color("#" + r.shirt)
 	# Feet, legs and shirt are their own boxes, so worn armor (issue #140) can recolour each.
 	_part(body, Vector3(0.26, 0.1, 0.26), 0, Palette.LEGS, tunic).name = "Feet"
-	_part(body, Vector3(0.26, 0.22, 0.26), 0.1, Palette.LEGS, tunic).name = "Legs"
-	_part(body, Vector3(0.34, 0.46, 0.34), 0.32, tunic, tunic).name = "Shirt"
+	_part(body, Vector3(0.26, 0.22, 0.26), 0.1, Palette.LEGS, tunic, BlockTextures.CLOTHING).name = "Legs"
+	_part(body, Vector3(0.34, 0.46, 0.34), 0.32, tunic, tunic, BlockTextures.CLOTHING).name = "Shirt"
 	_part(body, Vector3(0.24, 0.32, 0.24), 0.78, Palette.SKIN, tunic)
 	var carry := _part(body, Vector3(0.28, 0.24, 0.28), 1.14, Palette.PLANK, tunic)
 	carry.name = "Carry"
@@ -1270,7 +1352,9 @@ func _dress(n: Node3D, r: Dictionary) -> void:
 	var leather: Color = Palette.ITEM_COLORS.leather
 	(n.get_node("Body/Cap") as Node3D).visible = worn.has("head")
 	for p in [["Feet", "feet", Palette.LEGS, leather.darkened(0.15)], ["Legs", "legs", Palette.LEGS, leather], ["Shirt", "chest", tunic, leather]]:
-		(n.get_node("Body/" + p[0]) as MeshInstance3D).material_override = _person_mat(p[3] if worn.has(p[1]) else p[2], tunic)
+		var on: bool = worn.has(p[1])
+		var finish := BlockTextures.HIDE if on else (BlockTextures.PLAIN if p[0] == "Feet" else BlockTextures.CLOTHING)
+		(n.get_node("Body/" + p[0]) as MeshInstance3D).material_override = _person_mat(p[3] if on else p[2], tunic, finish)
 
 
 # ---------------------------------------------------------------- animals (issues #42, #138)
@@ -1295,7 +1379,7 @@ func _make_animal(species: String) -> Node3D:
 	match species:
 		"cow":
 			_part(body, Vector3(0.58, 0.26, 0.34), 0.0, COW_HIDE.darkened(0.3))  # legs
-			var hide := _part(body, Vector3(0.74, 0.36, 0.44), 0.24, COW_HIDE)
+			var hide := _part(body, Vector3(0.74, 0.36, 0.44), 0.24, COW_HIDE, Palette.CHALK, BlockTextures.HIDE)
 			hide.name = "Hide"
 			var patch := _part(body, Vector3(0.28, 0.37, 0.45), 0.24, COW_PATCH)  # a white patch round its middle
 			patch.position.x = -0.1
@@ -1309,14 +1393,14 @@ func _make_animal(species: String) -> Node3D:
 				horn.position.z = z
 		"pig":
 			_part(body, Vector3(0.38, 0.1, 0.26), 0.0, PIG_SNOUT.darkened(0.2))  # short legs
-			_part(body, Vector3(0.5, 0.26, 0.36), 0.08, PIG_SKIN)
+			_part(body, Vector3(0.5, 0.26, 0.36), 0.08, PIG_SKIN, Palette.CHALK, BlockTextures.HIDE)
 			var head := _part(body, Vector3(0.2, 0.2, 0.24), 0.12, PIG_SKIN)
 			head.position.x = 0.32
 			var snout := _part(body, Vector3(0.06, 0.1, 0.14), 0.16, PIG_SNOUT)
 			snout.position.x = 0.44
 		_:
 			_part(body, Vector3(0.44, 0.16, 0.30), 0.0, SHEEP_FACE)     # legs, as one dark block
-			_part(body, Vector3(0.56, 0.34, 0.42), 0.14, SHEEP_WOOL)     # woolly body
+			_part(body, Vector3(0.56, 0.34, 0.42), 0.14, SHEEP_WOOL, Palette.CHALK, BlockTextures.FLEECE)     # woolly body
 			var head := _part(body, Vector3(0.2, 0.22, 0.2), 0.3, SHEEP_FACE)
 			head.name = "Head"
 			head.position.x = 0.34
