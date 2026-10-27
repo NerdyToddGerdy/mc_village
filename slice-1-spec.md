@@ -116,7 +116,7 @@ The crafting bench is a 1-block structure built from logs. Selecting it opens it
 
 **Automatic ingredients (after the first house is finished).**
 - Until the PC's house is finished, every recipe is queued by hand, so the opening teaches the chain from logs to planks to sticks to tools.
-- Once the first house is complete, a queued recipe that's short of a bench-made ingredient automatically gets that ingredient's recipe queued ahead of it. The ingredients are planks and sticks. The new entries are marked "(auto)".
+- Once the first house is complete, a queued recipe that's short of a bench-made ingredient automatically gets that ingredient's recipe queued ahead of it. The ingredients are planks and sticks. The new entries are marked "(auto)". (The Godot game does this from the start, slice-2-spec.md #182; the prototype stays as it was.)
 - This works through the whole chain. For example, a wooden pickaxe adds sticks, then the sticks add planks, and planks come from logs.
 - Only raw materials, meaning logs and cobblestone, have to exist already.
 - Auto entries can be removed like any other queue item.

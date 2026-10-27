@@ -16,6 +16,8 @@ func _initialize() -> void:
 	_run(sim, 120)
 	for r in ["planks", "planks", "sticks", "wood_pick"]:
 		sim.queue_add(bench, r)
+	if SaveFormat.VERSION >= 27:  # the founding's tools goal is an axe and a pickaxe (#182)
+		sim.queue_add(bench, "wood_axe")
 	_run(sim, 120)
 	sim.paint_zone(area(10, 7, 4, 2))
 	sim.designate_mine(Rect2i(0, 0, sim.w, sim.h))
@@ -24,6 +26,8 @@ func _initialize() -> void:
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	_run(sim, 600)
+	if SaveFormat.VERSION >= 27:  # 3 sheep from #182: the second bed's wool, as if fetched from the meadow
+		sim.drop_items(at(10, 6), "wool", 3)
 	sim.place_site("house", at(1, 4), 1)
 	if SaveFormat.VERSION >= 8:
 		sim.paint_farm(area(15, 15, 2, 2))  # wheat planted and growing when saved
@@ -248,6 +252,18 @@ func _initialize() -> void:
 		var block: Dictionary = sim.sites.filter(func(st): return st.tpl == "chopping_block")[0]
 		sim.set_make_keep(block, 15)
 		sim.queue_add(block, "saw_planks")
+	if SaveFormat.VERSION >= 28:  # a storehouse with 2 chests, holding logs and a pickaxe (#189)
+		for c in [at(14, 12), at(2, 13), at(13, 14), at(0, 12)]:
+			if sim.placement_check("storehouse", c) == "":
+				var sh := sim.place_site("storehouse", c)
+				sh.stage = 2
+				sh.done = true
+				sh.chests = 2
+				sim._occ_dirty = true
+				var slots := Sim.store_slots(sh)
+				sim._store_put(slots[0], "log", 12)
+				sim._store_put(slots[9], "stone_pick", 1, 17)
+				break
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

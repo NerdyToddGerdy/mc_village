@@ -1866,6 +1866,9 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 			c.add_child(_label("%s next: %s." % [nxt.name, Defs.cost_text(nxt.cost)], false, Palette.CHALK_DIM, Palette.BODY, true))
 		c.add_child(_destructive("Cancel blueprint", "Click again to cancel the blueprint", "site:%d" % s.id, func(): game.cancel_site(s)))
 		return
+	if s.tpl == "storehouse":  # issue #189
+		_fill_storehouse(c, sim, s)
+		return
 	if s.tpl == "house":
 		var owner := sim.resident(s.owner)
 		var line := "Home of %s." % owner.name if not owner.is_empty() else ("Empty. A traveler should arrive soon." if sim.arrival_at >= 0 else "Empty.")
@@ -1898,6 +1901,34 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		c.add_child(_reason(x.why))
 	if not game.craft_menu_open:
 		c.add_child(_button("Open the craft menu", func(): game.open_craft_menu(s), "Primary"))
+
+
+## A finished storehouse (issue #189): its chests, how full they are, and what's in them.
+func _fill_storehouse(c: Container, sim: Sim, s: Dictionary) -> void:
+	c.add_child(_label("Storehouse", true, Palette.CHALK, Palette.TITLE))
+	var slots := Sim.store_slots(s)
+	var used := slots.filter(func(k): return sim.items.has(k)).size()
+	var chests: int = s.get("chests", 0)
+	c.add_child(_row("Chests", "%d / %d" % [chests, Tuning.CHESTS], false))
+	if chests > 0:
+		c.add_child(_row("Stacks", "%d / %d" % [used, slots.size()], false))
+		c.add_child(_bar(float(used) / slots.size()))
+	var held := {}
+	for k in slots:
+		var it = sim.items.get(k)
+		if it != null:
+			held[it.type] = held.get(it.type, 0) + it.n
+	if not held.is_empty():
+		var parts: PackedStringArray = []
+		for t in held:
+			parts.append(Defs.words(t, held[t]))
+		c.add_child(_label("Holds " + ", ".join(parts) + ".", false, Palette.CHALK, Palette.BODY, true))
+	var more := "Haulers bring loose things here first; the stockpile takes what doesn't fit." if chests > 0 else "Craft a chest at the bench (8 planks): a hauler carries it in, and it holds %d stacks of anything." % Tuning.CHEST_STACKS
+	if chests > 0 and chests < Tuning.CHESTS:
+		more += " Each chest crafted at the bench adds %d stacks, up to %d chests." % [Tuning.CHEST_STACKS, Tuning.CHESTS]
+	c.add_child(_label(more, false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
+		c.add_child(_reason(x.why))
 
 
 ## A finished chopping block or mason's bench (issue #177): its pile, its keep-stock target with a

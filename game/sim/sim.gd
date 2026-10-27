@@ -57,8 +57,8 @@ var next_id := 1
 var rng := RandomNumberGenerator.new()  ## Seeded and saved, so a game replays exactly.
 var seed := Tuning.SEED      ## The game's seed: the old mine's deeper levels are generated from it (issue #132).
 var residents: Array = []    ## Everyone, on every map; each has the `map` they're on.
-var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafted": false,
-	"houses": 0, "traveler_home": false, "division": false}
+var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafted": false, "axe_crafted": false,
+	"houses": 0, "traveler_home": false, "division": false, "built": {}, "meadow_wool": false}
 var arrival_at := -1
 var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
@@ -145,8 +145,9 @@ const RING_TREES := [[9, 2], [26, 2], [14, 3], [17, 3], [8, 5], [11, 5], [26, 7]
 	[4, 16], [27, 17], [30, 17], [5, 20], [27, 21], [30, 23], [5, 25], [26, 25], [11, 27], [14, 27], [30, 27],
 	[22, 28], [19, 29], [5, 30], [10, 30], [13, 30]]
 const RING_BOULDERS := [[6, 7], [3, 8], [28, 11], [25, 13], [3, 14], [14, 25], [19, 26], [21, 26], [17, 30], [24, 30]]
-## Six sheep around the opening (issue #42): wool for the two opening beds. Open ground, in map cells.
-const START_SHEEP := [[21, 8], [12, 24], [24, 19], [8, 12], [22, 24], [20, 20]]
+## Three sheep around the opening (issues #42, #182): wool for Ada's bed. The second bed's comes from the
+## meadow. Open ground, in map cells.
+const START_SHEEP := [[21, 8], [12, 24], [24, 19]]
 ## Berry bushes, in opening coordinates (like OPENING_TREES): early food before farms (issue #44).
 const START_BUSHES := [[5, 10], [12, 6], [4, 14], [13, 14], [8, 13], [16, 12]]
 
@@ -168,6 +169,7 @@ static func new_game() -> Sim:
 	for p in START_SHEEP:
 		s.add_sheep(Vector2i(p[0], p[1]))
 	s.add_resident("Ada", ADA_TUNIC, OPENING_START + o)
+	s.auto_craft = true  # the bench makes a recipe's planks and sticks from the start (issue #182)
 	s._add_site_maps()
 	return s
 
@@ -512,7 +514,7 @@ static func nearest(list: Array, c: Vector2i):
 	var best = null
 	var bd := 1 << 30
 	for o in list:
-		var d := manhattan(o.cell, c)
+		var d := manhattan(o.at if o.has("at") else o.cell, c)  # a chest slot's stack is reached at its door (issue #189)
 		if d < bd:
 			bd = d
 			best = o
@@ -623,6 +625,12 @@ static func is_station(s: Dictionary) -> bool:
 static func plot_rect(tpl: String, origin: Vector2i, rot: int):
 	if not Defs.TEMPLATES[tpl].has("plot"):
 		return null
+	if Defs.TEMPLATES[tpl].size == Vector2i(3, 3):  # the storehouse grows back from its door (issue #189)
+		match rot % 4:
+			0: return Rect2i(origin + Vector2i(0, -2), Vector2i(3, 5))
+			1: return Rect2i(origin + Vector2i(-2, 0), Vector2i(5, 3))
+			2: return Rect2i(origin, Vector2i(3, 5))
+			_: return Rect2i(origin, Vector2i(5, 3))
 	match rot % 4:
 		0: return Rect2i(origin + Vector2i(-1, 0), Vector2i(3, 3))
 		1: return Rect2i(origin + Vector2i(-2, -1), Vector2i(3, 3))
@@ -792,6 +800,9 @@ func _clear_footprint(s: Dictionary) -> void:
 
 func _on_site_done(s: Dictionary) -> void:
 	assign_workstations()
+	if not stats.has("built"):
+		stats.built = {}
+	stats.built[s.tpl] = true  # for the founding goals (issue #182)
 	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
 		var job: String = Defs.JOB_STATIONS.find_key(s.tpl)
 		var who := resident(s.get("worker", 0))
@@ -837,9 +848,6 @@ func _on_site_done(s: Dictionary) -> void:
 	if not ada_home:
 		s.owner = ada.id
 		_toast("Ada’s house is finished.", 0, s.id)
-		if not auto_craft:
-			auto_craft = true
-			_toast("The bench now makes the planks and sticks a recipe needs.")
 	else:
 		_toast("The house is finished, bed and all. Someone may come to live in it.", 0, s.id)
 
@@ -1013,6 +1021,112 @@ func set_make_keep(s: Dictionary, n: int) -> void:
 	rev += 1
 
 
+# ---------------------------------------------------------------- storehouses (issue #189)
+
+## Whether a stack's key is a chest slot in a storehouse rather than a cell on the map. Slots are
+## keyed off the map, at (-1 - slot, -the storehouse's id), so nothing else mistakes them for ground.
+static func in_store(c: Vector2i) -> bool:
+	return c.x < 0
+
+
+## The storehouse a chest slot belongs to, or {}.
+func store_of(c: Vector2i) -> Dictionary:
+	return site(-c.y)
+
+
+## The cell in front of a storehouse's door, where residents put things in and take them out.
+static func store_door(s: Dictionary) -> Vector2i:
+	match s.rot % 4:
+		0: return s.origin + Vector2i(1, 3)
+		1: return s.origin + Vector2i(3, 1)
+		2: return s.origin + Vector2i(1, -1)
+		_: return s.origin + Vector2i(-1, 1)
+
+
+## A storehouse's chest slots: CHEST_STACKS for each chest carried in.
+static func store_slots(s: Dictionary) -> Array:
+	var out: Array = []
+	for i in s.get("chests", 0) * Tuning.CHEST_STACKS:
+		out.append(Vector2i(-1 - i, -s.id))
+	return out
+
+
+## Where a resident stands to reach a stack: its storehouse's door for a chest slot, else its cell.
+func reach(c: Vector2i) -> Array:
+	if in_store(c):
+		var s := store_of(c)
+		if not s.is_empty():
+			return [store_door(s)]
+	return [c]
+
+
+## The nearest storehouse to `c` with room for `type`, as {site, cell (a chest slot), room}, or null.
+## A chest isn't stored in a chest: it's set in place.
+func store_dest(type: String, c: Vector2i):
+	if type == "chest":
+		return null
+	var cap := Defs.stack_cap(type)
+	var best = null
+	var bd := 1 << 30
+	for s in m.sites:
+		if s.tpl != "storehouse" or not s.done or s.get("chests", 0) == 0:
+			continue
+		var door := store_door(s)
+		var d := manhattan(door, c)
+		if d >= bd or not walkable(door):
+			continue
+		var found = null
+		var empty = null
+		for k in store_slots(s):
+			if m.zone_res.has(k):
+				continue
+			var it = m.items.get(k)
+			if it == null:
+				if empty == null:
+					empty = k
+			elif it.type == type and it.n < cap:
+				found = {"site": s, "cell": k, "room": cap - it.n}
+				break
+		if found == null and empty != null:
+			found = {"site": s, "cell": empty, "room": cap}
+		if found != null:
+			best = found
+			bd = d
+	return best
+
+
+## Puts carried items into a chest slot.
+func _store_put(k: Vector2i, type: String, n: int, uses := -1) -> void:
+	var it = m.items.get(k)
+	if it == null:
+		it = {"cell": k, "type": type, "n": 0, "res": 0, "at": store_door(store_of(k))}
+		if Defs.wears(type):
+			it.dur = full_uses(type) if uses < 0 else uses
+		m.items[k] = it
+	it.n += n
+	rev += 1
+
+
+## Chests carried into a storehouse are set in place.
+func _set_chests() -> void:
+	for s in m.sites:
+		if s.tpl == "storehouse" and s.done and s.store.get("chest", 0) > 0:
+			s.chests = mini(Tuning.CHESTS, s.get("chests", 0) + s.store.chest)
+			s.store.chest = 0
+			rev += 1
+
+
+## A hauler's job carrying a chest into the nearest storehouse with room for one, or null.
+func _chest_job(r: Dictionary, c: Vector2i):
+	var want := m.sites.filter(func(s): return s.tpl == "storehouse" and s.done and not _cooling(s) and s.get("chests", 0) + s.store.get("chest", 0) + s.incoming.get("chest", 0) < Tuning.CHESTS)
+	if want.is_empty():
+		return null
+	var chests := stacks_where(func(st): return st.type == "chest" and avail(st) > 0)
+	if chests.is_empty():
+		return null
+	return _deliver_job(_nearest_site(want, c), "chest", 1, nearest(chests, c))
+
+
 # ---------------------------------------------------------------- workstations (issue #177)
 
 ## Which job works a tree or a boulder: Lumberjack for trees, Stonemason for boulders and ore.
@@ -1068,7 +1182,7 @@ func pile_map() -> Dictionary:
 ## Whether a stack is put away: in a stockpile, or in the pile of a workstation that keeps its type.
 ## A caller checking many stacks passes `pile_map()`, worked out once.
 func stored(st: Dictionary, piles = null) -> bool:
-	if in_zone(st.cell):
+	if in_zone(st.cell) or in_store(st.cell):
 		return true
 	var ws = pile_at(st.cell) if piles == null else piles.get(st.cell)
 	return ws != null and work_of(ws).item == st.type
@@ -1213,7 +1327,7 @@ func _plant_job(r: Dictionary, c: Vector2i, stations: Array):
 	var sh := j.hold({"t": "stack", "stack": st, "n": 1})
 	_plant_claims[cell] = r.id
 	j.hold({"t": "plant", "cell": cell})
-	j.step(_goto([st.cell], false))
+	j.step(_goto(reach(st.cell), false))
 	j.step({"op": "pickup", "stack": st, "n": 1, "hold": sh})
 	j.step(_goto([cell], true))
 	j.step({"op": "work", "what": "plant_tree", "cell": cell, "label": "Planting a sapling"})
@@ -1336,7 +1450,7 @@ func _eat_job(r: Dictionary):
 	var stack: Dictionary = f.stack
 	stack.res += 1
 	var hd := j.hold({"t": "stack", "stack": stack, "n": 1})
-	j.step(_goto([stack.cell], false))
+	j.step(_goto(reach(stack.cell), false))
 	j.step({"op": "pickup", "stack": stack, "n": 1, "hold": hd})
 	j.step({"op": "work", "what": "eat", "label": "Eating %s" % Defs.ITEMS[stack.type].one})
 	return j
@@ -1404,7 +1518,7 @@ func _hunt_job(r: Dictionary, target: Dictionary) -> Job:
 func _fetch_tool(j: Job, stack: Dictionary) -> void:
 	stack.res += 1
 	var hd := j.hold({"t": "stack", "stack": stack, "n": 1})
-	j.step(_goto([stack.cell], false))
+	j.step(_goto(reach(stack.cell), false))
 	j.step({"op": "pickup_tool", "stack": stack, "hold": hd})
 
 
@@ -1418,7 +1532,7 @@ func _deliver_job(dest: Dictionary, type: String, n: int, stack: Dictionary) -> 
 	dest.incoming[type] = dest.incoming.get(type, 0) + n
 	var sh := j.hold({"t": "stack", "stack": stack, "n": n})
 	var ih := j.hold({"t": "incoming", "site": dest, "type": type, "n": n})
-	j.step(_goto([stack.cell], false))
+	j.step(_goto(reach(stack.cell), false))
 	j.step({"op": "pickup", "stack": stack, "n": n, "hold": sh})
 	j.step(_goto(site_cells(dest), true))
 	j.step({"op": "deposit", "site": dest, "type": type, "n": n, "hold": ih})
@@ -1462,7 +1576,7 @@ func _craft_job(r: Dictionary, b: Dictionary, rec: Dictionary) -> Job:
 
 ## Carrying a stack to a stockpile cell, or to a workstation's pile (`pile`, issue #177).
 func _haul_job(r: Dictionary, stack: Dictionary, dest: Vector2i, n: int, pile := {}) -> Job:
-	var where: String = "the stockpile" if pile.is_empty() else "the " + Defs.TEMPLATES[pile.tpl].name.to_lower()
+	var where: String = "the storehouse" if in_store(dest) else "the stockpile" if pile.is_empty() else "the " + Defs.TEMPLATES[pile.tpl].name.to_lower()
 	var j := Job.new("haul", "Hauling %s to %s" % [Defs.ITEMS[stack.type].many, where], where)
 	stack.res += n
 	m.zone_res[dest] = r.id
@@ -1472,9 +1586,9 @@ func _haul_job(r: Dictionary, stack: Dictionary, dest: Vector2i, n: int, pile :=
 	if not pile.is_empty():
 		pile.incoming[stack.type] = pile.incoming.get(stack.type, 0) + n
 		drop.pile_hold = j.hold({"t": "incoming", "site": pile, "type": stack.type, "n": n})
-	j.step(_goto([stack.cell], false))
+	j.step(_goto(reach(stack.cell), false))
 	j.step({"op": "pickup", "stack": stack, "n": n, "hold": sh})
-	j.step(_goto([dest], false))
+	j.step(_goto(reach(dest), false))
 	j.step(drop)
 	return j
 
@@ -1683,7 +1797,10 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			if st.has("pile_hold"):
 				st.pile_hold.site.incoming[st.type] -= st.n
 				j.holds.erase(st.pile_hold)
-			drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
+			if in_store(st.cell):  # into a chest (issue #189)
+				_store_put(st.cell, st.type, st.n, r.carry.get("dur", -1))
+			else:
+				drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
 			r.carry = null
 			return true
 		"depart":  # off the edge of the map: onto the road map (#118), or the walk to or from the meadow (#137)
@@ -2071,6 +2188,8 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				drop_items(rcell(r), o, rec.out[o], uses)
 				if Defs.ITEMS[o].get("tool", "") == "pick":
 					stats.pick_crafted = true
+				if Defs.ITEMS[o].get("tool", "") == "axe":
+					stats.axe_crafted = true
 			if b.queue.is_empty():  # a skilled cook's spare wheat goes back out
 				for k in b.store:
 					if b.store[k] > 0:
@@ -2223,6 +2342,9 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			var pj = _pack_job(r, c)  # packing for an expedition comes before the stockpile
 			if pj != null:
 				return _tagged(pj, "haul")
+			var cj = _chest_job(r, c)  # a chest for a storehouse (issue #189)
+			if cj != null:
+				return _tagged(cj, "haul")
 			var hs = _haul_source(c, carry_cap(r))
 			if hs != null:
 				return _tagged(_haul_job(r, hs.stack, hs.dest, hs.n, hs.get("pile", {})), "haul")
@@ -2243,12 +2365,14 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 	# hauler with a full stockpile asks every tick, so finding nowhere to go has to cost little.
 	var dests := {}  # type -> a stockpile cell with room for it, or null
 	var piled := {}  # type -> whether a workstation's pile keeps it with room (issue #177)
+	var stores := {}  # type -> whether a storehouse has room for it (issue #189)
 	var anywhere := false
 	for ls in loose:
 		if not dests.has(ls.type):
 			dests[ls.type] = zone_dest(ls.type)
 			piled[ls.type] = pile_dest(ls.type, c) != null
-			anywhere = anywhere or dests[ls.type] != null or piled[ls.type]
+			stores[ls.type] = store_dest(ls.type, c) != null
+			anywhere = anywhere or dests[ls.type] != null or piled[ls.type] or stores[ls.type]
 	if not anywhere:
 		return null
 	# An expedition's unloaded cargo goes first (issue #112), then the nearest.
@@ -2257,6 +2381,9 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 		var pd = pile_dest(ls.type, ls.cell) if piled[ls.type] else null  # a workstation's pile before the stockpile
 		if pd != null:
 			return {"stack": ls, "dest": pd.cell, "n": mini(mini(avail(ls), carry), pd.room), "pile": pd.site}
+		var sd = store_dest(ls.type, ls.cell) if stores[ls.type] else null  # the nearest storehouse, then the stockpile
+		if sd != null:
+			return {"stack": ls, "dest": sd.cell, "n": mini(mini(avail(ls), carry), sd.room)}
 		var dest = dests[ls.type]
 		if dest == null:
 			continue
@@ -2393,6 +2520,7 @@ func _step_map() -> void:
 	if auto_craft and tick % 10 == 0:
 		expand_queues()
 	if tick % 10 == 0:
+		_set_chests()
 		keep_meals_stocked()
 		keep_made_stocked()
 		keep_tools_stocked()
@@ -2958,10 +3086,12 @@ func _arrive() -> void:
 	var who: Array = TRAVELERS[n % TRAVELERS.size()]
 	var t := add_resident(who[0] if n < TRAVELERS.size() else "%s %d" % [who[0], n / TRAVELERS.size() + 1], who[1], spawn)
 	var skill: String = Defs.JOBS[rng.randi_range(0, Defs.JOBS.size() - 1)]
+	if n == 0:
+		skill = "lumber"  # the first traveler fells trees from the chopping block the founding ends on (issue #182)
 	t.jobs[skill].xp = Tuning.SKILL_LEVELS[Tuning.ARRIVAL_LEVEL - 2]
 	t.role = skill  # an arrival starts with the job they're skilled in (issue #134)
 	walk_in(t)
-	_toast("A traveler named %s has arrived, a skilled %s." % [t.name, Defs.JOB_SKILLED[skill]], t.id)
+	_toast("%s, a skilled %s, has arrived." % [t.name, Defs.JOB_SKILLED[skill]], t.id)
 
 
 func walk_in(t: Dictionary) -> void:
@@ -3112,20 +3242,31 @@ func _stuck_on_map() -> void:
 			if m.farm[k].grow < 0.0 and m.items.has(k):
 				_add_stuck("Farm", "Harvested wheat needs a stockpile before replanting", Vector2(k) + Vector2(0.5, 0.5), 0.6, "crop", m.farm[k].id)
 				break
-	if not m.zone.is_empty():
+	var stores := m.sites.filter(func(s): return s.tpl == "storehouse" and s.done)
+	for s in stores:  # issue #189
+		var at := Vector2(s.origin) + Vector2(1.5, 1.5)
+		if not walkable(store_door(s)):
+			_add_stuck("Storehouse", "Can’t reach the storehouse: its door is blocked", at, 2.2, "site", s.id)
+		elif s.get("chests", 0) == 0:
+			_add_stuck("Storehouse", "No chests yet. Craft one at the bench (8 planks)", at, 2.2, "site", s.id)
+	if not m.zone.is_empty() or not stores.is_empty():
 		var piles := pile_map()
-		var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s, piles))
+		var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s, piles) and s.type != "chest")
 		var full := not loose.is_empty()
 		var tried := {}
 		for s in loose:
 			if tried.has(s.type):
 				continue
 			tried[s.type] = true
-			if zone_dest(s.type) != null:
+			if zone_dest(s.type) != null or store_dest(s.type, s.cell) != null:
 				full = false
 				break
 		if full:
-			_add_stuck("Stockpile", "Stockpile is full", Vector2(m.zone.keys()[0]) + Vector2(0.5, 0.5), 0.6, "", 0)
+			var room := stores.filter(func(s): return s.get("chests", 0) > 0 and walkable(store_door(s)))
+			if not room.is_empty():
+				_add_stuck("Storehouse", "The storehouse is full", Vector2(room[0].origin) + Vector2(1.5, 1.5), 2.2, "site", room[0].id)
+			if not m.zone.is_empty():
+				_add_stuck("Stockpile", "Stockpile is full", Vector2(m.zone.keys()[0]) + Vector2(0.5, 0.5), 0.6, "", 0)
 
 
 ## "No one is a farmer" (spec §9): there's work of a job, nobody but Ada has it, and Ada can't see
@@ -3592,7 +3733,7 @@ func equip_order(r: Dictionary, stack: Dictionary) -> void:
 	j.ordered = true
 	stack.res += 1
 	var hd := j.hold({"t": "stack", "stack": stack, "n": 1})
-	j.step(_goto([stack.cell], false))
+	j.step(_goto(reach(stack.cell), false))
 	j.step({"op": "pickup_tool", "stack": stack, "hold": hd, "keep": true})
 	r.direct = j
 
@@ -4142,6 +4283,8 @@ func _finish_return() -> void:
 	var b := site(ex.board)
 	if not b.is_empty():
 		b.report = report
+	if ex.dest == Meadow.ID and ex.get("cargo", {}).get("wool", 0) > 0:
+		stats.meadow_wool = true  # a founding goal (issue #182)
 	expedition = {}
 	stats.expeditions = stats.get("expeditions", 0) + 1
 	rev += 1
@@ -4627,7 +4770,7 @@ func _railhead_job(r: Dictionary, c: Vector2i):
 	j.work = "build"
 	from.res += n
 	var sh := j.hold({"t": "stack", "stack": from, "n": n})
-	j.step(_goto([from.cell], false))
+	j.step(_goto(reach(from.cell), false))
 	j.step({"op": "pickup", "stack": from, "n": n, "hold": sh})
 	j.step(_goto([route_sign()], true))
 	j.step({"op": "cross", "to": Road.ID})
@@ -4683,7 +4826,7 @@ func _dock_job(r: Dictionary, c: Vector2i):
 	j.work = "haul"
 	from.res += 1
 	var sh := j.hold({"t": "stack", "stack": from, "n": 1})
-	j.step(_goto([from.cell], false))
+	j.step(_goto(reach(from.cell), false))
 	j.step({"op": "pickup", "stack": from, "n": 1, "hold": sh})
 	j.step(_goto([route_sign()], true))
 	j.step({"op": "cross", "to": Road.ID})
@@ -4715,7 +4858,7 @@ func _platform_haul(r: Dictionary, from_village: bool):
 	if from_village:
 		j.step(_goto([route_sign()], true))
 		j.step({"op": "cross", "to": Road.ID})
-	j.step(_goto([st.cell], false))
+	j.step(_goto(reach(st.cell), false))
 	j.step({"op": "pickup", "stack": st, "n": n, "hold": sh})
 	j.step(_goto([Road.VILLAGE_END], false))
 	j.step({"op": "cross", "to": "village"})
@@ -5000,7 +5143,7 @@ func _stow_job(r: Dictionary, c: Vector2i):
 	j.work = "haul"
 	st.res += n
 	var hd := j.hold({"t": "stack", "stack": st, "n": n})
-	j.step(_goto([st.cell], false))
+	j.step(_goto(reach(st.cell), false))
 	j.step({"op": "pickup", "stack": st, "n": n, "hold": hd})
 	j.step(_goto([m.entrance], false))
 	j.step({"op": "stow", "n": n})
@@ -5309,7 +5452,7 @@ func _dress(r: Dictionary, stack: Dictionary) -> Job:
 	var j := Job.new("dress", "Going to put on the %s" % it.one, "the %s" % it.one)
 	stack.res += 1
 	var hd := j.hold({"t": "stack", "stack": stack, "n": 1})
-	j.step(_goto([stack.cell], false))
+	j.step(_goto(reach(stack.cell), false))
 	j.step({"op": "pickup_armor", "stack": stack, "hold": hd})
 	return j
 
@@ -5667,7 +5810,7 @@ func save_state() -> Dictionary:
 	for id in maps:
 		maps_out[id] = maps[id].save()
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
-		"stats": stats.duplicate(), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
+		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
 		"herd_floor": herd_floor.duplicate(), "rng_state": rng.state, "seed": seed,
 		"expedition": expedition.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true)}
 
@@ -5685,7 +5828,7 @@ static func from_state(d: Dictionary) -> Sim:
 	for id in ids:
 		s.maps[id] = SimMap.from_save(d.maps[id])
 	s.use_map("village")
-	s.stats = d.stats.duplicate()
+	s.stats = d.stats.duplicate(true)
 	s.arrival_at = d.arrival_at
 	s.arrived = d.arrived
 	s.auto_craft = d.auto_craft

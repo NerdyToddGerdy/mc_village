@@ -41,15 +41,18 @@ Marks drawn on the world show what's been ordered. Chalk-white means selected, r
 The goals panel leads you through these steps. Each one unlocks the next.
 
 1. **Chop a tree.** Choose **Gather → Mine** (or press **X**) and click a tree. Ada fells it by hand, slowly. A tree drops 4 to 6 logs.
-2. **Build a crafting bench.** Choose **Build → Crafting bench** (or press **T**) and click open ground. It takes 4 logs.
-3. **Craft a pickaxe.** Open the bench (click it, or press **C**). Queue planks, then sticks, then a wooden pickaxe.
-4. **Paint a stockpile.** Choose **Paint → Stockpile** (Z, then 1) and drag over open ground. Residents carry what they gather there.
+2. **Paint a stockpile.** The logs are lying loose. Choose **Paint → Stockpile** (Z, then 1) and drag over open ground. Residents carry what they gather there.
+3. **Build a crafting bench.** Choose **Build → Crafting bench** (or press **T**) and click open ground. It takes 4 logs.
+4. **Craft an axe and a pickaxe.** Open the bench (click it, or press **C**) and queue a wooden axe and a wooden pickaxe. The bench queues their planks and sticks first by itself, marked **A**. An axe chops 2.5× faster than bare hands.
 5. **Break a boulder.** With a pickaxe, Ada can mine boulders for cobblestone. Each one gives 6.
-6. **Hunt sheep for wool.** Choose **Gather → Hunt** (or press **G**) and mark sheep. Each one gives 1 wool and 1 raw mutton. A house's bed needs 3 wool.
+6. **Hunt sheep for wool.** Choose **Gather → Hunt** (or press **G**) and mark sheep. Each one gives 1 wool and 1 raw mutton. The clearing's 3 sheep give the 3 wool a bed needs.
 7. **Build Ada's house.** Choose **Build → House** (or press **H**), and press **R** to turn the door. The house goes up in stages as materials arrive, and its bed is the last stage.
-8. **Build a second house.** From here on, the bench queues the planks and sticks a recipe needs by itself.
-9. **Welcome a traveler.** Tomas arrives a little while after the second house, bed included, is finished.
-10. **Two residents at work.** Keep both busy on different jobs.
+8. **Build a fireplace.** Choose **Build → Fireplace** (or press **K**). It costs 6 cobblestone, and cooks the mutton into meals: a trip off the map needs one for the walk home.
+9. **Build an expedition board.** It's in the Build menu once Ada's house is up. The second bed needs more wool than the clearing has, and the board plans trips off the map.
+10. **Fetch wool from the meadow.** Click the meadow's signpost on the west edge, or the board. Send Ada for wool, take as many meals as the fireplace has made, click **Start packing**, then **Depart**. The village waits while she's away.
+11. **Build a second house.** Its bed is what brings a traveler.
+12. **Welcome a traveler.** Tomas, a lumberjack, arrives a little while after the second bed is ready.
+13. **Build Tomas a chopping block.** Choose **Build → Chopping block** near trees. Tomas fells the trees around it on his own, while Ada does everything else.
 
 ## Giving orders
 
@@ -144,6 +147,8 @@ The workstation's panel and the stuck list say what's holding it up: "No trees i
 Everything is carried. Felled trees drop logs where they stood, and broken boulders drop cobblestone. Residents carry up to 4 of one thing at a time.
 
 Until you paint a stockpile, items stay where they fell, and builders fetch them from the ground. Once there's a stockpile, residents with **Haul** on carry loose items to it. Each cell holds up to 16. If the stockpile is full, the stuck list says so.
+
+**The storehouse** (Build menu: 6 cobblestone, 12 planks and 4 logs) is the main storage once you have one. It holds nothing until you add chests. Craft a **chest** at the bench (8 planks) and a hauler carries it in. Each chest holds 9 stacks of anything, up to 4 chests. Haulers fill the nearest storehouse with room first, and stockpiles take what doesn't fit. Residents fetch what's stored at its door, and its panel lists what's inside. The squares on each chest's lid show what it holds.
 
 The top bar counts what you have, with how much of it is still lying loose.
 

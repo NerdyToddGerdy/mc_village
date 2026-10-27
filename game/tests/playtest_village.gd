@@ -41,13 +41,15 @@ func _initialize() -> void:
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	await play(600)
+	sim.drop_items(at(10, 6), "wool", 3)  # the second bed's wool and the sheep's mutton, as if from the meadow
+	sim.drop_items(at(11, 6), "mutton", 3)  # (a new game has 3 sheep, issue #182)
 	var h2 := sim.place_site("house", at(1, 4), 1)
 	for i in 8:
 		sim.queue_add(bench, "planks")
 	check(await play_until(1200, func(): return sim.stats.get("traveler_home", false)), "founding: Tomas has moved in")
 	var tomas: Dictionary = sim.residents[1] if sim.residents.size() > 1 else {}
 	check(h1.done and h2.done and h1.stage == 4 and h2.stage == 4, "both houses are finished with their beds")
-	check(sim.stats.get("sheep_hunted", 0) >= 6, "the clearing's sheep were hunted for wool and mutton (%d)" % sim.stats.get("sheep_hunted", 0))
+	check(sim.stats.get("sheep_hunted", 0) >= 3, "the clearing's sheep were hunted for wool and mutton (%d)" % sim.stats.get("sheep_hunted", 0))
 	check(not tomas.is_empty() and seen("a skilled"), "Tomas arrived skilled in a job")
 
 	# ---- A bigger stockpile, by drag: Z opens the Paint menu, 1 picks Stockpile (issue #93)
@@ -168,7 +170,7 @@ func _initialize() -> void:
 	# ---- The meadow (issues #136, #137): an expedition board, then an adventure there for wool
 	check(await open_bench_panel(), "open the bench for the board's planks and sticks")
 	await queue_recipe("Planks", 2)
-	await queue_recipe("Sticks", 1)
+	await queue_recipe("Sticks", 2)  # the toolsmith's spares take sticks too
 	await key(KEY_ESCAPE)
 	check(await click_button("Build") and await click_button("Expedition board"), "pick Expedition board in the Build menu")
 	var bp := build_spot("board", at(9, 9))
@@ -176,7 +178,7 @@ func _initialize() -> void:
 	await look_at(bp)
 	await click(screen(bp))
 	var board = sim.site_at(bp)
-	check(await play_until(300, func(): return board != null and board.done), "the board is built")
+	check(await play_until(300, func(): return board != null and board.done), "the board is built (%s)" % ("; ".join(sim.stuck.map(func(x): return x.who + ": " + x.why)) if board != null else "not placed"))
 	await look_at(sim.meadow_sign())
 	await click(screen(sim.meadow_sign(), 1.4))
 	game._hud.refresh(sim)
@@ -315,6 +317,33 @@ func _initialize() -> void:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(game.planner_open and visible_label("Last expedition") and find_button("Start packing") != null or visible_label("Last expedition"), "the board shows the last expedition and is ready to plan the next")
+	await key(KEY_ESCAPE)
+
+	# ---- A storehouse with a chest (issue #189): haulers fill the chest before the stockpile
+	game.selection = {}
+	check(await open_bench_panel(), "open the bench for a chest")
+	check(await queue_recipe("Chest"), "queue a chest (8 planks)")
+	await key(KEY_ESCAPE)
+	await key(KEY_B)
+	check(await click_button("Storehouse"), "pick Storehouse in the Build menu")
+	var sp := build_spot("storehouse", at(9, 14))
+	await look_at(sp + Vector2i(1, 1))
+	await click(screen(sp + Vector2i(1, 1)))
+	var store = sim.site_at(sp + Vector2i(1, 1))
+	check(store != null and store.tpl == "storehouse" and store.plot != null, "the storehouse is placed, with room reserved to grow")
+	if game.tool != "":
+		await key(KEY_ESCAPE)
+	check(await play_until(500, func(): return store != null and store.done and store.get("chests", 0) >= 1), "it's built, and a hauler carries the chest in (%s)" % ("; ".join(sim.stuck.map(func(x): return x.who + ": " + x.why)) if store != null else "not placed"))
+	await key(KEY_X)
+	await look_at(at(9, 9))
+	await drag(screen(Vector2i(1, 1)), screen(Vector2i(sim.w - 2, sim.h - 2)), true)  # logs to put away
+	await key(KEY_ESCAPE)
+	check(await play_until(300, func(): return store != null and Sim.store_slots(store).any(func(k): return sim.items.has(k))), "haulers fill the chest")
+	await look_at(sp + Vector2i(1, 1))
+	await click(screen(sp + Vector2i(1, 1), 0.6))
+	game._hud.refresh(sim)
+	await frames(2)
+	check(visible_label("Storehouse") and visible_label("Chests"), "selecting it shows its chests and what they hold")
 	await key(KEY_ESCAPE)
 
 	# ---- Every stall has a reason: anything in the stuck list carries one

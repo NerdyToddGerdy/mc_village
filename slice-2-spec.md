@@ -43,10 +43,33 @@ Slice 2 is done when, from a fresh start, a player can:
   - The bed sits in the house's **top corner**: the back corner, furthest from the camera.
   - It's two cells long, with a plank frame, a white pillow and a red blanket.
   - The roof is cut away while the bed is being built, and whenever the house is selected or hovered, so the bed can be seen.
-- **The clearing starts with 6 sheep**, enough wool for the two opening beds.
+- **The clearing starts with 3 sheep**, enough wool for Ada's bed. The second bed's wool comes from the meadow (#182, below). Saved games keep their sheep.
 - **Arrivals need a free bed** (§7). Tomas comes once the second house, bed included, is finished.
 - **Ada's house** is hers when its bed is finished, not when its roof is.
-- **Slice 1 goals** gain "Hunt sheep for wool" before Ada's house. ("Make Ada the toolsmith", added after the bench by #91, went again with #134: Ada makes tools herself.) The founding checklist otherwise stays, and its hints name the Gather and Paint menus (#93, #94).
+- **The founding (reworked in #182)** teaches the stockpile first, both tools together, a first trip to the meadow, and the chopping block:
+
+  | # | Goal | Done when |
+  |---|---|---|
+  | 1 | Chop a tree | a tree is felled |
+  | 2 | Paint a stockpile | a stockpile is painted |
+  | 3 | Build a crafting bench | a bench is finished |
+  | 4 | Craft an axe and a pickaxe | both have been crafted |
+  | 5 | Break a boulder | a boulder is broken |
+  | 6 | Hunt sheep for wool | a sheep is hunted (or Ada's house is finished, in saves from before sheep) |
+  | 7 | Build Ada's house | a house is finished |
+  | 8 | Build a fireplace | a fireplace is finished. It cooks the clearing's mutton, the trip's meals |
+  | 9 | Build an expedition board | a board is finished |
+  | 10 | Fetch wool from the meadow | a meadow trip comes home with wool |
+  | 11 | Build a second house | two houses are finished |
+  | 12 | Welcome a traveler | the traveler has moved in |
+  | 13 | Build Tomas a chopping block | a chopping block is finished |
+
+  - **Automatic ingredients from the start:** the bench queues a recipe's planks and sticks in a new game, marked **A**. The first house no longer unlocks it.
+  - **The board** shows in the Build menu once Ada's house is finished, rather than after the founding.
+  - **The first traveler is a lumberjack**, so the last goal gives him his workstation. Later arrivals are skilled in a random job, as before. The toast reads "Tomas, a skilled lumberjack, has arrived."
+  - The goals read the village's stats, including which buildings have ever been finished. The fireplace goal was added beside the issue's twelve, since a meadow trip packs a meal for the walk home.
+  - **Older saves** (v26→v27): automatic ingredients turn on. A save past the old pickaxe goal counts the new tools goal as done, and one with two houses counts the fireplace, board and meadow steps as done. A founding that was complete stays complete.
+  - "Make Ada the toolsmith" (added by #91) went with #134, and "Two residents at work" with #182. The hints name the Gather and Paint menus (#93, #94).
 - **After the founding (#81):** the goals panel folds to a small "Founding ✓" chip, since it has nothing left to guide. Whether Slice 2 gets a checklist of its own is still open. Saves made after the founding are labelled with facts about the village, "4 residents, 3 houses, 18 meals", rather than "Founding complete", so they can be told apart. The menu's subtitle reads "Your village: …" the same way. Older saves labelled "Founding complete" are listed by the same facts, read from the save.
 - **Tool breakage:** while a resident's job is Toolsmith, a resident whose tool breaks fetches a spare instead of stopping (§6). With no toolsmith, the Slice 1 rule holds: they stop and report, and the report says how to fix it: "Axe broke. Craft one at the bench, or make someone the toolsmith" (#91, #134).
 
@@ -301,6 +324,8 @@ Once a crafting bench is finished, a **Craft** button appears in the orders tool
 | Chopping block (1×1, #177) | Sawmill | 3×3, block at its back wall; its pile sits on the two cells beside it |
 | Mason's bench (1×1, #177) | Mason's workshop | 3×3, bench at its back wall; its pile sits on the two cells beside it |
 
+| Storehouse (3×3, #189) | A bigger storehouse | 3×5: its footprint and two rows behind it, away from the door |
+
 A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgraded later only if the 3×3 around it happens to be clear.
 
 | Thing | How | Cost |
@@ -309,11 +334,22 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 | Fireplace | Build menu, K | 6 cobblestone (reserves a 3×3 kitchen plot) |
 | Chopping block | Build menu (#177) | 4 planks (reserves a 3×3 sawmill plot) |
 | Mason's bench | Build menu (#177) | 2 planks, 4 cobblestone (reserves a 3×3 mason's workshop plot) |
+| Storehouse | Build menu (#189) | 6 cobblestone, then 12 planks and 4 logs (reserves room behind it) |
+| Chest | Bench recipe (#189) | 8 planks |
 | Keep mark | Gather menu, Keep (click or drag) | — |
 | Toolsmith's bench, composter, hunter's lodge, builder's table | Build menu (#184) | See §5 |
 | Farm plot | Farm order, P (drag) | free |
 | Hunt mark | Hunt order, G (click or drag) | — |
 | Meadow trip | Resident panel: Send to the meadow | — |
+
+**The storehouse (#189)** is the village's main storage. Painted stockpiles stay, as overflow.
+- **The building:** 3×3, from the Build menu, built in two stages (a cobblestone floor, then plank walls). It holds nothing until it's built. Its door is the middle of its front side, which R turns, and its upgrade plot runs back from the door.
+- **Chests:** a chest is crafted at the bench (8 planks) and carried in by a hauler. A storehouse holds up to **4 chests**, each with **9 stacks of anything**, so storage grows visibly. Chests sit inside the low walls, clear of the path from the door, and each lid shows squares of the first few kinds of thing in it.
+- **Hauling:** haulers carry a loose item to the nearest storehouse with room for it, before any stockpile. A workstation's pile still comes first for its own logs or cobblestone. Stockpile cells take the overflow: they're used only when no storehouse has room, or before the village has one. Haulers carry chests in before they put anything away.
+- **Fetching:** residents reach what's in a storehouse at its door. Crafting, cooking, building, equipping, eating and packing take from the chests as from a stockpile.
+- **Its panel** shows its chests, how many of their stacks are full, and what they hold.
+- **Before any storage:** the founding's first logs stay where they were dropped, as before.
+- **Later (each its own issue):** more chests or a bigger building, storehouses marked for food or crafting, a granary or pantry, and a loading dock by the village station.
 
 ## 9. Stuck reasons added
 
@@ -326,6 +362,7 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 - "Meadow has no sheep left", when a trip is planned.
 - Workstations (#177): "Chopping block: No trees in range. Plant saplings or move the chopping block", "Mason's bench: No boulders in range", and "Stonemason: no pickaxe" on a stonemason with none to pick up. Waiting, not stuck: "Target reached (20 cobblestone)", "Full (20 logs)" (the overflow goes to the stockpile), "Saplings growing: no grown trees in range yet", and "No lumberjack to work it" while no one has claimed it.
 - "Tomas: Build a composter to start work", for a resident whose job has no free workstation (#184).
+- Storehouses (#189): "The storehouse is full" when a loose item has nowhere to go (beside "Stockpile is full" when there's a stockpile too), "Can’t reach the storehouse: its door is blocked", and "No chests yet. Craft one at the bench (8 planks)".
 - "Tomas: Hunter: herd at its floor (2 sheep)" or "Hunter: no animals to hunt", waiting, for a hunter with nothing above the floor and nothing marked (#183).
 
 **Stuck and waiting (#77).** The stuck list has two tiers:
@@ -348,6 +385,8 @@ Taken together, the upgrade steps:
 - Hands existing benches, fireplaces, chopping blocks and mason's benches to residents whose jobs match (v23→v24, #184; see §5).
 - Starts every species at the default herd floor (v24→v25, #183).
 - Gives each existing chopping block and mason's bench the default standing order: 20 planks, 10 stone bricks (v25→v26, #178).
+- Turns automatic ingredients on and carries the founding's progress over to the reworked goals (v26→v27, #182; see above).
+- Nothing changes for storehouses (v27→v28, #189): older saves have none. A storehouse saves its chest count, and its chests' stacks are saved with the map's items, keyed by chest slot.
 - Turns a Mine resident into a Lumberjack, with Mine's experience in both Lumberjack and Stonemason (v22→v23, #177; see §5). No village has a workstation, sapling or Keep mark yet.
 - Marks no tools as chosen (v11→v12, equipping).
 - Gives older saves a full meadow with nobody away (v12→v13, #50).
@@ -421,6 +460,7 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 | `work_store` | 20 logs or cobblestone in a workstation's pile |
 | `keep_stock` / `keep_step` | 20 by default / steps of 5 |
 | `make_keep` / `make_step` | 20 planks at a chopping block, 10 stone bricks at a mason's bench / steps of 5 (#178) |
+| `chests` / `chest_stacks` | 4 chests in a storehouse / 9 stacks in a chest (#189) |
 | `herd_floor` | 2 wild animals of each species, until changed on the jobs board (#183) |
 | `saplings` / `sapling_extra` | 1 per felled tree / 30% chance of a second |
 | `sapling_grow` / `plant_tree_time` | 300 s / 2 s |
