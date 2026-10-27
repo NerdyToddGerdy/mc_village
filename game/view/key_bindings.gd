@@ -76,7 +76,8 @@ func load_file() -> void:
 		return
 	var fresh: Array = []  # actions newer than the file, which keep their default keys
 	for a in ACTIONS:
-		var v = cfg.get_value("keys", a[0], null)
+		# has_section_key first: get_value with a null default logs an error for every missing key.
+		var v = cfg.get_value("keys", a[0]) if cfg.has_section_key("keys", a[0]) else null
 		if v is Array:
 			keys[a[0]] = v.filter(func(k): return k is int)
 		else:
