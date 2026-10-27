@@ -42,6 +42,10 @@ var _group_btns := {}           ## Tally group id -> its button in the tally bar
 var _pointer := Vector2(-1, -1)
 var _goals := VBoxContainer.new()
 var _speed_btns := {}
+var _menu_btn: Button                ## The on-screen button for the Esc menu (issue #216), beside the speed buttons.
+var _menu_panel: PanelContainer
+var _menu_cap: PanelContainer        ## Its key badge, which follows the "menu" binding.
+var _menu_cap_label: Label
 var _stuck_panel: PanelContainer
 var _stuck := VBoxContainer.new()
 var stuck_open := true          ## The stuck list shows its entries; false folds it to a chip (issue #77).
@@ -157,8 +161,30 @@ func _ready() -> void:
 		b.toggle_mode = true
 		_speed_btns[v] = b
 		speed.add_child(b)
+	_menu_btn = _button("Menu", func(): game.toggle_menu())  # the Esc menu, for the mouse and the web build (issue #216)
+	_menu_btn.custom_minimum_size = Vector2(0, 44)
+	_menu_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_menu_cap = PanelContainer.new()
+	var menu_cap_box := _box(Color(0, 0, 0, 0), 3, 0, Palette.CHALK_DIM)
+	menu_cap_box.content_margin_left = 5
+	menu_cap_box.content_margin_right = 5
+	menu_cap_box.content_margin_top = 0
+	menu_cap_box.content_margin_bottom = 0
+	_menu_cap.add_theme_stylebox_override("panel", menu_cap_box)
+	_menu_cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_menu_cap_label = _label("", false, Palette.CHALK_DIM, Palette.CAPTION)
+	_menu_cap.add_child(_menu_cap_label)
+	_menu_btn.add_child(_menu_cap)
+	var place_cap := func() -> void:
+		var cs := _menu_cap.get_combined_minimum_size()
+		_menu_cap.size = cs
+		_menu_cap.position = Vector2(_menu_btn.size.x - cs.x - 10, (_menu_btn.size.y - cs.y) / 2)
+	_menu_btn.resized.connect(place_cap)
+	_menu_cap.minimum_size_changed.connect(place_cap)
 	_speed_panel = _panel(speed, Vector2.ZERO, 4)
 	tr.add_child(_speed_panel)
+	_menu_panel = _panel(_menu_btn, Vector2.ZERO, 4)  # its own panel under the speed buttons, so the speed row stays narrow
+	tr.add_child(_menu_panel)
 	_stuck_panel = _panel(_stuck, Vector2(250, 0))
 	tr.add_child(_stuck_panel)
 
@@ -525,6 +551,14 @@ func _refresh_key_labels() -> void:
 	for t in _tool_btns:
 		_tool_btns[t].tooltip_text = tips[t] + (" (%s)" % k.first(t) if k.first(t) != "" else "")
 	_toolbar_sig = ""
+	var menu_key := k.first("menu")
+	_menu_cap_label.text = menu_key
+	_menu_cap.visible = menu_key != ""
+	_menu_btn.tooltip_text = "Save, load, controls and more" + (" (%s, or Esc)" % menu_key if menu_key != "" else " (Esc)")
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		var sb := (_theme.get_stylebox(state, "Button") as StyleBoxFlat).duplicate() as StyleBoxFlat
+		sb.content_margin_right = 10 + (_font.get_string_size(menu_key, HORIZONTAL_ALIGNMENT_LEFT, -1, Palette.CAPTION).x + 12 + 10 if menu_key != "" else 2)
+		_menu_btn.add_theme_stylebox_override(state, sb)
 	var speed_actions := {0: "pause", 1: "speed1", 2: "speed2", 3: "speed3"}
 	for v in _speed_btns:
 		var keytext := k.text(speed_actions[v]).replace("  ", " or ")

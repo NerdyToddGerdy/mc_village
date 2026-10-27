@@ -465,6 +465,8 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 
 **Tools dropdown (#90).** A click pins the list open, and a second click unpins it. A click anywhere outside the button and the list, or Esc, closes it. Only keyboard focus (tabbing to the button) holds it open, not the focus a click leaves behind. Hovering the gap between the button and the list counts as hovering, but the rest of their bounding box doesn't, and the mouse leaving the window ends hovering.
 
+**Menu button (#216).** A **Menu** button at the top right, beside the speed buttons, opens the same main menu as Esc. Its keycap shows the `menu` binding and follows a rebind; Esc itself stays fixed. `Game.toggle_menu()` opens the menu, or closes it again from the main page. The menu's overlay covers the screen while it's open, so the button is reached by mouse only to open it; Esc, the menu key or the menu's own Back close it.
+
 **Erasing stockpile cells (#63).** With the Stockpile order on, a drag that starts on a stockpile cell erases every stockpile cell in its rectangle instead of painting, and a click on one cell erases just that cell, as clicking a marked tree unmarks it under Mine.
 - **Preview:** while erasing, the rectangle is outlined in cut red and each cell that will go is filled red, with the hint "Release to erase these stockpile cells".
 - **Items left behind:** stacks on erased cells stay where they are and count as loose. They're hauled to the cells that are left, if any have room.

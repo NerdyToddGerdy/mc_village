@@ -357,10 +357,12 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | Esc | Close whatever is open, or open the menu |
 | M / ? | Menu, Controls |
 
+The **Menu** button at the top right, beside the speed buttons, opens the same menu with a click. It shows the menu key (M unless you've changed it), and Esc always works too.
+
 You can still give orders while the game is paused.
 
 ## Saving and settings
 
-The menu has five save slots. A save made during the founding is labelled with the next step. After the founding, it's labelled with facts about the village, such as "4 residents, 3 houses, 18 meals".
+The menu (the **Menu** button at the top right, or Esc) has five save slots. A save made during the founding is labelled with the next step. After the founding, it's labelled with facts about the village, such as "4 residents, 3 houses, 18 meals".
 
 **Interface size**, on the menu, sets how big the panels and their text are drawn: 90, 100, 115 or 130%. It's saved along with your key bindings. Older saves keep loading as the game changes.

@@ -286,6 +286,35 @@ func _menu_caps(game: Game, menu: String, row: String) -> Array:
 	return []
 
 
+## Issue #216: a Menu button on the HUD opens the Esc menu, shows the menu key and follows a rebind.
+func _test_menu_button(game: Game) -> void:
+	var hud: Hud = game._hud
+	game.set_tool("")
+	if game._menu.visible:
+		game.close_menu()
+	hud.refresh(game.sim)
+	var b: Button = hud._menu_btn
+	check(b.is_visible_in_tree() and b.text == "Menu", "the HUD has a Menu button")
+	check(hud._menu_cap_label.text == game.keys.first("menu"), "it shows the menu key (%s)" % hud._menu_cap_label.text)
+	var r := b.get_global_rect()
+	check(get_root().get_visible_rect().encloses(r), "it's on screen")
+	for other in [hud._speed_panel, hud._stuck_panel, hud._tally_panel]:
+		check(not other.visible or not other.get_global_rect().intersects(hud._menu_panel.get_global_rect()), "it covers neither the speed buttons, the stuck list nor the tally bar")
+	for m in hud._maps.get_children():  # the map switcher runs along the top (the slice 3.5 bot's Meadow button)
+		check(not m is Button or not m.is_visible_in_tree() or not m.get_global_rect().intersects(hud._menu_panel.get_global_rect()), "nor the %s button of the map switcher" % m.name)
+	b.pressed.emit()
+	check(game._menu.visible and game._menu.view == "main", "clicking it opens the main menu")
+	game.toggle_menu()
+	check(not game._menu.visible, "clicking it again closes the menu, as Esc does")
+	game.keys.assign("menu", KEY_F2)
+	hud._keys_sig = ""
+	hud.refresh(game.sim)
+	check(hud._menu_cap_label.text == "F2" and "F2" in b.tooltip_text, "the badge and tooltip follow a rebound key")
+	game.keys.reset()
+	hud._keys_sig = ""
+	hud.refresh(game.sim)
+
+
 ## Issues #93, #94: Gather and Paint menus in the toolbar, picked by click or by 1–9 while open.
 func _test_order_menus(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -1270,6 +1299,7 @@ func _initialize() -> void:
 	_test_smooth_movement(game)
 	await _test_rebinding(game)
 	_test_order_menus(game)
+	_test_menu_button(game)
 	_test_key_migration()
 	await _test_craft_menu(game)
 	await _test_right_click_never_silent(game)
