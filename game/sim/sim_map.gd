@@ -112,6 +112,94 @@ static func from_save(d: Dictionary) -> SimMap:
 	return m
 
 
+# ---------------------------------------------------------------- growing the map (issue #187)
+
+## Grows the map by `depth` cells along an edge ("north", "south", "east" or "west") and returns the
+## offset every existing coordinate moved by: zero for south and east, which only extend it, and
+## the strip's depth for north and west, which move the origin.
+func grow(edge: String, depth: int) -> Vector2i:
+	var off := Vector2i.ZERO
+	match edge:
+		"north":
+			off = Vector2i(0, depth)
+			h += depth
+		"south":
+			h += depth
+		"west":
+			off = Vector2i(depth, 0)
+			w += depth
+		"east":
+			w += depth
+	occ.resize(w * h)
+	occ_dirty = true
+	_dark = {}
+	if off != Vector2i.ZERO:
+		shift(off)
+	return off
+
+
+## Moves every coordinate on the map by `off`, in one pass, so a claim on the north or west edge
+## leaves the village exactly as it was, only further from the origin. Anything with a cell lives
+## here: trees, boulders, animals (cell, position and where they're heading), bushes, stacks, the
+## stockpile and its reservations, farm plots, sites and their plots, pens, gates, and the terrain
+## sets a site map has. A chest slot (issue #189) is keyed off the map and stays put, but its door
+## cell moves. Nothing that holds a cell is left behind: jobs, which aren't saved, are failed first.
+func shift(off: Vector2i) -> void:
+	var offf := Vector2(off)
+	for o in trees + boulders + bushes:
+		o.cell += off
+	for a in sheep:
+		a.cell += off
+		a.pos += offf
+		if a.get("dest") != null:  # the cell it's wandering to
+			a.dest += off
+	var moved := {}
+	for k in items:
+		var it: Dictionary = items[k]
+		if k.x < 0:  # a chest slot
+			it.at += off
+			moved[k] = it
+		else:
+			it.cell += off
+			moved[k + off] = it
+	items = moved
+	zone = _shifted_keys(zone, off)
+	zone_res = _shifted_keys(zone_res, off)
+	var plots := {}
+	for k in farm:
+		farm[k].cell += off
+		plots[k + off] = farm[k]
+	farm = plots
+	for s in sites:
+		s.origin += off
+		if s.get("plot") != null:
+			s.plot.position += off
+	for p in pens:
+		p.rect.position += off
+		p.gate += off
+		p.built = _shifted_keys(p.get("built", {}), off)
+	gates = _shifted_keys(gates, off)
+	rock = _shifted_keys(rock, off)
+	water = _shifted_keys(water, off)
+	fences = _shifted_keys(fences, off)
+	for i in torches.size():
+		torches[i] += off
+	for i in banks.size():
+		banks[i] += off
+	for i in ledges.size():
+		ledges[i] += off
+	entrance += off
+	_dark = {}
+	occ_dirty = true
+
+
+func _shifted_keys(d: Dictionary, off: Vector2i) -> Dictionary:
+	var out := {}
+	for k in d:
+		out[k + off] = d[k]
+	return out
+
+
 func in_bounds(c: Vector2i) -> bool:
 	return c.x >= 0 and c.y >= 0 and c.x < w and c.y < h
 

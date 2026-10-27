@@ -6,6 +6,10 @@ const TPS := 20                         ## Simulation ticks per second.
 const DT := 1.0 / TPS
 const SPEEDS := [0, 1, 2, 3]
 
+const CLAIM_EVERY := 2                  ## A land claim for every this many residents beyond the founding pair (issue #187).
+const CLAIM_DEPTH := 8                  ## How deep a claimed strip is, in cells.
+const CLAIM_STAKES := 4                 ## Sticks a builder plants as boundary stakes.
+const MAP_MAX := 64                     ## The village never grows past this many cells a side.
 const MAP_W := 32                       ## New games; a loaded save keeps its own size.
 const MAP_H := 32
 const OPENING_OFFSET := Vector2i(7, 7)  ## Where the original 18×18 opening sits in the bigger map.

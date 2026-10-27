@@ -141,8 +141,9 @@ func _look_at_first_resident() -> void:
 
 func _place_camera() -> void:
 	var mp := sim.get_map(view_map)
-	_target.x = clampf(_target.x, -2, mp.w + 2)
-	_target.z = clampf(_target.z, -2, mp.h + 2)
+	var margin: float = Tuning.CLAIM_DEPTH + 2.0 if tool == "claim" else 2.0  # room to see the strips on offer (issue #187)
+	_target.x = clampf(_target.x, -margin, mp.w + margin)
+	_target.z = clampf(_target.z, -margin, mp.h + margin)
 	_cam.position = _target + ISO_DIR.normalized() * 60.0
 	_cam.look_at(_target, Vector3.UP)
 
@@ -169,6 +170,7 @@ func _process(delta: float) -> void:
 	for ev in sim.events:
 		if ev.type == "toast":
 			_hud.add_toast(ev)
+	handle_view_events(sim.events)
 	sim.events.clear()
 	_in_view(_update_live_overlays)
 	_world.selected_ids = selection.get("ids", [])
@@ -234,6 +236,27 @@ func _update_live_overlays() -> void:
 			outlines.append({"rect": _drag.rect, "h": 0.03, "color": col, "dashed": true})
 	elif tool in OrderMenus.MARK_TOOLS and _hover != null:
 		outlines.append({"rect": Rect2i(_hover, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
+	if view_map == "village":  # strips already staked, until the builder finishes (issue #187)
+		for st in sim.sites:
+			if st.tpl == "claim_stakes":
+				outlines.append({"rect": Claims.strip(st.edge, sim.w, sim.h), "h": 0.03, "color": Palette.BLUE, "dashed": true})
+	if tool == "claim":
+		var edge := _claim_edge()
+		var why := sim.claim_check(edge)
+		for e in Claims.EDGES:
+			var strip := Claims.strip(e, sim.w, sim.h)
+			if e == edge:
+				outlines.append({"rect": strip, "h": 0.03, "color": Palette.RED if why != "" else Palette.BLUE, "dashed": true})
+				if why == "":
+					for k in [strip.position, Vector2i(strip.end.x - 1, strip.position.y), Vector2i(strip.position.x, strip.end.y - 1), strip.end - Vector2i.ONE]:
+						fills.append({"rect": Rect2i(k, Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.55)})
+			else:
+				outlines.append({"rect": strip, "h": 0.02, "color": Color(Palette.CHALK, 0.35), "dashed": true})
+		if why != "":
+			hint = why
+			hint_col = Palette.YELLOW
+		else:
+			hint = "Claim %d cells of new land to the %s. Click to stake it (%s)." % [Tuning.CLAIM_DEPTH * (sim.h if edge in ["east", "west"] else sim.w), edge, Defs.words("stick", Tuning.CLAIM_STAKES)]
 	if tool == "build" and placing != "" and _hover != null:
 		var origin := _placement_origin()
 		var size: Vector2i = Defs.TEMPLATES[placing].size
@@ -549,7 +572,7 @@ func _mouse_button(e: InputEventMouseButton) -> void:
 ## starving, it says why nothing happened.
 func _right_click(e: InputEventMouseButton) -> void:
 	var has_residents: bool = selection.get("kind", "") == "res" and not selection.ids.is_empty()
-	if menu_open != "" or tool == "build":
+	if menu_open != "" or tool == "build" or tool == "claim":
 		set_tool("")
 		return
 	# Residents aren't order targets, so look past anyone standing in front of the tree or sheep.
@@ -584,6 +607,16 @@ func _right_click(e: InputEventMouseButton) -> void:
 
 func _left_down(e: InputEventMouseButton) -> void:
 	var c = _cell_at(e.position)
+	if tool == "claim":  # stake the strip under the cursor (issue #187)
+		var edge := _claim_edge()
+		var why := sim.place_claim(edge)
+		if why != "":
+			_hud.add_toast({"text": why + ".", "res_id": 0, "site_id": 0})
+		else:
+			var staked: Array = sim.sites.filter(func(st): return st.tpl == "claim_stakes")
+			selection = {"kind": "site", "id": staked[0].id}
+			set_tool("")
+		return
 	if tool == "build":
 		if placing != "" and c != null:
 			var origin := _placement_origin()
@@ -718,6 +751,7 @@ func _key(e: InputEventKey) -> void:
 		"board": start_placing("board")
 		"chopping_block": start_placing("chopping_block")
 		"storehouse": start_placing("storehouse")
+		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
 		"toolsmith_bench", "composter", "lodge", "builder_table": start_placing(keys.action_for(e))
 		"rotate":
@@ -879,7 +913,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "build", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "keep"]
+const VILLAGE_ONLY := ["stock", "farm", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -924,13 +958,55 @@ func set_tool(t: String) -> void:
 ## the menu. Unlike the direct keys, picking the order that's already on leaves it on.
 func pick_order(menu: String, id: String) -> void:
 	if menu == "build":
-		start_placing(id)
+		if id == "claim":
+			start_claiming()
+		else:
+			start_placing(id)
 		return
 	menu_open = ""
 	craft_menu_open = false
 	tool = id
 	placing = ""
 	_drag = {}
+
+
+## What the sim's events change in the view, apart from toasts: a claim on the north or west edge moved
+## the village's origin (issue #187), so the camera moves with it and stays on the same ground. Called
+## every frame, and by the bots, which step the sim themselves.
+func handle_view_events(events: Array) -> void:
+	for ev in events:
+		if ev.type == "map_grew":
+			var by := Vector3(ev.shift.x, 0, ev.shift.y)
+			if view_map == "village":
+				_target += by
+				_place_camera()
+			elif _cams.has("village"):
+				_cams.village.target += by
+
+
+## The Claim land order (issue #187): the cursor's nearest edge is the strip on offer, and a click
+## stakes it.
+func start_claiming() -> void:
+	if view_map != "village":
+		return
+	tool = "claim"
+	placing = ""
+	menu_open = ""
+	craft_menu_open = false
+
+
+## The edge nearest the cursor, found on the ground plane whether or not it's over the map.
+func _claim_edge() -> String:
+	var r := _ray(_mouse)
+	if absf(r[1].y) < 1e-5:
+		return "north"
+	var p: Vector3 = r[0] + r[1] * (-r[0].y / r[1].y)
+	var gap := {"north": p.z, "south": sim.h - p.z, "west": p.x, "east": sim.w - p.x}
+	var best := "north"
+	for e in gap:
+		if gap[e] < gap[best]:
+			best = e
+	return best
 
 
 func start_placing(tpl: String) -> void:

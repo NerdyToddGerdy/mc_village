@@ -162,6 +162,10 @@ const TEMPLATES := {
 		"work": {"job": "mason", "kind": "boulder", "item": "cobble"}, "stages": [
 		{"name": "Mason's bench", "verb": "needs", "cost": {"plank": 2, "cobble": 4}},
 	]},
+	# Boundary stakes for a land claim (issue #187): a builder plants them, then the strip joins the village.
+	"claim_stakes": {"name": "Boundary stakes", "size": Vector2i(1, 1), "walk": true, "stages": [
+		{"name": "Stakes", "verb": "needs", "cost": {"stick": 4}},
+	]},
 	# The village's storage (issue #189): chests carried in hold the stacks; its door faces its front.
 	"storehouse": {"name": "Storehouse", "size": Vector2i(3, 3), "plot": "warehouse", "store": true, "stages": [
 		{"name": "Floor", "verb": "needs", "cost": {"cobble": 6}},

@@ -800,6 +800,8 @@ func _clear_footprint(s: Dictionary) -> void:
 
 func _on_site_done(s: Dictionary) -> void:
 	assign_workstations()
+	if s.tpl == "claim_stakes":  # the strip joins the village between ticks (issue #187), with its own toast
+		return
 	if not stats.has("built"):
 		stats.built = {}
 	stats.built[s.tpl] = true  # for the founding goals (issue #182)
@@ -833,11 +835,16 @@ func _on_site_done(s: Dictionary) -> void:
 		else:
 			_toast("Track is laid along %s." % Road.SEGMENTS[s.seg].name.to_lower(), 0, s.id)
 		return
+	if s.tpl == "storehouse":  # issue #189
+		_toast("The storehouse is built. Craft a chest at the bench (%s): a hauler carries it in, and it holds %d stacks of anything." % [Defs.cost_text({"plank": 8}), Tuning.CHEST_STACKS], 0, s.id)
+		return
 	if s.tpl == "board":  # it has word of the old mine and the meadow, which the map switcher now shows (issues #105, #136)
 		maps[OldMine.ID].known = true
 		road().known = true
 		maps[Meadow.ID].known = true
 		_toast("The expedition board is up, with word of an old mine to the east and a meadow to the west. Select it to plan an adventure.", 0, s.id)
+		return
+	if s.tpl != "house":  # only a house is a home: anything else without its own case above does nothing more
 		return
 	stats.houses += 1
 	var ada: Dictionary = residents[0]
@@ -1125,6 +1132,146 @@ func _chest_job(r: Dictionary, c: Vector2i):
 	if chests.is_empty():
 		return null
 	return _deliver_job(_nearest_site(want, c), "chest", 1, nearest(chests, c))
+
+
+# ---------------------------------------------------------------- land claims (issue #187)
+
+## Claims made so far: strips added to the village. Saved.
+var claims_made := 0
+
+
+## Boundary stakes still going in or standing ready to apply: they count against the claims available.
+func claims_pending() -> int:
+	return maps.village.sites.filter(func(s): return s.tpl == "claim_stakes").size()
+
+
+## Land claims the village has earned and not used: one for every CLAIM_EVERY residents beyond the
+## founding pair. Worked out from the residents, so an older save with a big village has them too.
+func claims_available() -> int:
+	return maxi(0, (residents.size() - 2) / Tuning.CLAIM_EVERY - claims_made - claims_pending())
+
+
+## The residents the village needs for its next claim.
+func claim_threshold() -> int:
+	return 2 + (claims_made + claims_pending() + 1) * Tuning.CLAIM_EVERY
+
+
+## Where the stakes for a claim on `edge` would go: the nearest open cell to the middle of that
+## edge, or (-1, -1) when there's none within a few cells.
+func claim_cell(edge: String) -> Vector2i:
+	var v: SimMap = maps.village
+	var mid := Vector2i(v.w / 2, v.h / 2)
+	for d in 6:
+		var c: Vector2i
+		match edge:
+			"north": c = Vector2i(mid.x, d)
+			"south": c = Vector2i(mid.x, v.h - 1 - d)
+			"west": c = Vector2i(d, mid.y)
+			_: c = Vector2i(v.w - 1 - d, mid.y)
+		if on_map("village", _stake_ok.bind(c)):
+			return c
+	return Vector2i(-1, -1)
+
+
+func _stake_ok(c: Vector2i) -> bool:
+	if placement_check("claim_stakes", c) != "" or not walkable(c) or m.items.has(c) or m.zone.has(c) or m.farm.has(c):
+		return false
+	var o := obstacles_in(Rect2i(c, Vector2i.ONE))
+	return o.trees.is_empty() and o.boulders.is_empty()
+
+
+## Why a claim on `edge` can't be made now, or "".
+func claim_check(edge: String) -> String:
+	var v: SimMap = maps.village
+	if claims_available() <= 0:
+		return "A claim is already staked" if claims_pending() > 0 else "The next land claim needs %d residents" % claim_threshold()
+	if not Claims.fits(edge, v.w, v.h):
+		return "The village is at its largest (%d cells a side)" % Tuning.MAP_MAX
+	if claim_cell(edge) == Vector2i(-1, -1):
+		return "No open ground for the stakes on that edge"
+	return ""
+
+
+## Stakes out a strip on `edge`: a small blueprint a builder finishes with a few sticks, after which
+## the strip joins the village. Returns why it can't be, or "".
+func place_claim(edge: String) -> String:
+	var why := claim_check(edge)
+	if why != "":
+		return why
+	on_map("village", func():
+		var s := place_site("claim_stakes", claim_cell(edge))
+		s.edge = edge)
+	return ""
+
+
+## Applies any finished boundary stakes. Between ticks, so no job is part-way through a step.
+func _apply_claims() -> void:
+	for s in maps.village.sites.filter(func(x): return x.tpl == "claim_stakes" and x.done):
+		on_map("village", expand_village.bind(s))
+
+
+## Adds the strip a finished set of stakes marks to the village, in one pass. A north or west claim
+## moves the origin, so everything on the map moves with it (`SimMap.shift`), and the residents
+## with it; their jobs end first, and are claimed again on the next tick. Sends a "map_grew" event
+## carrying the shift, for the camera.
+func expand_village(stakes: Dictionary) -> void:
+	var edge: String = stakes.edge
+	var vm: SimMap = maps.village
+	vm.sites.erase(stakes)
+	for r in residents:
+		if r.map == "village":
+			if r.arriving:  # a traveler still walking in: his walk is planned again below, as on loading
+				r.job = null
+				r.path = []
+			else:
+				fail_job(r)
+			r.direct = null
+	var signs := [meadow_sign(), route_sign()]  # where the signposts stand in the land, before it grows
+	var strip := Claims.strip(edge, vm.w, vm.h)
+	var lane := Rect2i()
+	if edge in ["east", "west"]:  # the way out to the signpost stays clear
+		lane = Rect2i(strip.position.x, vm.h / 2 - 1, strip.size.x, 3)
+	var land := Claims.generate(seed, claims_made, strip, lane)
+	var off := vm.grow(edge, Tuning.CLAIM_DEPTH)
+	for r in residents:
+		if r.map == "village":
+			r.pos += Vector2(off)
+			r.path = []
+			for o in r.orders:
+				if o.kind == "move":
+					o.cell += off
+	for r in residents:
+		if r.map == "village" and r.arriving:
+			walk_in(r)
+	_plant_claims.clear()
+	vm.zone_res.clear()
+	var i := 0
+	for c in land.trees:
+		vm.trees.append({"id": _id(), "kind": "tree", "cell": c + off, "logs": 4 + (i * 7) % 3, "alive": true, "des": false, "claim": 0, "unreach_until": 0})
+		i += 1
+	for c in land.boulders:
+		vm.boulders.append({"id": _id(), "kind": "boulder", "cell": c + off, "alive": true, "des": false, "claim": 0, "unreach_until": 0})
+	for c in land.bushes:
+		add_bush(c + off)
+	for c in land.sheep:
+		add_sheep(c + off)
+	var now := [meadow_sign(), route_sign()]
+	for k in 2:  # a signpost that moved to an edge cell with something there makes room for itself
+		if now[k] != signs[k] + off:
+			_clear_around(now[k])
+	claims_made += 1
+	_occ_dirty = true
+	rev += 1
+	events.append({"type": "map_grew", "shift": off})
+	_toast("The village has grown: %d cells of new land to the %s." % [Tuning.CLAIM_DEPTH * (vm.h if edge in ["east", "west"] else vm.w), edge])
+
+
+## Nothing grows or stands in the way of a signpost.
+func _clear_around(c: Vector2i) -> void:
+	var near := Rect2i(c - Vector2i.ONE, Vector2i(3, 3))
+	m.trees = m.trees.filter(func(t): return not near.has_point(t.cell))
+	m.boulders = m.boulders.filter(func(b): return not near.has_point(b.cell))
+	m.bushes = m.bushes.filter(func(b): return not near.has_point(b.cell))
 
 
 # ---------------------------------------------------------------- workstations (issue #177)
@@ -2455,6 +2602,7 @@ func step() -> void:
 		_step_map()
 	use_map("village")
 	_step_arrivals()
+	_apply_claims()
 	if tick % 10 == 0:
 		assign_workstations()
 	use_map(prev)
@@ -5810,7 +5958,7 @@ func save_state() -> Dictionary:
 	for id in maps:
 		maps_out[id] = maps[id].save()
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
-		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft,
+		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made,
 		"herd_floor": herd_floor.duplicate(), "rng_state": rng.state, "seed": seed,
 		"expedition": expedition.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true)}
 
@@ -5832,6 +5980,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.arrival_at = d.arrival_at
 	s.arrived = d.arrived
 	s.auto_craft = d.auto_craft
+	s.claims_made = d.get("claims_made", 0)
 	s.herd_floor = d.herd_floor.duplicate()
 	# Bushes added to older saves (v7) may sit where something now stands; drop those.
 	s.bushes = s.bushes.filter(func(b):
