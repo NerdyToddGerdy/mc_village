@@ -242,6 +242,12 @@ func _initialize() -> void:
 			quit(1)
 			return
 		sim.events.clear()
+	if SaveFormat.VERSION >= 25:  # the village keeps 4 sheep from its hunters (#183)
+		sim.set_herd_floor("sheep", 4)
+	if SaveFormat.VERSION >= 26:  # the chopping block keeps 15 planks, and has a batch queued by hand (#178)
+		var block: Dictionary = sim.sites.filter(func(st): return st.tpl == "chopping_block")[0]
+		sim.set_make_keep(block, 15)
+		sim.queue_add(block, "saw_planks")
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

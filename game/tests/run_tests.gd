@@ -80,6 +80,8 @@ func _init() -> void:
 		"test_lumberjacks_and_stonemasons",
 		"test_saplings_and_replanting",
 		"test_jobs_need_their_workstation",
+		"test_hunters_keep_a_herd_floor",
+		"test_workstations_process_materials",
 	]
 	var only := Array(OS.get_cmdline_user_args())
 	if not only.is_empty():
@@ -2909,6 +2911,7 @@ func test_lumberjacks_and_stonemasons() -> void:
 	var ada: Dictionary = sim.residents[0]
 	var block := place_done(sim, "chopping_block")
 	check(not block.is_empty() and block.keep == Tuning.KEEP_STOCK, "a chopping block keeps %d logs by default" % Tuning.KEEP_STOCK)
+	block.make_keep = 0  # gathering and piles only here: no sawing (issue #178)
 	run(sim, 30)
 	check(sim.stats.felled == 0, "Ada never fells trees on her own, even with a chopping block")
 	sim.compute_stuck()
@@ -3048,6 +3051,98 @@ func test_saplings_and_replanting() -> void:
 
 
 # ---------------------------------------------------------------- workstations claimed (issue #184)
+
+func test_hunters_keep_a_herd_floor() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var wild := func() -> int: return sim.sheep.filter(func(a): return a.alive and a.get("pen", 0) == 0).size()
+	var flock: int = wild.call()
+	run(sim, 30)
+	check(wild.call() == flock, "Ada never hunts on her own (%d sheep)" % flock)
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	sim.set_role(tomas, "hunt")
+	run(sim, 20)
+	check(wild.call() == flock, "a hunter with no lodge doesn't hunt")
+	var lodge := give_station(sim, tomas)
+	check(is_same(sim.claimed(tomas), lodge), "Tomas claims the hunter's lodge")
+	check(sim.floor_of("sheep") == Tuning.HERD_FLOOR, "the herd floor starts at %d" % Tuning.HERD_FLOOR)
+	var keep := flock - 2
+	sim.set_herd_floor("sheep", keep)
+	run(sim, 150)
+	check(wild.call() == keep, "he hunts on his own down to the floor and no further (%d of %d left, floor %d)" % [wild.call(), flock, keep])
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Tomas: Hunter: herd at its floor (%d sheep)" % keep) and sim.stuck.any(func(x): return x.why.begins_with("Hunter: herd") and x.waiting), "the stuck list says the herd is at its floor, waiting: " + stuck_text(sim))
+	# Marks come first, and a marked animal is hunted even below the floor.
+	ada.away = true  # off at the meadow, so the marks are Tomas's
+	ada.back_at = 1 << 30
+	var near: Dictionary = Sim.nearest(sim.sheep.filter(func(a): return a.alive), Sim.rcell(tomas))
+	var far: Dictionary = sim.sheep.filter(func(a): return a.alive and not is_same(a, near)).reduce(func(best, a): return a if Sim.manhattan(a.cell, Sim.rcell(tomas)) > Sim.manhattan(best.cell, Sim.rcell(tomas)) else best)
+	sim.set_herd_floor("sheep", 0)
+	far.des = true
+	sim.fail_job(tomas)
+	var first = null
+	for i in 10 * Tuning.TPS:
+		sim.step()
+		if tomas.job != null and tomas.job.work == "hunt":
+			first = tomas.job.target
+			break
+	check(first != null and is_same(first, far), "with the floor lowered, he hunts the marked sheep before a nearer unmarked one")
+	sim.set_herd_floor("sheep", 50)
+	var before: int = wild.call()
+	var other: Dictionary = sim.sheep.filter(func(a): return a.alive and not a.des and a.claim == 0)[0]
+	other.des = true
+	run(sim, 60)
+	check(not other.alive and wild.call() < before, "a marked sheep is hunted even at the floor")
+	sim.set_herd_floor("sheep", -3)
+	check(sim.floor_of("sheep") == 0, "the floor never goes below 0")
+	# Saved with the game.
+	sim.set_herd_floor("cow", 5)
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(back.floor_of("cow") == 5 and back.floor_of("pig") == Tuning.HERD_FLOOR, "herd floors are saved, unset ones at the default")
+
+
+func test_workstations_process_materials() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	ada.away = true  # off at the meadow: the workstations' own gatherers do the work
+	ada.back_at = 1 << 30
+	var logs_before: int = sim.stats.felled
+	var block := place_done(sim, "chopping_block")
+	check(block.make_keep == 20 and Sim.is_station(block), "a chopping block is a station that keeps 20 planks by default")
+	block.keep = 0  # no felling: just the logs set down for it
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(block.origin + Vector2i(0, 2)))
+	sim.set_role(tomas, "lumber")
+	check(is_same(sim.claimed(tomas), block), "Tomas claims the chopping block")
+	sim.set_make_keep(block, 12)
+	sim.drop_items(sim.nearest_walkable(block.origin + Vector2i(2, 2)), "log", 4)
+	run(sim, 4)
+	check(block.queue == ["saw_planks"] and block.autoq == [true], "under its target, the standing order queues sawn planks (%s)" % [block.queue])
+	run(sim, 90)
+	check(sim.free_count("plank") == 15 and sim.free_count("log") == 1, "he saws 5 planks a log, up to the target, then stops (%d planks, %d logs left)" % [sim.free_count("plank"), sim.free_count("log")])
+	check(sim.stats.felled == logs_before and tomas.jobs.lumber.xp > 0, "sawing is Lumberjack work (%d xp)" % tomas.jobs.lumber.xp)
+	check(Sim.recipe_for(tomas, Defs.recipe("saw_planks")).out.plank == 5, "a level-1 lumberjack saws 5 planks")
+	tomas.jobs.lumber.xp = Tuning.SKILL_LEVELS[2]
+	check(Sim.recipe_for(tomas, Defs.recipe("saw_planks")).out.plank == 6, "a level-4 lumberjack saws 6")
+	check(Defs.recipe("planks").out.plank == 4 and Defs.recipe("planks").get("at", "bench") == "bench", "the bench's Planks recipe stays, at 4 a log")
+	# The mason's bench cuts stone bricks.
+	var mb := place_done(sim, "mason_bench", block.origin + Vector2i(6, 0))
+	check(mb.make_keep == 10, "a mason's bench keeps 10 stone bricks by default")
+	mb.keep = 0
+	var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], sim.nearest_walkable(mb.origin + Vector2i(0, 2)))
+	sim.set_role(mira, "mason")
+	sim.set_make_keep(mb, 4)
+	sim.drop_items(sim.nearest_walkable(mb.origin + Vector2i(2, 2)), "cobble", 7)
+	run(sim, 90)
+	check(sim.free_count("stone_brick") == 4 and sim.free_count("cobble") == 3, "she cuts 2 cobblestone into 2 stone bricks, up to the target (%d bricks, %d cobblestone left)" % [sim.free_count("stone_brick"), sim.free_count("cobble")])
+	check(mira.jobs.mason.xp > 0, "cutting is Stonemason work")
+	# Queued by hand, past the target; a target of 0 turns the standing order off.
+	sim.set_make_keep(mb, 0)
+	sim.queue_add(mb, "stone_bricks")
+	run(sim, 30)
+	check(sim.free_count("stone_brick") == 6 and mb.queue.is_empty(), "a batch queued by hand is cut regardless (%d)" % sim.free_count("stone_brick"))
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(back.sites.any(func(st): return st.tpl == "chopping_block" and st.make_keep == 12), "standing orders are saved")
+
 
 func test_jobs_need_their_workstation() -> void:
 	var sim := Sim.new_game()

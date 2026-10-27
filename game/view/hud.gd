@@ -1534,6 +1534,8 @@ func _refresh_board(sim: Sim) -> void:
 	var sig := "%s|%s|%d|%s" % [game.selection, _keys_sig, _job_for, _stations_sig(sim)]
 	for r in sim.residents:
 		sig += "%d%s%s%s%s%s;" % [r.id, r.name, r.role, r.jobs, r.away, r.map]
+	var herds := _wild_herds(sim)
+	sig += "|%s|%s" % [herds, sim.herd_floor]
 	_rebuild(_board, sig, func(c: Container) -> void:
 		var head := HBoxContainer.new()
 		var title := _label("Village jobs", true, Palette.CHALK, Palette.HEADING)
@@ -1587,7 +1589,43 @@ func _refresh_board(sim: Sim) -> void:
 			grid.add_child(pick)
 			for jb in Defs.JOBS:
 				grid.add_child(_board_cell(r, jb))
-		c.add_child(grid))
+		c.add_child(grid)
+		_add_herd_floors(c, sim, herds))
+
+
+## Wild animals in the village by species, penned ones aside (issue #139).
+func _wild_herds(sim: Sim) -> Dictionary:
+	var out := {}
+	for a in sim.maps.village.sheep:
+		if a.alive and a.get("pen", 0) == 0:
+			out[a.species] = out.get(a.species, 0) + 1
+	return out
+
+
+## The jobs board's herd floors (issue #183): how many of each wild species hunters leave, with a stepper.
+func _add_herd_floors(c: Container, sim: Sim, herds: Dictionary) -> void:
+	if herds.is_empty():
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.add_child(_label("Hunters leave", true, Palette.CHALK, Palette.BODY))
+	for sp in Defs.SPECIES:
+		if not herds.has(sp):
+			continue
+		var sd: Dictionary = Defs.SPECIES[sp]
+		var n := sim.floor_of(sp)
+		var less := _button("−", func(): game.set_herd_floor(sp, n - 1), "Secondary")
+		less.disabled = n <= 0
+		less.tooltip_text = "Leave one fewer %s" % sd.one
+		row.add_child(less)
+		var lbl := _label("%d %s" % [n, sd.one if n == 1 else sd.many], false, Palette.CHALK, Palette.BODY)
+		lbl.tooltip_text = "Hunters hunt %s on their own until %d %s left (%d now). Marked ones are hunted anyway." % [sd.many, n, "is" if n == 1 else "are", herds[sp]]
+		lbl.mouse_filter = Control.MOUSE_FILTER_STOP
+		row.add_child(lbl)
+		var more := _button("+", func(): game.set_herd_floor(sp, n + 1), "Secondary")
+		more.tooltip_text = "Leave one more %s" % sd.one
+		row.add_child(more)
+	c.add_child(row)
 
 
 ## A resident's level in a job on the board, with a tick of progress to the next; lit for their job.
@@ -1891,6 +1929,36 @@ func _fill_workstation(c: Container, sim: Sim, s: Dictionary, reasons: Array) ->
 	c.add_child(_label(_station_line(sim, s), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	for x in reasons:
 		c.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
+	c.add_child(_rule())
+	c.add_child(_label(_bench_status(sim, s), false, Palette.CHALK_DIM, Palette.BODY, true))
+	c.add_child(_make_keep_row(sim, s))
+	if not game.craft_menu_open:
+		c.add_child(_button("Open the craft menu", func(): game.open_craft_menu(s), "Secondary"))
+
+
+## A workstation's standing order (issue #178): "Keep 20 planks", with − and +. 0 is off.
+func _make_keep_row(sim: Sim, s: Dictionary) -> Control:
+	var rec := Defs.recipe(Defs.TEMPLATES[s.tpl].makes)
+	var out: String = rec.out.keys()[0]
+	var v := VBoxContainer.new()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	var n: int = s.get("make_keep", 0)
+	var less := _button("−", func(): game.set_make_keep(s, n - Tuning.MAKE_STEP), "Secondary")
+	less.disabled = n <= 0
+	less.tooltip_text = "Keep %d fewer" % Tuning.MAKE_STEP
+	row.add_child(less)
+	var lbl := _label("Keep %s" % Defs.words(out, n) if n > 0 else "Make %s: off" % Defs.ITEMS[out].many, false, Palette.CHALK, Palette.BODY)
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(lbl)
+	var more := _button("+", func(): game.set_make_keep(s, n + Tuning.MAKE_STEP), "Secondary")
+	more.tooltip_text = "Keep %d more" % Tuning.MAKE_STEP
+	row.add_child(more)
+	v.add_child(row)
+	var inp: String = rec.inp.keys()[0]
+	v.add_child(_label("The village has %d. While it has fewer, %ss make them here from %s." % [sim.free_count(out), Defs.JOB_NAMES[Sim.recipe_job(rec)].to_lower(), Defs.ITEMS[inp].many] if n > 0 else "Nothing is made here unless you queue it.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	return v
 
 
 ## Who works from a workstation (issue #184): "Bram works here as the farmer.", or that it's free.
@@ -1975,6 +2043,8 @@ func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 		bar.tooltip_text = "Missing planks and sticks are queued automatically." if sim.auto_craft else "Once Ada’s house is finished, the bench queues the planks and sticks a recipe needs."
 	c.add_child(bar)
 	c.add_child(_on_hand(sim, s))
+	if Defs.TEMPLATES[s.tpl].has("makes"):
+		c.add_child(_make_keep_row(sim, s))
 	if s.tpl == "fireplace":
 		var on: bool = s.get("keep_meals", true)
 		var keep := _button("Keep %d meals in stock: %s" % [Tuning.MEAL_STOCK, "on" if on else "off"], func(): game.set_keep_meals(s, not on), "Secondary")

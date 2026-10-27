@@ -215,6 +215,25 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 - **Ada** works marked trees and boulders but never makes her own work, so she never clears the land on her own.
 - **Saplings (settles #22 for village trees):** a felled tree drops 1 sapling, with a 30% chance of a second. A lumberjack plants saplings on open grass in a chopping block's work area. The spot must be off protected land and off the map's edge, at least 3 cells from another tree and 2 from a boulder. A sapling grows into a full tree in 5 minutes: it shows as a sapling, then a young tree at half-time, then a full tree. Until then it can't be marked or chopped, though it blocks the way like a tree. A blueprint placed over a sapling lifts it back into a sapling item. Saplings are stockpiled and hauled like anything else.
 - **The workstation's panel** shows its pile, its target, the resident who has claimed it (#184), and its stuck reasons.
+- **Processing (#178):** each workstation is also a station with a queue, and gets a tab in the Craft panel.
+  - The chopping block saws **5 planks from a log** ("Sawn planks"), against the bench's 4. A level-4 lumberjack saws 6. The bench's Planks recipe stays.
+  - The mason's bench cuts **2 cobblestone into 2 stone bricks**. Stone bricks are a new building material. Nothing uses them yet; the mason's workshop, the kitchen and a sturdier house will.
+  - Sawing is Lumberjack work and cutting is Stonemason work, so their levels speed it up. Ada does it too, like all station work.
+  - **Standing order:** a chopping block keeps 20 planks and a mason's bench 10 stone bricks, set in steps of 5 in its panel and its Craft panel tab (0 is off). While the village has fewer, it queues one batch at a time, like the fireplace's meals, when the inputs are on hand. Batches queued by hand are made regardless.
+
+**Jobs make their own work (#183).** A resident whose job has no marked work finds work of that job by themselves, but only within limits the player has set up. Marks come first, and anyone whose job fits can work them. Ada never makes her own work.
+
+| Job | Works on its own | Area or limit |
+|---|---|---|
+| Lumberjack, Stonemason | fells trees, breaks boulders | their workstation's work area (above) |
+| Hunter | hunts wild animals in the village | down to a **herd floor** per species |
+| Farmer | plants and harvests | painted farm plots |
+| Cook, Crafter, Toolsmith | standing orders | their workstation |
+| Hauler | carries loose items | the stockpiles and piles |
+| Builder | blueprints only | none of their own |
+
+- **Herd floor:** hunters with a claimed hunter's lodge hunt unmarked wild animals in the village, nearest first, while more than the floor of that species are left. Each species starts at 2. The jobs board's "Hunters leave" row sets them, with − and + for each species in the village. Animals already marked or being hunted don't count toward the floor, so it holds with several hunters. Marked animals are hunted even below the floor. Penned animals are never hunted on a hunter's own (#139).
+- **Stuck reasons:** "Hunter: herd at its floor (2 sheep)", or "Hunter: no animals to hunt" when the village has none. Both are waiting, not stuck. A lumberjack's or stonemason's limits show on their workstation (above).
 
 **Character panel.** The resident panel first had a **Jobs** grid (#47). The Village jobs board (#78, above) replaced it; the panel has the job dropdown and a button to the board.
 
@@ -307,6 +326,7 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 - "Meadow has no sheep left", when a trip is planned.
 - Workstations (#177): "Chopping block: No trees in range. Plant saplings or move the chopping block", "Mason's bench: No boulders in range", and "Stonemason: no pickaxe" on a stonemason with none to pick up. Waiting, not stuck: "Target reached (20 cobblestone)", "Full (20 logs)" (the overflow goes to the stockpile), "Saplings growing: no grown trees in range yet", and "No lumberjack to work it" while no one has claimed it.
 - "Tomas: Build a composter to start work", for a resident whose job has no free workstation (#184).
+- "Tomas: Hunter: herd at its floor (2 sheep)" or "Hunter: no animals to hunt", waiting, for a hunter with nothing above the floor and nothing marked (#183).
 
 **Stuck and waiting (#77).** The stuck list has two tiers:
 - **Stuck:** work that can't go on. These entries get a yellow flag in the list and on the map, and the list puts the longest-stuck first. An entry keeps its age while only its count changes ("4 more planks" becoming "3 more planks").
@@ -326,6 +346,8 @@ Taken together, the upgrade steps:
 - Gives existing residents level 1 in every job (v10→v11, #48).
 - Gives each resident one job, and Ada Everything, in place of the switches and priorities (v21→v22, #134; see §5).
 - Hands existing benches, fireplaces, chopping blocks and mason's benches to residents whose jobs match (v23→v24, #184; see §5).
+- Starts every species at the default herd floor (v24→v25, #183).
+- Gives each existing chopping block and mason's bench the default standing order: 20 planks, 10 stone bricks (v25→v26, #178).
 - Turns a Mine resident into a Lumberjack, with Mine's experience in both Lumberjack and Stonemason (v22→v23, #177; see §5). No village has a workstation, sapling or Keep mark yet.
 - Marks no tools as chosen (v11→v12, equipping).
 - Gives older saves a full meadow with nobody away (v12→v13, #50).
@@ -398,6 +420,8 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 | `work_radius` | 8 cells around a chopping block or mason's bench (#177) |
 | `work_store` | 20 logs or cobblestone in a workstation's pile |
 | `keep_stock` / `keep_step` | 20 by default / steps of 5 |
+| `make_keep` / `make_step` | 20 planks at a chopping block, 10 stone bricks at a mason's bench / steps of 5 (#178) |
+| `herd_floor` | 2 wild animals of each species, until changed on the jobs board (#183) |
 | `saplings` / `sapling_extra` | 1 per felled tree / 30% chance of a second |
 | `sapling_grow` / `plant_tree_time` | 300 s / 2 s |
 

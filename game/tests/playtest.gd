@@ -413,8 +413,23 @@ func _initialize() -> void:
 	await frames(2)
 	check(game.selection.get("kind", "") == "site" and visible_label("Keep %d cobblestone" % mbench.keep), "selecting it shows its keep-stock target")
 	check(game._world.live_outlines.any(func(o): return o.has("radius")), "and draws its work area")
-	check(await click_button("+"), "raise the target")
+	var keep_lbl: Array = _all(game._hud._sel).filter(func(n): return n is Label and n.text == "Keep %d cobblestone" % mbench.keep)
+	var keep_plus: Button = keep_lbl[0].get_parent().get_child(keep_lbl[0].get_index() + 1) if not keep_lbl.is_empty() else null
+	check(keep_plus != null, "with a + beside it")
+	if keep_plus != null:
+		await click(keep_plus.get_global_rect().get_center())
 	check(mbench.keep == Tuning.KEEP_STOCK + Tuning.KEEP_STEP, "the target goes up by %d (%d)" % [Tuning.KEEP_STEP, mbench.keep])
+	# It cuts stone bricks too (issue #178): a standing order in its panel, and a tab in the Craft panel
+	check(visible_label("Keep %d stone bricks" % Tuning.MAKE_KEEP.mason_bench), "its panel shows the stone bricks it keeps")
+	check(game.craft_menu_open, "selecting it opens the Craft panel")
+	check(await click_button("Mason's bench"), "click the Craft panel's Mason's bench tab")
+	check(game.craft_bench() == mbench, "the tab shows the mason's bench")
+	var by_hand := func() -> int: return mbench.autoq.filter(func(a): return not a).size()
+	var hand_before: int = by_hand.call()
+	check(await queue_recipe("Stone bricks"), "queue stone bricks")
+	check(by_hand.call() == hand_before + 1, "a batch of stone bricks is queued (%s)" % [mbench.queue])
+	await key(KEY_ESCAPE)
+	check(await play_until(120, func(): return sim.free_count("stone_brick") > 0 or sim.stats.get("crafted", {}).get("stone_brick", 0) > 0), "Tomas cuts stone bricks (%d)" % sim.free_count("stone_brick"))
 
 	# Tools dropdown on hover
 	var tb: Button = game._hud._tools_btn

@@ -704,6 +704,15 @@ func _test_jobs_grid(game: Game) -> void:
 	check(_walk(hud._board).filter(func(n): return n.has_meta("cell") and not n.is_queued_for_deletion()).size() == Defs.JOBS.size() * sim.residents.size(), "a level cell per resident and job")
 	var nobody: Array = _walk(hud._board).filter(func(n): return n is Label and n.text == "nobody" and not n.is_queued_for_deletion())
 	check(nobody.filter(func(l): return l.get_theme_color("font_color") == Palette.YELLOW).size() == Defs.JOBS.size() - 2, "the jobs nobody has say so in yellow, Haul and Farm aside (%d)" % nobody.size())
+	# Herd floors (issue #183): how many wild sheep hunters leave, with a stepper
+	var floor_lbl := func() -> Label:
+		return _walk(hud._board).filter(func(n): return n is Label and n.text.ends_with(" sheep") and n.get_parent() is HBoxContainer and not n.is_queued_for_deletion()).front()
+	check(_walk(hud._board).any(func(n): return n is Label and n.text == "Hunters leave") and floor_lbl.call().text == "%d sheep" % Tuning.HERD_FLOOR, "the board shows how many sheep hunters leave (%s)" % floor_lbl.call().text)
+	var plus: Button = floor_lbl.call().get_parent().get_child(floor_lbl.call().get_index() + 1)
+	plus.pressed.emit()
+	hud.refresh(sim)
+	await process_frame
+	check(sim.floor_of("sheep") == Tuning.HERD_FLOOR + 1 and floor_lbl.call().text == "%d sheep" % (Tuning.HERD_FLOOR + 1), "+ leaves one more")
 	var pick := func() -> Button:
 		return _walk(hud._board).filter(func(n): return n is Button and n.get_meta("label", "") == "Job: Tomas" and not n.is_queued_for_deletion()).front()
 	check(pick.call().text.begins_with("Farmer, level 1 (no composter)"), "Tomas's row shows his job and level, and that he has no composter (%s)" % pick.call().text)
