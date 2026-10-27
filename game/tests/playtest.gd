@@ -599,15 +599,16 @@ func _initialize() -> void:
 	check(not game._hud._tools_drop.visible and not game._menu.visible, "pinned, Esc closes it (and doesn't open the menu)")
 
 	# Menu by mouse: save, load with confirmation, controls, start over
-	# Esc closes an open tool, menu or panel before it opens the game menu, and the real-time clicks
-	# above sometimes leave one open.
-	var still_open := {"tool": game.tool, "menu": game.menu_open, "jobs board": game.jobs_board_open, "craft panel": game.craft_menu_open, "planner": game.planner_open}
+	# Esc closes an open tool, menu, panel or selection before it opens the game menu (issue #197), and
+	# the real-time clicks above sometimes leave one open.
+	var still_open := {"tool": game.tool, "menu": game.menu_open, "jobs board": game.jobs_board_open, "craft panel": game.craft_menu_open, "planner": game.planner_open, "selection": game.selection}
 	for k in still_open.keys():
 		if not still_open[k]:
 			still_open.erase(k)
 	if not still_open.is_empty():
 		print("     (closing %s first)" % still_open)
-		await key(KEY_ESCAPE)
+		for i in still_open.size():
+			await key(KEY_ESCAPE)
 	await key(KEY_ESCAPE)
 	check(game._menu.visible and game.speed == 0, "Esc opens the menu and pauses (tool \"%s\", menu \"%s\", jobs board %s, craft %s, planner %s)" % [game.tool, game.menu_open, game.jobs_board_open, game.craft_menu_open, game.planner_open])
 	check(await click_button("Save game"), "click Save game")
