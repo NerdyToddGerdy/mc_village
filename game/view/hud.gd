@@ -14,6 +14,7 @@ var _radial := Control.new()  ## Draws the radial Gather menu (issue #176) when 
 var _tallies := HBoxContainer.new()
 var _tools_btn: Button
 var _jobs_btn: Button               ## Opens the Village jobs board (issue #78).
+var _claim_btn: Button              ## "2 land claims": starts the Claim land order (issue #187).
 var _maps := HBoxContainer.new()    ## The map switcher (issue #101): Village, and each known site.
 var _party := Button.new()          ## "Party at the old mine: mining", when residents work on another map.
 var _party_panel: PanelContainer
@@ -103,6 +104,10 @@ func _ready() -> void:
 	_jobs_btn.toggle_mode = true
 	_jobs_btn.custom_minimum_size = Vector2(0, 36)
 	tally_row.add_child(_jobs_btn)
+	_claim_btn = _button("", func(): game.start_claiming(), "Primary")
+	_claim_btn.custom_minimum_size = Vector2(0, 36)
+	_claim_btn.visible = false
+	tally_row.add_child(_claim_btn)
 	_maps.add_theme_constant_override("separation", 2)
 	tally_row.add_child(_maps)
 	_tally_panel = _panel(tally_row, Vector2(0, 0))
@@ -727,6 +732,11 @@ func refresh(sim: Sim) -> void:
 
 
 func _refresh_tallies(sim: Sim) -> void:
+	var claims := sim.claims_available()  # issue #187
+	_claim_btn.visible = claims > 0 or sim.claims_pending() > 0
+	_claim_btn.disabled = claims == 0
+	_claim_btn.text = "%d land %s" % [claims, "claim" if claims == 1 else "claims"] if claims > 0 else "Staking land"
+	_claim_btn.tooltip_text = "Claim a strip of new land along an edge. One claim for every %d residents beyond the first two." % Tuning.CLAIM_EVERY if claims > 0 else "A builder is planting the boundary stakes."
 	var totals := {}
 	var loose := {}
 	for k in sim.items:
@@ -2380,7 +2390,9 @@ func show_hint(text: String, at: Vector2, color := Palette.CHALK) -> void:
 		return
 	_hint.text = text
 	_hint.add_theme_color_override("font_color", color)
-	_hint.position = at + Vector2(18, 14)
+	var wide := _hint.get_combined_minimum_size().x
+	var room := get_viewport().get_visible_rect().size.x - 8.0
+	_hint.position = Vector2(minf(at.x + 18.0, maxf(8.0, room - wide)), at.y + 14.0)  # never off the right edge
 	_hint.size = Vector2.ZERO
 
 

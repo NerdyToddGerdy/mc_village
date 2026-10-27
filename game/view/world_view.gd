@@ -671,6 +671,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "storehouse":
 		_add_storehouse(solid if s.stage >= 1 else ghost, s)
 		return
+	if s.tpl == "claim_stakes":
+		_add_claim_stakes(solid if s.done else ghost, s)
+		return
 	if s.tpl == "bridge":
 		_add_bridge(solid if s.done else ghost, s)
 		return
@@ -712,6 +715,17 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 
 
 static var EMBER := Color("#E8763A")
+
+
+## Boundary stakes for a land claim (issue #187): a stake on their own cell, and one at each corner
+## of the strip they mark, off the edge of the map. Blue ghosts until the builder has planted them.
+func _add_claim_stakes(b: Batch, s: Dictionary) -> void:
+	var col := Palette.LOG if s.done else Color(Palette.BLUE, 0.6)
+	var strip := Claims.strip(s.edge, sim.w, sim.h)
+	var spots: Array = [s.origin, strip.position, Vector2i(strip.end.x - 1, strip.position.y), Vector2i(strip.position.x, strip.end.y - 1), strip.end - Vector2i.ONE]
+	for c in spots:
+		b.box(Vector3(c.x + 0.4, 0, c.y + 0.4), Vector3(c.x + 0.6, 1.1, c.y + 0.6), col)
+		b.box(Vector3(c.x + 0.3, 0.8, c.y + 0.3), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.RED if s.done else col)
 
 
 ## A box in a 3×3 building's own frame (x and z from 0 to 3, its door on the far side, +z), turned

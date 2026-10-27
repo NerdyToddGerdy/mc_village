@@ -351,6 +351,16 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 - **Before any storage:** the founding's first logs stay where they were dropped, as before.
 - **Later (each its own issue):** more chests or a bigger building, storehouses marked for food or crafting, a granary or pantry, and a loading dock by the village station.
 
+**Land claims (#187).** The village isn't a fixed 32×32: it grows by strips as it gains residents. A save keeps its own size.
+- **Unlocking:** one **land claim** for every 2 residents beyond the founding pair, so a fourth resident earns the first. The top bar shows "1 land claim" while one is available.
+- **Claiming:** the **Claim land** order in the Build menu outlines the strip along each edge, **8 cells deep**, and offers the one nearest the cursor (the cursor can be off the map). A click stakes it. The camera can look a few cells past the edge while claiming.
+- **The stakes** are a small blueprint of 4 sticks, one at the strip's edge and one at each corner of the strip. A builder plants them, like any blueprint, and one claim is in progress at a time ("Staking land" in the top bar). When they're in, the strip joins the village, and a toast says how much land.
+- **Growing east or south** only extends the map. **Growing west or north** moves the origin, so everything on the map moves with it by the strip's depth in one pass: trees, boulders, animals, bushes, stacks, the stockpile, farm plots, sites and their plots, pens, and the residents. Chest slots (#189) keep their keys, and their door cells move. Everyone's current job ends and is claimed again on the next tick, except that a traveler still walking in carries on to the house. The camera moves with the land.
+- **New land isn't empty:** each strip has trees, boulders, berry bushes and up to 3 sheep, generated from the game's seed and the claim's number alone, never the live random numbers, so the same village claims the same land however it got there. East and west strips keep a 3-wide lane clear to the signpost.
+- **Signposts** stand on the edges at the middle of the village's side, so they move out with the edge. One that lands on a tree or boulder makes room for itself.
+- **Blocked, with the reason in the hint:** "The next land claim needs N residents", "A claim is already staked", "The village is at its largest (64 cells a side)", and "No open ground for the stakes on that edge".
+- **Maximum:** 64 cells a side, so geometry and pathing stay manageable. A village can still take strips on its other sides.
+
 ## 9. Stuck reasons added
 
 - "Starving: no food stored", and "Hungry" on the resident.
@@ -386,6 +396,7 @@ Taken together, the upgrade steps:
 - Starts every species at the default herd floor (v24→v25, #183).
 - Gives each existing chopping block and mason's bench the default standing order: 20 planks, 10 stone bricks (v25→v26, #178).
 - Turns automatic ingredients on and carries the founding's progress over to the reworked goals (v26→v27, #182; see above).
+- Nothing changes for land claims (v28→v29, #187): a save keeps its size, and claims available come from its residents (it saves the number made).
 - Nothing changes for storehouses (v27→v28, #189): older saves have none. A storehouse saves its chest count, and its chests' stacks are saved with the map's items, keyed by chest slot.
 - Turns a Mine resident into a Lumberjack, with Mine's experience in both Lumberjack and Stonemason (v22→v23, #177; see §5). No village has a workstation, sapling or Keep mark yet.
 - Marks no tools as chosen (v11→v12, equipping).
@@ -477,6 +488,8 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 | `work_store` | 20 logs or cobblestone in a workstation's pile |
 | `keep_stock` / `keep_step` | 20 by default / steps of 5 |
 | `make_keep` / `make_step` | 20 planks at a chopping block, 10 stone bricks at a mason's bench / steps of 5 (#178) |
+| `claim_every` / `claim_depth` | 1 claim per 2 residents beyond the founding pair / strips 8 cells deep (#187) |
+| `claim_stakes` / `map_max` | 4 sticks / 64 cells a side |
 | `chests` / `chest_stacks` | 4 chests in a storehouse / 9 stacks in a chest (#189) |
 | `herd_floor` | 2 wild animals of each species, until changed on the jobs board (#183) |
 | `saplings` / `sapling_extra` | 1 per felled tree / 30% chance of a second |

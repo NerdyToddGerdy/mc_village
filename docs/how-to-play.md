@@ -157,6 +157,8 @@ Until you paint a stockpile, items stay where they fell, and builders fetch them
 
 **The storehouse** (Build menu: 6 cobblestone, 12 planks and 4 logs) is the main storage once you have one. It holds nothing until you add chests. Craft a **chest** at the bench (8 planks) and a hauler carries it in. Each chest holds 9 stacks of anything, up to 4 chests. Haulers fill the nearest storehouse with room first, and stockpiles take what doesn't fit. Residents fetch what's stored at its door, and its panel lists what's inside. The squares on each chest's lid show what it holds.
 
+**Growing the village.** The map isn't fixed: every 2 residents past the first two earn a **land claim**, and the top bar shows "1 land claim". Choose **Build → Claim land**, and the outline of a strip, 8 cells deep, shows along each edge; the one nearest the cursor is on offer, even with the cursor off the map. Click to stake it. A builder plants boundary stakes (4 sticks), and then the strip joins the village, with its own trees, boulders, berries and a few sheep. Claiming north or west moves everything with it, and the view stays put. The village stops at 64 cells a side.
+
 The top bar counts what you have, with how much of it is still lying loose.
 
 ## Crafting and tools

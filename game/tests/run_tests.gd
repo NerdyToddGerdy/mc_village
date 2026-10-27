@@ -84,6 +84,7 @@ func _init() -> void:
 		"test_hunters_keep_a_herd_floor",
 		"test_workstations_process_materials",
 		"test_storehouse_chests",
+		"test_land_claims",
 	]
 	var only := Array(OS.get_cmdline_user_args())
 	if not only.is_empty():
@@ -400,7 +401,8 @@ func test_every_save_fixture_still_loads() -> void:
 		var sim := Sim.from_state(r.data.state)
 		check(sim.tick == r.data.tick, "v%d: tick restored" % v)
 		var size := Vector2i(sim.w, sim.h)
-		check(size == (Vector2i(18, 18) if v < 4 else Vector2i(Tuning.MAP_W, Tuning.MAP_H)), "v%d: map size is %s" % [v, size])
+		var want := Vector2i(18, 18) if v < 4 else Vector2i(Tuning.MAP_W, Tuning.MAP_H) + (Vector2i(Tuning.CLAIM_DEPTH, 0) if v >= 29 else Vector2i.ZERO)  # v29's village has one claim
+		check(size == want, "v%d: map size is %s" % [v, size])
 		check(sim.residents.size() == (3 if v >= 15 else 2) and sim.residents[1].arriving, "v%d: Tomas is walking in again after loading" % v)
 		if v < 27:  # upgraded from before the founding's rework (issue #182): two houses cover the steps it added
 			check(Goals.current(sim) == Goals.LIST.size() - 2 and sim.auto_craft, "v%d: the founding lands on Welcome a traveler, with auto ingredients on (%s)" % [v, Goals.progress_text(sim)])
@@ -3230,6 +3232,10 @@ func test_storehouse_chests() -> void:
 	var ada: Dictionary = sim.residents[0]
 	var sh := place_done(sim, "storehouse", Sim.rcell(ada) + Vector2i(0, 5))
 	check(not sh.is_empty() and sh.plot.size == Vector2i(3, 5), "a storehouse is 3×3, with its upgrade's plot behind it")
+	var houses_before: int = sim.stats.houses
+	sim._on_site_done(sh)
+	check(sim.stats.houses == houses_before and sh.owner == 0 and sim.events.any(func(ev): return ev.type == "toast" and ev.text.begins_with("The storehouse is built")), "finishing a storehouse isn't a house: it counts as none, has no owner, and says what to do next")
+	sim.events.clear()
 	sim.compute_stuck()
 	check(stuck_text(sim).contains("Storehouse: No chests yet"), "with no chests it says so: " + stuck_text(sim))
 	# A chest from the bench is carried in and set in place: 9 stacks of room.
@@ -3290,6 +3296,161 @@ func test_storehouse_chests() -> void:
 	var bsh: Dictionary = back.sites.filter(func(st): return st.id == sh.id)[0]
 	check(bsh.chests == 1 and back.items.has(slots[0]) and back.items[slots[0]].type == "cobble", "chests and what's in them are saved")
 	check(board.done, "")
+
+
+## Everything with a cell in the village, as strings, so two copies can be compared. Chest slots keep
+## their keys and only their door moves (issue #187).
+func village_cells(sim: Sim) -> Dictionary:
+	var m: SimMap = sim.maps.village
+	var out := {"tree": [], "boulder": [], "bush": [], "sheep": [], "item": [], "chest": [], "zone": [], "farm": [], "site": [], "plot": [], "pen": [], "res": []}
+	for t in m.trees:
+		out.tree.append(t.cell)
+	for b in m.boulders:
+		out.boulder.append(b.cell)
+	for b in m.bushes:
+		out.bush.append(b.cell)
+	for a in m.sheep:
+		out.sheep.append(a.cell)
+	for k in m.items:
+		if k.x < 0:
+			out.chest.append(m.items[k].at)
+		else:
+			out.item.append(m.items[k].cell)
+	out.zone = m.zone.keys()
+	out.farm = m.farm.keys()
+	for st in m.sites:
+		out.site.append(st.origin)
+		if st.get("plot") != null:
+			out.plot.append(st.plot.position)
+	for p in m.pens:
+		out.pen.append(p.rect.position)
+	for r in sim.residents:
+		out.res.append(Vector2i(r.pos))
+	return out
+
+
+func test_land_claims() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	sim.add_resident("Mira", Sim.TRAVELERS[1][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-2, 0)))
+	check(sim.claims_available() == 0 and sim.claim_check("east").contains("needs 4 residents"), "three residents have no claim yet: " + sim.claim_check("east"))
+	sim.add_resident("Bram", Sim.TRAVELERS[2][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(0, 2)))
+	check(sim.claims_available() == 1 and sim.claim_check("east") == "", "the fourth resident unlocks one")
+	var w0: int = sim.w
+	var h0: int = sim.h
+	# A claim east: stake it, and a builder plants the stakes.
+	var before := village_cells(sim)
+	check(sim.place_claim("east") == "" and sim.claims_available() == 0, "staking an edge uses the claim")
+	check(sim.claim_check("north") == "A claim is already staked", "and only one at a time: " + sim.claim_check("north"))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "stick", Tuning.CLAIM_STAKES)
+	run(sim, 90)
+	check(sim.w == w0 + Tuning.CLAIM_DEPTH and sim.h == h0 and sim.claims_made == 1, "the stakes go in and the village grows east (%d×%d)" % [sim.w, sim.h])
+	check(sim.sites.all(func(st): return st.tpl != "claim_stakes"), "the stakes are gone")
+	check(sim.stats.houses == 0 and not sim.events.any(func(ev): return ev.type == "toast" and ev.text.contains("house")), "and they didn't count as a house")
+	var after := village_cells(sim)
+	check(after.tree.size() > before.tree.size() and before.tree.all(func(c): return after.tree.has(c)), "every old tree is where it was, and the new land has more")
+	check(sim.route_sign() == Vector2i(sim.w - 1, sim.h / 2) and sim.walkable(sim.route_sign()), "the signpost to the mine moves out to the new east edge")
+	check(sim.meadow_sign() == Vector2i(0, sim.h / 2), "and the meadow's, on the west edge, stays")
+	# North and west shift everything, and nothing is left behind.
+	for edge in ["north", "west", "south"]:
+		var t := Sim.new_game()
+		var a: Dictionary = t.residents[0]
+		for i in 3:
+			t.add_resident("R%d" % i, Sim.TRAVELERS[i][1], t.nearest_walkable(Sim.rcell(a) + Vector2i(i - 1, 2)))
+		var house := place_done(t, "house", Vector2i(12, 12))
+		var block := place_done(t, "chopping_block", Vector2i(18, 12))
+		var store := place_done(t, "storehouse", Vector2i(12, 20))
+		store.chests = 1
+		var slots := Sim.store_slots(store)
+		t._store_put(slots[0], "log", 7)
+		t.paint_zone(open_rect(t, Vector2i(3, 2)))
+		t.paint_farm(open_rect(t, Vector2i(2, 2)))
+		t.drop_items(Sim.rcell(a) + Vector2i(3, 3), "cobble", 5)
+		var animal := t.add_sheep(t.nearest_walkable(Sim.rcell(a) + Vector2i(4, 0)))
+		animal.dest = animal.cell + Vector2i(1, 0)  # on its way somewhere when the land is claimed
+		t.m.pens.append({"id": t._id(), "kind": "pen", "rect": Rect2i(Vector2i(20, 20), Vector2i(3, 3)), "gate": Vector2i(20, 21), "built": {Vector2i(20, 20): true}})
+		t.direct_order(a, null, Vector2i(5, 5))
+		var was := village_cells(t)
+		var walk := {}
+		for x in t.w:
+			for y in t.h:
+				walk[Vector2i(x, y)] = t.walkable(Vector2i(x, y))
+		var stakes := t.place_site("claim_stakes", t.claim_cell(edge))
+		stakes.edge = edge
+		stakes.stage = 1
+		stakes.done = true
+		t._occ_dirty = true
+		t.compute_stuck()
+		t._apply_claims()
+		var off := Vector2i(Tuning.CLAIM_DEPTH, 0) if edge == "west" else (Vector2i(0, Tuning.CLAIM_DEPTH) if edge == "north" else Vector2i.ZERO)
+		var now := village_cells(t)
+		var drift := 0
+		for k in was:
+			if k == "item" or k == "chest" or k == "tree" or k == "boulder" or k == "bush" or k == "sheep":
+				continue  # the new land adds more of these; theirs are checked below
+			var moved: Array = was[k].map(func(c): return c + off)
+			if k == "site":
+				moved = moved.filter(func(c): return c != stakes.origin + off)
+			for c in moved:
+				if not now[k].has(c):
+					drift += 1
+		check(drift == 0, "%s claim: every site, plot, stockpile cell, farm plot, pen and resident moved by (%s) and none was left behind (%d off)" % [edge, off, drift])
+		check(was.item.all(func(c): return now.item.has(c + off)) and was.tree.all(func(c): return now.tree.has(c + off)) and was.boulder.all(func(c): return now.boulder.has(c + off)), "%s claim: the loose stacks, trees and boulders too" % edge)
+		check(was.chest.all(func(c): return now.chest.has(c + off)) and t.items.has(slots[0]) and t.items[slots[0]].n == 7, "%s claim: a chest slot keeps its key, its door moves with the building" % edge)
+		check(walk.keys().all(func(c): return walk[c] == t.walkable(c + off) or c == stakes.origin), "%s claim: every old cell is as walkable as before" % edge)
+		check(is_same(t.site_at(house.origin), house) and house.done and block.done, "%s claim: buildings are intact" % edge)
+		check(animal.cell == Vector2i(animal.pos) and t.in_bounds(animal.cell) and animal.dest == animal.cell + Vector2i(1, 0), "%s claim: animals stand on the map, with their destination" % edge)
+		# On with the show: hauling goes to the shifted stockpile and the village still works.
+		t.drop_items(t.nearest_walkable(Sim.rcell(a) + Vector2i(1, 4)), "plank", 6)
+		run(t, 60)
+		check(t.stacks_where(func(st): return st.type == "plank" and (t.in_zone(st.cell) or Sim.in_store(st.cell))).size() > 0, "%s claim: haulers still carry things to storage" % edge)
+	# A traveler still walking in when the land is claimed carries on to his house.
+	var w := Sim.new_game()
+	var home := place_done(w, "house", Vector2i(12, 12))
+	home.stage = 4
+	w._arrive()
+	var walker: Dictionary = w.residents[-1]
+	check(walker.arriving and walker.job != null, "a traveler walks in")
+	var ws := w.place_site("claim_stakes", w.claim_cell("west"))
+	ws.edge = "west"
+	ws.stage = 1
+	ws.done = true
+	w._apply_claims()
+	check(walker.arriving and walker.job != null and walker.job.kind == "arrive", "a claim made meanwhile doesn't stop him: he walks on, to the house where it now stands")
+	run(w, 60)
+	check(not walker.arriving and home.owner == walker.id, "and moves in (%s)" % [walker.job])
+	# Deterministic: the same seed and claim number give the same land.
+	var u := Sim.new_game()
+	var v := Sim.new_game()
+	var st_u := u.place_site("claim_stakes", u.claim_cell("north"))
+	var st_v := v.place_site("claim_stakes", v.claim_cell("north"))
+	for pair in [[u, st_u], [v, st_v]]:
+		pair[1].edge = "north"
+		pair[1].stage = 1
+		pair[1].done = true
+		pair[0]._apply_claims()
+	check(village_cells(u).tree == village_cells(v).tree and village_cells(u).boulder == village_cells(v).boulder, "new land is generated the same way from the same seed")
+	var seeded := Sim.new_game()
+	seeded.seed = 99
+	var st_s := seeded.place_site("claim_stakes", seeded.claim_cell("north"))
+	st_s.edge = "north"
+	st_s.stage = 1
+	st_s.done = true
+	seeded._apply_claims()
+	check(village_cells(seeded).tree != village_cells(u).tree, "and differently from another seed")
+	# The size never passes the maximum.
+	var big := Sim.new_game()
+	for i in 6:
+		big.add_resident("R%d" % i, Sim.TRAVELERS[i % 5][1], big.nearest_walkable(Vector2i(10 + i, 10)))
+	big.maps.village.grow("east", Tuning.MAP_MAX - Tuning.CLAIM_DEPTH + 1 - big.w)
+	check(big.claim_check("east").contains("at its largest") and big.claim_check("south") == "", "the village stops growing at %d cells a side, per direction (%s)" % [Tuning.MAP_MAX, big.claim_check("east")])
+	# Older saves: the size is kept and claims come from the residents.
+	var raw := SaveFormat.read("res://tests/fixtures/save_v24.save")
+	var old := Sim.from_state(raw.data.state)
+	check(old.w == Tuning.MAP_W and old.claims_made == 0 and old.claims_available() == maxi(0, (old.residents.size() - 2) / Tuning.CLAIM_EVERY), "an older save keeps its size, with claims for its residents (%d)" % old.claims_available())
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	check(back.w == sim.w and back.claims_made == 1, "the grown size and the claims made are saved")
 
 
 func test_jobs_need_their_workstation() -> void:

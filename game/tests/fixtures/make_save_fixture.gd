@@ -264,6 +264,13 @@ func _initialize() -> void:
 				sim._store_put(slots[0], "log", 12)
 				sim._store_put(slots[9], "stone_pick", 1, 17)
 				break
+	if SaveFormat.VERSION >= 29:  # a village grown east by one claim, with Mira's town already round it (#187)
+		var stakes := sim.place_site("claim_stakes", sim.claim_cell("east"))
+		stakes.edge = "east"
+		stakes.stage = 1
+		stakes.done = true
+		sim._apply_claims()
+		sim.events.clear()
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

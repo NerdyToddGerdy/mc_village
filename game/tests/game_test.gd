@@ -766,6 +766,56 @@ func _test_jobs_grid(game: Game) -> void:
 	check(not game.jobs_board_open and not game._menu.visible, "Esc closes the board before opening the menu")
 
 
+## Issue #187: land claims. A chip in the top bar, an order in the Build menu, the edge nearest the
+## cursor on offer (the cursor may be off the map), and the camera following a claim on the west.
+func _test_land_claims(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var hud: Hud = game._hud
+	var ada: Dictionary = sim.residents[0]
+	hud.refresh(sim)
+	await _frames()
+	check(not hud._claim_btn.visible, "with one resident there's no claim chip")
+	check(not OrderMenus.entries("build", sim).any(func(e): return e.id == "claim"), "and the Build menu doesn't list Claim land")
+	for i in 3:
+		sim.add_resident("R%d" % i, Sim.TRAVELERS[i][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(i + 1, 2)))
+	hud.refresh(sim)
+	await _frames()
+	check(hud._claim_btn.visible and hud._claim_btn.text == "1 land claim", "four residents show \"1 land claim\" (%s)" % hud._claim_btn.text)
+	check(OrderMenus.entries("build", sim).any(func(e): return e.id == "claim"), "and the Build menu lists Claim land")
+	game.pick_order("build", "claim")
+	check(game.tool == "claim", "picking it starts the claim order")
+	game._mouse = game._cam.unproject_position(Vector3(sim.w + 3.0, 0, sim.h / 2.0))
+	check(game._claim_edge() == "east", "a cursor past the east edge picks the east strip (%s)" % game._claim_edge())
+	game._mouse = game._cam.unproject_position(Vector3(-3.0, 0, sim.h / 2.0))
+	check(game._claim_edge() == "west", "and one past the west edge, the west")
+	game._update_live_overlays()
+	check(game._world.live_outlines.size() == 4 and game._hud._hint.text.begins_with("Claim 256 cells of new land to the west"), "all four strips are outlined, and the hint says what a claim gives (%s)" % game._hud._hint.text)
+	var w0: int = sim.w
+	var before: Vector3 = game._target
+	var e := InputEventMouseButton.new()
+	e.button_index = MOUSE_BUTTON_LEFT
+	e.pressed = true
+	e.position = game._mouse
+	game._left_down(e)
+	check(game.tool == "" and sim.claims_pending() == 1 and game.selection.get("kind", "") == "site", "a click stakes the strip, and selects the stakes")
+	hud.refresh(sim)
+	await _frames()
+	check(hud._claim_btn.text == "Staking land" and hud._claim_btn.disabled, "the chip says a builder is on it")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 0), "stick", Tuning.CLAIM_STAKES)
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		if sim.claims_made == 1:
+			break
+	game._process(0.0)
+	check(sim.w == w0 + Tuning.CLAIM_DEPTH and sim.claims_made == 1, "the stakes go in and the village grows west (%d wide)" % sim.w)
+	check(is_equal_approx(game._target.x, before.x + Tuning.CLAIM_DEPTH) and is_equal_approx(game._target.z, before.z), "the camera moves with the land: the view stays on the same ground (%s to %s)" % [before, game._target])
+	hud.refresh(sim)
+	await _frames()
+	check(not hud._claim_btn.visible, "the chip goes once the claim is used")
+	game.set_tool("")
+
+
 ## Equip in the resident panel lists tools lying about and sends the resident for the chosen one.
 func _test_equip(game: Game) -> void:
 	game.restart()
@@ -1183,6 +1233,7 @@ func _initialize() -> void:
 	await _test_farm_tool(game)
 	await _test_fireplace(game)
 	await _test_jobs_grid(game)
+	await _test_land_claims(game)
 	await _test_equip(game)
 	await _test_toasts(game)
 	_test_headers(game)

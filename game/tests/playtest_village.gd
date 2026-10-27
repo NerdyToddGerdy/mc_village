@@ -344,7 +344,45 @@ func _initialize() -> void:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(visible_label("Storehouse") and visible_label("Chests"), "selecting it shows its chests and what they hold")
+	game.selection = {}
+
+	# ---- Land claims (issue #187): a fourth resident earns the first claim; the north edge, then a house on it
+	if sim.residents.size() < 4:
+		sim.add_resident("Bram", Sim.TRAVELERS[2][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(1, 2)))
+	game.selection = {}
+	game._hud.refresh(sim)
+	await frames(2)
+	check(find_button("1 land claim") != null, "the top bar offers a land claim (%d residents)" % sim.residents.size())
+	check(await open_bench_panel(), "open the bench for the stakes' sticks")
+	check(await queue_recipe("Sticks", 1), "queue sticks for the stakes")
 	await key(KEY_ESCAPE)
+	await key(KEY_B)
+	check(await click_button("Claim land"), "the Build menu lists Claim land")
+	check(game.tool == "claim", "it starts the claim order")
+	var h_before: int = sim.h
+	game._target = Vector3(sim.w / 2.0, 0, 6.0)  # looking along the north edge, strips and all
+	game._cam.size = 30.0
+	game._place_camera()
+	await frames(2)
+	var north := screen(Vector2i(sim.w / 2, -4))
+	await move(north)
+	check(game._claim_edge() == "north" and game._hud._hint.text.begins_with("Claim 256 cells of new land to the north"), "hovering above the village offers the north strip (\"%s\")" % game._hud._hint.text)
+	await click(north)
+	check(sim.claims_pending() == 1 and game.tool == "", "a click stakes it")
+	check(await play_until(240, func(): return sim.claims_made == 1), "a builder plants the stakes and the strip joins the village (%s)" % ("; ".join(sim.stuck.map(func(x): return x.who + ": " + x.why))))
+	check(sim.h == h_before + Tuning.CLAIM_DEPTH and sim.sites.all(func(st): return st.tpl != "claim_stakes"), "the village is %d cells deep now" % sim.h)
+	check(absf(game._target.z - (6.0 + Tuning.CLAIM_DEPTH)) < 0.01, "and the camera stayed on the same ground")
+	check(sim.stats.houses == 3 and sim.residents.size() >= 4, "the stakes didn't count as a house (%d)" % sim.stats.houses)
+	game._cam.size = 17.0
+	await key(KEY_H)
+	var hs := build_spot("house", Vector2i(sim.w / 2, 2))
+	await look_at(hs + Vector2i(2, 2))
+	await click(screen(hs + Vector2i(2, 2)))
+	var new_house = sim.site_at(hs + Vector2i(2, 2))
+	check(new_house != null and new_house.tpl == "house" and new_house.origin.y < Tuning.CLAIM_DEPTH, "a house is placed on the new land (%s)" % [hs])
+	if game.tool != "":
+		await key(KEY_ESCAPE)
+	check(await play_until(300, func(): return new_house != null and new_house.stage >= 1), "and builders get its foundation down (stage %d)" % (new_house.stage if new_house != null else -1))
 
 	# ---- Every stall has a reason: anything in the stuck list carries one
 	check(sim.stuck.all(func(s): return s.why != ""), "every stuck item says why")

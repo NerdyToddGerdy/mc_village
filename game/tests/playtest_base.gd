@@ -165,6 +165,7 @@ func run(seconds: float) -> void:
 	for ev in game.sim.events:
 		if ev.type == "toast":
 			game._hud.add_toast(ev)
+	game.handle_view_events(game.sim.events)
 	game.sim.events.clear()
 	game._hud.refresh(game.sim)
 	await frames(3)
@@ -253,6 +254,7 @@ func play(seconds: float) -> void:
 			if ev.type == "toast":
 				_seen.append(ev.text)
 				game._hud.add_toast(ev)
+		game.handle_view_events(game.sim.events)
 		game.sim.events.clear()
 		if not game.sim.pending.is_empty():
 			break  # the game stops for a choice, as it does in play
