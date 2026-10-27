@@ -196,7 +196,8 @@ func _build_static() -> void:
 	for k in sim.farm:
 		_add_crop(solid, sim.farm[k])
 	for k in sim.items:
-		_add_item(solid, sim.items[k])
+		if not Sim.in_store(k):  # what's in a storehouse's chests shows on their lids
+			_add_item(solid, sim.items[k])
 	for s in sim.sites:
 		_add_site(solid, ghost, s)
 		if not s.done:
@@ -648,6 +649,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
 		_add_small_station(solid if s.done else ghost, s)
 		return
+	if s.tpl == "storehouse":
+		_add_storehouse(solid if s.stage >= 1 else ghost, s)
+		return
 	if s.tpl == "bridge":
 		_add_bridge(solid if s.done else ghost, s)
 		return
@@ -689,6 +693,54 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 
 
 static var EMBER := Color("#E8763A")
+
+
+## A box in a 3×3 building's own frame (x and z from 0 to 3, its door on the far side, +z), turned
+## to face the way the building does.
+func _box_turned(b: Batch, s: Dictionary, lo: Vector3, hi: Vector3, col: Color) -> void:
+	var a := _turn(s, Vector2(lo.x, lo.z))
+	var c := _turn(s, Vector2(hi.x, hi.z))
+	var o := Vector2(s.origin)
+	b.box(Vector3(o.x + minf(a.x, c.x), lo.y, o.y + minf(a.y, c.y)), Vector3(o.x + maxf(a.x, c.x), hi.y, o.y + maxf(a.y, c.y)), col)
+
+
+static func _turn(s: Dictionary, p: Vector2) -> Vector2:
+	match s.rot % 4:
+		1: return Vector2(3.0 - p.y, p.x)
+		2: return Vector2(3.0 - p.x, 3.0 - p.y)
+		3: return Vector2(p.y, 3.0 - p.x)
+	return p
+
+
+## The storehouse (issue #189): a cobblestone floor inside low plank walls, open at the door so its
+## chests show. Each chest's lid carries a square of the first few kinds of thing in it.
+func _add_storehouse(b: Batch, s: Dictionary) -> void:
+	var done: bool = s.done
+	var ghost := Color(Palette.BLUE, 0.45)
+	_box_turned(b, s, Vector3(0, 0, 0), Vector3(3, 0.15, 3), Palette.COBBLE if s.stage >= 1 else ghost)
+	if not done:
+		return
+	var wall := Palette.PLANK
+	var walls := [[Vector3(0, 0.15, 0), Vector3(3, 1.0, 0.18)], [Vector3(0, 0.15, 0), Vector3(0.18, 1.0, 3)], [Vector3(2.82, 0.15, 0), Vector3(3, 1.0, 3)],
+		[Vector3(0, 0.15, 2.82), Vector3(1.0, 1.0, 3)], [Vector3(2.0, 0.15, 2.82), Vector3(3, 1.0, 3)]]
+	for w in walls:
+		_box_turned(b, s, w[0], w[1], wall)
+	for p in [Vector2(0.18, 0.18), Vector2(2.82, 0.18), Vector2(0.18, 2.82), Vector2(2.82, 2.82)]:  # corner posts
+		_box_turned(b, s, Vector3(p.x - 0.12, 0.15, p.y - 0.12), Vector3(p.x + 0.12, 1.15, p.y + 0.12), Palette.LOG)
+	var spots := [Vector2(0.3, 0.3), Vector2(1.95, 0.3), Vector2(0.3, 1.45), Vector2(1.95, 1.45)]  # clear of the path from the door
+	var slots := Sim.store_slots(s)
+	for i in mini(s.get("chests", 0), spots.size()):
+		var p: Vector2 = spots[i]
+		_box_turned(b, s, Vector3(p.x, 0.15, p.y), Vector3(p.x + 0.75, 0.62, p.y + 0.55), Palette.PLANK.darkened(0.15))
+		_box_turned(b, s, Vector3(p.x - 0.02, 0.5, p.y - 0.02), Vector3(p.x + 0.77, 0.56, p.y + 0.57), Palette.LOG)
+		var kinds: Array = []
+		for k in slots.slice(i * Tuning.CHEST_STACKS, (i + 1) * Tuning.CHEST_STACKS):
+			var it = sim.items.get(k)
+			if it != null and not kinds.has(it.type):
+				kinds.append(it.type)
+		for j in mini(kinds.size(), 3):
+			var x := p.x + 0.08 + j * 0.22
+			_box_turned(b, s, Vector3(x, 0.62, p.y + 0.15), Vector3(x + 0.16, 0.7, p.y + 0.4), Palette.ITEM_COLORS.get(kinds[j], Palette.CHALK))
 
 
 ## A squat cobblestone hearth with a chimney at the back and embers in its mouth, which faces its

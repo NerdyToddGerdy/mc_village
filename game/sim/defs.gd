@@ -9,6 +9,8 @@ const ITEMS := {
 	"cobble": {"one": "cobblestone", "many": "cobblestone", "label": "Cobblestone", "group": "building"},
 	# Dropped by a felled tree, and planted by a lumberjack (issue #177).
 	"sapling": {"one": "sapling", "many": "saplings", "label": "Saplings", "group": "building"},
+	# Crafted at the bench and carried into a storehouse (issue #189).
+	"chest": {"one": "chest", "many": "chests", "label": "Chests", "group": "building"},
 	# Cut at the mason's bench (issue #178), for the upgrades to come.
 	"stone_brick": {"one": "stone brick", "many": "stone bricks", "label": "Stone bricks", "group": "building"},
 	"wool": {"one": "wool", "many": "wool", "label": "Wool", "group": "animal"},
@@ -81,6 +83,7 @@ const RECIPES := [
 	{"id": "sticks", "name": "Sticks", "inp": {"plank": 2}, "out": {"stick": 4}, "pattern": [" P ", " P ", "   "]},
 	{"id": "wood_axe", "name": "Wooden axe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_axe": 1}, "pattern": ["PP ", "PS ", " S "]},
 	{"id": "wood_pick", "name": "Wooden pickaxe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_pick": 1}, "pattern": ["PPP", " S ", " S "]},
+	{"id": "chest", "name": "Chest", "inp": {"plank": 8}, "out": {"chest": 1}, "pattern": ["PPP", "P P", "PPP"]},
 	{"id": "stone_axe", "name": "Stone axe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_axe": 1}, "pattern": ["CC ", "CS ", " S "]},
 	{"id": "stone_pick", "name": "Stone pickaxe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_pick": 1}, "pattern": ["CCC", " S ", " S "]},
 	# Iron tools (issue #104), from ingots smelted at the fireplace.
@@ -158,6 +161,11 @@ const TEMPLATES := {
 	"mason_bench": {"name": "Mason's bench", "size": Vector2i(1, 1), "plot": "mason's workshop", "station": true, "makes": "stone_bricks",
 		"work": {"job": "mason", "kind": "boulder", "item": "cobble"}, "stages": [
 		{"name": "Mason's bench", "verb": "needs", "cost": {"plank": 2, "cobble": 4}},
+	]},
+	# The village's storage (issue #189): chests carried in hold the stacks; its door faces its front.
+	"storehouse": {"name": "Storehouse", "size": Vector2i(3, 3), "plot": "warehouse", "store": true, "stages": [
+		{"name": "Floor", "verb": "needs", "cost": {"cobble": 6}},
+		{"name": "Walls and roof", "verb": "needs", "cost": {"plank": 12, "log": 4}},
 	]},
 	# The other jobs' workstations (issue #184). Small builds that reserve room for an upgrade; the
 	# toolsmith's grows into an anvil once there's iron.
