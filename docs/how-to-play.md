@@ -54,6 +54,23 @@ The goals panel leads you through these steps. Each one unlocks the next.
 12. **Welcome a traveler.** Tomas, a lumberjack, arrives a little while after the second bed is ready.
 13. **Build Tomas a chopping block.** Choose **Build → Chopping block** near trees. Tomas fells the trees around it on his own, while Ada does everything else.
 
+Each step shows a line under its hint saying **why** it matters.
+
+### The village
+
+When the founding is done, a second chapter of goals follows in the same panel, each with a hint and a why:
+
+1. **Paint a farm plot.** **Paint → Farm plot**, on open grass. A farmer plants and harvests it: the village's steady food.
+2. **Cook a meal.** Queue bread or cooked mutton at the fireplace. Cooked food fills a resident for much longer.
+3. **Give a second resident a workstation.** Build another workstation (a mason's bench, composter and so on) and give someone that job from the Jobs board. Tomas's chopping block was the first.
+4. **Bring iron ore home from the old mine.** Plan a trip at the expedition board. Smelted with coal at the fireplace's furnace, iron makes tools that last more than twice as long as stone.
+
+When both chapters are done the panel folds to a green **The village ✓** chip.
+
+### The village book
+
+The goals panel's **Book** button (or the chip, once the chapters are done) opens the village book in its place. Its **Goals** page lists every step with its why. Every other page is a building or zone: what it's for, who works it, what it grows into and what goes wrong without it. A page shows once its building can be built (the expedition board once Ada's house is up, the pen once the board is built, the road once a party has been to the old mine). Select a building and click **? About the…** to jump to its page. Esc or **Close** shuts the book.
+
 ## Giving orders
 
 There are two ways to get work done.

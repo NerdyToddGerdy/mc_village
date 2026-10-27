@@ -23,6 +23,8 @@ var _party_details := VBoxContainer.new()  ## The party's members, packs and obj
 var _choice_panel: PanelContainer   ## A choice the game stopped for (issues #110, #111).
 var _choice_box := VBoxContainer.new()
 var _board_panel: PanelContainer
+var _book_panel: PanelContainer      ## The village book (issue #198), over the goals panel's place.
+var _book := VBoxContainer.new()
 var _board := VBoxContainer.new()
 var _tools_drop: PanelContainer
 var _job_drop: PanelContainer       ## A resident's job dropdown (issue #134), under the button it opened from.
@@ -207,6 +209,10 @@ func _ready() -> void:
 	_board_panel.top_level = true
 	_board_panel.visible = false
 	_root.add_child(_board_panel)
+	_book_panel = _panel(_book, Vector2(460, 0))
+	_book_panel.top_level = true
+	_book_panel.visible = false
+	_root.add_child(_book_panel)
 	_root.add_child(_job_drop)
 	_radial.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_radial.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -717,6 +723,7 @@ func refresh(sim: Sim) -> void:
 	_refresh_tallies(sim)
 	_refresh_maps(sim)
 	_refresh_goals(sim)
+	_refresh_book(sim)
 	for v in _speed_btns:
 		_speed_btns[v].set_pressed_no_signal(game.speed == v)
 	_paused_label.visible = game.speed == 0 and sim.pending.is_empty()  # a choice says so itself
@@ -1122,7 +1129,7 @@ func _process(_delta: float) -> void:
 	_stuck_gives_way = _plan_panel.visible and _plan_panel.get_global_rect().position.y < _stuck_panel.get_global_rect().position.y + _stuck_panel.get_combined_minimum_size().y + 8
 	if _stuck_gives_way:
 		_stuck_panel.visible = false
-	_goals_panel.visible = not game.jobs_board_open and (not _sel_panel.visible or _sel_panel.get_global_rect().position.y > _goals_panel.get_global_rect().position.y + _goals_panel.get_combined_minimum_size().y + 8)
+	_goals_panel.visible = not game.jobs_board_open and not game.book_open and (not _sel_panel.visible or _sel_panel.get_global_rect().position.y > _goals_panel.get_global_rect().position.y + _goals_panel.get_combined_minimum_size().y + 8)
 	var open := _drop_pinned
 	for g in _group_btns:
 		if open == "" and _group_btns[g].has_focus():
@@ -1146,25 +1153,110 @@ func _process(_delta: float) -> void:
 
 func _refresh_goals(sim: Sim) -> void:
 	var cur := Goals.current(sim)
+	var vcur := Goals.village_current(sim) if cur < 0 else 0
+	var chapter: Array = Goals.LIST if cur >= 0 else Goals.VILLAGE
+	var at := cur if cur >= 0 else vcur
 	var done_sig := ""
-	for i in Goals.LIST.size():
-		done_sig += "1" if Goals.done(sim, i) else "0"
-	# Once the founding is done, the panel folds to a small chip: it has nothing left to guide (#81).
-	_goals_panel.custom_minimum_size.x = 0 if cur < 0 else 290
-	_rebuild(_goals, "%d%s" % [cur, done_sig], func(c: Container) -> void:
+	for i in chapter.size():
+		done_sig += "1" if (Goals.done(sim, i) if cur >= 0 else Goals.village_done(sim, i)) else "0"
+	# Once both chapters are done, the panel folds to a small chip that opens the book: it has nothing
+	# left to guide (#81, #198).
+	_goals_panel.custom_minimum_size.x = 0 if at < 0 else 290
+	_rebuild(_goals, "%d%d%s" % [cur, at, done_sig], func(c: Container) -> void:
 		var n_done := done_sig.count("1")
-		if cur < 0:
-			var chip := _label("Founding  ✓", true, Palette.GREEN, Palette.BODY)
-			chip.tooltip_text = "Every founding step is done: the village has its bench, its houses and its first traveler."
-			chip.mouse_filter = Control.MOUSE_FILTER_STOP
+		if at < 0:
+			var chip := _button("The village  ✓", func(): game.open_book())
+			chip.flat = true
+			for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+				chip.add_theme_color_override(state, Palette.GREEN)
+			chip.tooltip_text = "Every founding and village step is done. Open the village book."
 			c.add_child(chip)
 			return
-		c.add_child(_row("The founding", "%d of %d" % [n_done, Goals.LIST.size()], false))
+		var head := HBoxContainer.new()
+		var title := _row("The founding" if cur >= 0 else "The village", "%d of %d" % [n_done, chapter.size()], false)
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		head.add_child(title)
+		var book := _button("Book", func(): game.open_book())
+		book.flat = true
+		book.tooltip_text = "Why each step matters, and a page for every building"
+		head.add_child(book)
+		c.add_child(head)
 		# Wrapped at the panel's own width, so they measure right even when built while the panel is
 		# hidden; otherwise they'd wrap at nothing, stand thousands of pixels tall and keep it hidden.
-		for l in [_label("%d  %s" % [cur + 1, Goals.LIST[cur].t], true, Palette.CHALK, Palette.BODY, true), _label(Goals.LIST[cur].h, false, Palette.CHALK_DIM, Palette.CAPTION, true)]:
+		var g: Dictionary = chapter[at]
+		for l in [_label("%d  %s" % [at + 1, g.t], true, Palette.CHALK, Palette.BODY, true), _label(g.h, false, Palette.CHALK_DIM, Palette.CAPTION, true), _label(g.w, false, Palette.CHALK_DIM, Palette.CAPTION, true)]:
 			l.custom_minimum_size.x = 290 - 24
 			c.add_child(l))
+
+
+## The village book (issue #198): the goals of both chapters with their whys, and one page for every
+## building the village knows of. A row of page buttons, the page below it.
+func _refresh_book(sim: Sim) -> void:
+	_book_panel.visible = game.book_open
+	if not game.book_open:
+		return
+	_book_panel.position = Vector2(16, _tally_panel.get_global_rect().end.y + 8)
+	var pages := Goals.pages(sim)
+	var sig := "%s|" % game.book_page
+	for i in Goals.LIST.size():
+		sig += "1" if Goals.done(sim, i) else "0"
+	for i in Goals.VILLAGE.size():
+		sig += "1" if Goals.village_done(sim, i) else "0"
+	for p in pages:
+		sig += p.id
+	_rebuild(_book, sig, func(c: Container) -> void:
+		var head := HBoxContainer.new()
+		var title := _label("The village book", true, Palette.CHALK, Palette.HEADING)
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		head.add_child(title)
+		head.add_child(_button("Close", func(): game.open_book("goals", false)))
+		c.add_child(head)
+		var tabs := HFlowContainer.new()
+		tabs.add_theme_constant_override("h_separation", 2)
+		tabs.add_theme_constant_override("v_separation", 2)
+		for entry in [{"id": "goals", "title": "Goals"}] + pages:
+			var b := _button(entry.title, func(): game.open_book(entry.id))
+			b.toggle_mode = true
+			b.set_pressed_no_signal(game.book_page == entry.id)
+			tabs.add_child(b)
+		c.add_child(tabs)
+		var scroll := ScrollContainer.new()
+		scroll.custom_minimum_size = Vector2(440, 330)
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		var body := VBoxContainer.new()
+		body.add_theme_constant_override("separation", 6)
+		body.custom_minimum_size.x = 430
+		scroll.add_child(body)
+		c.add_child(scroll)
+		var page := pages.filter(func(p): return p.id == game.book_page)
+		if page.is_empty():
+			_fill_book_goals(body, sim)
+		else:
+			_fill_book_page(body, page[0]))
+
+
+func _fill_book_goals(c: Container, sim: Sim) -> void:
+	var chapters := [["The founding", Goals.LIST, Goals.done], ["The village", Goals.VILLAGE, Goals.village_done]]
+	for ch in chapters:
+		c.add_child(_label(ch[0], true, Palette.CHALK, Palette.BODY))
+		for i in ch[1].size():
+			var g: Dictionary = ch[1][i]
+			var done: bool = ch[2].call(sim, i)
+			var t := _label("%s  %s" % ["✓" if done else "·", g.t], true, Palette.GREEN if done else Palette.CHALK, Palette.BODY, true)
+			t.custom_minimum_size.x = 420
+			c.add_child(t)
+			var w := _label(g.w, false, Palette.CHALK_DIM, Palette.CAPTION, true)
+			w.custom_minimum_size.x = 420
+			c.add_child(w)
+
+
+func _fill_book_page(c: Container, p: Dictionary) -> void:
+	c.add_child(_label(p.title, true, Palette.CHALK, Palette.HEADING))
+	for line in [["What it's for", p.what], ["Who works it", p.who], ["What it grows into", p.grows], ["Without it", p.without]]:
+		c.add_child(_label(line[0], true, Palette.CHALK_DIM, Palette.CAPTION))
+		var l := _label(line[1], false, Palette.CHALK, Palette.BODY, true)
+		l.custom_minimum_size.x = 420
+		c.add_child(l)
 
 
 ## The stuck list (issue #77) has two tiers. Blockers, work that can't go on, get a yellow flag,
@@ -1425,6 +1517,12 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			_add_keep(c, sim, target)
 		"site":
 			_fill_site(c, sim, target)
+			var page := Goals.page_for(target.tpl)
+			if not page.is_empty() and Goals.page_known(sim, page):  # the book's page for this building (issue #198)
+				var about := _button("?  About the %s" % Defs.TEMPLATES[target.tpl].name.to_lower(), func(): game.open_book(page.id))
+				about.flat = true
+				about.alignment = HORIZONTAL_ALIGNMENT_LEFT
+				c.add_child(about)
 
 
 ## A village tree or boulder's Keep toggle (issue #177): lumberjacks and stonemasons never take a kept

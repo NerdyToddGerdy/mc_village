@@ -86,6 +86,8 @@ func _init() -> void:
 		"test_storehouse_chests",
 		"test_land_claims",
 		"test_blueprints_clear_their_footprint",
+		"test_founding_book_chapter_and_pages",
+		"test_founding_book_save_upgrade",
 	]
 	var only := Array(OS.get_cmdline_user_args())
 	if not only.is_empty():
@@ -3620,3 +3622,76 @@ func test_jobs_need_their_workstation() -> void:
 	# Saved and loaded, workstations keep their residents.
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(loaded.site(tbench.id).worker == bram.id and not loaded.claimed(loaded.resident(bram.id)).is_empty(), "claims survive a save")
+
+
+## Issue #198: every founding goal says why, the village chapter follows in order, and a page shows
+## once its building is known.
+func test_founding_book_chapter_and_pages() -> void:
+	for g in Goals.LIST:
+		check(g.get("w", "") != "", "founding goal \"%s\" has a why" % g.t)
+	for g in Goals.VILLAGE:
+		check(g.get("h", "") != "" and g.get("w", "") != "", "village goal \"%s\" has a hint and a why" % g.t)
+	check(Goals.VILLAGE[-1].t.begins_with("Bring iron ore"), "the mine trip is the chapter's last task")
+	var ids := {}
+	for p in Goals.PAGES:
+		for k in ["title", "what", "who", "grows", "without"]:
+			check(p.get(k, "") != "", "page %s has %s" % [p.id, k])
+		check(not ids.has(p.id), "page id %s is unique" % p.id)
+		ids[p.id] = true
+		check(p.get("tpl", "") == "" or Defs.TEMPLATES.has(p.tpl), "page %s names a real building" % p.id)
+	for e in OrderMenus.MENUS.build.entries:
+		if e.id != "claim":
+			check(not Goals.page_for(e.id).is_empty(), "the Build menu's %s has a page" % e.id)
+	# The chapter, in order.
+	var sim := Sim.new_game()
+	check(Goals.village_current(sim) == 0, "a new village starts at the farm")
+	sim.paint_farm(open_rect(sim, Vector2i(2, 2)))
+	check(Goals.village_current(sim) == 1, "a farm plot is goal 1")
+	sim.stats.meals_cooked = 1
+	check(Goals.village_current(sim) == 2, "a cooked meal is goal 2")
+	var picked := 0
+	for tpl in ["chopping_block", "mason_bench"]:
+		var st := sim.place_site(tpl, open_cell_for(sim, Vector2i(1, 1)))
+		st.done = true
+		st.worker = sim.residents[0].id
+		picked += 1
+		check(Goals.village_current(sim) == (2 if picked < 2 else 3), "%d workstation(s) with a worker: goal %d" % [picked, Goals.village_current(sim)])
+	sim.stats.ore_home = true
+	check(Goals.village_current(sim) == -1, "iron ore home finishes the chapter")
+	# Pages wait for their building.
+	var fresh := Sim.new_game()
+	var shown := Goals.pages(fresh).map(func(p): return p.id)
+	check(not "board" in shown and not "pen" in shown and not "road" in shown and "bench" in shown, "a new village's book has no board, pen or road page (%s)" % [shown])
+	fresh.stats.houses = 1
+	check(Goals.pages(fresh).any(func(p): return p.id == "board"), "the board's page shows once Ada's house is up")
+	fresh.stats.built.board = true
+	check(Goals.pages(fresh).any(func(p): return p.id == "pen"), "the pen's page shows once the board is built")
+	fresh.get_map("old_mine").visited = true
+	check(Goals.pages(fresh).any(func(p): return p.id == "road"), "the road's page shows once the party has been to the mine")
+	# The counters.
+	var cook := Sim.new_game()
+	cook.stats.meals_cooked = 0
+	var bench := cook.place_site("fireplace", open_cell_for(cook, Vector2i(1, 1)))
+	check(not cook.stats.ore_home and cook.stats.meals_cooked == 0, "a new game has cooked nothing and brought nothing home")
+
+
+## Issue #198: an old village isn't asked to do what it already has.
+func test_founding_book_save_upgrade() -> void:
+	var raw: Dictionary = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v29.save"))
+	var plain := SaveFormat.upgrade(raw.duplicate(true))
+	check(plain.data.state.stats.meals_cooked == 1 and plain.data.state.stats.ore_home == false, "the opening-stage save has meals and Ada's cooking, but no ore home")
+	var bare: Dictionary = raw.duplicate(true)
+	for r in bare.state.residents:
+		r.jobs.cook.xp = 0
+	for k in bare.state.maps.village.items.keys():
+		if bare.state.maps.village.items[k].type in Defs.MEALS:
+			bare.state.maps.village.items.erase(k)
+	var none := SaveFormat.upgrade(bare)
+	check(none.data.state.stats.meals_cooked == 0 and none.data.state.stats.ore_home == false, "with no cooking and no meals, nothing is counted")
+	var rich: Dictionary = raw.duplicate(true)
+	rich.state.maps.village.items[Vector2i(0, 0)] = {"cell": Vector2i(0, 0), "type": "iron_ingot", "n": 2, "res": 0}
+	rich.state.maps.village.items[Vector2i(1, 0)] = {"cell": Vector2i(1, 0), "type": "bread", "n": 3, "res": 0}
+	var up := SaveFormat.upgrade(rich)
+	check(up.data.state.stats.meals_cooked == 1 and up.data.state.stats.ore_home == true, "a village with iron and bread on hand counts as having cooked and brought ore home")
+	var sim := Sim.from_state(up.data.state)
+	check(Goals.village_done(sim, 1) and Goals.village_done(sim, 3), "so those two chapter goals are done")

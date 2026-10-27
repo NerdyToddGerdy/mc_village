@@ -403,7 +403,7 @@ func _initialize() -> void:
 	check(Goals.current(sim) < 0, "every founding goal is done (%s)" % Goals.progress_text(sim))
 	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
 	await frames(2)
-	check(visible_label("Founding  ✓") and not visible_label("Slice 1"), "the goals panel folds to a Founding chip")
+	check(visible_label("The village") and visible_label("1  Paint a farm plot") and not visible_label("Slice 1"), "the goals panel moves on to the village chapter")
 	check(Goals.progress_text(sim).ends_with("meals") and "residents" in Goals.progress_text(sim), "saves are labelled with the village's facts: %s" % Goals.progress_text(sim))
 
 	# Farm plots (issue #45): P, drag over open grass, and residents plant wheat

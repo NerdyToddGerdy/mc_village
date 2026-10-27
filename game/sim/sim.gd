@@ -58,7 +58,8 @@ var rng := RandomNumberGenerator.new()  ## Seeded and saved, so a game replays e
 var seed := Tuning.SEED      ## The game's seed: the old mine's deeper levels are generated from it (issue #132).
 var residents: Array = []    ## Everyone, on every map; each has the `map` they're on.
 var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafted": false, "axe_crafted": false,
-	"houses": 0, "traveler_home": false, "division": false, "built": {}, "meadow_wool": false}
+	"houses": 0, "traveler_home": false, "division": false, "built": {}, "meadow_wool": false,
+	"meals_cooked": 0, "ore_home": false}
 var arrival_at := -1
 var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
@@ -1992,6 +1993,8 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				_store_put(st.cell, st.type, st.n, r.carry.get("dur", -1))
 			else:
 				drop_items(st.cell, st.type, st.n, r.carry.get("dur", -1))
+			if st.type == "iron_ore" and m.kind == "village":  # a village-book goal (issue #198)
+				stats.ore_home = true
 			r.carry = null
 			return true
 		"depart":  # off the edge of the map: onto the road map (#118), or the walk to or from the meadow (#137)
@@ -2377,6 +2380,8 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				if Defs.is_tool_item(o):  # Toolsmith: +20% uses per level above 1
 					uses = roundi(full_uses(o) * (1.0 + Tuning.TOOLSMITH_USES * (level(r, "toolsmith") - 1)))
 				drop_items(rcell(r), o, rec.out[o], uses)
+				if Defs.MEALS.has(o):  # a village-book goal (issue #198)
+					stats.meals_cooked = stats.get("meals_cooked", 0) + rec.out[o]
 				if Defs.ITEMS[o].get("tool", "") == "pick":
 					stats.pick_crafted = true
 				if Defs.ITEMS[o].get("tool", "") == "axe":

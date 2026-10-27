@@ -12,12 +12,33 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 29
+const VERSION := 30
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23, 23: _v23_to_v24, 24: _v24_to_v25, 25: _v25_to_v26, 26: _v26_to_v27, 27: _v27_to_v28, 28: _v28_to_v29}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23, 23: _v23_to_v24, 24: _v24_to_v25, 25: _v25_to_v26, 26: _v26_to_v27, 27: _v27_to_v28, 28: _v28_to_v29, 29: _v29_to_v30}
+
+
+## v30: the village chapter of the founding book (issue #198) counts meals cooked and iron ore brought
+## home. An old village isn't asked to do what it already has: any cook's experience or meal on hand
+## means a meal was cooked, and iron ore or ingots in the village mean ore came home.
+static func _v29_to_v30(d: Dictionary) -> Dictionary:
+	var st: Dictionary = d.state
+	var meals := 0
+	for r in st.residents:
+		if r.jobs.get("cook", {}).get("xp", 0) > 0:
+			meals = 1
+	var ore := false
+	for id in st.maps:
+		for it in st.maps[id].items.values():
+			if it.type in ["bread", "cooked_mutton", "cooked_beef", "cooked_porkchop"]:
+				meals = 1
+			if id == "village" and it.type in ["iron_ore", "iron_ingot"]:
+				ore = true
+	st.stats.meals_cooked = meals
+	st.stats.ore_home = ore
+	return d
 
 
 ## v29: land claims (issue #187). The village can grow by strips at its edges: the map's size is

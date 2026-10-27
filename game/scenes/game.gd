@@ -19,6 +19,8 @@ var build_menu_open: bool:
 var craft_menu_open := false            ## The Craft panel above the toolbar (issue #57).
 var craft_bench_i := 0                  ## Which finished bench the Craft panel shows.
 var jobs_board_open := false            ## The Village jobs board (issue #78).
+var book_open := false                  ## The village book (issue #198).
+var book_page := "goals"                ## Its open page: "goals", or a page's id from Goals.PAGES.
 var planner_open := false               ## The expedition planner above the toolbar (issue #106).
 var line_preview := false                ## The route panel shows the line's cost before it's planned (issue #121).
 var plan := {}                          ## The plan being drawn up in the planner; the sim's once confirmed.
@@ -713,6 +715,8 @@ func _key(e: InputEventKey) -> void:
 	if e.keycode == KEY_ESCAPE:
 		if tool != "" or menu_open != "":
 			set_tool("")
+		elif book_open:
+			book_open = false
 		elif jobs_board_open:
 			jobs_board_open = false
 		elif craft_menu_open:
@@ -1067,6 +1071,16 @@ func set_role(r: Dictionary, role: String) -> void:
 
 func toggle_jobs_board(open = null) -> void:
 	jobs_board_open = (not jobs_board_open) if open == null else open
+	if jobs_board_open:
+		book_open = false
+
+
+## Opens the village book on a page ("goals" or a page id), or closes it (issue #198).
+func open_book(page := "goals", open := true) -> void:
+	book_open = open
+	if open:
+		book_page = page
+		jobs_board_open = false
 
 
 func set_keep_meals(f: Dictionary, on: bool) -> void:
