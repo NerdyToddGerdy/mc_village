@@ -172,6 +172,7 @@ func _draw_map() -> void:
 	_build_occluders()
 	_update_people()
 	_update_sheep()
+	_update_creatures()
 	_build_cart()
 	_update_portal_glow()
 	_build_live()
@@ -1539,6 +1540,58 @@ func _update_sheep() -> void:
 	for id in _sheep_nodes:  # sheep on a map that isn't in view
 		if not here.has(id):
 			_sheep_nodes[id].visible = false
+
+
+# ---------------------------------------------------------------- the Nether's creatures (issue #151)
+
+static var CREATURE_COLORS := {"magma_cube": Color("#C4501E"), "zombified_piglin": Color("#C98A83"), "skeleton": Color("#DCD7C5"), "blaze": Color("#F2B531")}
+var _creature_nodes := {}   ## Creature id -> its model.
+
+
+func _make_creature(species: String) -> Node3D:
+	var n := Node3D.new()
+	var body := Node3D.new()
+	body.name = "Body"
+	n.add_child(body)
+	var col: Color = CREATURE_COLORS[species]
+	match species:
+		"magma_cube":  # a squat cube with a darker crust and a glowing seam
+			_part(body, Vector3(0.62, 0.5, 0.62), 0.0, col.darkened(0.25))
+			_part(body, Vector3(0.64, 0.12, 0.64), 0.2, Color("#F7C948"))
+			_part(body, Vector3(0.5, 0.14, 0.5), 0.5, col)
+		"zombified_piglin":  # a pink head over a green rag of a shirt
+			_part(body, Vector3(0.26, 0.3, 0.26), 0.0, Color("#4B4F5C"))
+			_part(body, Vector3(0.34, 0.44, 0.34), 0.3, Color("#6E8E58"))
+			_part(body, Vector3(0.32, 0.3, 0.32), 0.74, col)
+		"skeleton":  # thin and pale
+			_part(body, Vector3(0.18, 0.4, 0.18), 0.0, col)
+			_part(body, Vector3(0.28, 0.4, 0.2), 0.4, col.darkened(0.08))
+			_part(body, Vector3(0.26, 0.26, 0.26), 0.8, col)
+		_:  # a blaze: a head over three yellow rods that hover
+			_part(body, Vector3(0.3, 0.3, 0.3), 0.7, col)
+			for k in 3:
+				_part(body, Vector3(0.08, 0.5, 0.08), 0.15 + k * 0.05, col.darkened(0.2)).position.x = -0.18 + k * 0.18
+	add_child(n)
+	return n
+
+
+## Draws the creatures of the map in view, a little larger for a moment after a blow either way.
+func _update_creatures() -> void:
+	var here := {}
+	for x in sim.m.creatures:
+		if not x.alive:
+			continue
+		here[x.id] = true
+		if not _creature_nodes.has(x.id):
+			_creature_nodes[x.id] = _make_creature(x.species)
+		var n: Node3D = _creature_nodes[x.id]
+		n.visible = true
+		n.position = Vector3(x.pos.x + 0.5, 0, x.pos.y + 0.5)
+		(n.get_node("Body") as Node3D).scale = Vector3.ONE * (1.25 if sim.tick < x.flash else 1.0)
+	for id in _creature_nodes.keys():
+		if not here.has(id):
+			_creature_nodes[id].queue_free()
+			_creature_nodes.erase(id)
 
 
 const HOP_STRIDE := 0.5    ## Cells walked per hop.

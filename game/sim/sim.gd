@@ -2514,6 +2514,19 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				_toast("%s has healed and is back at work." % r.name, r.id)
 				return true
 			return false
+		"fight":  # blows at a creature, one every HIT_TIME, until it's down or out of reach (issue #151)
+			var cr: Dictionary = st.target
+			if not cr.alive:
+				return true
+			if manhattan(rcell(r), cr.cell) > 1:
+				return "gone"
+			r.pos = Vector2(rcell(r))
+			j.label = "Fighting the %s" % Defs.CREATURES[cr.species].name.to_lower()
+			st.t = st.get("t", 0.0) + Tuning.DT
+			if st.t >= Tuning.HIT_TIME / skill_speed(r, "guard"):
+				st.t = 0.0
+				_strike(r, cr)
+			return not cr.alive
 		"mark_seen":  # a landmark is seen; the last one surveys the landing (issue #148)
 			if not m.landmarks_seen.has(st.cell):
 				m.landmarks_seen.append(st.cell)
@@ -3145,6 +3158,8 @@ func _step_map() -> void:
 		_regrow_herds()
 	if not m.pens.is_empty():
 		_step_pens()
+	if not m.creatures.is_empty():
+		_step_creatures()
 	for r in residents:
 		if r.map != map_id:
 			continue
@@ -4527,7 +4542,7 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 			break
 	if realm_of(dest) == "nether":  # the first crossing: survey the landing (issue #148)
 		return {"dest": dest, "party": party, "target": {"item": "survey", "n": 1}, "meals": 3, "picks": 0, "sticks": 0, "wheat": 0, "list": [],
-			"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": false, "clear": false}
+			"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": false, "clear": false, "fight": false}
 	var meadow := dest == Meadow.ID  # issue #137: wool, and no pickaxes, for the meadow
 	var sticks := fence_left() if meadow else 0  # issue #139: what the pens need
 	var wheat := wheat_wanted() if meadow else 0
@@ -4545,7 +4560,7 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 ## fits), and `new` on one the village has just learned the place gives. The old single `target` is kept as the
 ## first row that's on, for what shows only one item.
 static func cargo_rows(plan: Dictionary) -> Array:
-	if plan.target.item in ["pens", "survey"]:  # tending the pens brings back whatever's hunted, with no list
+	if plan.target.item == "pens":  # tending the pens brings back whatever's hunted, with no list
 		return []
 	var rows: Array = plan.get("list", []).filter(func(r): return r.on)
 	if plan.get("clear", false):  # clearing the level wants all of it: every amount is "as much as fits" (issue #188)
@@ -6079,6 +6094,9 @@ func _site_job(r: Dictionary):
 		w.step(_goto([m.entrance], false))
 		w.step({"op": "rest_site"})
 		return w
+	var fj = _fight_job(r, c)  # a guard fights what threatens the party (issue #151)
+	if fj != null:
+		return fj
 	if m.id == Meadow.ID:
 		return _meadow_job(r, c)
 	if m.id == NetherLanding.ID:
@@ -6125,6 +6143,151 @@ func _landing_job(r: Dictionary, c: Vector2i):
 	j.step(_goto([at], true))
 	j.step({"op": "mark_seen", "cell": at})
 	return j
+
+
+# ---------------------------------------------------------------- creatures and combat (issue #151)
+
+## Puts a creature of a species on a map, at a cell. Creatures live on one map and never leave it.
+func spawn_creature(id: String, species: String, cell: Vector2i) -> Dictionary:
+	var c := {"id": _id(), "kind": "creature", "species": species, "cell": cell, "pos": Vector2(cell), "alive": true,
+		"hp": Defs.CREATURES[species].hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0}
+	maps[id].creatures.append(c)
+	rev += 1
+	return c
+
+
+## Whether a creature is a danger to the party now: one that goes for people, or one that's been hit or has struck.
+func _dangerous(x: Dictionary) -> bool:
+	return x.alive and (Defs.CREATURES[x.species].notice > 0 or x.angry or x.engaged)
+
+
+## One tick of the map's creatures: each notices the nearest resident in range (a neutral one only after it's been hit),
+## closes in, and strikes when it's close enough and its blow is ready.
+func _step_creatures() -> void:
+	var folks := here()
+	for x in m.creatures:
+		if not x.alive:
+			continue
+		x.cool = maxf(0.0, x.cool - Tuning.DT)
+		var sp: Dictionary = Defs.CREATURES[x.species]
+		var tgt = null
+		var best := 999
+		for r in folks:
+			var d := manhattan(x.cell, rcell(r))
+			if ((sp.notice > 0 and d <= sp.notice) or (x.angry and d <= 10)) and d < best:
+				best = d
+				tgt = r
+		if tgt == null:
+			continue
+		x.engaged = true  # it's after someone: a guard goes for it
+		if best <= sp.reach:
+			if x.cool <= 0.0:
+				x.cool = sp.cool
+				x.flash = tick + 6
+				_hazard(tgt, sp.hit, sp.serious, "a " + sp.name.to_lower())
+			continue
+		x.acc += Tuning.CREATURE_SPEED * Tuning.DT
+		while x.acc >= 1.0:
+			x.acc -= 1.0
+			var at := rcell(tgt)
+			var steps: Array = [Vector2i(signi(at.x - x.cell.x), 0), Vector2i(0, signi(at.y - x.cell.y))]
+			if absi(at.y - x.cell.y) > absi(at.x - x.cell.x):
+				steps.reverse()
+			for st in steps:
+				var n: Vector2i = x.cell + st
+				if st != Vector2i.ZERO and walkable(n) and not m.creatures.any(func(o): return o.alive and o.cell == n):
+					x.cell = n
+					x.pos = Vector2(n)
+					rev += 1
+					break
+
+
+## A guard's blow (issue #151): it wears the sword, lands by chance (more often the higher the Guard level) and does
+## more with a sword than without. The creature that's hit is angry; a creature brought down leaves its drops.
+func _strike(r: Dictionary, cr: Dictionary) -> void:
+	var dmg: int = Tuning.BARE_DAMAGE
+	if r.sword != null:
+		dmg = Tuning.SWORD_DAMAGE
+		_wear(r, "sword")
+	cr.flash = tick + 6
+	if not _roll(Tuning.HIT_CHANCE + 0.08 * (level(r, "guard") - 1)):
+		return
+	cr.hp -= dmg
+	cr.angry = true
+	if cr.hp > 0:
+		return
+	cr.alive = false
+	stats.creatures_beaten = stats.get("creatures_beaten", 0) + 1
+	var sp: Dictionary = Defs.CREATURES[cr.species]
+	for k in sp.drops:
+		drop_items(cr.cell, k, sp.drops[k])
+		if not m.drops_known.has(k):
+			m.drops_known.append(k)
+	gain_xp(r, "guard")
+	rev += 1
+	_toast("%s brought down a %s." % [r.name, sp.name.to_lower()], r.id)
+
+
+## What a party member does about creatures (issue #151). A guard (or Ada) goes for what threatens the party, or, when the
+## party doesn't avoid combat, anything near; anyone else moves away from what's dangerous and goes back to work.
+func _fight_job(r: Dictionary, c: Vector2i):
+	if m.creatures.is_empty() or r.get("hurt", 0) >= 2:
+		return null
+	var guard: bool = r.role == "guard" or r.role == "all"
+	var party := here().filter(func(o): return not expedition_of(o).is_empty())
+	var foe: Dictionary = {}
+	var best := 999
+	for x in m.creatures:
+		if not x.alive or x.get("unreach_until", 0) > tick:
+			continue
+		var d := manhattan(x.cell, c)
+		if guard:
+			var near_us: bool = party.any(func(o): return manhattan(x.cell, rcell(o)) <= Tuning.SELF_DEFENSE_RANGE)
+			var wanted: bool = (_dangerous(x) and (x.engaged or near_us)) or (expedition.get("fight", false) and d <= Tuning.ENGAGE_RANGE) or (near_us and _dangerous(x))
+			if wanted and d < best:
+				best = d
+				foe = x
+		elif _dangerous(x) and d <= Tuning.AVOID_RANGE and d < best:
+			best = d
+			foe = x
+	if foe.is_empty():
+		return null
+	var name: String = Defs.CREATURES[foe.species].name.to_lower()
+	if guard:
+		var j := Job.new("fight", "Going for the %s" % name, "the " + name)
+		j.target = foe
+		j.step({"op": "chase", "target": foe, "planned_for": null})
+		j.step({"op": "fight", "target": foe})
+		return j
+	var away = _clear_of(c, foe.cell)
+	if away == null or away == c:
+		return null
+	var f := Job.new("flee", "Moving away from the %s" % name, "away")
+	f.step(_goto([away], true))
+	return f
+
+
+## A cell a few steps off that's further from `from`, or null.
+func _clear_of(c: Vector2i, from: Vector2i):
+	var seen := {c: true}
+	var queue: Array = [c]
+	var qi := 0
+	var best = null
+	var best_d := manhattan(c, from)
+	while qi < queue.size():
+		var cur: Vector2i = queue[qi]
+		qi += 1
+		if manhattan(cur, from) > best_d:
+			best = cur
+			best_d = manhattan(cur, from)
+		if manhattan(cur, c) >= 6:
+			continue
+		for d in DIRS:
+			var n: Vector2i = cur + d
+			if in_bounds(n) and not seen.has(n) and walkable(n) and not m.heat().has(n):
+				seen[n] = true
+				queue.append(n)
+	return best
 
 
 ## What a party member does at the meadow (issues #137, #139): pack what the objective still needs,
@@ -6441,6 +6604,8 @@ func _stuck_site() -> void:
 	if party.is_empty():
 		return
 	var at := Vector2(m.entrance) + Vector2(0.5, 0.5)
+	if party.any(func(r): return r.job != null and r.job.kind in ["fight", "flee"]):  # issue #151
+		_add_stuck(party_name(slot), "fighting", at, 1.6, "", 0, false, true)
 	var to_mine := m.boulders.any(func(b): return b.alive and b.des)
 	if to_mine and party.all(func(r): return r.get("hurt", 0) > 0):
 		_add_stuck(m.name, "Everyone is hurt, so nobody can mine. Call them home", at, 1.6, "", 0)
@@ -6998,7 +7163,8 @@ func _meadow_report() -> Dictionary:
 func _landing_report() -> Dictionary:
 	var mp: SimMap = maps[NetherLanding.ID]
 	return {"name": mp.name, "told": NetherLanding.TOLD, "visited": mp.visited, "travel": 0.0, "level": 0, "pattern": "",
-		"resources": [], "hazards": NetherLanding.HAZARDS.duplicate() if mp.visited else [], "access": NetherLanding.ACCESS.duplicate() if mp.visited else [],
+		"resources": mp.drops_known.map(func(k): return {"item": k, "name": Defs.ITEMS[k].label, "reserve": -1, "known": true}),
+		"hazards": NetherLanding.HAZARDS.duplicate() if mp.visited else [], "access": NetherLanding.ACCESS.duplicate() if mp.visited else [],
 		"finds": [], "levels": [], "door": "", "landmarks": mp.landmarks_seen.size(), "landmark_total": mp.landmarks.size()}
 
 

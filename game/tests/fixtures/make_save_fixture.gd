@@ -287,6 +287,10 @@ func _initialize() -> void:
 		tomas.sword = {"type": "iron_sword", "tier": 3, "dur": 30}
 		tomas.jobs.guard.xp = 10
 		sim.residents[2].armor = {"chest": {"type": "iron_chestplate", "dur": 12}}
+	if SaveFormat.VERSION >= 42:  # a hurt magma cube on the Nether landing, and the cream it has dropped before (#151)
+		var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Vector2i(9, 9))
+		cube.hp = 5
+		sim.get_map(NetherLanding.ID).drops_known = ["magma_cream"]
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

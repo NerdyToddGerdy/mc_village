@@ -37,6 +37,10 @@ const ITEMS := {
 	"obsidian": {"one": "obsidian", "many": "obsidian", "label": "Obsidian", "group": "ores"},
 	"flint": {"one": "flint", "many": "flint", "label": "Flint", "group": "ores"},
 	"flint_and_steel": {"one": "flint and steel", "many": "flint and steels", "uses": Tuning.FLINT_STEEL_USES, "group": "tools"},
+	# What the Nether's creatures leave (issue #151), carried home as cargo.
+	"magma_cream": {"one": "magma cream", "many": "magma cream", "label": "Magma cream", "group": "ores"},
+	"bone": {"one": "bone", "many": "bones", "label": "Bones", "group": "ores"},
+	"blaze_rod": {"one": "blaze rod", "many": "blaze rods", "label": "Blaze rods", "group": "ores"},
 	# The line to the mine (Slice 4, issue #120). A minecart is one big item: one to a cell, hauled like a tool.
 	"rail": {"one": "rail", "many": "rails", "label": "Rails", "group": "building"},
 	"minecart": {"one": "minecart", "many": "minecarts", "label": "Minecarts", "single": true, "group": "building"},
@@ -82,6 +86,16 @@ const SPECIES := {
 	"sheep": {"name": "Sheep", "one": "sheep", "many": "sheep", "young": "lamb", "youngs": "lambs"},
 	"cow": {"name": "Cow", "one": "cow", "many": "cows", "young": "calf", "youngs": "calves"},
 	"pig": {"name": "Pig", "one": "pig", "many": "pigs", "young": "piglet", "youngs": "piglets"},
+}
+
+## The Nether's creatures (issue #151): health, how a blow from them lands (`hit` the chance, `serious` the chance a hit
+## knocks someone down), the seconds between blows, how close they strike from (`reach`: 1 is next to them), how far they
+## notice someone (`notice`, 0 for a creature that only fights back), and what they leave.
+const CREATURES := {
+	"magma_cube": {"name": "Magma cube", "hp": 8, "hit": 0.4, "serious": 0.25, "cool": 1.6, "reach": 1, "notice": 5, "drops": {"magma_cream": 1}},
+	"zombified_piglin": {"name": "Zombified piglin", "hp": 10, "hit": 0.5, "serious": 0.3, "cool": 1.4, "reach": 1, "notice": 0, "drops": {"gold_ingot": 1}},
+	"skeleton": {"name": "Skeleton", "hp": 6, "hit": 0.3, "serious": 0.2, "cool": 2.0, "reach": 4, "notice": 6, "drops": {"bone": 1}},
+	"blaze": {"name": "Blaze", "hp": 10, "hit": 0.3, "serious": 0.3, "cool": 2.2, "reach": 5, "notice": 7, "drops": {"blaze_rod": 1}},
 }
 
 ## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.

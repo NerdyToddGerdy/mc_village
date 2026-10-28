@@ -1680,6 +1680,20 @@ func _screenshot_scene() -> void:
 		sim.rev += 1
 		switch_map(NetherLanding.ID)
 		_cam.size = 14.0
+	if "--creatures" in OS.get_cmdline_user_args():  # one of each creature on the landing, and a guard facing them (issue #151)
+		var landing := sim.get_map(NetherLanding.ID)
+		landing.known = true
+		landing.visited = true
+		var at := landing.entrance + Vector2i(5, 0)
+		var k := 0
+		for sp in Defs.CREATURES:
+			var cr := sim.spawn_creature(NetherLanding.ID, sp, at + Vector2i(k * 2, k % 2 * 2))
+			cr.engaged = false
+			k += 1
+		sim.move_to_map(sim.residents[0], NetherLanding.ID, landing.entrance + Vector2i(2, 0))
+		sim.rev += 1
+		switch_map(NetherLanding.ID)
+		_cam.size = 9.0
 	if "--select-bench" in OS.get_cmdline_user_args():
 		_select(bench)
 	if "--craft" in OS.get_cmdline_user_args():

@@ -116,7 +116,28 @@ Hazards go through the same system as Slice 3's (`_hazard`, `injure`): an injury
 - **Planner:** a guard going with no sword to hand shows "No sword for Bram". It warns; it doesn't stop the plan. Guards carry their sword and armor with them; spare swords in the packs are not built yet.
 - **Saving:** v41. Every resident has a `sword` slot and Guard at no experience.
 
-## 9. Tuning table (provisional)
+## 9. Visible auto-combat (#151)
+
+Creatures live on a Nether map (`SimMap.creatures`, each with health) and never leave it: a creature is data of one map, and only residents cross the portal. There's no village combat. Fights are decided by the sim's seeded random numbers, so a game replays the same.
+
+| Creature | Health | Where | Behaviour | Drops |
+|---|---|---|---|---|
+| Magma cube | 8 | Routes | Hostile: notices someone within 5 cells, closes in, strikes next to them. | Magma cream |
+| Zombified piglin | 10 | Routes | Neutral: only fights back once it's been hit. | A gold ingot |
+| Skeleton | 6 | Fortress | Hostile, ranged (strikes from 4 cells). | A bone |
+| Blaze | 10 | Fortress | Hostile, ranged (strikes from 5 cells), notices from 7. | A blaze rod |
+
+The landing is a hub with none; the route and fortress maps (#153, #157) place them.
+
+- **A creature's blow** is a hazard roll (`_hazard`): armor wears and turns some aside, an injury is slower walking and work, and a **knock-down** is a serious injury, which stops the game for the retreat as any serious injury does. There's no death. Ada is never seriously hurt.
+- **Guards** (and Ada) go for a creature that's after the party, wherever it is; or one within `SELF_DEFENSE_RANGE` of anyone. A blow lands by chance (`HIT_CHANCE`, 8% more a level), takes `HIT_TIME` (quicker the higher the level), does `SWORD_DAMAGE` with a sword and `BARE_DAMAGE` without, and wears the sword. A creature brought down gives the guard a point of Guard practice.
+- **Everyone else** moves away from a dangerous creature within `AVOID_RANGE`, and goes back to work.
+- **Return policy:** a plan's `fight` is false by default: the party **avoids combat except in self-defense**, so guards don't go looking for a neutral piglin. With `fight` set, guards go after any creature within `ENGAGE_RANGE`.
+- **Drops** lie where the creature fell, and join the level's cargo list once seen (the landing's report lists them), so the party packs them like any find.
+- **Seen:** each creature has a model; it swells for a moment on a blow either way. The stuck list says "Nether party: fighting" while a guard fights or someone moves away.
+- **Saving:** v42. A map keeps its `creatures` and `drops_known`; an older trip avoids combat.
+
+## 10. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -144,3 +165,8 @@ Each build issue adds its rows.
 | `BARE_DAMAGE` / `SWORD_DAMAGE` | 1 / 4 | A blow without and with a sword. |
 | `HIT_TIME` | 1.2 s | Between a guard's blows at Guard level 1. |
 | `HIT_CHANCE` | 60% | A blow lands at Guard level 1, 8% more a level. |
+| `CREATURE_SPEED` | 1.4 cells/s | How fast a creature closes in. |
+| `AVOID_RANGE` | 3 | How close a hostile creature gets before a non-guard moves away. |
+| `SELF_DEFENSE_RANGE` | 2 | How close a creature must be for a guard to fight it when the party avoids combat. |
+| `ENGAGE_RANGE` | 8 | How far a guard goes after a creature when the party doesn't avoid combat. |
+| Creature table | see §9 | Health, hit chance, serious chance, blow time, reach, notice range and drops, in `Defs.CREATURES`. |

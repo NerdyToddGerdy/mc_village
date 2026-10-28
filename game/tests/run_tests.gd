@@ -68,6 +68,7 @@ func _init() -> void:
 		"test_the_guard_and_iron_gear",
 		"test_the_nether_landing",
 		"test_nether_hazards",
+		"test_auto_combat",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
 		"test_expedition_slots",
@@ -4804,3 +4805,130 @@ func test_the_guard_and_iron_gear() -> void:
 	var f41 := SaveFormat.read("res://tests/fixtures/save_v41.save")
 	var s41 := Sim.from_state(f41.data.state)
 	check(s41.residents[1].role == "guard" and s41.residents[1].sword.type == "iron_sword" and s41.residents[2].armor.chest.type == "iron_chestplate", "the v41 fixture loads its guard, sword and chestplate")
+
+
+## A party at the landing, Tomas a guard with an iron sword and Mira an ordinary resident (issue #151).
+func fight_world() -> Dictionary:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var tomas: Dictionary = w.tomas
+	var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], Sim.rcell(w.ada) + Vector2i(-1, 0))
+	sim.set_role(tomas, "guard")
+	tomas.sword = {"type": "iron_sword", "tier": 3, "dur": Sim.full_uses("iron_sword")}
+	var landing: SimMap = sim.get_map(NetherLanding.ID)
+	landing.known = true
+	landing.visited = true
+	landing.fire.clear()  # these fights are about creatures
+	landing.landmarks = []  # and nobody surveys, so the party stays
+	landing._heat_ready = false
+	landing._heat.clear()
+	sim.expeditions.nether = {"state": "out", "leg": "out", "dest": NetherLanding.ID, "party": [tomas.id, mira.id], "board": w.portal.id,
+		"target": {"item": "survey", "n": 1}, "list": [], "meals": 3, "picks": 0, "policy": {"target": true, "full": true, "low": true}, "spend_return": false,
+		"provisions": {"bread": 3}, "cargo": {}, "supplies": {}, "tools": [], "packed": {}, "cart": false, "cart_cap": false, "hurt": {}, "broken": 0, "clear": false, "fight": false, "reached": NetherLanding.ID}
+	for r in [tomas, mira]:
+		sim.move_to_map(r, NetherLanding.ID, landing.entrance + Vector2i(2 + (0 if r == tomas else 1), 0))
+	w.mira = mira
+	w.landing = landing
+	return w
+
+
+## Fights on a Nether map (issue #151): creatures notice and strike, guards fight, others move away, nobody dies.
+func test_auto_combat() -> void:
+	var w := fight_world()
+	var sim: Sim = w.sim
+	var tomas: Dictionary = w.tomas
+	var mira: Dictionary = w.mira
+	var landing: SimMap = w.landing
+	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "blaze"], "four creatures")
+	# A guard defeats a magma cube, which leaves its cream.
+	var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Sim.rcell(tomas) + Vector2i(5, 0))
+	var xp: int = tomas.jobs.guard.xp
+	var fought := false
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		fought = fought or (tomas.job != null and tomas.job.kind == "fight")
+		if not cube.alive:
+			break
+	check(fought and not cube.alive, "a guard goes for the magma cube and brings it down")
+	check(sim.on_map(NetherLanding.ID, func(): return sim.items.values().any(func(it): return it.type == "magma_cream")) and landing.drops_known == ["magma_cream"], "it leaves magma cream, which the landing now lists")
+	check(tomas.jobs.guard.xp == xp + 1 and tomas.sword.dur < Sim.full_uses("iron_sword"), "the guard gains practice and the sword wears")
+	check(sim.plan_targets(NetherLanding.ID).any(func(x): return x.item == "magma_cream"), "and magma cream is a cargo target now")
+	# Nobody died: the guard may be hurt, never gone.
+	check(sim.resident(tomas.id).name == "Tomas" and sim.resident(mira.id).name == "Mira", "nobody is lost")
+	# Someone who isn't a guard moves away from a hostile creature.
+	var cube2 := sim.spawn_creature(NetherLanding.ID, "magma_cube", Sim.rcell(mira) + Vector2i(3, 0))
+	tomas.role = "none"  # nobody here can fight it
+	tomas.sword = null
+	var fled := false
+	var said := ""
+	for i in 12 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		if mira.job != null and mira.job.kind == "flee" and not fled:
+			fled = true
+			sim.compute_stuck()
+			said = stuck_text(sim)
+	check(fled, "a resident who isn't a guard moves away from the creature")
+	check(said.contains("Nether party: fighting"), "the stuck list says the party is fighting: " + said)
+	cube2.alive = false
+	# A neutral zombified piglin leaves them alone unless it's hit.
+	tomas.role = "guard"
+	tomas.sword = {"type": "iron_sword", "tier": 3, "dur": 30}
+	var pig := sim.spawn_creature(NetherLanding.ID, "zombified_piglin", Sim.rcell(tomas) + Vector2i(3, 0))
+	mira.hurt = 0
+	tomas.hurt = 0
+	for i in 20 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+	check(pig.alive and not pig.angry and mira.hurt == 0 and tomas.hurt == 0, "a zombified piglin that isn't hit leaves them alone")
+	sim.expeditions.nether.fight = true  # now the party doesn't avoid combat
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		if not pig.alive:
+			break
+	check(not pig.alive, "when the party doesn't avoid combat, the guard goes after it (and it fights back)")
+	# A knocked-down resident is seriously hurt, the game stops for the retreat, and nobody dies.
+	sim.pending.clear()
+	mira.hurt = 0
+	sim.on_slot("nether", func(): sim.on_map(NetherLanding.ID, func(): sim.injure(mira, 2, "a magma cube")))
+	check(mira.hurt == 2 and not sim.pending.is_empty() and sim.pending[0].kind == "injury" and sim.pending[0].slot == "nether", "a knocked-down resident is seriously hurt and the game stops for the retreat")
+	sim.choose("retreat")
+	check(sim.expeditions.nether.leg == "home" and sim.resident(mira.id).hurt == 2, "the retreat policy applies; she's hurt, not dead")
+	# The PC is never seriously hurt.
+	var ada: Dictionary = w.ada
+	sim.injure(ada, 2, "a magma cube")
+	check(ada.hurt == 1, "Ada is never seriously hurt")
+	# Armor lowers the chance of being hit.
+	var plain := 0
+	var armored := 0
+	for i in 800:
+		var a := {"id": 7000 + i, "name": "A", "armor": {}, "hurt": 0, "job": null, "heal": 0.0}
+		var b := {"id": 8000 + i, "name": "B", "armor": {"chest": {"type": "iron_chestplate", "dur": 99}}, "hurt": 0, "job": null, "heal": 0.0}
+		sim._hazard(a, Defs.CREATURES.magma_cube.hit, 0.0, "a magma cube")
+		sim._hazard(b, Defs.CREATURES.magma_cube.hit, 0.0, "a magma cube")
+		plain += 1 if a.hurt > 0 else 0
+		armored += 1 if b.hurt > 0 else 0
+	check(armored < plain - 40, "armor lowers the injuries from creatures (%d bare, %d armored of 800)" % [plain, armored])
+	# Creatures stay on their map and are saved with their health.
+	check(sim.maps.village.creatures.is_empty() and sim.maps[OldMine.ID].creatures.is_empty(), "no creature ever turns up in the village or the mine")
+	var live := sim.spawn_creature(NetherLanding.ID, "blaze", landing.entrance + Vector2i(15, 3))
+	live.hp = 4
+	for i in 400:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+	check(landing.in_bounds(live.cell) and not landing.rock.has(live.cell), "a creature stays on its map, on open ground")
+	var back := Sim.from_state(sim.save_state())
+	var saved: Array = back.get_map(NetherLanding.ID).creatures.filter(func(x): return x.id == live.id)
+	check(saved.size() == 1 and saved[0].hp == live.hp and saved[0].species == "blaze", "creatures are saved with their health")
+	var f42 := SaveFormat.read("res://tests/fixtures/save_v42.save")
+	var s42 := Sim.from_state(f42.data.state)
+	check(s42.get_map(NetherLanding.ID).creatures.size() == 1 and s42.get_map(NetherLanding.ID).creatures[0].hp == 5, "the v42 fixture loads its hurt magma cube")
+	var f41 := SaveFormat.read("res://tests/fixtures/save_v41.save")
+	check(Sim.from_state(f41.data.state).get_map(NetherLanding.ID).creatures.is_empty(), "an older save has no creatures")
