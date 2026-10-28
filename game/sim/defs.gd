@@ -44,6 +44,8 @@ const ITEMS := {
 	"wood_pick": {"one": "wooden pickaxe", "many": "wooden pickaxes", "tool": "pick", "tier": 1, "group": "tools"},
 	"stone_axe": {"one": "stone axe", "many": "stone axes", "tool": "axe", "tier": 2, "group": "tools"},
 	"stone_pick": {"one": "stone pickaxe", "many": "stone pickaxes", "tool": "pick", "tier": 2, "group": "tools"},
+	"iron_sword": {"one": "iron sword", "many": "iron swords", "tool": "sword", "tier": 3, "uses": Tuning.SWORD_USES, "group": "tools"},
+	"iron_chestplate": {"one": "iron chestplate", "many": "iron chestplates", "label": "Iron chestplates", "armor": "chest", "tier": 3, "uses": Tuning.IRON_ARMOR_USES, "guard": Tuning.IRON_GUARD, "group": "tools"},
 	"iron_axe": {"one": "iron axe", "many": "iron axes", "tool": "axe", "tier": 3, "group": "tools"},
 	"iron_pick": {"one": "iron pickaxe", "many": "iron pickaxes", "tool": "pick", "tier": 3, "group": "tools"},
 	"diamond_axe": {"one": "diamond axe", "many": "diamond axes", "tool": "axe", "tier": 4, "group": "tools"},
@@ -102,6 +104,9 @@ const RECIPES := [
 	{"id": "iron_pick", "name": "Iron pickaxe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_pick": 1}, "pattern": ["III", " S ", " S "]},
 	# Diamond tools (issue #186): the best tier, from diamonds found on the deep levels.
 	{"id": "flint_and_steel", "name": "Flint and steel", "inp": {"flint": 1, "iron_ingot": 1}, "out": {"flint_and_steel": 1}, "pattern": ["F  ", " I ", "   "]},
+	# The Guard's gear (issue #150).
+	{"id": "iron_sword", "name": "Iron sword", "inp": {"iron_ingot": 2, "stick": 1}, "out": {"iron_sword": 1}, "pattern": [" I ", " I ", " S "]},
+	{"id": "iron_chestplate", "name": "Iron chestplate", "inp": {"iron_ingot": 8}, "out": {"iron_chestplate": 1}, "pattern": ["I I", "III", "III"]},
 	{"id": "diamond_axe", "name": "Diamond axe", "inp": {"diamond": 3, "stick": 2}, "out": {"diamond_axe": 1}, "pattern": ["DD ", "DS ", " S "]},
 	{"id": "diamond_pick", "name": "Diamond pickaxe", "inp": {"diamond": 3, "stick": 2}, "out": {"diamond_pick": 1}, "pattern": ["DDD", " S ", " S "]},
 	# The line to the mine (issue #120): Craft work, not Toolsmith, since nobody carries them as tools.
@@ -129,12 +134,14 @@ const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
 ## Lumberjack and Stonemason replaced Mine in issue #177.
-const JOBS := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
+const JOBS := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt", "guard"]
+## The jobs a traveler can arrive skilled in: the Guard is trained in the village, not arrived with (issue #150).
+const SKILL_POOL := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
 const JOB_NAMES := {"lumber": "Lumberjack", "mason": "Stonemason", "haul": "Haul", "build": "Build", "craft": "Craft", "toolsmith": "Toolsmith",
-	"farm": "Farm", "cook": "Cook", "hunt": "Hunt"}
+	"farm": "Farm", "cook": "Cook", "hunt": "Hunt", "guard": "Guard"}
 ## "Tomas is a skilled farmer."
 const JOB_SKILLED := {"lumber": "lumberjack", "mason": "stonemason", "haul": "hauler", "build": "builder", "craft": "crafter", "toolsmith": "toolsmith",
-	"farm": "farmer", "cook": "cook", "hunt": "hunter"}
+	"farm": "farmer", "cook": "cook", "hunt": "hunter", "guard": "guard"}
 
 ## Each job's workstation (issue #184): a resident works their job only once they've claimed a finished
 ## one, one resident to each. Haul needs none.

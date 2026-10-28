@@ -107,7 +107,16 @@ Hazards go through the same system as Slice 3's (`_hazard`, `injure`): an injury
 - **Site reports** list a map's known hazards once someone has been there: for the landing, lava, fire and ledges; for a deep mine level with lava pools, the lava.
 - **Saving:** `fire` is a map field, saved with the map (the v40 format).
 
-## 8. Tuning table (provisional)
+## 8. The Guard, iron swords and iron armor (#150)
+
+- **Guard job:** a tenth job, `guard`, levelled like the others (experience from practice, five levels), with the Jobs board's on/off and priority. It needs **no workstation**. A guard hauls in the village; the work of the job is fighting on expeditions (#151). Ada does everything, so she fights too, though she's never seriously hurt. A higher level means quicker, more accurate blows (`HIT_TIME`, `HIT_CHANCE`). No traveler arrives skilled as a Guard (`Defs.SKILL_POOL`): they're made from the Jobs board.
+- **Iron sword:** a tool of kind `sword` (tier 3, `SWORD_USES`): 2 iron ingots and a stick at the bench. A guard with none takes one lying about and keeps it, like a tool. A blow with it does `SWORD_DAMAGE` against `BARE_DAMAGE`. It wears with every blow.
+- **Iron chestplate:** the only piece in Slice 5: 8 iron ingots at the bench, worn in the chest slot. It turns aside `IRON_GUARD` of injuries (a leather tunic: 15%) and wears out after `IRON_ARMOR_USES` blows taken. Armor already lowers hazard injuries; fights use the same rule (#151).
+- **Toolsmith:** with a toolsmith, a guard's sword gets a spare when iron and a stick are on hand, like a spare pickaxe.
+- **Planner:** a guard going with no sword to hand shows "No sword for Bram". It warns; it doesn't stop the plan. Guards carry their sword and armor with them; spare swords in the packs are not built yet.
+- **Saving:** v41. Every resident has a `sword` slot and Guard at no experience.
+
+## 9. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -129,3 +138,9 @@ Each build issue adds its rows.
 | `FIRE_CHANCE` | 40% | A burn each second someone is alight. |
 | `FIRE_SERIOUS` | 20% | A fire burn is serious. |
 | `HEAT_STEP_COST` | 250 | Path cost of a step beside lava or on fire (open ground is 100). |
+| `SWORD_USES` | 40 | Blows an iron sword lands before it breaks. |
+| `IRON_ARMOR_USES` | 20 | Blows an iron chestplate takes before it wears out. |
+| `IRON_GUARD` | 35% | Share of injuries an iron chestplate turns aside. |
+| `BARE_DAMAGE` / `SWORD_DAMAGE` | 1 / 4 | A blow without and with a sword. |
+| `HIT_TIME` | 1.2 s | Between a guard's blows at Guard level 1. |
+| `HIT_CHANCE` | 60% | A blow lands at Guard level 1, 8% more a level. |

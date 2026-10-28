@@ -281,6 +281,12 @@ func _initialize() -> void:
 				break
 		sim.stats.obsidian_home = true
 		sim.events.clear()
+	if SaveFormat.VERSION >= 41:  # Tomas the guard, with an iron sword in hand, some practice, and Mira in an iron chestplate (#150)
+		var tomas: Dictionary = sim.residents[1]
+		tomas.role = "guard"
+		tomas.sword = {"type": "iron_sword", "tier": 3, "dur": 30}
+		tomas.jobs.guard.xp = 10
+		sim.residents[2].armor = {"chest": {"type": "iron_chestplate", "dur": 12}}
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

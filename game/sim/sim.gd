@@ -278,9 +278,9 @@ func _id() -> int:
 
 func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 	var r := {"id": _id(), "kind": "res", "name": rname, "shirt": shirt, "pos": Vector2(cell),
-		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null,
-		"broken": {"axe": false, "pick": false}, "progress": -1.0, "note": null, "arriving": false,
-		"orders": [], "hunger": 100.0, "role": "all" if residents.is_empty() else "none", "jobs": default_jobs(), "kept": {"axe": false, "pick": false},
+		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null, "sword": null,
+		"broken": {"axe": false, "pick": false, "sword": false}, "progress": -1.0, "note": null, "arriving": false,
+		"orders": [], "hunger": 100.0, "role": "all" if residents.is_empty() else "none", "jobs": default_jobs(), "kept": {"axe": false, "pick": false, "sword": false},
 		"away": false, "back_at": 0, "trip": "", "map": map_id, "hurt": 0, "heal": 0.0, "armor": {}}
 	residents.append(r)
 	return r
@@ -299,6 +299,8 @@ static func default_jobs() -> Dictionary:
 func works(r: Dictionary, job: String) -> bool:
 	if r.role == "all" or job == "haul":
 		return true
+	if job == "guard":  # needs no workstation: guards fight on expeditions (issue #150)
+		return r.role == "guard"
 	return r.role == job and not claimed(r).is_empty()
 
 
@@ -656,10 +658,10 @@ static func nearest(list: Array, c: Vector2i):
 
 ## Uses a new tool of this type has.
 static func full_uses(type: String) -> int:
+	if Defs.ITEMS[type].has("uses"):  # a flint and steel (issue #146), an iron sword or chestplate (#150)
+		return Defs.ITEMS[type].uses
 	if Defs.is_armor(type):
 		return Tuning.ARMOR_USES
-	if Defs.ITEMS[type].has("uses"):  # a flint and steel (issue #146)
-		return Defs.ITEMS[type].uses
 	return Tuning.DURABILITY[Defs.ITEMS[type].tier]
 
 
@@ -1129,6 +1131,21 @@ func has_toolsmith() -> bool:
 
 
 ## Whether a "(toolsmith)" entry for this tool kind is queued at any bench.
+## Whether a guard needs a sword and has none to hand, for the planner (issue #150).
+func needs_sword(r: Dictionary) -> bool:
+	return r.role == "guard" and r.sword == null
+
+
+## Warnings about a plan that don't stop it (issue #150): "No sword for Bram".
+func plan_warnings(plan: Dictionary) -> Array:
+	var out: Array = []
+	for id in plan.party:
+		var r := resident(id)
+		if not r.is_empty() and needs_sword(r) and tool_items("sword", 0).is_empty():
+			out.append("No sword for %s" % r.name)
+	return out
+
+
 func _spare_queued(kind: String) -> bool:
 	for b in m.sites:
 		if b.done and b.tpl == "bench":
@@ -1152,6 +1169,11 @@ func keep_tools_stocked() -> void:
 			break
 	if bench == null:
 		return
+	if residents.any(func(r): return r.role == "guard" and (r.sword != null or r.broken.sword)) and tool_items("sword", 0).is_empty() and not bench.queue.has("iron_sword") and free_count("iron_ingot") >= Defs.recipe("iron_sword").inp.iron_ingot and free_count("stick") >= 1:
+		bench.queue.append("iron_sword")  # a spare sword, like a spare tool (issue #150)
+		bench.autoq.append("toolsmith")
+		if auto_craft:
+			expand_queues()
 	for kind in ["axe", "pick"]:
 		var used := residents.any(func(r): return r[kind] != null or r.broken[kind])
 		if not used or not tool_items(kind, 0).is_empty() or _spare_queued(kind):
@@ -2827,6 +2849,10 @@ func _claim(r: Dictionary) -> void:
 	if dj != null:
 		r.job = dj
 		return
+	var aj = _arm_job(r, c)  # a guard takes a sword (issue #150)
+	if aj != null:
+		r.job = aj
+		return
 	if auto_craft:
 		expand_queues()
 	keep_meals_stocked()
@@ -3725,7 +3751,7 @@ func _arrive() -> void:
 	var n := residents.size() - 1
 	var who: Array = TRAVELERS[n % TRAVELERS.size()]
 	var t := add_resident(who[0] if n < TRAVELERS.size() else "%s %d" % [who[0], n / TRAVELERS.size() + 1], who[1], spawn)
-	var skill: String = Defs.JOBS[rng.randi_range(0, Defs.JOBS.size() - 1)]
+	var skill: String = Defs.SKILL_POOL[rng.randi_range(0, Defs.SKILL_POOL.size() - 1)]
 	if n == 0:
 		skill = "lumber"  # the first traveler fells trees from the chopping block the founding ends on (issue #182)
 	t.jobs[skill].xp = Tuning.SKILL_LEVELS[Tuning.ARRIVAL_LEVEL - 2]
@@ -6548,8 +6574,9 @@ static func armor_worn(r: Dictionary) -> Dictionary:
 ## The share of hazard injuries someone's armor turns aside (issue #140).
 static func protection(r: Dictionary) -> float:
 	var g := 0.0
-	for slot in armor_worn(r):
-		g += Tuning.ARMOR_GUARD[slot]
+	var worn := armor_worn(r)
+	for slot in worn:
+		g += Defs.ITEMS[worn[slot].type].get("guard", Tuning.ARMOR_GUARD[slot])  # iron turns more aside (issue #150)
 	return g
 
 
@@ -6563,6 +6590,23 @@ func _wear_armor(r: Dictionary) -> void:
 			stats.armor_worn_out = stats.get("armor_worn_out", 0) + 1
 			_toast("%s's %s wore out." % [r.name, Defs.ITEMS[a.type].one], r.id)
 	rev += 1
+
+
+## A guard without a sword takes one lying about, and keeps it (issue #150).
+func _arm_job(r: Dictionary, c: Vector2i):
+	if map_id != "village" or r.role != "guard" or r.sword != null or r.get("hurt", 0) > 0:
+		return null
+	var swords := tool_items("sword", 0)
+	if swords.is_empty():
+		return null
+	var st: Dictionary = nearest(swords, c)
+	var it: Dictionary = Defs.ITEMS[st.type]
+	var j := Job.new("equip", "Going to get the %s" % it.one, "the %s" % it.one)
+	st.res += 1
+	var hd := j.hold({"t": "stack", "stack": st, "n": 1})
+	j.step(_goto(reach(st.cell), false))
+	j.step({"op": "pickup_tool", "stack": st, "hold": hd, "keep": true})
+	return j
 
 
 ## Putting on armor lying about (issue #140): the nearest piece for a slot they haven't filled.

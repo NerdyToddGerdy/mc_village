@@ -65,6 +65,7 @@ func _init() -> void:
 		"test_slice2_fixture_loads",
 		"test_deep_mine_materials",
 		"test_the_portal",
+		"test_the_guard_and_iron_gear",
 		"test_the_nether_landing",
 		"test_nether_hazards",
 		"test_nether_and_overworld_together",
@@ -4736,3 +4737,70 @@ func test_nether_hazards() -> void:
 	var hazards: Array = sim.site_report(NetherLanding.ID).hazards
 	check(hazards.any(func(h): return h.contains("Lava")) and hazards.any(func(h): return h.contains("fire")) and hazards.any(func(h): return h.contains("Ledges")), "the site report lists lava, fire and ledges (%s)" % [hazards])
 	check(Sim.from_state(sim.save_state()).get_map(NetherLanding.ID).fire == landing.fire, "the fire is saved")
+
+
+## The Guard job, iron swords and the iron chestplate (issue #150).
+func test_the_guard_and_iron_gear() -> void:
+	check(Defs.recipe("iron_sword").inp == {"iron_ingot": 2, "stick": 1} and Defs.recipe("iron_chestplate").inp == {"iron_ingot": 8}, "the recipes: a sword is 2 ingots and a stick, a chestplate 8 ingots")
+	check(Defs.JOBS.has("guard") and Defs.JOB_NAMES.guard == "Guard" and not Defs.JOB_STATIONS.has("guard") and not Defs.SKILL_POOL.has("guard"), "Guard is a job with no workstation, and no traveler arrives as one")
+	check(Sim.full_uses("iron_sword") == Tuning.SWORD_USES and Sim.full_uses("iron_chestplate") == Tuning.IRON_ARMOR_USES and Defs.stack_cap("iron_sword") == 1, "they wear: a sword's uses, a chestplate's")
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var bram := sim.add_resident("Bram", "7A5C8F", Sim.rcell(ada) + Vector2i(1, 0))
+	check(bram.jobs.guard.xp == 0 and Sim.level(bram, "guard") == 1 and bram.sword == null, "a new resident has Guard at its start and no sword")
+	sim.set_role(bram, "guard")
+	check(sim.works(bram, "guard") and not sim.works(bram, "lumber") and sim.works(bram, "haul") and sim.works(ada, "guard"), "a guard works the Guard job and hauls; Ada does everything")
+	# A guard takes a sword that lies about, and keeps it.
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "iron_sword", 1)
+	run(sim, 30)
+	check(bram.sword != null and bram.sword.type == "iron_sword" and bram.sword.dur == Sim.full_uses("iron_sword") and bram.kept.sword, "a guard with no sword picks one up and keeps it")
+	ada.sword = null
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 3), "iron_sword", 1)
+	run(sim, 30)
+	check(ada.sword == null, "only a guard arms himself")
+	# The planner warns about a guard with no sword; it doesn't stop the plan.
+	var tomas := sim.add_resident("Tomas", "7A5C8F", Sim.rcell(ada) + Vector2i(-1, 0))
+	sim.set_role(tomas, "guard")
+	var plan := sim.new_plan()
+	plan.party = [tomas.id]
+	for s in sim.stacks_where(func(x): return x.type == "iron_sword"):
+		sim.items.erase(s.cell)
+	check(sim.plan_warnings(plan) == ["No sword for Tomas"], "the planner warns: %s" % [sim.plan_warnings(plan)])
+	plan.party = [bram.id]
+	check(sim.plan_warnings(plan).is_empty(), "no warning for a guard with a sword")
+	# Iron armor turns more aside than leather, and wears.
+	var leather := {"armor": {"chest": {"type": "leather_tunic", "dur": 8}}}
+	var iron := {"armor": {"chest": {"type": "iron_chestplate", "dur": 20}}}
+	check(Sim.protection(iron) > Sim.protection(leather) and absf(Sim.protection(iron) - Tuning.IRON_GUARD) < 0.001, "an iron chestplate turns aside %d%% against a tunic's %d%%" % [roundi(Tuning.IRON_GUARD * 100), roundi(Tuning.ARMOR_GUARD.chest * 100)])
+	var hurt_plain := 0
+	var hurt_iron := 0
+	for i in 600:
+		for pair in [[hurt_plain, {}], [hurt_iron, iron.armor]]:
+			pass
+		var a := {"id": 9000 + i, "name": "A", "armor": {}, "hurt": 0, "job": null, "heal": 0.0}
+		var b := {"id": 9500 + i, "name": "B", "armor": iron.armor.duplicate(true), "hurt": 0, "job": null, "heal": 0.0}
+		sim._hazard(a, 0.5, 0.0, "a test")
+		sim._hazard(b, 0.5, 0.0, "a test")
+		hurt_plain += 1 if a.hurt > 0 else 0
+		hurt_iron += 1 if b.hurt > 0 else 0
+	check(hurt_iron < hurt_plain - 60, "armor lowers the injury chance (%d hurt bare, %d in iron, of 600)" % [hurt_plain, hurt_iron])
+	# The toolsmith keeps a spare sword once a guard has one.
+	var ts := Sim.new_game()
+	hire_toolsmith(ts)
+	var bench := ts.place_site("bench", open_rect(ts, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	var g := ts.add_resident("Bram", "7A5C8F", Sim.rcell(ts.residents[0]) + Vector2i(1, 0))
+	ts.set_role(g, "guard")
+	g.sword = {"type": "iron_sword", "tier": 3, "dur": 5}
+	ts.drop_items(Sim.rcell(ts.residents[0]) + Vector2i(1, 1), "iron_ingot", 2)
+	ts.drop_items(Sim.rcell(ts.residents[0]) + Vector2i(-1, 1), "stick", 1)
+	run(ts, 1)
+	check(bench.queue.has("iron_sword"), "the toolsmith queues a spare sword (%s)" % [bench.queue])
+	# An old save's residents have no sword and Guard at the start.
+	var fixture := SaveFormat.read("res://tests/fixtures/save_v40.save")
+	var old := Sim.from_state(fixture.data.state)
+	check(old.residents.all(func(r): return r.sword == null and r.broken.sword == false and r.jobs.guard.xp == 0), "an older save loads with no sword and Guard at 0")
+	var f41 := SaveFormat.read("res://tests/fixtures/save_v41.save")
+	var s41 := Sim.from_state(f41.data.state)
+	check(s41.residents[1].role == "guard" and s41.residents[1].sword.type == "iron_sword" and s41.residents[2].armor.chest.type == "iron_chestplate", "the v41 fixture loads its guard, sword and chestplate")

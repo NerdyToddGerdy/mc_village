@@ -2957,6 +2957,8 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 	var tend: bool = plan.target.item in ["pens", "survey"]
 	if not plan.party.is_empty():  # issue #140: the party's armor against the hazards
 		c.add_child(_label(_protection_text(sim, plan.party), false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	for w in sim.plan_warnings(plan):  # a guard with no sword (issue #150)
+		c.add_child(_label(w, false, Palette.YELLOW, Palette.CAPTION, true))
 	_add_cargo_list(c, plan, tend)
 	var meadow: bool = plan.dest == Meadow.ID and not sim.get_map(Meadow.ID).pens.is_empty()
 	if meadow:  # issue #139: or tend the pens
