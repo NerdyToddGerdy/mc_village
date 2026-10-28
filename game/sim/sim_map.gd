@@ -37,6 +37,7 @@ var visited := false         ## Someone has been there, so its site report has r
 var found := false           ## Its hidden find (the old mine's iron) has been found (issue #111).
 var discovered := false      ## And surveyed, so it's a known resource with an estimate.
 var diamond_found := false   ## Someone has mined next to a hidden diamond here, so diamonds are a known resource of this level (issue #186).
+var lava := {}               ## Vector2i -> true: rock cells that are lava pools, beside the deep levels' obsidian (issue #146).
 var ledges: Array = []       ## Cells with a drop someone can fall from in the dark (issue #110).
 # The old mine's levels (issue #132).
 var level := 0               ## 1 for the old mine, 2 and on for the levels below it; 0 for any other map.
@@ -66,7 +67,7 @@ func _init(p_w := Tuning.MAP_W, p_h := Tuning.MAP_H) -> void:
 	occ.resize(w * h)
 
 
-const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "diamond_found", "ledges", "water", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear"]
+const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "diamond_found", "ledges", "water", "lava", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear"]
 
 
 ## The map as plain data. Reservations and job bookkeeping aren't saved (spec §2, Saving).

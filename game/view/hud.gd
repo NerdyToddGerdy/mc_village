@@ -1201,7 +1201,7 @@ func _fill_tools(c: Container, sim: Sim) -> void:
 
 
 func _tool_row(type: String, dur: int) -> VBoxContainer:
-	var most: int = Tuning.DURABILITY[Defs.ITEMS[type].tier]
+	var most: int = Sim.full_uses(type)
 	var low := dur <= 3
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)

@@ -210,9 +210,10 @@ func _build_static() -> void:
 	for b in sim.boulders:
 		if b.alive and not b.get("hidden", false) and not _in_fog(b.cell):
 			var c: Vector2i = b.cell
-			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), Palette.STONE, BlockTextures.ROCK)
-			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.STONE.lightened(0.06), BlockTextures.ROCK)
-			if b.has("ore"):  # flecks of ore on its faces and top (issue #103)
+			var body: Color = Palette.ITEM_COLORS.obsidian if b.get("ore", "") == "obsidian" else (GRAVEL if b.get("ore", "") == "gravel" else Palette.STONE)
+			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), body, BlockTextures.COBBLES if b.get("ore", "") == "gravel" else BlockTextures.ROCK)
+			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), body.lightened(0.06), BlockTextures.ROCK)
+			if b.has("ore") and b.ore != "obsidian":  # flecks of ore on its faces and top (issue #103)
 				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[Defs.ORES[b.ore].item])
 			if b.get("loose", false) and sim.m.visited:  # a loose ceiling: cracks, and props holding it (issue #110)
 				for k in 2:
@@ -264,6 +265,10 @@ func _add_site_ground(b: Batch) -> void:
 			if c == mp.door:
 				_add_door(b, c, mp.door_state == "open", MINE_ROCK * Color(v, v, v))
 				continue
+			if mp.lava.has(c):  # a lava pool sunk into the rock (issue #146)
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), MINE_ROCK.darkened(0.4))
+				b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0.3, y + 1), LAVA * Color(v, v, v))
+				continue
 			if mp.rock.has(c) or (sim.boulders.any(func(o): return o.alive and o.get("hidden", false) and o.cell == c)):
 				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.7, y + 1), MINE_ROCK * Color(v, v, v), BlockTextures.ROCK)
 				continue
@@ -293,6 +298,8 @@ func _add_site_ground(b: Batch) -> void:
 
 
 static var WATER := Color("#4E7EA3")
+static var LAVA := Color("#E0561E")
+static var GRAVEL := Color("#8B8681")
 static var MEADOW_GRASS := Color("#7FA055")
 static var MUD := Color("#6E5A3E")
 

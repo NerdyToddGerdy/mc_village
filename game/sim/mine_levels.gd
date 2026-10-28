@@ -72,7 +72,12 @@ static func _rng(seed: int, salt: int) -> RandomNumberGenerator:
 ## Coal and iron blocks on a level: Level 1's, and more for each level down.
 ## Ores that only appear from a level down (issue #186), as data so a later one is a new row: the first level, how
 ## many blocks that level has, one more every `every` levels, and at most `max`.
-const DEEP_ORES := {"diamond": {"from": 4, "base": 1, "every": 2, "max": 3}}
+const DEEP_ORES := {"diamond": {"from": 4, "base": 1, "every": 2, "max": 3},
+	"gold": {"from": 2, "base": 2, "every": 2, "max": 5},      # smelted into gold ingots, for the piglins (issue #146)
+	"gravel": {"from": 3, "base": 2, "every": 2, "max": 4},    # sometimes drops flint
+	"obsidian": {"from": 5, "base": 4, "every": 1, "max": 8}}  # beside a lava pool; only a diamond pickaxe breaks it
+## The character each deep ore is drawn with in a level's rows ("L" is a lava pool, beside the obsidian).
+const DEEP_CHARS := {"diamond": "d", "gold": "g", "gravel": "v", "obsidian": "b"}
 
 
 ## How many blocks of a deep ore a level has: none above its first level.
@@ -173,6 +178,15 @@ static func build(s: Sim, n: int) -> SimMap:
 					var d := OldMine._block(s, c, "diamond")
 					d.hidden = true
 					m.boulders.append(d)
+				"g":
+					m.boulders.append(OldMine._block(s, c, "gold"))
+				"v":
+					m.boulders.append(OldMine._block(s, c, "gravel"))
+				"b":
+					m.boulders.append(OldMine._block(s, c, "obsidian"))
+				"L":  # a lava pool: rock to walk, with a glow (issue #146)
+					m.rock[c] = true
+					m.lava[c] = true
 	for b in m.boulders:
 		if b.cell in lay.loose:
 			b.loose = true
@@ -441,10 +455,10 @@ static func _deep_ores(grid: Dictionary, seed: int, n: int) -> void:
 		var count := deep_ore_count(n, ore)
 		if count <= 0:
 			continue
-		var g := _rng(seed ^ 0xD1A, n)
+		var g := _rng(seed ^ 0xD1A if ore == "diamond" else seed ^ 0xD1A ^ hash(ore), n)  # diamonds keep the stream they had
 		var spots: Array = []
 		for y in range(1, grid.h - 1):
-			for x in range(grid.w / 2, grid.w - 2):
+			for x in range(grid.w / 2 if ore == "diamond" else 3, grid.w - 2):  # the new ores may lie anywhere past the entrance
 				if _at(grid, x, y) != "#":
 					continue
 				for d in Sim.DIRS:
@@ -455,7 +469,13 @@ static func _deep_ores(grid: Dictionary, seed: int, n: int) -> void:
 			var at := g.randi_range(0, spots.size() - 1)
 			var c: Vector2i = spots[at]
 			spots.remove_at(at)
-			grid.c[c.y][c.x] = "d"
+			grid.c[c.y][c.x] = DEEP_CHARS[ore]
+			if ore == "obsidian":  # a lava pool in the rock behind it, where there is room
+				for d in Sim.DIRS:
+					var lc: Vector2i = c + d
+					if _at(grid, lc.x, lc.y) == "#" and lc.x >= 1 and lc.y >= 1 and lc.x <= grid.w - 2 and lc.y <= grid.h - 2 and Sim.DIRS.all(func(e): return _at(grid, lc.x + e.x, lc.y + e.y) in ["#", DEEP_CHARS[ore], "L"]):
+						grid.c[lc.y][lc.x] = "L"
+						break
 
 
 ## Torches on the walls beside open floor, spread out, fewer the deeper the level.

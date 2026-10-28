@@ -53,9 +53,34 @@ Slice 5 is done when, from a Slice 4 village, a player can:
 - **Saving:** v37. The one expedition becomes the Overworld's slot and the Nether's is empty; a waiting choice belongs to the Overworld's.
 - Not yet: the Nether row on the expedition board and its planner come with the landing (#148).
 
-## 4. Tuning table (provisional)
+## 4. Gold, obsidian and flint in the deeper mine (#146)
+
+The portal needs nothing found only in the Nether (brief §8), so its materials come from the old mine's deeper levels. They're placed last, from streams of their own (`MineLevels.DEEP_ORES`), so the rest of every level is as it was; a level already made in an older save keeps its layout.
+
+| Material | From | Where | Needs |
+|---|---|---|---|
+| Gold ore | Level 2 | Rock beside the floor, in plain sight | Any pickaxe. Smelted at the fireplace with coal into a gold ingot, for the piglins (#156). |
+| Gravel | Level 3 | Rock beside the floor | Any pickaxe. Each block drops a flint about half the time, else nothing. |
+| Obsidian | Level 5 | Rock beside the floor, with a **lava pool** sunk in the rock behind it where there's room | A **diamond pickaxe**. |
+| Diamonds | Level 4 (#186) | Hidden until someone mines beside them | An iron pickaxe or better. Three diamonds and two sticks make a diamond pickaxe. |
+
+A wide level has little rock beside its floor, so it can hold fewer blocks than the table's count.
+
+- **Lava** cells are rock nobody walks into and nobody mines. They glow in the view. Burning is the hazard issue's (#149).
+- **Flint and steel:** a flint and an iron ingot at the bench. One to a cell, with `FLINT_STEEL_USES` uses; the portal (#147) wears it.
+- **Pickaxe tiers by ore** are data (`Tuning.ORE_PICK_TIER`): diamonds 3, obsidian 4. A party without the pickaxe is told: "Obsidian: needs a diamond pickaxe", and doesn't mark that ore.
+- **The planner and the report:** a level lists the gold, obsidian and flint it holds once someone has seen it, as cargo targets. The tally bar groups the new items with the other ores.
+- **Saving:** v38. A level map keeps its `lava` cells; nothing else changes shape.
+
+## 5. Tuning table (provisional)
 
 Each build issue adds its rows.
 
 | Name | Value | Meaning |
 |---|---|---|
+| `ORE_YIELD` gold | 2 | Gold ore dropped by a gold ore block. |
+| `ORE_YIELD` obsidian | 1 | Obsidian dropped by an obsidian block. |
+| `GRAVEL_FLINT_CHANCE` | 50% | Chance a broken gravel block drops a flint. |
+| `ORE_PICK_TIER` | diamond 3, obsidian 4 | The pickaxe tier an ore needs. |
+| `FLINT_STEEL_USES` | 8 | Times a flint and steel lights something. |
+| Gold ore, gravel, obsidian | levels 2, 3, 5 | First level of each, with 2 / 2 / 4 blocks, more further down. |

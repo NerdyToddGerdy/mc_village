@@ -654,6 +654,8 @@ static func nearest(list: Array, c: Vector2i):
 static func full_uses(type: String) -> int:
 	if Defs.is_armor(type):
 		return Tuning.ARMOR_USES
+	if Defs.ITEMS[type].has("uses"):  # a flint and steel (issue #146)
+		return Defs.ITEMS[type].uses
 	return Tuning.DURABILITY[Defs.ITEMS[type].tier]
 
 
@@ -2084,8 +2086,9 @@ func fail_job(r: Dictionary, why := "") -> void:
 		if j.target != null:
 			j.target.unreach_until = until
 	elif why == "needs_pick":
-		var diamond: bool = j.target != null and j.target.get("ore", "") == "diamond"
-		r.note = {"text": "Diamond ore needs an iron pickaxe" if diamond else "Needs a pickaxe", "until": tick + 4 * Tuning.TPS}
+		var ore: String = j.target.get("ore", "") if j.target != null else ""
+		var diamond: bool = Tuning.ORE_PICK_TIER.has(ore)
+		r.note = {"text": pick_need_text(ore) if diamond else "Needs a pickaxe", "until": tick + 4 * Tuning.TPS}
 		if diamond:
 			j.target.unreach_until = tick + int(Tuning.UNREACHABLE_COOLDOWN * Tuning.TPS)
 
@@ -2482,7 +2485,7 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			var tier: int = r[st.tool].tier if r[st.tool] != null else 0
 			if st.tool == "axe":
 				return Tuning.CHOP_TIME[tier]
-			if st.target.get("ore", "") == "diamond" and tier < Tuning.DIAMOND_PICK_TIER:  # only an iron pickaxe or better (issue #186)
+			if tier < Tuning.ORE_PICK_TIER.get(st.target.get("ore", ""), 0):  # diamonds want an iron pickaxe (issue #186), obsidian a diamond one (#146)
 				return -1.0
 			return Tuning.BREAK_TIME[tier] if tier > 0 else -1.0
 		"dig":
@@ -2509,7 +2512,7 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			match st.get("recipe", {}).get("id", ""):
 				"bread": return Tuning.BAKE_TIME
 				"cooked_mutton", "cooked_beef", "cooked_porkchop": return Tuning.COOK_TIME
-				"smelt_iron": return Tuning.SMELT_TIME
+				"smelt_iron", "smelt_gold": return Tuning.SMELT_TIME
 			return Tuning.CRAFT_TIME
 
 
@@ -2528,7 +2531,11 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				drop_items(t.cell, "sapling", saplings)  # issue #177
 				stats.felled += 1
 			elif t.has("ore"):  # an ore block (issue #103); it never comes back (issue #102)
-				drop_items(t.cell, Defs.ORES[t.ore].item, Tuning.ORE_YIELD[t.ore] + skill_bonus(r, "mason"))
+				if t.ore == "gravel":  # sometimes a flint, else nothing (issue #146)
+					if rng.randf() < Tuning.GRAVEL_FLINT_CHANCE:
+						drop_items(t.cell, "flint", 1)
+				else:
+					drop_items(t.cell, Defs.ORES[t.ore].item, Tuning.ORE_YIELD[t.ore] + skill_bonus(r, "mason"))
 				stats.ore_mined = stats.get("ore_mined", 0) + 1
 			else:
 				drop_items(t.cell, "cobble", Tuning.BOULDER_COBBLE + skill_bonus(r, "mason"))
@@ -4479,16 +4486,39 @@ func _reserve_above(item: String) -> int:
 
 ## Whether a block or an animal gives any item on the list (issue #185).
 func gives_wanted(b: Dictionary) -> bool:
-	return cargo_rows(expedition).any(func(r): return gives(b, r.item) and (r.item != "diamond" or can_mine_diamond()))
+	return cargo_rows(expedition).any(func(r): return gives(b, r.item) and can_mine_item(r.item))
 
 
 ## Whether someone in the party, or a spare in the packs, has the iron pickaxe diamond ore needs (issue #186).
 func can_mine_diamond() -> bool:
+	return can_mine_ore("diamond")
+
+
+## Whether the party has a pickaxe good enough for an ore: iron for diamonds (issue #186), a diamond one for obsidian (#146).
+func can_mine_ore(ore: String) -> bool:
+	var need: int = Tuning.ORE_PICK_TIER.get(ore, 0)
+	if need == 0:
+		return true
 	for id in expedition.get("party", []):
 		var r := resident(id)
-		if not r.is_empty() and r.pick != null and r.pick.tier >= Tuning.DIAMOND_PICK_TIER and r.get("hurt", 0) == 0:
+		if not r.is_empty() and r.pick != null and r.pick.tier >= need and r.get("hurt", 0) == 0:
 			return true
-	return expedition.get("tools", []).any(func(t): return Defs.ITEMS[t.type].tier >= Tuning.DIAMOND_PICK_TIER)
+	return expedition.get("tools", []).any(func(t): return Defs.ITEMS[t.type].tier >= need)
+
+
+## Whether the party could mine what gives this item: true unless it comes from an ore that needs a better pickaxe.
+func can_mine_item(item: String) -> bool:
+	for ore in Tuning.ORE_PICK_TIER:
+		if Defs.ORES[ore].item == item:
+			return can_mine_ore(ore)
+	return true
+
+
+## What a block that needs a better pickaxe says when nobody has one.
+static func pick_need_text(ore: String) -> String:
+	if ore == "obsidian":
+		return "Obsidian: needs a diamond pickaxe"
+	return "%s needs an %s pickaxe" % [Defs.ORES[ore].name, Defs.TIER_NAMES[Tuning.ORE_PICK_TIER[ore]].to_lower()]
 
 
 ## "3 coal and 2 iron ore", or "what's on the list": what a plan or the party is out for, in words.
@@ -5790,7 +5820,8 @@ static func block_yield(item: String) -> int:
 	for sp in Tuning.ANIMAL_DROPS:
 		if Tuning.ANIMAL_DROPS[sp].has(item):
 			return Tuning.ANIMAL_DROPS[sp][item]
-	return {"cobble": Tuning.BOULDER_COBBLE, "coal": Tuning.ORE_YIELD.coal, "iron_ore": Tuning.ORE_YIELD.iron, "diamond": Tuning.ORE_YIELD.diamond}.get(item, 1)
+	return {"cobble": Tuning.BOULDER_COBBLE, "coal": Tuning.ORE_YIELD.coal, "iron_ore": Tuning.ORE_YIELD.iron, "diamond": Tuning.ORE_YIELD.diamond,
+		"gold_ore": Tuning.ORE_YIELD.gold, "obsidian": Tuning.ORE_YIELD.obsidian}.get(item, 1)
 
 
 ## Whether a block gives the objective's resource (stone, coal or iron ore), or an animal does when
@@ -5803,6 +5834,9 @@ static func gives(b: Dictionary, item: String) -> bool:
 		"coal": return b.get("ore", "") == "coal"
 		"iron_ore": return b.get("ore", "") == "iron"
 		"diamond": return b.get("ore", "") == "diamond"
+		"gold_ore": return b.get("ore", "") == "gold"
+		"obsidian": return b.get("ore", "") == "obsidian"
+		"flint": return b.get("ore", "") == "gravel"
 	return false
 
 
@@ -5976,7 +6010,7 @@ func _mark_objective() -> void:
 	var party_size: int = expedition.party.size()
 	for row in cargo_rows(expedition):
 		var item: String = row.item
-		if item == "diamond" and not can_mine_diamond():  # nobody could mine it: left to the stuck list to say so
+		if not can_mine_item(item):  # nobody could mine it: left to the stuck list to say so
 			continue
 		var have := cargo_have(item)
 		for st in m.items.values():
@@ -6170,9 +6204,10 @@ func _stuck_site() -> void:
 		_add_stuck(m.name, "The packs are full", at, 1.6, "", 0, false, true)
 	if expedition.get("survey", false) and not party.any(func(r): return r.pick != null and r.get("hurt", 0) == 0):
 		_add_stuck(m.name, "Investigating the vein needs someone with a pickaxe", at, 1.6, "", 0)
-	var wants_diamond := cargo_rows(expedition).any(func(r): return r.item == "diamond") or m.boulders.any(func(b): return b.alive and b.des and b.get("ore", "") == "diamond")
-	if wants_diamond and m.boulders.any(func(b): return b.alive and not b.get("hidden", false) and b.get("ore", "") == "diamond") and not can_mine_diamond():  # issue #186
-		_add_stuck(m.name, "Diamond ore needs an iron pickaxe", at, 1.6, "", 0)
+	for ore in Tuning.ORE_PICK_TIER:  # a block that needs a better pickaxe than anyone has (issues #186, #146)
+		var wanted := cargo_rows(expedition).any(func(r): return r.item == Defs.ORES[ore].item) or m.boulders.any(func(b): return b.alive and b.des and b.get("ore", "") == ore)
+		if wanted and m.boulders.any(func(b): return b.alive and not b.get("hidden", false) and b.get("ore", "") == ore) and not can_mine_ore(ore):
+			_add_stuck(m.name, pick_need_text(ore), at, 1.6, "", 0)
 	var sticks: int = expedition.get("supplies", {}).get("stick", 0)
 	if fence_left(map_id) > 0 and sticks < Tuning.FENCE_STICKS and not party.any(func(r): return r.job != null and r.job.kind == "fence"):
 		_add_stuck(m.name, "The pens need %s more. Pack them next time" % Defs.words("stick", fence_left(map_id)), at, 1.6, "", 0, false, true)
@@ -6583,6 +6618,10 @@ func site_report(id: String) -> Dictionary:
 		res.append({"item": "iron_ore", "name": "?", "reserve": -1, "known": false})
 	if mp.diamond_found:  # a known resource of this level once someone has found it (issue #186)
 		res.append({"item": "diamond", "name": "Diamond", "reserve": ore_left(id, "diamond") * Tuning.ORE_YIELD.diamond, "known": true})
+	for ore in ["gold", "obsidian", "gravel"]:  # what the deeper levels hold once someone has seen them (issue #146)
+		if mp.visited and mp.boulders.any(func(b): return b.get("ore", "") == ore):
+			res.append({"item": Defs.ORES[ore].item, "name": {"gold": "Gold", "obsidian": "Obsidian", "gravel": "Flint"}[ore],
+				"reserve": ore_left(id, ore) * Tuning.ORE_YIELD[ore], "known": true})
 	var hazards: Array = []
 	if mp.visited:
 		var dark := 0

@@ -63,6 +63,7 @@ func _init() -> void:
 		"test_hazards_and_injuries",
 		"test_iron_discovery",
 		"test_slice2_fixture_loads",
+		"test_deep_mine_materials",
 		"test_expedition_slots",
 		"test_old_expedition_moves_to_the_overworld_slot",
 		"test_road_to_the_mine",
@@ -4343,3 +4344,96 @@ func test_old_expedition_moves_to_the_overworld_slot() -> void:
 	check(up.state.pending[0].slot == "overworld", "and so is a waiting choice")
 	var fixture := SaveFormat.read("res://tests/fixtures/save_v36.save")
 	check(not fixture.has("error") and fixture.data.state.expeditions.nether.is_empty(), "the v36 fixture loads with its expedition in the Overworld slot")
+
+
+## Gold, gravel and flint, and obsidian beside lava on the deeper levels; flint and steel (issue #146).
+func test_deep_mine_materials() -> void:
+	var sim := Sim.new_game()
+	for ore in ["gold", "gravel", "obsidian"]:
+		var ch: String = MineLevels.DEEP_CHARS[ore]
+		var first: int = MineLevels.DEEP_ORES[ore].from
+		for n in range(1, first):
+			check(MineLevels.deep_ore_count(n, ore) == 0 and not "".join(MineLevels.layout(sim.seed, n).rows).contains(ch), "no %s on level %d" % [ore, n])
+		for n in range(first, first + 3):
+			var rows: Array = MineLevels.layout(sim.seed, n).rows
+			var found: int = "".join(rows).count(ch)  # a wide level has little rock beside its floor, so it can hold fewer
+			check(found >= 1 and found <= MineLevels.deep_ore_count(n, ore) and rows == MineLevels.layout(sim.seed, n).rows, "level %d has %s, the same every time (%d)" % [n, ore, found])
+	check(MineLevels.DEEP_ORES.gold.from == 2 and MineLevels.DEEP_ORES.gravel.from == 3 and MineLevels.DEEP_ORES.obsidian.from == 5, "gold from level 2, gravel from 3, obsidian from 5")
+	# The diamonds are where they were: gold, gravel and obsidian leave their layout alone.
+	var with_all := "".join(MineLevels.layout(sim.seed, 6).rows).replace("g", "#").replace("v", "#").replace("b", "#").replace("L", "#")
+	check(with_all.count("d") == MineLevels.deep_ore_count(6, "diamond"), "level 6 keeps its diamonds")
+	# Obsidian has lava beside it, and lava is rock to walk: a pool nobody enters.
+	var lvl: SimMap = MineLevels.build(sim, 5)
+	for n in range(5, 9):  # a level with a pool: the walls behind the obsidian decide
+		lvl = MineLevels.build(sim, n)
+		if not lvl.lava.is_empty():
+			break
+	sim.maps[lvl.id] = lvl
+	var obs: Array = lvl.boulders.filter(func(x): return x.get("ore", "") == "obsidian")
+	check(obs.size() >= 1 and obs.all(func(x): return not x.get("hidden", false)), "the obsidian is in plain sight")
+	var pools := 0
+	for lc in lvl.lava:
+		pools += 1
+		check(lvl.rock.has(lc) and not sim.on_map(lvl.id, func(): return sim.walkable(lc)), "a lava pool is not walkable")
+		check(Sim.DIRS.any(func(d): return obs.any(func(x): return x.cell == lc + d)), "and has obsidian beside it")
+	check(pools > 0, "a deep level has a lava pool (%d)" % pools)
+	var saved := SimMap.from_save(lvl.save())
+	check(saved.lava == lvl.lava, "the pools are saved")
+	# Obsidian needs a diamond pickaxe; gold only a pickaxe.
+	var ada: Dictionary = sim.residents[0]
+	var st := {"what": "gather", "tool": "pick", "target": obs[0]}
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 10}
+	check(sim._work_time(ada, st) < 0.0, "an iron pickaxe can't break obsidian")
+	ada.pick = {"type": "diamond_pick", "tier": 4, "dur": 10}
+	check(sim._work_time(ada, st) > 0.0, "a diamond pickaxe can")
+	sim.expedition = {"state": "out", "leg": "out", "dest": lvl.id, "party": [ada.id], "target": {"item": "obsidian", "n": 1}, "list": [{"item": "obsidian", "on": true, "n": 1}],
+		"cargo": {}, "tools": [], "policy": {"target": true, "full": true, "low": true}}
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 10}
+	ada.map = lvl.id
+	ada.arriving = false
+	check(not sim.can_mine_ore("obsidian") and sim.can_mine_ore("gold") and sim.can_mine_ore("gravel"), "only obsidian wants the better pickaxe")
+	sim.on_map(lvl.id, func(): sim._stuck_site())
+	check(sim.stuck.any(func(x): return x.why == "Obsidian: needs a diamond pickaxe"), "the stuck list says so: " + stuck_text(sim))
+	ada.pick = {"type": "diamond_pick", "tier": 4, "dur": 10}
+	check(sim.can_mine_ore("obsidian"), "with a diamond pickaxe it can")
+	sim.expedition = {}
+	# The report lists what the level holds, once it's been seen, as cargo targets.
+	lvl.visited = true
+	var items: Array = sim.site_report(lvl.id).resources.map(func(x): return x.item)
+	check(items.has("gold_ore") and items.has("obsidian") and items.has("flint"), "the site report lists gold, obsidian and flint (%s)" % [items])
+	check(sim.plan_targets(lvl.id).any(func(x): return x.item == "obsidian"), "obsidian is a cargo target")
+	# Gravel gives a flint, sometimes.
+	var gravel: Dictionary = {}
+	for n in range(3, 7):
+		var gl: SimMap = MineLevels.build(sim, n)
+		for b in gl.boulders:
+			if b.get("ore", "") == "gravel" and gravel.is_empty():
+				gravel = b
+				sim.maps[gl.id] = gl
+				lvl = gl
+	check(not gravel.is_empty(), "there is gravel to break")
+	var flints := 0
+	for i in 40:
+		var before: int = sim.on_map(lvl.id, func(): return sim.items.values().filter(func(x): return x.type == "flint").map(func(x): return x.n).reduce(func(a, b): return a + b, 0))
+		gravel.alive = true
+		sim.on_map(lvl.id, func():
+			sim.rng.seed = i + 1
+			sim._finish_work(ada, {"what": "gather", "tool": "pick", "target": gravel}))
+		flints += sim.on_map(lvl.id, func(): return sim.items.values().filter(func(x): return x.type == "flint").map(func(x): return x.n).reduce(func(a, b): return a + b, 0)) - before
+	check(flints > 5 and flints < 35, "about half the gravel breaks to a flint (%d of 40)" % flints)
+	# Smelting gold, and flint and steel.
+	check(Defs.recipe("smelt_gold").inp == {"gold_ore": 1, "coal": 1} and Defs.recipe("smelt_gold").out == {"gold_ingot": 1} and Defs.recipe("smelt_gold").at == "fireplace", "gold ore smelts with coal at the fireplace")
+	check(Defs.recipe("flint_and_steel").inp == {"flint": 1, "iron_ingot": 1}, "flint and steel is a flint and an iron ingot")
+	check(Sim.full_uses("flint_and_steel") == Tuning.FLINT_STEEL_USES and Defs.stack_cap("flint_and_steel") == 1, "it wears: one to a cell, a few uses")
+	check(["gold_ore", "gold_ingot", "obsidian", "flint"].all(func(i): return Defs.ITEMS[i].group == "ores"), "the tally bar groups them with the other ores")
+	var vil := Sim.new_game()
+	var bench := vil.place_site("bench", open_rect(vil, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	var cook: Dictionary = vil.residents[0]
+	vil.drop_items(Sim.rcell(cook) + Vector2i(1, 0), "flint", 1)
+	vil.drop_items(Sim.rcell(cook) + Vector2i(-1, 0), "iron_ingot", 1)
+	vil.queue_add(bench, "flint_and_steel")
+	run(vil, 60.0)
+	var lit: Array = vil.stacks_where(func(x): return x.type == "flint_and_steel")
+	check(lit.size() == 1 and lit[0].dur == Tuning.FLINT_STEEL_USES, "the bench makes flint and steel (%d)" % lit.size())
