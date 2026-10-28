@@ -62,7 +62,7 @@ const BREED_COOLDOWN := 300.0           ## Seconds before a pair that bred can b
 const GROW_TIME := 240.0                ## Seconds for a young animal to grow up; till then it can't be hunted.
 
 # Site maps (Slice 3, issues #102, #103).
-const ORE_YIELD := {"coal": 3, "iron": 4, "diamond": 1}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).
+const ORE_YIELD := {"coal": 3, "iron": 4, "diamond": 1, "gold": 2, "obsidian": 1, "gravel": 1}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).
 const TORCH_LIGHT := 3.0                ## Cells a torch lights; open cells further from every torch are dark.
 # The old mine's deeper levels (issue #132).
 const LEVEL_ORE := {"coal": 2, "iron": 1}  ## Ore blocks each level down adds to Level 1's 6 coal and 4 iron.
@@ -146,4 +146,16 @@ const UNREACHABLE_COOLDOWN := 8.0       ## Seconds before retrying a target that
 const CHOP_TIME := [20.0, 8.0, 5.0, 3.5, 2.5]
 const BREAK_TIME := [0.0, 10.0, 6.0, 4.0, 2.5]  ## Tier 0 can't break stone.
 const DURABILITY := [0, 10, 25, 60, 150]     ## Uses before a tool breaks.
+const ORE_PICK_TIER := {"diamond": 3, "obsidian": 4}  ## The pickaxe tier an ore needs: iron for diamonds, a diamond pickaxe for obsidian (issue #146).
+const GRAVEL_FLINT_CHANCE := 0.5      ## Chance a broken gravel block drops a flint (issue #146).
+const PORTAL_OBSIDIAN := 10           ## Obsidian in a portal's frame (issue #147).
+const PORTAL_LIGHT_TIME := 4.0        ## Seconds to light a finished portal with flint and steel.
+const PORTAL_GUTTER_CHANCE := 0.2     ## Chance the portal goes out while a party is through it (issue #148).
+const LAVA_CHANCE := 0.04             ## Chance of a burn each time someone steps onto a cell beside lava (issue #149).
+const LAVA_SERIOUS := 0.25            ## Chance a lava burn is serious.
+const FIRE_BURN_TIME := 2.0           ## Seconds someone keeps burning after they leave a fire.
+const FIRE_CHANCE := 0.4              ## Chance of a burn each second someone is alight.
+const FIRE_SERIOUS := 0.2             ## Chance a fire burn is serious.
+const HEAT_STEP_COST := 250           ## A step onto a cell beside lava or fire costs this, against 100 for open ground: paths go round.
+const FLINT_STEEL_USES := 8           ## Times a flint and steel lights something before it's spent (issues #146, #147).
 const DIAMOND_PICK_TIER := 3            ## The pickaxe tier diamond ore needs: iron (issue #186).

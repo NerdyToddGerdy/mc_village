@@ -998,7 +998,7 @@ func _refresh_maps(sim: Sim) -> void:
 		_party.set_meta("map", id)
 		break
 	# Looking at the site the party is working: what they're doing here, and the way to call them home.
-	var ex: Dictionary = sim.expedition
+	var ex: Dictionary = sim.expeditions[Sim.realm_of(game.view_map)]  # the party of the realm in view (issue #145)
 	var here_site: bool = ex.get("state", "") == "out" and game.view_map == ex.dest
 	_home_btn.visible = here_site and ex.get("leg", "out") == "out"
 	if here_site:
@@ -1201,7 +1201,7 @@ func _fill_tools(c: Container, sim: Sim) -> void:
 
 
 func _tool_row(type: String, dur: int) -> VBoxContainer:
-	var most: int = Tuning.DURABILITY[Defs.ITEMS[type].tier]
+	var most: int = Sim.full_uses(type)
 	var low := dur <= 3
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
@@ -1627,7 +1627,8 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			c.add_child(_destructive("Clear orders", "Click again to clear orders", "orders:%d" % r.id, func(): game.clear_orders(r)))
 		if equip_kind != "":
 			return  # the tool list takes the Jobs grid's room while it's open
-		if sim.expedition.get("state", "") == "out" and sim.expedition.party.has(r.id) and r.map == sim.expedition.dest:
+		var rex := sim.expedition_of(r)
+		if rex.get("state", "") == "out" and r.map == rex.dest:
 			_add_call_home(c, sim)
 		if r.axe == null and not r.broken.axe:
 			c.add_child(_label("Chopping by hand is slow. Stone needs a pickaxe.", false, Palette.CHALK_DIM, Palette.BODY, true))
@@ -2051,7 +2052,7 @@ func _status(sim: Sim, r: Dictionary) -> String:
 
 ## "On the way to the meadow, 22 s", "On the way home, 22 s" or "On the road home, 22 s".
 static func _road_text(sim: Sim, r: Dictionary) -> String:
-	var meadow: bool = sim.expedition.get("dest", "") == Meadow.ID
+	var meadow: bool = sim.expedition_of(r).get("dest", "") == Meadow.ID
 	if r.trip == "village":
 		return "On the %s home, %d s" % ["way" if meadow else "road", ceili(sim.back_in(r))]
 	return "On the %s to the %s, %d s" % ["way" if meadow else "road", sim.get_map(r.trip).name.to_lower(), ceili(sim.back_in(r))]
@@ -2684,6 +2685,12 @@ func show_hint(text: String, at: Vector2, color := Palette.CHALK) -> void:
 ## The planner opens above the toolbar when the board is selected. With no expedition it draws up a
 ## plan; while one is packing it shows the packing and Depart; while one is out it says so.
 func _refresh_planner(sim: Sim) -> void:
+	var prev := sim.use_slot(game.plan_slot())  # the planner shows the realm of the chosen adventure (issue #145)
+	_refresh_planner_slot(sim)
+	sim.use_slot(prev)
+
+
+func _refresh_planner_slot(sim: Sim) -> void:
 	var board := sim.expedition_board()
 	_plan_panel.visible = game.planner_open and not board.is_empty()
 	if not _plan_panel.visible:
@@ -2784,6 +2791,10 @@ func _refresh_loc_drop(sim: Sim) -> void:
 ## off is left), its name, how many are wanted (Max: as much as fits), and ▲ ▼ to reorder. The packs' bar below
 ## shows the wanted amounts against the room.
 func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
+	if plan.target.item == "survey":  # the first crossing brings nothing back (issue #148)
+		c.add_child(_label("Survey the landing", true))
+		c.add_child(_label("Walk to its landmarks and come home. Nothing to bring back this time.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+		return
 	var head := HBoxContainer.new()
 	var l := _label("Bring back, best first", true)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2943,7 +2954,7 @@ func _add_party_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
 
 ## The objective, provisions, spare pickaxes, the packs they share, the return policy, and Start packing.
 func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
-	var tend: bool = plan.target.item == "pens"
+	var tend: bool = plan.target.item in ["pens", "survey"]
 	if not plan.party.is_empty():  # issue #140: the party's armor against the hazards
 		c.add_child(_label(_protection_text(sim, plan.party), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	_add_cargo_list(c, plan, tend)
@@ -2967,7 +2978,7 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 	c.add_child(_stepper_row("Meals to take", plan.meals, "meals"))
 	var keep := Sim.return_meals(plan)
 	var mins := Sim.site_minutes(plan)
-	var at := "the meadow" if plan.dest == Meadow.ID else "the mine"
+	var at := "the meadow" if plan.dest == Meadow.ID else ("the landing" if Sim.realm_of(plan.dest) == "nether" else "the mine")
 	var feeds := "About %d min at %s" % [roundi(mins), at] if mins >= 1.0 else "Not enough to eat at %s" % at
 	var food := "%s, the return food too." % feeds if plan.spend_return else "%s. %d kept for the walk home." % [feeds, keep]
 	var food_row := HBoxContainer.new()
@@ -3114,7 +3125,7 @@ func _stepper(value: String, key: String) -> HBoxContainer:
 func _fill_staging(c: Container, sim: Sim) -> void:
 	var ex: Dictionary = sim.expedition
 	var p := sim.packed()
-	var aim := "to tend the pens" if ex.target.item == "pens" else ("to clear the level" if ex.get("clear", false) else "to bring back %s" % Sim.list_text(ex))
+	var aim := "to survey the landing" if ex.target.item == "survey" else "to tend the pens" if ex.target.item == "pens" else ("to clear the level" if ex.get("clear", false) else "to bring back %s" % Sim.list_text(ex))
 	c.add_child(_label("Packing for the %s, %s" % [sim.get_map(ex.dest).name.to_lower(), aim], false, Palette.CHALK, Palette.BODY, true))
 	c.add_child(_row("Meals", "%d / %d" % [p.meals, ex.meals]))
 	c.add_child(_bar(float(p.meals) / maxi(ex.meals, 1)))
@@ -3177,8 +3188,9 @@ func _fill_out(c: Container, sim: Sim) -> void:
 ## Call the party home (issue #108), until #109's return policy does it by itself. Disabled, with
 ## why, until the whole party is at the site.
 func _add_call_home(c: Container, sim: Sim) -> void:
-	var why := sim.call_home_blocker()
-	if sim.expedition.get("leg", "out") == "home":
+	var sl := Sim.realm_of(game.view_map)
+	var why := sim.call_home_blocker(sl)
+	if sim.expeditions[sl].get("leg", "out") == "home":
 		return
 	var b := _button("Call the party home", func(): game.call_home(), "Primary")
 	b.disabled = why != ""
@@ -3346,7 +3358,10 @@ func _fill_party(c: Container, sim: Sim) -> void:
 	var sup: Dictionary = ex.get("supplies", {})
 	var pen_sup := "" if sup.is_empty() else " Sticks: %d. Wheat: %d." % [sup.get("stick", 0), sup.get("wheat", 0)]
 	c.add_child(_label("Meals: %d%s. Spare pickaxes: %d.%s" % [meals, keep, spares, pen_sup], false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	if ex.target.item == "pens":  # issue #139
+	if ex.target.item == "survey":  # issue #148
+		c.add_child(_row("Survey the landing", "walk to its landmarks"))
+		c.add_child(_label("The party steps through the portal, walks to each landmark and comes home. A shelter comes later.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	elif ex.target.item == "pens":  # issue #139
 		c.add_child(_row("Tend the pens", "keep %d of each" % ex.target.n))
 		c.add_child(_label(_pens_text(sim), false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	else:

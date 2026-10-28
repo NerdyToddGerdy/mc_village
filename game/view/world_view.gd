@@ -173,16 +173,17 @@ func _draw_map() -> void:
 	_update_people()
 	_update_sheep()
 	_build_cart()
+	_update_portal_glow()
 	_build_live()
 
 
 # ---------------------------------------------------------------- static world
 
 ## The mines are colder and harsher than the village (issue #206): a blue-grey grade and stronger texture.
-func _grade_blocks(mine: bool) -> void:
+func _grade_blocks(mine: bool, nether := false) -> void:
 	for m in [_block_mat, _trees_faded.material_override]:
-		m.set_shader_parameter("grade", Palette.MINE_GRADE if mine else Color.WHITE)
-		m.set_shader_parameter("contrast", Palette.MINE_CONTRAST if mine else 1.0)
+		m.set_shader_parameter("grade", Palette.NETHER_GRADE if nether else (Palette.MINE_GRADE if mine else Color.WHITE))
+		m.set_shader_parameter("contrast", Palette.MINE_CONTRAST if mine or nether else 1.0)
 
 
 func _build_static() -> void:
@@ -190,7 +191,7 @@ func _build_static() -> void:
 	var ghost := Batch.new()
 	var dark := Batch.new()
 	var col := Batch.new()
-	_grade_blocks(sim.m.kind == "site" and sim.m.id != Meadow.ID)
+	_grade_blocks(sim.m.kind == "site" and sim.m.id != Meadow.ID and sim.m.id != NetherLanding.ID, sim.m.id == NetherLanding.ID)
 	if sim.m.id == Meadow.ID:
 		_add_meadow_ground(solid)
 	elif sim.m.kind == "site":
@@ -210,9 +211,10 @@ func _build_static() -> void:
 	for b in sim.boulders:
 		if b.alive and not b.get("hidden", false) and not _in_fog(b.cell):
 			var c: Vector2i = b.cell
-			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), Palette.STONE, BlockTextures.ROCK)
-			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.STONE.lightened(0.06), BlockTextures.ROCK)
-			if b.has("ore"):  # flecks of ore on its faces and top (issue #103)
+			var body: Color = Palette.ITEM_COLORS.obsidian if b.get("ore", "") == "obsidian" else (GRAVEL if b.get("ore", "") == "gravel" else Palette.STONE)
+			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), body, BlockTextures.COBBLES if b.get("ore", "") == "gravel" else BlockTextures.ROCK)
+			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), body.lightened(0.06), BlockTextures.ROCK)
+			if b.has("ore") and b.ore != "obsidian":  # flecks of ore on its faces and top (issue #103)
 				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[Defs.ORES[b.ore].item])
 			if b.get("loose", false) and sim.m.visited:  # a loose ceiling: cracks, and props holding it (issue #110)
 				for k in 2:
@@ -257,21 +259,28 @@ static var DARK_TINT := Color("#2C3445")
 ## and the tunnels no torch reaches drawn darker, so the dark parts read at a glance.
 func _add_site_ground(b: Batch) -> void:
 	var mp := sim.m
+	var nether: bool = mp.id == NetherLanding.ID  # red netherrack, and rock that's nearly black (issue #148)
+	var rock_base: Color = NETHER_ROCK if nether else MINE_ROCK
+	var floor_base: Color = NETHERRACK if nether else MINE_FLOOR
 	for x in mp.w:
 		for y in mp.h:
 			var c := Vector2i(x, y)
 			var v := 0.94 + _hash(x, y) * 0.1
 			if c == mp.door:
-				_add_door(b, c, mp.door_state == "open", MINE_ROCK * Color(v, v, v))
+				_add_door(b, c, mp.door_state == "open", rock_base * Color(v, v, v))
+				continue
+			if mp.lava.has(c):  # a lava pool sunk into the rock (issue #146)
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), MINE_ROCK.darkened(0.4))
+				b.box(Vector3(x, -0.1, y), Vector3(x + 1, -0.02, y + 1), LAVA * Color(v, v, v))
 				continue
 			if mp.rock.has(c) or (sim.boulders.any(func(o): return o.alive and o.get("hidden", false) and o.cell == c)):
-				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.7, y + 1), MINE_ROCK * Color(v, v, v), BlockTextures.ROCK)
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.7, y + 1), rock_base * Color(v, v, v), BlockTextures.ROCK)
 				continue
 			if mp.water.has(c):  # an underground stream (issue #132), below the floor
 				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.45, y + 1), MINE_FLOOR.darkened(0.3))
 				b.box(Vector3(x, -0.45, y), Vector3(x + 1, -0.3, y + 1), (WATER * Color(v, v, v)).darkened(0.25 if mp.is_dark(c) else 0.0))
 				continue
-			var floor_col := MINE_FLOOR * Color(v, v, v)
+			var floor_col := floor_base * Color(v, v, v)
 			if mp.is_dark(c):  # unlit: darker and a little cold, but still read as floor, not a hole
 				floor_col = floor_col.darkened(0.38).lerp(DARK_TINT, 0.25)
 			if c in mp.ledges and mp.visited:  # a ledge: the floor drops, with a pale lip (issue #110)
@@ -279,6 +288,10 @@ func _add_site_ground(b: Batch) -> void:
 				b.box(Vector3(x, -0.3, y), Vector3(x + 1, 0, y + 0.12), floor_col.lightened(0.25), BlockTextures.COBBLES)
 				continue
 			b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0, y + 1), floor_col, BlockTextures.COBBLES)
+	for c in mp.fire:  # a patch of fire (issue #149)
+		b.box(Vector3(c.x + 0.15, 0, c.y + 0.15), Vector3(c.x + 0.85, 0.4, c.y + 0.85), TORCH_FLAME.darkened(0.15))
+		b.box(Vector3(c.x + 0.3, 0.4, c.y + 0.3), Vector3(c.x + 0.7, 0.85, c.y + 0.7), Color("#F7C948"))
+		b.box(Vector3(c.x + 0.42, 0.85, c.y + 0.42), Vector3(c.x + 0.58, 1.1, c.y + 0.58), Color("#FBE58A"))
 	for t in mp.torches:
 		var x: float = t.x + 0.5
 		var z: float = t.y + 0.5
@@ -287,12 +300,37 @@ func _add_site_ground(b: Batch) -> void:
 	# The way back to the village: a timber frame over the entrance, and the party's packs beside it.
 	var e := mp.entrance
 	_add_packs(b, mp, Vector2(e.x + 1.2, e.y + 0.17), 1.0)
+	if nether:  # the portal's far side: an obsidian arch with a violet glow, and the landmarks to survey
+		_add_landing_features(b, mp)
+		return
 	b.box(Vector3(e.x, 0, e.y - 0.05), Vector3(e.x + 0.15, 1.4, e.y + 0.1), Palette.LOG, BlockTextures.LOG)
 	b.box(Vector3(e.x, 0, e.y + 0.9), Vector3(e.x + 0.15, 1.4, e.y + 1.05), Palette.LOG, BlockTextures.LOG)
 	b.box(Vector3(e.x - 0.05, 1.4, e.y - 0.1), Vector3(e.x + 0.2, 1.6, e.y + 1.1), Palette.LOG, BlockTextures.LOG)
 
 
+## The portal landing's far side (issue #148): the obsidian arch you came through, and a ruined pillar at each landmark,
+## with a chalk flag on the ones already seen.
+func _add_landing_features(b: Batch, mp: SimMap) -> void:
+	var e := mp.entrance
+	var ob: Color = Palette.ITEM_COLORS.obsidian
+	b.box(Vector3(e.x, 0, e.y - 0.1), Vector3(e.x + 0.3, 1.8, e.y + 0.15), ob, BlockTextures.ROCK)
+	b.box(Vector3(e.x, 0, e.y + 0.85), Vector3(e.x + 0.3, 1.8, e.y + 1.1), ob, BlockTextures.ROCK)
+	b.box(Vector3(e.x, 1.6, e.y - 0.1), Vector3(e.x + 0.3, 1.9, e.y + 1.1), ob, BlockTextures.ROCK)
+	b.box(Vector3(e.x + 0.05, 0, e.y + 0.15), Vector3(e.x + 0.15, 1.6, e.y + 0.85), PORTAL_GLOW)
+	for c in mp.landmarks:
+		b.box(Vector3(c.x + 0.25, 0, c.y + 0.25), Vector3(c.x + 0.75, 1.5, c.y + 0.75), NETHER_ROCK.lightened(0.12), BlockTextures.ROCK)
+		b.box(Vector3(c.x + 0.2, 1.5, c.y + 0.2), Vector3(c.x + 0.8, 1.7, c.y + 0.8), NETHER_ROCK.lightened(0.2), BlockTextures.ROCK)
+		if mp.landmarks_seen.has(c):
+			b.box(Vector3(c.x + 0.46, 1.7, c.y + 0.46), Vector3(c.x + 0.52, 2.3, c.y + 0.52), Palette.CHALK)
+			b.box(Vector3(c.x + 0.52, 2.05, c.y + 0.46), Vector3(c.x + 0.85, 2.3, c.y + 0.5), Palette.BLUE)
+
+
+static var NETHERRACK := Color("#8A4040")
+static var NETHER_ROCK := Color("#4A2C33")
+static var PORTAL_GLOW := Color("#9A63E0")
 static var WATER := Color("#4E7EA3")
+static var LAVA := Color("#E0561E")
+static var GRAVEL := Color("#8B8681")
 static var MEADOW_GRASS := Color("#7FA055")
 static var MUD := Color("#6E5A3E")
 
@@ -752,6 +790,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
 		_add_small_station(solid if s.done else ghost, s)
 		return
+	if s.tpl == "portal":
+		_add_portal(solid if s.done else ghost, s)
+		return
 	if s.tpl == "storehouse":
 		_add_storehouse(solid if s.stage >= 1 else ghost, s)
 		return
@@ -858,6 +899,58 @@ func _add_storehouse(b: Batch, s: Dictionary) -> void:
 		for j in mini(kinds.size(), 3):
 			var x := p.x + 0.08 + j * 0.22
 			_box_turned(b, s, Vector3(x, 0.62, p.y + 0.15), Vector3(x + 0.16, 0.7, p.y + 0.4), Palette.ITEM_COLORS.get(kinds[j], Palette.CHALK))
+
+
+## The Nether portal (issue #147): a frame of obsidian, four blocks wide, a sill, two pillars and a lintel. Until it's
+## built, a blueprint shows where it will stand.
+func _add_portal(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var col: Color = Palette.ITEM_COLORS.obsidian if s.done else Color(Palette.BLUE, 0.45)
+	var z0 := o.y + 0.2
+	var z1 := o.y + 0.8
+	b.box(Vector3(o.x, 0, z0), Vector3(o.x + 4.0, 0.3, z1), col, BlockTextures.ROCK)
+	b.box(Vector3(o.x, 0.3, z0), Vector3(o.x + 0.7, 2.4, z1), col, BlockTextures.ROCK)
+	b.box(Vector3(o.x + 3.3, 0.3, z0), Vector3(o.x + 4.0, 2.4, z1), col, BlockTextures.ROCK)
+	b.box(Vector3(o.x + 0.7, 2.1, z0), Vector3(o.x + 3.3, 2.4, z1), col, BlockTextures.ROCK)
+	if s.done:  # a few violet specks on the frame, so it isn't a black slab
+		for k in [0.3, 1.0, 2.1, 3.6]:
+			b.box(Vector3(o.x + k, 0.3 + fmod(k * 1.7, 1.6), z0 - 0.02), Vector3(o.x + k + 0.18, 0.5 + fmod(k * 1.7, 1.6), z0 + 0.02), PORTAL_SPECK)
+
+
+static var PORTAL_SPECK := Color("#7A4FB5")
+var _portal_fx := {}   ## Portal site id -> the lit portal's shimmering plane.
+
+
+## A lit portal's violet plane, pulsing (issue #147). Drawn each frame, since the batches only rebuild when the sim changes.
+func _update_portal_glow() -> void:
+	var lit := {}
+	if map_id == "village":
+		for s in sim.maps.village.sites:
+			if s.tpl == "portal" and s.done and s.lit:
+				lit[s.id] = s
+	for id in _portal_fx.keys():
+		if not lit.has(id):
+			_portal_fx[id].queue_free()
+			_portal_fx.erase(id)
+	for id in lit:
+		var s: Dictionary = lit[id]
+		if not _portal_fx.has(id):
+			var mi := MeshInstance3D.new()
+			var bm := BoxMesh.new()
+			bm.size = Vector3(2.6, 1.8, 0.1)
+			mi.mesh = bm
+			var mat := StandardMaterial3D.new()
+			mat.albedo_color = Color("#8E5CD6", 0.5)
+			mat.emission_enabled = true
+			mat.emission = Color("#8E5CD6")
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mi.material_override = mat
+			mi.position = Vector3(s.origin.x + 2.0, 1.2, s.origin.y + 0.5)
+			add_child(mi)
+			_portal_fx[id] = mi
+		var pulse := 0.5 + 0.18 * sin(Time.get_ticks_msec() / 400.0 + id)
+		(_portal_fx[id].material_override as StandardMaterial3D).albedo_color.a = pulse
 
 
 ## A squat cobblestone hearth with a chimney at the back and embers in its mouth, which faces its

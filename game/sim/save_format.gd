@@ -12,12 +12,42 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 36
+const VERSION := 40
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23, 23: _v23_to_v24, 24: _v24_to_v25, 25: _v25_to_v26, 26: _v26_to_v27, 27: _v27_to_v28, 28: _v28_to_v29, 29: _v29_to_v30, 30: _v30_to_v31, 31: _v31_to_v32, 32: _v32_to_v33, 33: _v33_to_v34, 34: _v34_to_v35, 35: _v35_to_v36}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23, 23: _v23_to_v24, 24: _v24_to_v25, 25: _v25_to_v26, 26: _v26_to_v27, 27: _v27_to_v28, 28: _v28_to_v29, 29: _v29_to_v30, 30: _v30_to_v31, 31: _v31_to_v32, 32: _v32_to_v33, 33: _v33_to_v34, 34: _v34_to_v35, 35: _v35_to_v36, 36: _v36_to_v37, 37: _v37_to_v38, 38: _v38_to_v39, 39: _v39_to_v40}
+
+
+## v40: the Nether portal landing (issue #148). A save gets the landing map when it loads, unknown until a portal is lit;
+## a pending choice and an expedition are unchanged. The landing keeps `landmarks`, `landmarks_seen` and `surveyed`.
+static func _v39_to_v40(d: Dictionary) -> Dictionary:
+	return d
+
+
+## v39: the Nether portal (issue #147). A site of kind "portal" keeps `lit`; a village without one is as it was, and the
+## Build menu offers the portal once obsidian has come home (`stats.obsidian_home`).
+static func _v38_to_v39(d: Dictionary) -> Dictionary:
+	return d
+
+
+## v38: gold, gravel and flint, and obsidian beside lava pools on the deeper levels (issue #146). A level map keeps its
+## `lava` cells, none until a level with a pool is made; levels already generated in an older save keep the layout they
+## had, and every level made from now on holds the new materials.
+static func _v37_to_v38(d: Dictionary) -> Dictionary:
+	return d
+
+
+## v37: two expeditions at once (issue #145). The one expedition becomes the Overworld's slot, and the Nether's is empty.
+## An older pending choice belongs to the Overworld's.
+static func _v36_to_v37(d: Dictionary) -> Dictionary:
+	var ex: Dictionary = d.state.get("expedition", {})
+	d.state.erase("expedition")
+	d.state.expeditions = {"overworld": ex, "nether": {}}
+	for p in d.state.get("pending", []):
+		p.slot = "overworld"
+	return d
 
 
 ## v36: diamonds on the deep levels (issue #186). A level map keeps `diamond_found`, false until someone finds the

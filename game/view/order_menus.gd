@@ -37,6 +37,7 @@ const MENUS := {
 		{"id": "builder_table", "name": "Builder's table", "sub": "4 planks and 2 logs. A builder works from it. Reserves room for a builder's yard", "mark": "build"},
 		{"id": "claim", "name": "Claim land", "sub": "A strip of new land, 8 cells deep, along an edge. A builder plants stakes (4 sticks). One claim for every 2 residents beyond the first two", "mark": "build", "unlock": "claims"},
 		{"id": "storehouse", "name": "Storehouse", "sub": "6 cobblestone, 12 planks and 4 logs. Chests carried in store anything; stockpiles take the overflow. Reserves room to grow", "mark": "build"},
+		{"id": "portal", "name": "Nether portal", "sub": "10 obsidian, then flint and steel to light it. Parties bound for the Nether pack on the staging area in front. Reserves room for a portal hall", "mark": "build", "unlock": "portal"},
 		{"id": "board", "name": "Expedition board", "sub": "6 planks and 4 sticks. Plans trips off the map. Reserves room for a map room", "mark": "build", "unlock": "house"},
 	]},
 }
@@ -73,6 +74,8 @@ static func unlocked(e: Dictionary, sim: Sim) -> bool:
 			return sim.map_id == Meadow.ID
 		"pens":
 			return not sim.m.pens.is_empty()
+		"portal":  # once obsidian has come home from the deep mine (issue #147)
+			return sim.stats.get("obsidian_home", false) or sim.maps.village.sites.any(func(s): return s.tpl == "portal")
 	return true
 
 

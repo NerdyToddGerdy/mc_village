@@ -54,18 +54,18 @@ static func _draw(img: Image, type: String) -> void:
 				_ellipse(img, p, Vector2(13, 9), dark)
 			for p in [Vector2(22, 24), Vector2(42, 18)]:
 				_ellipse(img, p, Vector2(10, 6), c)
-		"coal":  # dark lumps, edged in chalk so they read on the slate
+		"coal", "obsidian", "flint":  # dark lumps, edged in chalk so they read on the slate
 			for p in [Vector2(24, 36), Vector2(40, 30), Vector2(34, 46)]:
 				_disc(img, p, 13, Palette.CHALK_DIM)
 			for p in [Vector2(24, 36), Vector2(40, 30), Vector2(34, 46)]:
 				_disc(img, p, 10, c)
 			_disc(img, Vector2(37, 27), 3, c.lightened(0.35))
-		"iron_ore":  # a chunk of stone with rusty flecks
+		"iron_ore", "gold_ore":  # a chunk of stone with flecks of the metal
 			_disc(img, Vector2(32, 34), 23, dark)
 			_disc(img, Vector2(32, 34), 20, Palette.STONE)
 			for p in [Vector2(24, 28), Vector2(38, 26), Vector2(30, 42), Vector2(42, 40)]:
 				_disc(img, p, 5, c)
-		"iron_ingot":  # a bar seen from above at a slant, its top face lighter
+		"iron_ingot", "gold_ingot":  # a bar seen from above at a slant, its top face lighter
 			_box(img, Rect2i(8, 22, 48, 26), dark)
 			_box(img, Rect2i(11, 25, 42, 20), c.darkened(0.2))
 			_box(img, Rect2i(15, 25, 34, 10), c)

@@ -786,6 +786,7 @@ func _key(e: InputEventKey) -> void:
 		"board": start_placing("board")
 		"chopping_block": start_placing("chopping_block")
 		"storehouse": start_placing("storehouse")
+		"portal": start_placing("portal")
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
 		"toolsmith_bench", "composter", "lodge", "builder_table": start_placing(keys.action_for(e))
@@ -958,7 +959,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "keep"]
+const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -1197,14 +1198,26 @@ func open_planner() -> void:
 	planner_open = true
 	craft_menu_open = false
 	menu_open = ""
-	if not sim.expedition.is_empty():
+	var busy: bool = not sim.expeditions[plan_slot()].is_empty()
+	if busy and adventure != "" and not sim.adventures().any(func(a): return a.id == adventure):
 		adventure = ""
-	else:
+	if not busy:
 		var known := sim.adventures()
 		if not known.any(func(a): return a.id == adventure):
 			adventure = known[0].id if not known.is_empty() else ""
-	if plan.is_empty() or not sim.expedition.is_empty() or plan.dest != adventure:
+	if plan.is_empty() or busy or plan.dest != adventure:
 		plan = sim.new_plan(adventure if adventure != "" else OldMine.ID)
+
+
+## The expedition slot the board is showing (issue #145): the one the chosen adventure belongs to, or, with none
+## chosen, the first that has a party.
+func plan_slot() -> String:
+	if adventure != "":
+		return Sim.slot_of_dest(adventure)
+	for sl in Sim.SLOTS:
+		if not sim.expeditions[sl].is_empty():
+			return sl
+	return "overworld"
 
 
 ## Opens the expedition board on one adventure (issue #136): its site report and planner. A signpost
@@ -1212,7 +1225,7 @@ func open_planner() -> void:
 func open_adventure(id: String) -> void:
 	if sim.expedition_board().is_empty():
 		return
-	adventure = id if sim.expedition.is_empty() else ""
+	adventure = id
 	open_planner()
 
 
@@ -1289,6 +1302,10 @@ func plan_clear_toggle() -> void:
 
 ## Which level of the old mine the plan is for (issue #132). Its list is the one that place last used.
 func plan_dest(id: String) -> void:
+	if Sim.realm_of(id) == "nether":  # the first crossing is a survey (issue #148)
+		plan = sim.new_plan(id)
+		adventure = id
+		return
 	var tending: bool = plan.target.item == "pens"
 	plan.dest = id
 	plan.list = sim.cargo_list_for(id)
@@ -1325,12 +1342,12 @@ func confirm_plan() -> String:
 
 
 func depart() -> String:
-	return sim.depart()
+	return sim.depart(plan_slot())
 
 
 ## Calls the party home from the site (issue #108).
 func call_home() -> String:
-	return sim.call_home()
+	return sim.call_home(Sim.realm_of(view_map) if view_map != "village" else plan_slot())
 
 
 ## Answers the choice the game stopped for (issues #110, #111), and carries on at the speed it had.
@@ -1341,7 +1358,7 @@ func answer(option: String) -> void:
 
 
 func cancel_expedition() -> void:
-	sim.cancel_expedition()
+	sim.cancel_expedition(plan_slot())
 	adventure = ""
 	plan = sim.new_plan()
 
@@ -1621,7 +1638,7 @@ func _screenshot_scene() -> void:
 		house.stage = 4
 		house.done = true
 		var near := at(6, 12)
-		for tpl in ["chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "fireplace", "board"]:
+		for tpl in ["chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "fireplace", "board", "portal"]:
 			var spot = null
 			for d in 12:
 				for dx in range(-d, d + 1):
@@ -1633,10 +1650,36 @@ func _screenshot_scene() -> void:
 				var s := sim.place_site(tpl, spot)
 				s.stage = Defs.TEMPLATES[tpl].stages.size() - 1
 				s.done = true
+				if tpl == "portal":
+					s.lit = true
 		sim.rev += 1
 		selection = {}
 		_target = Vector3(near.x + 0.5, 0, near.y + 0.5)
 		_place_camera()
+	if "--portal" in OS.get_cmdline_user_args():  # a lit portal in a cleared spot, for its model and glow (issue #147)
+		var near := Sim.rcell(sim.residents[0]) + Vector2i(-3, 6)
+		for t in sim.trees:
+			if absi(t.cell.x - near.x) <= 5 and absi(t.cell.y - near.y) <= 4:
+				t.alive = false
+		sim._occ_dirty = true
+		var p := sim.place_site("portal", near)
+		p.stage = 1
+		p.done = true
+		p.lit = "--unlit" not in OS.get_cmdline_user_args()
+		sim.rev += 1
+		selection = {}
+		_target = Vector3(near.x + 2.0, 0, near.y + 1.0)
+		_cam.size = 9.0
+		_place_camera()
+	if "--nether" in OS.get_cmdline_user_args():  # the portal landing, seen from the arch, with a landmark surveyed (issue #148)
+		var landing := sim.get_map(NetherLanding.ID)
+		landing.known = true
+		landing.visited = true
+		landing.landmarks_seen = [landing.landmarks[0]]
+		sim.move_to_map(sim.residents[0], NetherLanding.ID, landing.entrance + Vector2i(3, 0))
+		sim.rev += 1
+		switch_map(NetherLanding.ID)
+		_cam.size = 14.0
 	if "--select-bench" in OS.get_cmdline_user_args():
 		_select(bench)
 	if "--craft" in OS.get_cmdline_user_args():

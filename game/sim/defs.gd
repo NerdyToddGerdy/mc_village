@@ -31,6 +31,12 @@ const ITEMS := {
 	"iron_ingot": {"one": "iron ingot", "many": "iron ingots", "label": "Iron", "group": "ores"},
 	# From the deep levels of the old mine (issue #186): found only with an iron pickaxe, from level 4 down.
 	"diamond": {"one": "diamond", "many": "diamonds", "label": "Diamond", "group": "ores"},
+	# From the deeper levels (issue #146): gold for the piglins, obsidian and flint for the portal.
+	"gold_ore": {"one": "gold ore", "many": "gold ore", "label": "Gold ore", "group": "ores"},
+	"gold_ingot": {"one": "gold ingot", "many": "gold ingots", "label": "Gold", "group": "ores"},
+	"obsidian": {"one": "obsidian", "many": "obsidian", "label": "Obsidian", "group": "ores"},
+	"flint": {"one": "flint", "many": "flint", "label": "Flint", "group": "ores"},
+	"flint_and_steel": {"one": "flint and steel", "many": "flint and steels", "uses": Tuning.FLINT_STEEL_USES, "group": "tools"},
 	# The line to the mine (Slice 4, issue #120). A minecart is one big item: one to a cell, hauled like a tool.
 	"rail": {"one": "rail", "many": "rails", "label": "Rails", "group": "building"},
 	"minecart": {"one": "minecart", "many": "minecarts", "label": "Minecarts", "single": true, "group": "building"},
@@ -77,7 +83,8 @@ const SPECIES := {
 }
 
 ## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.
-const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}, "diamond": {"item": "diamond", "name": "Diamond ore"}}
+const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}, "diamond": {"item": "diamond", "name": "Diamond ore"},
+	"gold": {"item": "gold_ore", "name": "Gold ore"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}
 
 ## `pattern` (bench) and `fuel` (fireplace) are display only, for the Craft panel's crafting grid and
 ## furnace (issue #95); they never change what a recipe costs. A pattern is three rows of three, each
@@ -94,6 +101,7 @@ const RECIPES := [
 	{"id": "iron_axe", "name": "Iron axe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_axe": 1}, "pattern": ["II ", "IS ", " S "]},
 	{"id": "iron_pick", "name": "Iron pickaxe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_pick": 1}, "pattern": ["III", " S ", " S "]},
 	# Diamond tools (issue #186): the best tier, from diamonds found on the deep levels.
+	{"id": "flint_and_steel", "name": "Flint and steel", "inp": {"flint": 1, "iron_ingot": 1}, "out": {"flint_and_steel": 1}, "pattern": ["F  ", " I ", "   "]},
 	{"id": "diamond_axe", "name": "Diamond axe", "inp": {"diamond": 3, "stick": 2}, "out": {"diamond_axe": 1}, "pattern": ["DD ", "DS ", " S "]},
 	{"id": "diamond_pick", "name": "Diamond pickaxe", "inp": {"diamond": 3, "stick": 2}, "out": {"diamond_pick": 1}, "pattern": ["DDD", " S ", " S "]},
 	# The line to the mine (issue #120): Craft work, not Toolsmith, since nobody carries them as tools.
@@ -111,12 +119,13 @@ const RECIPES := [
 	{"id": "cooked_porkchop", "name": "Cooked porkchop", "inp": {"porkchop": 1, "log": 1}, "out": {"cooked_porkchop": 1}, "at": "fireplace", "doing": "Cooking a porkchop", "fuel": "log"},
 	# Smelting (issue #104): coal is the fuel. It's Cook work, like everything at the fireplace.
 	{"id": "smelt_iron", "name": "Smelt iron", "inp": {"iron_ore": 1, "coal": 1}, "out": {"iron_ingot": 1}, "at": "fireplace", "doing": "Smelting iron", "fuel": "coal"},
+	{"id": "smelt_gold", "name": "Smelt gold", "inp": {"gold_ore": 1, "coal": 1}, "out": {"gold_ingot": 1}, "at": "fireplace", "doing": "Smelting gold", "fuel": "coal"},
 	# Workstations process their material (issue #178): Lumberjack and Stonemason work.
 	{"id": "saw_planks", "name": "Sawn planks", "inp": {"log": 1}, "out": {"plank": 5}, "at": "chopping_block", "doing": "Sawing planks", "pattern": ["   ", " L ", "   "]},
 	{"id": "stone_bricks", "name": "Stone bricks", "inp": {"cobble": 2}, "out": {"stone_brick": 2}, "at": "mason_bench", "doing": "Cutting stone bricks", "pattern": ["   ", "CC ", "   "]},
 ]
 
-const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot", "H": "leather", "D": "diamond"}
+const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot", "H": "leather", "D": "diamond", "F": "flint"}
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
 ## Lumberjack and Stonemason replaced Mine in issue #177.
@@ -207,6 +216,11 @@ const TEMPLATES := {
 	"station": {"name": "Station", "size": Vector2i(3, 1), "walk": true, "plot": "loading station", "stages": [
 		{"name": "Station", "verb": "needs", "cost": {"plank": 6, "cobble": 4}},
 	]},
+	# The way to the Nether (Slice 5, issue #147): an obsidian frame, lit with flint and steel. The party packs and gathers
+	# on the staging area in front, which is part of the plot it reserves. It never turns.
+	"portal": {"name": "Nether portal", "size": Vector2i(4, 1), "plot": "portal hall", "stages": [
+		{"name": "Portal frame", "verb": "needs", "cost": {"obsidian": Tuning.PORTAL_OBSIDIAN}},
+	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},
 		{"name": "Walls", "verb": "need", "cost": {"plank": 16, "log": 4}},
@@ -246,7 +260,7 @@ static func is_armor(item: String) -> bool:
 
 ## Items that wear out, each with its own uses left: tools and armor.
 static func wears(item: String) -> bool:
-	return ITEMS[item].has("tool") or ITEMS[item].has("armor")
+	return ITEMS[item].has("tool") or ITEMS[item].has("armor") or ITEMS[item].has("uses")
 
 
 ## Items to a cell: one tool, piece of armor or minecart, or a stack of anything else.

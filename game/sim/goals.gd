@@ -35,7 +35,7 @@ const VILLAGE := [
 
 
 ## One page of the village book per building or zone, in the Build menu's order. `unlock` says when it
-## shows: "" from the start, "house" once Ada's house is up, "board" once the board is built, "road"
+## shows: "" from the start, "house" once Ada's house is up, "board" once the board is built, "portal" once obsidian has come home, "road"
 ## once a party has been to the old mine. `tpl` is the building's template, for its panel's "?".
 const PAGES := [
 	{"id": "stockpile", "title": "Stockpile", "who": "Anyone hauls to it",
@@ -90,6 +90,10 @@ const PAGES := [
 		"what": "The village's main storage. Chests carried in hold anything; stockpiles take the overflow.",
 		"grows": "Up to 4 chests, and room to grow into a warehouse.",
 		"without": "Everything sits loose in stockpiles, and runs out of room."},
+	{"id": "portal", "title": "Nether portal", "tpl": "portal", "unlock": "portal", "who": "Builders carry the obsidian; anyone lights it",
+		"what": "A frame of obsidian from the deep mine, lit with flint and steel. Parties bound for the Nether pack on the staging area in front of it.",
+		"grows": "Reserves a portal hall around it.",
+		"without": "There's no way to the Nether, and nothing it holds."},
 	{"id": "board", "title": "Expedition board", "tpl": "board", "unlock": "house", "who": "Whoever you send",
 		"what": "Plans trips off the map: pack the party, set a target, and Depart. The village waits while they're away.",
 		"grows": "Reserves a plot, and grows into a map room.",
@@ -111,6 +115,7 @@ static func page_known(sim: Sim, page: Dictionary) -> bool:
 		"house": return sim.stats.houses >= 1
 		"board": return sim.stats.get("built", {}).has("board")
 		"road": return sim.get_map("old_mine").visited
+		"portal": return sim.stats.get("obsidian_home", false) or sim.maps.village.sites.any(func(x): return x.tpl == "portal")
 	return true
 
 

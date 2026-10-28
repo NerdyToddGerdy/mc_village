@@ -26,6 +26,7 @@ const ACTIONS := [
 	["board", "Orders", "Place an expedition board", []],
 	["chopping_block", "Orders", "Place a chopping block", []],
 	["storehouse", "Orders", "Place a storehouse", []],
+	["portal", "Orders", "Place a Nether portal", []],
 	["claim", "Orders", "Claim land", []],
 	["mason_bench", "Orders", "Place a mason's bench", []],
 	["toolsmith_bench", "Orders", "Place a toolsmith's bench", []],

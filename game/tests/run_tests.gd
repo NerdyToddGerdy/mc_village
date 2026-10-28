@@ -63,6 +63,14 @@ func _init() -> void:
 		"test_hazards_and_injuries",
 		"test_iron_discovery",
 		"test_slice2_fixture_loads",
+		"test_deep_mine_materials",
+		"test_the_portal",
+		"test_the_nether_landing",
+		"test_nether_hazards",
+		"test_nether_and_overworld_together",
+		"test_the_portal_goes_out",
+		"test_expedition_slots",
+		"test_old_expedition_moves_to_the_overworld_slot",
 		"test_road_to_the_mine",
 		"test_survey_and_obstacles",
 		"test_rails_and_minecarts",
@@ -1454,7 +1462,7 @@ func send_to_mine(sim: Sim, r: Dictionary) -> void:
 ## tallies leave out what lies on another map.
 func test_residents_only_work_on_their_own_map() -> void:
 	var sim := Sim.new_game()
-	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID] and sim.map_id == "village", "a new game has the village, the old mine, the road between them and the meadow, with the village current")
+	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, NetherLanding.ID] and sim.map_id == "village", "a new game has the village, the old mine, the road between them, the meadow and the Nether landing, with the village current")
 	var ada: Dictionary = sim.residents[0]
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
 	check(ada.map == "village" and tomas.map == "village", "residents start on the village map")
@@ -1759,7 +1767,7 @@ func test_planning_an_expedition() -> void:
 	# Confirming starts packing; it doesn't send anyone. One expedition at a time.
 	check(sim.plan_expedition(plan) == "" and sim.expedition.state == "staging", "confirming the plan starts packing")
 	check(ada.map == "village" and not ada.away, "nobody leaves yet")
-	check(sim.plan_expedition(sim.new_plan()) == "One expedition at a time", "a second plan can't be made while one is under way")
+	check(sim.plan_expedition(sim.new_plan()) == "An Overworld party is already out", "a second Overworld plan can't be made while one is under way")
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(loaded.expedition.state == "staging" and loaded.expedition.party == plan.party and loaded.expedition.meals == 4, "the plan is saved")
 
@@ -1914,7 +1922,7 @@ func test_return_and_unloading() -> void:
 	var p := send_party(sim)
 	var ada: Dictionary = p.ada
 	var tomas: Dictionary = p.tomas
-	check(sim.plan_problems(sim.new_plan()).has("One expedition at a time"), "the board is locked while the party is out")
+	check(sim.plan_problems(sim.new_plan()).has("An Overworld party is already out"), "the board is locked while the party is out")
 	for i in int((ROAD + 40) * Tuning.TPS):
 		sim.step()
 		if sim.at_site(ada) and sim.at_site(tomas):
@@ -2703,7 +2711,7 @@ func test_adventures_list() -> void:
 	sim.plan_expedition(plan)
 	rows = sim.adventures()
 	check(rows[1].status == "Packing to go" and rows[1].here and rows[0].locked and rows[0].status == "Locked: packing for the meadow", "while packing, the meadow's row says so and the mine's is locked")
-	check(sim.plan_problems(sim.new_plan(OldMine.ID)).has("One expedition at a time"), "planning is locked")
+	check(sim.plan_problems(sim.new_plan(OldMine.ID)).has("An Overworld party is already out"), "planning is locked")
 	b.store = {"bread": 2}
 	for i in 30 * Tuning.TPS:
 		sim.step()
@@ -4297,3 +4305,434 @@ func test_diamonds_deep_in_the_mine() -> void:
 	ts2.drop_items(Sim.rcell(ts2.residents[0]) + Vector2i(2, 0), "diamond", 2)
 	run(ts2, 1)
 	check(b3.queue.has("iron_pick") and not b3.queue.has("diamond_pick"), "with fewer than 3 diamonds it's iron (%s)" % [b3.queue])
+
+
+## Two expeditions at once (issue #145): a slot for each realm.
+func test_expedition_slots() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var other := sim.add_resident("Tomas", "7A5C8F", Sim.rcell(ada) + Vector2i(1, 0))
+	check(sim.slot == "overworld" and sim.expedition.is_empty() and sim.expeditions.keys() == ["overworld", "nether"], "two empty slots, the Overworld's current at rest")
+	check(Sim.slot_of_dest(OldMine.ID) == "overworld" and Sim.slot_of_dest(MineLevels.level_id(2)) == "overworld" and Sim.slot_of_dest("nether_landing") == "nether", "a destination's realm decides its slot")
+	# The current slot is the one `expedition` reads and writes.
+	sim.expeditions.nether = {"state": "out", "dest": "nether_landing", "party": [other.id]}
+	sim.expedition = {"state": "out", "dest": OldMine.ID, "party": [ada.id]}
+	check(sim.on_slot("nether", func(): return sim.expedition.dest) == "nether_landing" and sim.expedition.dest == OldMine.ID, "on_slot reads the other slot and puts the current one back")
+	check(sim.slot_of(ada) == "overworld" and sim.slot_of(other) == "nether", "a resident's slot is their party's")
+	var seen := []
+	sim.each_expedition(func(): seen.append(sim.slot))
+	check(seen == ["overworld", "nether"] and sim.slot == "overworld", "each_expedition walks the slots that have a party")
+	# A taken slot refuses a plan, with its reason; the other realm's slot is free.
+	var plan := {"dest": OldMine.ID, "party": [], "policy": {"target": true}, "target": {"item": "coal", "n": 1}}
+	check(sim.plan_problems(plan).has("An Overworld party is already out"), "a second Overworld expedition is refused with a reason")
+	plan.dest = "nether_landing"
+	check(sim.plan_problems(plan).has("A Nether party is already out"), "and so is a second Nether one")
+	plan.rescue = true
+	check(not sim.plan_problems(plan).has("A Nether party is already out"), "a rescue sets out although its slot is taken")
+	# A resident is in one party only.
+	check(sim.cant_join(ada) == "Out with the party" and sim.cant_join(other) == "Out with the party", "residents in a party can't join another")
+	# A choice names its expedition, and answering it works that slot.
+	sim.on_slot("nether", func(): sim._ask("injury", "Someone is hurt.", [{"id": "press_on", "label": "Press on", "cost": ""}], other.id))
+	check(sim.pending[0].slot == "nether", "a pending choice names its slot")
+	sim.choose("press_on")
+	check(sim.pending.is_empty() and sim.slot == "overworld", "answering it puts the slot back")
+	# Saving keeps both.
+	var back := Sim.from_state(sim.save_state())
+	check(back.expeditions.nether.dest == "nether_landing" and back.expeditions.overworld.dest == OldMine.ID, "both slots survive a save")
+
+
+## An older save's expedition moves into the Overworld slot (issue #145).
+func test_old_expedition_moves_to_the_overworld_slot() -> void:
+	var raw := {"v": 36, "state": {"expedition": {"dest": "old_mine", "state": "out", "party": [1]}, "pending": [{"kind": "door", "text": "", "options": [], "res_id": 0, "map": "old_mine"}]}}
+	var up: Dictionary = SaveFormat.upgrade(raw).data
+	check(up.state.expeditions.overworld.dest == "old_mine" and up.state.expeditions.nether.is_empty() and not up.state.has("expedition"), "the trip is the Overworld's, the Nether's empty")
+	check(up.state.pending[0].slot == "overworld", "and so is a waiting choice")
+	var fixture := SaveFormat.read("res://tests/fixtures/save_v36.save")
+	check(not fixture.has("error") and fixture.data.state.expeditions.nether.is_empty(), "the v36 fixture loads with its expedition in the Overworld slot")
+
+
+## Gold, gravel and flint, and obsidian beside lava on the deeper levels; flint and steel (issue #146).
+func test_deep_mine_materials() -> void:
+	var sim := Sim.new_game()
+	for ore in ["gold", "gravel", "obsidian"]:
+		var ch: String = MineLevels.DEEP_CHARS[ore]
+		var first: int = MineLevels.DEEP_ORES[ore].from
+		for n in range(1, first):
+			check(MineLevels.deep_ore_count(n, ore) == 0 and not "".join(MineLevels.layout(sim.seed, n).rows).contains(ch), "no %s on level %d" % [ore, n])
+		for n in range(first, first + 3):
+			var rows: Array = MineLevels.layout(sim.seed, n).rows
+			var found: int = "".join(rows).count(ch)  # a wide level has little rock beside its floor, so it can hold fewer
+			check(found >= 1 and found <= MineLevels.deep_ore_count(n, ore) and rows == MineLevels.layout(sim.seed, n).rows, "level %d has %s, the same every time (%d)" % [n, ore, found])
+	check(MineLevels.DEEP_ORES.gold.from == 2 and MineLevels.DEEP_ORES.gravel.from == 3 and MineLevels.DEEP_ORES.obsidian.from == 5, "gold from level 2, gravel from 3, obsidian from 5")
+	# The diamonds are where they were: gold, gravel and obsidian leave their layout alone.
+	var with_all := "".join(MineLevels.layout(sim.seed, 6).rows).replace("g", "#").replace("v", "#").replace("b", "#").replace("L", "#")
+	check(with_all.count("d") == MineLevels.deep_ore_count(6, "diamond"), "level 6 keeps its diamonds")
+	# Obsidian has lava beside it, and lava is rock to walk: a pool nobody enters.
+	var lvl: SimMap = MineLevels.build(sim, 5)
+	for n in range(5, 9):  # a level with a pool: the walls behind the obsidian decide
+		lvl = MineLevels.build(sim, n)
+		if not lvl.lava.is_empty():
+			break
+	sim.maps[lvl.id] = lvl
+	var obs: Array = lvl.boulders.filter(func(x): return x.get("ore", "") == "obsidian")
+	check(obs.size() >= 1 and obs.all(func(x): return not x.get("hidden", false)), "the obsidian is in plain sight")
+	var pools := 0
+	for lc in lvl.lava:
+		pools += 1
+		check(lvl.rock.has(lc) and not sim.on_map(lvl.id, func(): return sim.walkable(lc)), "a lava pool is not walkable")
+		check(Sim.DIRS.any(func(d): return obs.any(func(x): return x.cell == lc + d)), "and has obsidian beside it")
+	check(pools > 0, "a deep level has a lava pool (%d)" % pools)
+	var saved := SimMap.from_save(lvl.save())
+	check(saved.lava == lvl.lava, "the pools are saved")
+	# Obsidian needs a diamond pickaxe; gold only a pickaxe.
+	var ada: Dictionary = sim.residents[0]
+	var st := {"what": "gather", "tool": "pick", "target": obs[0]}
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 10}
+	check(sim._work_time(ada, st) < 0.0, "an iron pickaxe can't break obsidian")
+	ada.pick = {"type": "diamond_pick", "tier": 4, "dur": 10}
+	check(sim._work_time(ada, st) > 0.0, "a diamond pickaxe can")
+	sim.expedition = {"state": "out", "leg": "out", "dest": lvl.id, "party": [ada.id], "target": {"item": "obsidian", "n": 1}, "list": [{"item": "obsidian", "on": true, "n": 1}],
+		"cargo": {}, "tools": [], "policy": {"target": true, "full": true, "low": true}}
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 10}
+	ada.map = lvl.id
+	ada.arriving = false
+	check(not sim.can_mine_ore("obsidian") and sim.can_mine_ore("gold") and sim.can_mine_ore("gravel"), "only obsidian wants the better pickaxe")
+	sim.on_map(lvl.id, func(): sim._stuck_site())
+	check(sim.stuck.any(func(x): return x.why == "Obsidian: needs a diamond pickaxe"), "the stuck list says so: " + stuck_text(sim))
+	ada.pick = {"type": "diamond_pick", "tier": 4, "dur": 10}
+	check(sim.can_mine_ore("obsidian"), "with a diamond pickaxe it can")
+	sim.expedition = {}
+	# The report lists what the level holds, once it's been seen, as cargo targets.
+	lvl.visited = true
+	var items: Array = sim.site_report(lvl.id).resources.map(func(x): return x.item)
+	check(items.has("gold_ore") and items.has("obsidian") and items.has("flint"), "the site report lists gold, obsidian and flint (%s)" % [items])
+	check(sim.plan_targets(lvl.id).any(func(x): return x.item == "obsidian"), "obsidian is a cargo target")
+	# Gravel gives a flint, sometimes.
+	var gravel: Dictionary = {}
+	for n in range(3, 7):
+		var gl: SimMap = MineLevels.build(sim, n)
+		for b in gl.boulders:
+			if b.get("ore", "") == "gravel" and gravel.is_empty():
+				gravel = b
+				sim.maps[gl.id] = gl
+				lvl = gl
+	check(not gravel.is_empty(), "there is gravel to break")
+	var flints := 0
+	for i in 40:
+		var before: int = sim.on_map(lvl.id, func(): return sim.items.values().filter(func(x): return x.type == "flint").map(func(x): return x.n).reduce(func(a, b): return a + b, 0))
+		gravel.alive = true
+		sim.on_map(lvl.id, func():
+			sim.rng.seed = i + 1
+			sim._finish_work(ada, {"what": "gather", "tool": "pick", "target": gravel}))
+		flints += sim.on_map(lvl.id, func(): return sim.items.values().filter(func(x): return x.type == "flint").map(func(x): return x.n).reduce(func(a, b): return a + b, 0)) - before
+	check(flints > 5 and flints < 35, "about half the gravel breaks to a flint (%d of 40)" % flints)
+	# Smelting gold, and flint and steel.
+	check(Defs.recipe("smelt_gold").inp == {"gold_ore": 1, "coal": 1} and Defs.recipe("smelt_gold").out == {"gold_ingot": 1} and Defs.recipe("smelt_gold").at == "fireplace", "gold ore smelts with coal at the fireplace")
+	check(Defs.recipe("flint_and_steel").inp == {"flint": 1, "iron_ingot": 1}, "flint and steel is a flint and an iron ingot")
+	check(Sim.full_uses("flint_and_steel") == Tuning.FLINT_STEEL_USES and Defs.stack_cap("flint_and_steel") == 1, "it wears: one to a cell, a few uses")
+	check(["gold_ore", "gold_ingot", "obsidian", "flint"].all(func(i): return Defs.ITEMS[i].group == "ores"), "the tally bar groups them with the other ores")
+	var vil := Sim.new_game()
+	var bench := vil.place_site("bench", open_rect(vil, Vector2i(3, 3)).position + Vector2i(1, 0))
+	bench.stage = 1
+	bench.done = true
+	var cook: Dictionary = vil.residents[0]
+	vil.drop_items(Sim.rcell(cook) + Vector2i(1, 0), "flint", 1)
+	vil.drop_items(Sim.rcell(cook) + Vector2i(-1, 0), "iron_ingot", 1)
+	vil.queue_add(bench, "flint_and_steel")
+	run(vil, 60.0)
+	var lit: Array = vil.stacks_where(func(x): return x.type == "flint_and_steel")
+	check(lit.size() == 1 and lit[0].dur == Tuning.FLINT_STEEL_USES, "the bench makes flint and steel (%d)" % lit.size())
+
+
+## The portal: an obsidian frame carried in and built, lit only with flint and steel (issue #147).
+func test_the_portal() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var spot := open_rect(sim, Vector2i(6, 3)).position + Vector2i(1, 0)
+	check(sim.placement_check("portal", spot) == "", "a portal can be placed on open ground")
+	var portal := sim.place_site("portal", spot, 2)
+	check(portal.rot == 0 and portal.size == Vector2i(4, 1) and portal.plot == Rect2i(spot + Vector2i(-1, 0), Vector2i(6, 3)) and not portal.lit, "it never turns, reserves its staging area and starts unlit")
+	check(Defs.TEMPLATES.portal.stages[0].cost == {"obsidian": Tuning.PORTAL_OBSIDIAN}, "the frame costs %d obsidian" % Tuning.PORTAL_OBSIDIAN)
+	check(Sim.staging_cells(portal).all(func(c): return portal.plot.has_point(c) and not Rect2i(portal.origin, portal.size).has_point(c)), "its staging area is in front of the frame")
+	sim.paint_zone(open_rect(sim, Vector2i(2, 2)))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 2), "obsidian", 4)
+	run(sim, 20)
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Portal frame needs 6 more obsidian"), "short of obsidian it says how much: " + stuck_text(sim))
+	# Built from the delivered obsidian.
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 3), "obsidian", 6)
+	run(sim, 120)
+	check(portal.done and not portal.lit and sim.free_count("obsidian") == 0, "the frame is built from the obsidian carried to it")
+	check(sim.events.any(func(ev): return ev.type == "toast" and ev.text.begins_with("The portal frame is built")), "and says what's next")
+	check(sim._work_at("build") == portal.origin, "a finished but unlit frame still counts as work for a builder")
+	# It lights only with flint and steel.
+	run(sim, 20)
+	sim.compute_stuck()
+	check(not portal.lit and stuck_text(sim).contains("Portal: Needs flint and steel to light"), "without flint and steel it waits: " + stuck_text(sim))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "flint_and_steel", 1)
+	run(sim, 60)
+	check(portal.lit and portal.builder == 0, "with flint and steel someone lights it")
+	var back := sim.stacks_where(func(x): return x.type == "flint_and_steel")
+	check(back.size() == 1 and back[0].dur == Tuning.FLINT_STEEL_USES - 1, "the flint and steel is put back with a use fewer (%s)" % [back.map(func(x): return x.dur)])
+	sim.compute_stuck()
+	check(not stuck_text(sim).contains("Portal"), "a lit portal is not stuck")
+	check(Sim.from_state(sim.save_state()).maps.village.sites.any(func(x): return x.tpl == "portal" and x.lit), "the lit state is saved")
+	# A spent flint and steel is gone.
+	var sim2 := Sim.new_game()
+	var p2 := sim2.place_site("portal", open_rect(sim2, Vector2i(6, 3)).position + Vector2i(1, 0))
+	p2.stage = 1
+	p2.done = true
+	sim2.drop_items(Sim.rcell(sim2.residents[0]) + Vector2i(-2, 1), "flint_and_steel", 1, 1)
+	run(sim2, 60)
+	check(p2.lit and sim2.stacks_where(func(x): return x.type == "flint_and_steel").is_empty(), "a spent flint and steel is used up")
+	var fixture := SaveFormat.read("res://tests/fixtures/save_v39.save")
+	check(not fixture.has("error") and Sim.from_state(fixture.data.state).maps.village.sites.any(func(x): return x.tpl == "portal" and x.lit), "the v39 fixture loads with its lit portal")
+	# The Build menu offers it once obsidian has come home.
+	check(not OrderMenus.unlocked({"unlock": "portal"}, Sim.new_game()) and OrderMenus.unlocked({"unlock": "portal"}, sim), "the Build menu lists the portal once obsidian has come home or a portal stands")
+
+
+## A world with a board, a lit portal, and a second resident (issue #148).
+func nether_world() -> Dictionary:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	var board := built_board(sim)
+	var portal := place_done(sim, "portal", Sim.rcell(ada) + Vector2i(0, 8))
+	return {"sim": sim, "ada": ada, "tomas": tomas, "board": board, "portal": portal}
+
+
+## The portal landing (issue #148): planned at the board, packed at the portal, crossed to and back.
+func test_the_nether_landing() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var portal: Dictionary = w.portal
+	var landing: SimMap = sim.get_map(NetherLanding.ID)
+	check(landing.w == 24 and landing.h == 24 and landing.id.begins_with("nether") and not landing.known and landing.landmarks.size() == 3 and not landing.lava.is_empty(), "the landing is a 24×24 Nether map with lava and three landmarks, unknown at first")
+	check(landing.name == "Nether: portal landing" and landing.entrance == Vector2i(0, 12) and sim.on_map(NetherLanding.ID, func(): return sim.walkable(landing.entrance)), "it's the switcher's 'Nether: portal landing', entered on its west edge")
+	var plan := sim.new_plan(NetherLanding.ID)
+	plan.party = [ada.id]
+	check(plan.target.item == "survey" and plan.picks == 0 and Sim.cargo_rows(plan).is_empty(), "a Nether plan is to survey the landing, with no cargo")
+	portal.lit = false
+	check(sim.plan_problems(plan).has("The portal isn't lit"), "an unlit portal can't be crossed")
+	var bare := Sim.new_game()
+	var bare_plan := bare.new_plan(NetherLanding.ID)
+	check(bare.plan_problems(bare_plan).has("Build the portal first"), "with no portal, the plan says to build one")
+	portal.lit = true
+	sim.maps[NetherLanding.ID].known = true
+	check(sim.adventures().any(func(a): return a.id == NetherLanding.ID and a.name == "Nether: portal landing"), "the board lists the landing once it's known")
+	check(sim.plan_expedition(plan) == "" and sim.expeditions.nether.state == "staging" and sim.expeditions.nether.board == portal.id and sim.expeditions.overworld.is_empty(), "the plan goes in the Nether's slot, packed at the portal")
+	portal.store = {"bread": 3}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart_blocker("nether") == "", "the party gathers at the staging area")
+	check(Sim.staging_cells(portal).any(func(c): return Sim.manhattan(Sim.rcell(ada), c) <= 1), "(in front of the portal)")
+	check(sim.depart("nether") == "" and sim.expeditions.nether.state == "out" and sim.expeditions.nether.has("lighter"), "they set off with a flint and steel to relight the portal")
+	# Through the portal, and only there.
+	var last_village := Vector2i.ZERO
+	for i in 90 * Tuning.TPS:
+		if ada.map == "village":
+			last_village = Sim.rcell(ada)
+		sim.step()
+		if ada.map == NetherLanding.ID:
+			break
+	check(ada.map == NetherLanding.ID and not ada.away, "Ada crosses to the landing")
+	check(Sim.manhattan(last_village, sim.sign_for(NetherLanding.ID)) <= 1, "from the staging area, the one way through (%s)" % [last_village])
+	check(Sim.rcell(ada) == landing.entrance and landing.known and landing.visited, "arriving on its west edge, which makes it known and visited")
+	# The survey: every landmark.
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if landing.surveyed:
+			break
+	check(landing.surveyed and landing.landmarks_seen.size() == 3, "the party surveys the landing, one landmark after another")
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.expeditions.nether.is_empty():
+			break
+	check(sim.expeditions.nether.is_empty() and ada.map == "village" and sim.stats.expeditions == 1, "once surveyed it heads home through the portal, unpacks, and the slot is free (%s)" % [sim.expeditions.nether.get("home_why", "")])
+	check(sim.stacks_where(func(x): return x.type == "flint_and_steel").size() == 1, "and the flint and steel comes home")
+	check(sim.expedition_board().get("report", []).size() > 0, "the board shows the report")
+	# Older saves get the landing when they load, unknown.
+	var old := SaveFormat.read("res://tests/fixtures/save_v38.save")
+	var oldsim := Sim.from_state(old.data.state)
+	check(oldsim.maps.has(NetherLanding.ID) and not oldsim.get_map(NetherLanding.ID).known and oldsim.expeditions.nether.is_empty(), "an older save loads with the landing, unknown")
+	# The surveyed landing is remembered, and saved.
+	var back := Sim.from_state(sim.save_state())
+	check(back.get_map(NetherLanding.ID).surveyed and back.get_map(NetherLanding.ID).visited and back.get_map(NetherLanding.ID).landmarks_seen.size() == 3, "the survey is saved")
+
+
+## An Overworld party and a Nether party out together, each from its own packs (issue #145).
+func test_nether_and_overworld_together() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var tomas: Dictionary = w.tomas
+	var portal: Dictionary = w.portal
+	var board: Dictionary = w.board
+	portal.lit = true
+	sim.maps[NetherLanding.ID].known = true
+	var nplan := sim.new_plan(NetherLanding.ID)
+	nplan.party = [tomas.id]
+	nplan.meals = 3
+	check(sim.plan_expedition(nplan) == "", "the Nether party is planned")
+	portal.store = {"bread": 3}
+	var oplan := sim.new_plan(Meadow.ID)
+	oplan.party = [ada.id]
+	oplan.meals = 2
+	sim.aim_plan(oplan, "wool", 2)
+	check(sim.plan_expedition(oplan) == "" and sim.expeditions.overworld.state == "staging" and sim.expeditions.nether.state == "staging", "and the Overworld party, while it's packing")
+	check(sim.plan_expedition(sim.new_plan(Meadow.ID)).contains("is already out") and sim.plan_expedition(sim.new_plan(NetherLanding.ID)).contains("is already out"), "a third is refused for either slot")
+	board.store = {"bread": 2}
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("overworld") == "" and sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("overworld") == "" and sim.depart("nether") == "", "both depart")
+	check(sim.expeditions.nether.provisions == {"bread": 3} and sim.expeditions.overworld.provisions == {"bread": 2}, "each from its own packs (%s, %s)" % [sim.expeditions.nether.provisions, sim.expeditions.overworld.provisions])
+	var both := false
+	for i in 150 * Tuning.TPS:
+		sim.step()
+		if tomas.map == NetherLanding.ID and ada.away:
+			both = true
+			break
+	check(both, "Tomas is on the Nether landing while Ada is away at the meadow")
+	check(sim.slot == "overworld" and sim.expeditions.nether.dest == NetherLanding.ID and sim.expeditions.overworld.dest == Meadow.ID, "each keeps its own destination")
+	for i in 400 * Tuning.TPS:
+		sim.step()
+		if sim.expeditions.nether.is_empty() and sim.expeditions.overworld.is_empty():
+			break
+	check(sim.expeditions.nether.is_empty() and sim.expeditions.overworld.is_empty() and sim.stats.expeditions == 2, "both come home and unpack (%d)" % sim.stats.expeditions)
+
+
+## The portal can go out while a party is through it (issue #148): a party with flint and steel relights it, and one
+## without waits for the village.
+func test_the_portal_goes_out() -> void:
+	for with_lighter in [true, false]:
+		var w := nether_world()
+		var sim: Sim = w.sim
+		var ada: Dictionary = w.ada
+		var portal: Dictionary = w.portal
+		portal.lit = false
+		var landing: SimMap = sim.get_map(NetherLanding.ID)
+		landing.known = true
+		landing.visited = true
+		landing.surveyed = true
+		sim.expeditions.nether = {"state": "out", "leg": "home", "dest": NetherLanding.ID, "party": [ada.id], "board": portal.id,
+			"target": {"item": "survey", "n": 1}, "list": [], "meals": 1, "picks": 0, "policy": {"target": true, "full": true, "low": true}, "spend_return": false,
+			"provisions": {"bread": 1}, "cargo": {}, "supplies": {}, "tools": [], "packed": {}, "cart": false, "cart_cap": false, "hurt": {}, "broken": 0, "clear": false, "home_why": "the landing is surveyed"}
+		if with_lighter:
+			sim.expeditions.nether.lighter = {"type": "flint_and_steel", "dur": 5}
+		sim.move_to_map(ada, NetherLanding.ID, landing.entrance)
+		var label := "with flint and steel" if with_lighter else "without"
+		if with_lighter:
+			for i in 60 * Tuning.TPS:
+				sim.step()
+				if portal.lit:
+					break
+			check(portal.lit, "%s: the party relights the portal" % label)
+			check(sim.expeditions.nether.get("lighter", {}).get("dur", 0) == 4 or sim.expeditions.nether.is_empty(), "%s: using a use of the flint and steel" % label)
+			for i in 90 * Tuning.TPS:
+				sim.step()
+				if sim.expeditions.nether.is_empty():
+					break
+			check(sim.expeditions.nether.is_empty() and ada.map == "village", "%s: and comes home" % label)
+		else:
+			run(sim, 30)
+			sim.compute_stuck()
+			check(ada.map == NetherLanding.ID and not portal.lit and stuck_text(sim).contains("The portal has gone out and no one has flint and steel"), "%s: the party waits, and the list says why: %s" % [label, stuck_text(sim)])
+			sim.drop_items(Sim.rcell(ada), "flint_and_steel", 1)  # (lying on the landing, out of the village's reach)
+			portal.lit = true  # the village lights it
+			for i in 90 * Tuning.TPS:
+				sim.step()
+				if sim.expeditions.nether.is_empty():
+					break
+			check(sim.expeditions.nether.is_empty() and ada.map == "village", "%s: once it's lit again they come home" % label)
+
+
+## Fire, lava and falls on the Nether's maps (issue #149).
+func test_nether_hazards() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var tomas: Dictionary = w.tomas
+	var ada: Dictionary = w.ada
+	var landing: SimMap = sim.get_map(NetherLanding.ID)
+	landing.visited = true
+	check(not landing.fire.is_empty() and not landing.ledges.is_empty() and not landing.lava.is_empty(), "the landing has fire, ledges and lava")
+	sim.move_to_map(tomas, NetherLanding.ID, landing.entrance + Vector2i(1, 0))
+	sim.use_map(NetherLanding.ID)
+	# Beside lava: a burn now and then.
+	var beside: Vector2i = landing.lava.keys().filter(func(c): return sim.walkable(c + Vector2i(0, 1)))[0] + Vector2i(0, 1)
+	check(landing.beside_lava(beside), "(a cell beside lava)")
+	var burns := 0
+	for i in 400:
+		tomas.hurt = 0
+		sim._ledge_step(tomas, beside)
+		burns += 1 if tomas.hurt > 0 else 0
+	check(burns > 3 and burns < 45, "stepping beside lava burns about %d%% of the time (%d of 400)" % [roundi(Tuning.LAVA_CHANCE * 100), burns])
+	check(str(tomas.hurt_cause).contains("burn"), "and the cause is a burn")
+	# Falls: a ledge on the Nether needs no dark.
+	var ledge: Vector2i = landing.ledges[0]
+	var falls := 0
+	for i in 600:
+		tomas.hurt = 0
+		sim._ledge_step(tomas, ledge)
+		falls += 1 if tomas.hurt > 0 else 0
+	check(falls > 5 and falls < 70, "a ledge drops someone now and then, dark or not (%d of 600)" % falls)
+	# Fire: stepping onto it sets someone alight and hurts; leaving it, the burning stops.
+	var fire: Vector2i = landing.fire.keys()[0]
+	var hurts := 0
+	for i in 60:
+		tomas.hurt = 0
+		tomas.burn = 0.0
+		tomas.pos = Vector2(fire)
+		tomas.path = []
+		sim._ledge_step(tomas, fire)
+		check(tomas.burn == Tuning.FIRE_BURN_TIME, "")
+		for k in int(Tuning.FIRE_BURN_TIME + 3.0) * Tuning.TPS:
+			if tomas.get("burn", 0.0) <= 0.0 and k > 0:
+				break
+			sim._step_resident(tomas)
+		hurts += 1 if tomas.hurt > 0 else 0
+		check(not landing.fire.has(Sim.rcell(tomas)), "")
+	check(hurts > 15, "someone on fire is hurt, often (%d of 60)" % hurts)
+	sim.use_map("village")
+	tomas.hurt = 0
+	tomas.burn = 0.0
+	tomas.job = null
+	tomas.pos = Vector2(landing.entrance + Vector2i(1, 0))
+	var before: int = sim.stats.get("injuries", 0)
+	run(sim, 15)
+	check(sim.stats.get("injuries", 0) == before and tomas.get("burn", 0.0) <= 0.0, "away from the fire the burning has stopped")
+	# Paths go round the lava where they can.
+	sim.use_map(NetherLanding.ID)
+	var path = sim.find_path(Vector2i(1, 3), {Vector2i(6, 3): true})
+	var hot: Dictionary = landing.heat()
+	check(path != null and not path.any(func(c): return hot.has(c)), "a path round the pool keeps off the cells beside lava (%s)" % [path.filter(func(c): return hot.has(c)) if path != null else "none"])
+	var tight = sim.find_path(Vector2i(1, 3), {Vector2i(5, 3): true})  # the goal is itself beside the pool
+	check(tight != null and tight.size() > 0, "and one to a cell beside it still finds it")
+	sim.use_map("village")
+	# The PC is never seriously hurt; a serious burn on an expedition stops the game and offers the retreat.
+	sim.injure(ada, 2, "burning")
+	check(ada.hurt == 1, "Ada can be burned, but never seriously")
+	ada.hurt = 0
+	sim.move_to_map(ada, NetherLanding.ID, landing.entrance + Vector2i(2, 0))
+	sim.expeditions.nether = {"state": "out", "leg": "out", "dest": NetherLanding.ID, "party": [tomas.id, ada.id], "board": w.portal.id,
+		"target": {"item": "survey", "n": 1}, "list": [], "meals": 1, "picks": 0, "policy": {"target": true, "full": true, "low": true}, "spend_return": false,
+		"provisions": {"bread": 1}, "cargo": {}, "supplies": {}, "tools": [], "packed": {}, "cart": false, "cart_cap": false, "hurt": {}, "broken": 0, "clear": false}
+	tomas.hurt = 0
+	sim.on_slot("nether", func(): sim.on_map(NetherLanding.ID, func(): sim.injure(tomas, 2, "burning")))
+	check(not sim.pending.is_empty() and sim.pending[0].kind == "injury" and sim.pending[0].slot == "nether" and "burning" in sim.pending[0].text, "a serious burn stops the game for the retreat")
+	sim.choose("retreat")
+	check(sim.expeditions.nether.leg == "home" and sim.expeditions.nether.home_why.contains("seriously hurt"), "retreat sends the party home (%s)" % sim.expeditions.nether.get("home_why", ""))
+	# The stuck list says what happened, and the report lists the dangers.
+	tomas.hurt = 1
+	tomas.hurt_cause = "burning"
+	tomas.heal = 30.0
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Burned"), "the stuck list says someone is burned: " + stuck_text(sim))
+	var hazards: Array = sim.site_report(NetherLanding.ID).hazards
+	check(hazards.any(func(h): return h.contains("Lava")) and hazards.any(func(h): return h.contains("fire")) and hazards.any(func(h): return h.contains("Ledges")), "the site report lists lava, fire and ledges (%s)" % [hazards])
+	check(Sim.from_state(sim.save_state()).get_map(NetherLanding.ID).fire == landing.fire, "the fire is saved")
