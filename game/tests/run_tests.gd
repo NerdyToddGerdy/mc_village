@@ -63,6 +63,8 @@ func _init() -> void:
 		"test_hazards_and_injuries",
 		"test_iron_discovery",
 		"test_slice2_fixture_loads",
+		"test_expedition_slots",
+		"test_old_expedition_moves_to_the_overworld_slot",
 		"test_road_to_the_mine",
 		"test_survey_and_obstacles",
 		"test_rails_and_minecarts",
@@ -1759,7 +1761,7 @@ func test_planning_an_expedition() -> void:
 	# Confirming starts packing; it doesn't send anyone. One expedition at a time.
 	check(sim.plan_expedition(plan) == "" and sim.expedition.state == "staging", "confirming the plan starts packing")
 	check(ada.map == "village" and not ada.away, "nobody leaves yet")
-	check(sim.plan_expedition(sim.new_plan()) == "One expedition at a time", "a second plan can't be made while one is under way")
+	check(sim.plan_expedition(sim.new_plan()) == "An Overworld party is already out", "a second Overworld plan can't be made while one is under way")
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(loaded.expedition.state == "staging" and loaded.expedition.party == plan.party and loaded.expedition.meals == 4, "the plan is saved")
 
@@ -1914,7 +1916,7 @@ func test_return_and_unloading() -> void:
 	var p := send_party(sim)
 	var ada: Dictionary = p.ada
 	var tomas: Dictionary = p.tomas
-	check(sim.plan_problems(sim.new_plan()).has("One expedition at a time"), "the board is locked while the party is out")
+	check(sim.plan_problems(sim.new_plan()).has("An Overworld party is already out"), "the board is locked while the party is out")
 	for i in int((ROAD + 40) * Tuning.TPS):
 		sim.step()
 		if sim.at_site(ada) and sim.at_site(tomas):
@@ -2703,7 +2705,7 @@ func test_adventures_list() -> void:
 	sim.plan_expedition(plan)
 	rows = sim.adventures()
 	check(rows[1].status == "Packing to go" and rows[1].here and rows[0].locked and rows[0].status == "Locked: packing for the meadow", "while packing, the meadow's row says so and the mine's is locked")
-	check(sim.plan_problems(sim.new_plan(OldMine.ID)).has("One expedition at a time"), "planning is locked")
+	check(sim.plan_problems(sim.new_plan(OldMine.ID)).has("An Overworld party is already out"), "planning is locked")
 	b.store = {"bread": 2}
 	for i in 30 * Tuning.TPS:
 		sim.step()
@@ -4297,3 +4299,47 @@ func test_diamonds_deep_in_the_mine() -> void:
 	ts2.drop_items(Sim.rcell(ts2.residents[0]) + Vector2i(2, 0), "diamond", 2)
 	run(ts2, 1)
 	check(b3.queue.has("iron_pick") and not b3.queue.has("diamond_pick"), "with fewer than 3 diamonds it's iron (%s)" % [b3.queue])
+
+
+## Two expeditions at once (issue #145): a slot for each realm.
+func test_expedition_slots() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var other := sim.add_resident("Tomas", "7A5C8F", Sim.rcell(ada) + Vector2i(1, 0))
+	check(sim.slot == "overworld" and sim.expedition.is_empty() and sim.expeditions.keys() == ["overworld", "nether"], "two empty slots, the Overworld's current at rest")
+	check(Sim.slot_of_dest(OldMine.ID) == "overworld" and Sim.slot_of_dest(MineLevels.level_id(2)) == "overworld" and Sim.slot_of_dest("nether_landing") == "nether", "a destination's realm decides its slot")
+	# The current slot is the one `expedition` reads and writes.
+	sim.expeditions.nether = {"state": "out", "dest": "nether_landing", "party": [other.id]}
+	sim.expedition = {"state": "out", "dest": OldMine.ID, "party": [ada.id]}
+	check(sim.on_slot("nether", func(): return sim.expedition.dest) == "nether_landing" and sim.expedition.dest == OldMine.ID, "on_slot reads the other slot and puts the current one back")
+	check(sim.slot_of(ada) == "overworld" and sim.slot_of(other) == "nether", "a resident's slot is their party's")
+	var seen := []
+	sim.each_expedition(func(): seen.append(sim.slot))
+	check(seen == ["overworld", "nether"] and sim.slot == "overworld", "each_expedition walks the slots that have a party")
+	# A taken slot refuses a plan, with its reason; the other realm's slot is free.
+	var plan := {"dest": OldMine.ID, "party": [], "policy": {"target": true}, "target": {"item": "coal", "n": 1}}
+	check(sim.plan_problems(plan).has("An Overworld party is already out"), "a second Overworld expedition is refused with a reason")
+	plan.dest = "nether_landing"
+	check(sim.plan_problems(plan).has("A Nether party is already out"), "and so is a second Nether one")
+	plan.rescue = true
+	check(not sim.plan_problems(plan).has("A Nether party is already out"), "a rescue sets out although its slot is taken")
+	# A resident is in one party only.
+	check(sim.cant_join(ada) == "Out with the party" and sim.cant_join(other) == "Out with the party", "residents in a party can't join another")
+	# A choice names its expedition, and answering it works that slot.
+	sim.on_slot("nether", func(): sim._ask("injury", "Someone is hurt.", [{"id": "press_on", "label": "Press on", "cost": ""}], other.id))
+	check(sim.pending[0].slot == "nether", "a pending choice names its slot")
+	sim.choose("press_on")
+	check(sim.pending.is_empty() and sim.slot == "overworld", "answering it puts the slot back")
+	# Saving keeps both.
+	var back := Sim.from_state(sim.save_state())
+	check(back.expeditions.nether.dest == "nether_landing" and back.expeditions.overworld.dest == OldMine.ID, "both slots survive a save")
+
+
+## An older save's expedition moves into the Overworld slot (issue #145).
+func test_old_expedition_moves_to_the_overworld_slot() -> void:
+	var raw := {"v": 36, "state": {"expedition": {"dest": "old_mine", "state": "out", "party": [1]}, "pending": [{"kind": "door", "text": "", "options": [], "res_id": 0, "map": "old_mine"}]}}
+	var up: Dictionary = SaveFormat.upgrade(raw).data
+	check(up.state.expeditions.overworld.dest == "old_mine" and up.state.expeditions.nether.is_empty() and not up.state.has("expedition"), "the trip is the Overworld's, the Nether's empty")
+	check(up.state.pending[0].slot == "overworld", "and so is a waiting choice")
+	var fixture := SaveFormat.read("res://tests/fixtures/save_v36.save")
+	check(not fixture.has("error") and fixture.data.state.expeditions.nether.is_empty(), "the v36 fixture loads with its expedition in the Overworld slot")

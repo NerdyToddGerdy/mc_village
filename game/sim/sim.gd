@@ -64,7 +64,9 @@ var arrival_at := -1
 var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
 var herd_floor := {}         ## Species -> how many wild animals hunters leave in the village (issue #183); unset is Tuning.HERD_FLOOR.
-## The planned expedition (issues #106, #107), or {} when there's none. One at a time (#25):
+## The planned expedition (issues #106, #107), or {} when there's none. Two at once (#145): one Overworld and one Nether,
+## in `expeditions`. `expedition` is the current slot's, like `m` is the current map's: it's the Overworld's at rest, and
+## the tick switches it to whoever's turn it is (`use_slot`, `on_slot`):
 ##   {dest, board (site id), party: [resident ids], target: {item, n}, meals, picks,
 ##    policy: {target, full, low}, spend_return, state: "staging" or "out", packed: {item: n}, tools: [{type, dur}],
 ##    leg: "out" or "home", provisions: {meal: n}, cargo: {item: n}, broken: n, hurt: {name: level},
@@ -72,7 +74,14 @@ var herd_floor := {}         ## Species -> how many wild animals hunters leave i
 ## `packed` is what was packed at the board, kept for the report. Once out, the packs hold `provisions`
 ## (meals left), `tools` (spare pickaxes left) and `cargo` (what's been mined), sharing PACK_CAPACITY
 ## each (issue #109). `leg` is which way the party is going (#108).
-var expedition := {}
+var expedition: Dictionary:
+	get:
+		return expeditions[slot]
+	set(v):
+		expeditions[slot] = v
+const SLOTS := ["overworld", "nether"]
+var expeditions := {"overworld": {}, "nether": {}}
+var slot := "overworld"   ## Which of `expeditions` is `expedition` now.
 ## Choices waiting for the player, oldest first (issues #110, #111): {kind, text, options, res_id, map}.
 ## The game pauses while there's one.
 var pending: Array = []
@@ -113,6 +122,61 @@ func on_map(id: String, f: Callable):
 
 func get_map(id: String) -> SimMap:
 	return maps[id]
+
+
+# ---------------------------------------------------------------- expedition slots (issue #145)
+
+## Which realm a map is in: "nether" for the Nether's maps (their ids start with "nether"), else "overworld".
+static func realm_of(id: String) -> String:
+	return "nether" if id.begins_with("nether") else "overworld"
+
+
+## Makes `id` ("overworld" or "nether") the current expedition slot. Returns the slot that was current.
+func use_slot(id: String) -> String:
+	var prev := slot
+	slot = id
+	return prev
+
+
+## Runs `f` with slot `id` current, then puts the current slot back. Returns what `f` returns.
+func on_slot(id: String, f: Callable):
+	var prev := use_slot(id)
+	var out = f.call()
+	use_slot(prev)
+	return out
+
+
+## The one helper that walks the slots (issue #145): runs `f` for each slot that has an expedition.
+func each_expedition(f: Callable) -> void:
+	for sl in SLOTS:
+		if not expeditions[sl].is_empty():
+			on_slot(sl, f)
+
+
+## The slot a destination's expedition goes in.
+static func slot_of_dest(dest: String) -> String:
+	return realm_of(dest)
+
+
+## The slot a resident's party is in, else the slot of the realm they're in.
+func slot_of(r: Dictionary) -> String:
+	for sl in SLOTS:
+		if expeditions[sl].get("party", []).has(r.id):
+			return sl
+	return realm_of(r.map)
+
+
+## The expedition a resident is in the party of, or {}.
+func expedition_of(r: Dictionary) -> Dictionary:
+	for sl in SLOTS:
+		if expeditions[sl].get("party", []).has(r.id):
+			return expeditions[sl]
+	return {}
+
+
+## What the player calls a slot's party: "Overworld party", "Nether party".
+static func party_name(sl: String) -> String:
+	return "%s party" % sl.capitalize()
 
 
 ## Residents on the current map, not counting anyone away on the walk to or from the meadow.
@@ -2897,6 +2961,7 @@ func step() -> void:
 		use_map(id)
 		_step_map()
 	use_map("village")
+	use_slot("overworld")
 	_step_arrivals()
 	_apply_claims()
 	if tick % 10 == 0:
@@ -2950,6 +3015,7 @@ func _step_map() -> void:
 	for r in residents:
 		if r.map != map_id:
 			continue
+		use_slot(slot_of(r))
 		if r.away:
 			if tick >= r.back_at:
 				if r.trip == "village":
@@ -2958,11 +3024,15 @@ func _step_map() -> void:
 					_arrive_at_site(r)
 			continue
 		_step_resident(r)
+	use_slot(realm_of(map_id))
 	_step_site()
 	if map_id == "village":
-		_step_unload()
+		for sl in SLOTS:
+			if expeditions[sl].get("unloading", false):
+				on_slot(sl, _step_unload)
 	elif map_id == Road.ID:
 		_step_cart()
+	use_slot("overworld")
 	if auto_craft and tick % 10 == 0:
 		expand_queues()
 	if tick % 10 == 0:
@@ -3658,8 +3728,11 @@ func _stuck_on_map() -> void:
 				mid, site_height(s) + 0.4, "site", s.id, false, standing)
 	_stuck_unstaffed()
 	_stuck_workstations()
-	_stuck_expedition()
+	for sl in SLOTS:
+		on_slot(sl, _stuck_expedition)
+	use_slot(realm_of(map_id))
 	_stuck_site()
+	use_slot("overworld")
 	var has_food: bool = food_available() if m.kind != "route" else on_map("village", food_available)  # the road eats from home
 	for r in on_here:
 		var at: Vector2 = r.pos + Vector2(0.5, 0.5)
@@ -4252,19 +4325,23 @@ static func staging_cells(b: Dictionary) -> Array:
 
 ## Whether a resident is in the party that's packing to leave.
 func in_staging_party(r: Dictionary) -> bool:
-	return expedition.get("state", "") == "staging" and expedition.party.has(r.id) and r.map == "village"
+	var ex := expedition_of(r)
+	return ex.get("state", "") == "staging" and r.map == "village"
 
 
 ## Why a resident can't join a party, or "" when they can (issue #106).
 func cant_join(r: Dictionary) -> String:
 	if r.arriving:
 		return "Still walking in"
+	var ex := expedition_of(r)
 	if r.away:
-		return "On the way to or from the meadow" if expedition.get("dest", "") == Meadow.ID else "On the road"
+		return "On the way to or from the meadow" if ex.get("dest", "") == Meadow.ID else "On the road"
 	if r.get("hurt", 0) > 0:
 		return "Injured, resting" if r.hurt == 1 else "Seriously hurt, resting"
-	if expedition.get("state", "") == "out" and expedition.party.has(r.id):
+	if ex.get("state", "") == "out":
 		return "Out with the party"
+	if not ex.is_empty():
+		return "Packing with a party"
 	if r.map != "village":
 		return "At the " + maps[r.map].name.to_lower()
 	return ""
@@ -4486,8 +4563,9 @@ func plan_targets(dest: String) -> Array:
 ## What stops a plan being confirmed, in the player's words; empty when it can be.
 func plan_problems(plan: Dictionary) -> Array:
 	var out: Array = []
-	if not expedition.is_empty():
-		out.append("One expedition at a time")
+	var sl := slot_of_dest(plan.dest)  # a rescue sets out even when its slot is taken (issue #145)
+	if not expeditions[sl].is_empty() and not plan.get("rescue", false):
+		out.append("%s %s is already out" % ["An" if sl == "overworld" else "A", party_name(sl)])
 	if expedition_board().is_empty():
 		out.append("Build an expedition board first")
 	if plan.party.is_empty():
@@ -4526,6 +4604,7 @@ func plan_expedition(plan: Dictionary) -> String:
 		return problems[0]
 	if plan.target.item != "pens":  # each place keeps its last list (issue #185)
 		cargo_lists[plan.dest] = plan.get("list", []).map(func(r): return {"item": r.item, "on": r.on, "n": r.n})
+	use_slot(slot_of_dest(plan.dest))
 	expedition = plan.duplicate(true)
 	expedition.board = expedition_board().id
 	expedition.state = "staging"
@@ -4533,6 +4612,7 @@ func plan_expedition(plan: Dictionary) -> String:
 	expedition.tools = []
 	rev += 1
 	_toast("Packing for the %s has started. The party gathers at the board." % maps[plan.dest].name.to_lower(), 0, expedition.board)
+	use_slot("overworld")
 	return ""
 
 
@@ -4731,25 +4811,26 @@ func _stuck_expedition() -> void:
 	var b := site(expedition.board)
 	if b.is_empty() or b.map != map_id:
 		return
+	var who := "Expedition" if slot == "overworld" else party_name(slot)  # the Nether's names its party (issue #145)
 	var at := Vector2(b.origin) + Vector2(0.5, 0.5)
 	var p := packed()
 	var need := pack_needs()
 	var meals: int = expedition.meals - p.meals
 	if meals > 0:
 		if need.meals > 0 and stacks_where(func(st): return Defs.MEALS.has(st.type) and avail(st) > 0).is_empty():
-			_add_stuck("Expedition", "No meals to pack. Cooks make them at the fireplace, or plan fewer", at, 1.9, "site", b.id)
+			_add_stuck(who, "No meals to pack. Cooks make them at the fireplace, or plan fewer", at, 1.9, "site", b.id)
 		else:
-			_add_stuck("Expedition", "Waiting for %d %s to pack" % [meals, "meal" if meals == 1 else "meals"], at, 1.9, "site", b.id, false, true)
+			_add_stuck(who, "Waiting for %d %s to pack" % [meals, "meal" if meals == 1 else "meals"], at, 1.9, "site", b.id, false, true)
 	var picks: int = expedition.picks - p.picks
 	if picks > 0:
 		if need.picks > 0 and tool_items("pick", 0).is_empty():
-			_add_stuck("Expedition", "No spare pickaxes to pack. Craft one at the bench, or plan fewer", at, 1.9, "site", b.id)
+			_add_stuck(who, "No spare pickaxes to pack. Craft one at the bench, or plan fewer", at, 1.9, "site", b.id)
 		else:
-			_add_stuck("Expedition", "Waiting for %d spare %s to pack" % [picks, "pickaxe" if picks == 1 else "pickaxes"], at, 1.9, "site", b.id, false, true)
+			_add_stuck(who, "Waiting for %d spare %s to pack" % [picks, "pickaxe" if picks == 1 else "pickaxes"], at, 1.9, "site", b.id, false, true)
 	for id in expedition.party:
 		var r := resident(id)
 		if not r.is_empty() and not at_board(r):
-			_add_stuck("Expedition", "Waiting for %s" % r.name, at, 1.9, "res", r.id, false, true)
+			_add_stuck(who, "Waiting for %s" % r.name, at, 1.9, "res", r.id, false, true)
 
 
 # ---------------------------------------------------------------- travel and the return (issues #108, #112)
@@ -6103,7 +6184,7 @@ func _stuck_site() -> void:
 
 ## Asks the player to choose (brief §5): the game pauses until they do. Each option: {id, label, cost}.
 func _ask(kind: String, text: String, options: Array, res_id := 0) -> void:
-	pending.append({"kind": kind, "text": text, "options": options, "res_id": res_id, "map": map_id})
+	pending.append({"kind": kind, "text": text, "options": options, "res_id": res_id, "map": map_id, "slot": slot})
 	events.append({"type": "pause"})
 	rev += 1
 
@@ -6114,6 +6195,7 @@ func choose(option: String) -> void:
 		return
 	var p: Dictionary = pending.pop_front()
 	var prev := use_map(p.map)
+	var prev_slot := use_slot(p.get("slot", "overworld"))
 	match [p.kind, option]:
 		["injury", "retreat"]:
 			if expedition.get("leg", "out") == "out":
@@ -6134,6 +6216,7 @@ func choose(option: String) -> void:
 				_head_home("the door is marked for another trip")
 		["door", "keep"]:
 			pass  # the door stays marked; the next trip can be planned for the level below
+	use_slot(prev_slot)
 	use_map(prev)
 	rev += 1
 
@@ -6567,10 +6650,10 @@ const ADVENTURES := [OldMine.ID, Meadow.ID]
 ##   [{id, name, travel, what, hazards: [text], status, here (the party's destination), locked}]
 func adventures() -> Array:
 	var out: Array = []
-	var ex := expedition
 	for id in ADVENTURES:
 		if not maps.has(id) or not maps[id].known:
 			continue
+		var ex: Dictionary = expeditions[slot_of_dest(id)]  # each realm has its own party out (issue #145)
 		var rep := site_report(id)
 		var what := ""
 		if id == Meadow.ID:
@@ -6630,7 +6713,7 @@ func save_state() -> Dictionary:
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
 		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made, "cargo_lists": cargo_lists.duplicate(true),
 		"herd_floor": herd_floor.duplicate(), "rng_state": rng.state, "seed": seed,
-		"expedition": expedition.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true)}
+		"expeditions": expeditions.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true)}
 
 
 static func from_state(d: Dictionary) -> Sim:
@@ -6664,7 +6747,10 @@ static func from_state(d: Dictionary) -> Sim:
 		return true)
 	s.rng.state = d.rng_state
 	s.seed = d.get("seed", Tuning.SEED)
-	s.expedition = d.get("expedition", {}).duplicate(true)
+	if d.has("expeditions"):
+		s.expeditions = d.expeditions.duplicate(true)
+	else:  # a state from before the slots (issue #145)
+		s.expeditions = {"overworld": d.get("expedition", {}).duplicate(true), "nether": {}}
 	s.pending = d.get("pending", []).duplicate(true)
 	s.cart = d.get("cart", {}).duplicate(true)
 	var new_meadow := not s.maps.has(Meadow.ID)
