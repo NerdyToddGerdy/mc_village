@@ -72,7 +72,16 @@ A wide level has little rock beside its floor, so it can hold fewer blocks than 
 - **The planner and the report:** a level lists the gold, obsidian and flint it holds once someone has seen it, as cargo targets. The tally bar groups the new items with the other ores.
 - **Saving:** v38. A level map keeps its `lava` cells; nothing else changes shape.
 
-## 5. Tuning table (provisional)
+## 5. The portal (#147)
+
+A **Nether portal** is a village building, 4×1, of an obsidian frame (`PORTAL_OBSIDIAN`, 10). The Build menu lists it once obsidian has come home from the deep mine (`stats.obsidian_home`) or a portal stands. It never turns, and it reserves a 6×3 **portal hall** plot, whose two rows in front of the frame are the **staging area** where Nether parties pack and gather (`Sim.staging_cells`, the same cells as an expedition board's; #148 sends the Nether slot's party there).
+
+- **Building:** staged like any building. Residents with Build on carry obsidian from the stockpile, and build once it's all there. Short of obsidian the stuck list says "Portal frame needs 6 more obsidian".
+- **Lighting:** a finished frame is dark until a resident carries flint and steel to it (`PORTAL_LIGHT_TIME`, 4 s). They fetch it from the stockpile, strike it, and set it back with a use fewer, or it's spent at none. A finished, unlit frame counts as Build work, so "No one is a builder" shows if no one builds. With no flint and steel, the stuck list says "Portal: Needs flint and steel to light".
+- **Seen:** an obsidian frame with violet specks; once lit, a violet plane pulses in it.
+- **Saving:** v39. The portal is an ordinary site with a `lit` flag.
+
+## 6. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -84,3 +93,5 @@ Each build issue adds its rows.
 | `ORE_PICK_TIER` | diamond 3, obsidian 4 | The pickaxe tier an ore needs. |
 | `FLINT_STEEL_USES` | 8 | Times a flint and steel lights something. |
 | Gold ore, gravel, obsidian | levels 2, 3, 5 | First level of each, with 2 / 2 / 4 blocks, more further down. |
+| `PORTAL_OBSIDIAN` | 10 | Obsidian in the portal's frame. |
+| `PORTAL_LIGHT_TIME` | 4 s | Lighting a finished portal. |

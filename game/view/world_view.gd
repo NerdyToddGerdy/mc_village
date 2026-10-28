@@ -173,6 +173,7 @@ func _draw_map() -> void:
 	_update_people()
 	_update_sheep()
 	_build_cart()
+	_update_portal_glow()
 	_build_live()
 
 
@@ -759,6 +760,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
 		_add_small_station(solid if s.done else ghost, s)
 		return
+	if s.tpl == "portal":
+		_add_portal(solid if s.done else ghost, s)
+		return
 	if s.tpl == "storehouse":
 		_add_storehouse(solid if s.stage >= 1 else ghost, s)
 		return
@@ -865,6 +869,58 @@ func _add_storehouse(b: Batch, s: Dictionary) -> void:
 		for j in mini(kinds.size(), 3):
 			var x := p.x + 0.08 + j * 0.22
 			_box_turned(b, s, Vector3(x, 0.62, p.y + 0.15), Vector3(x + 0.16, 0.7, p.y + 0.4), Palette.ITEM_COLORS.get(kinds[j], Palette.CHALK))
+
+
+## The Nether portal (issue #147): a frame of obsidian, four blocks wide, a sill, two pillars and a lintel. Until it's
+## built, a blueprint shows where it will stand.
+func _add_portal(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var col: Color = Palette.ITEM_COLORS.obsidian if s.done else Color(Palette.BLUE, 0.45)
+	var z0 := o.y + 0.2
+	var z1 := o.y + 0.8
+	b.box(Vector3(o.x, 0, z0), Vector3(o.x + 4.0, 0.3, z1), col, BlockTextures.ROCK)
+	b.box(Vector3(o.x, 0.3, z0), Vector3(o.x + 0.7, 2.4, z1), col, BlockTextures.ROCK)
+	b.box(Vector3(o.x + 3.3, 0.3, z0), Vector3(o.x + 4.0, 2.4, z1), col, BlockTextures.ROCK)
+	b.box(Vector3(o.x + 0.7, 2.1, z0), Vector3(o.x + 3.3, 2.4, z1), col, BlockTextures.ROCK)
+	if s.done:  # a few violet specks on the frame, so it isn't a black slab
+		for k in [0.3, 1.0, 2.1, 3.6]:
+			b.box(Vector3(o.x + k, 0.3 + fmod(k * 1.7, 1.6), z0 - 0.02), Vector3(o.x + k + 0.18, 0.5 + fmod(k * 1.7, 1.6), z0 + 0.02), PORTAL_SPECK)
+
+
+static var PORTAL_SPECK := Color("#7A4FB5")
+var _portal_fx := {}   ## Portal site id -> the lit portal's shimmering plane.
+
+
+## A lit portal's violet plane, pulsing (issue #147). Drawn each frame, since the batches only rebuild when the sim changes.
+func _update_portal_glow() -> void:
+	var lit := {}
+	if map_id == "village":
+		for s in sim.maps.village.sites:
+			if s.tpl == "portal" and s.done and s.lit:
+				lit[s.id] = s
+	for id in _portal_fx.keys():
+		if not lit.has(id):
+			_portal_fx[id].queue_free()
+			_portal_fx.erase(id)
+	for id in lit:
+		var s: Dictionary = lit[id]
+		if not _portal_fx.has(id):
+			var mi := MeshInstance3D.new()
+			var bm := BoxMesh.new()
+			bm.size = Vector3(2.6, 1.8, 0.1)
+			mi.mesh = bm
+			var mat := StandardMaterial3D.new()
+			mat.albedo_color = Color("#8E5CD6", 0.5)
+			mat.emission_enabled = true
+			mat.emission = Color("#8E5CD6")
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mi.material_override = mat
+			mi.position = Vector3(s.origin.x + 2.0, 1.2, s.origin.y + 0.5)
+			add_child(mi)
+			_portal_fx[id] = mi
+		var pulse := 0.5 + 0.18 * sin(Time.get_ticks_msec() / 400.0 + id)
+		(_portal_fx[id].material_override as StandardMaterial3D).albedo_color.a = pulse
 
 
 ## A squat cobblestone hearth with a chimney at the back and embers in its mouth, which faces its

@@ -271,6 +271,16 @@ func _initialize() -> void:
 		stakes.done = true
 		sim._apply_claims()
 		sim.events.clear()
+	if SaveFormat.VERSION >= 39:  # a lit portal, with obsidian left in the stockpile's reach (#147)
+		for c in [at(1, 4), at(1, 8), at(6, 15), at(10, 15), at(14, 1)]:
+			if sim.placement_check("portal", c) == "":
+				var portal := sim.place_site("portal", c)
+				portal.stage = 1
+				portal.done = true
+				portal.lit = true
+				break
+		sim.stats.obsidian_home = true
+		sim.events.clear()
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

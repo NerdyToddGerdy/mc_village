@@ -216,6 +216,11 @@ const TEMPLATES := {
 	"station": {"name": "Station", "size": Vector2i(3, 1), "walk": true, "plot": "loading station", "stages": [
 		{"name": "Station", "verb": "needs", "cost": {"plank": 6, "cobble": 4}},
 	]},
+	# The way to the Nether (Slice 5, issue #147): an obsidian frame, lit with flint and steel. The party packs and gathers
+	# on the staging area in front, which is part of the plot it reserves. It never turns.
+	"portal": {"name": "Nether portal", "size": Vector2i(4, 1), "plot": "portal hall", "stages": [
+		{"name": "Portal frame", "verb": "needs", "cost": {"obsidian": Tuning.PORTAL_OBSIDIAN}},
+	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},
 		{"name": "Walls", "verb": "need", "cost": {"plank": 16, "log": 4}},

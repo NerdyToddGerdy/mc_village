@@ -786,6 +786,7 @@ func _key(e: InputEventKey) -> void:
 		"board": start_placing("board")
 		"chopping_block": start_placing("chopping_block")
 		"storehouse": start_placing("storehouse")
+		"portal": start_placing("portal")
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
 		"toolsmith_bench", "composter", "lodge", "builder_table": start_placing(keys.action_for(e))
@@ -958,7 +959,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "keep"]
+const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -1621,7 +1622,7 @@ func _screenshot_scene() -> void:
 		house.stage = 4
 		house.done = true
 		var near := at(6, 12)
-		for tpl in ["chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "fireplace", "board"]:
+		for tpl in ["chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "fireplace", "board", "portal"]:
 			var spot = null
 			for d in 12:
 				for dx in range(-d, d + 1):
@@ -1633,9 +1634,26 @@ func _screenshot_scene() -> void:
 				var s := sim.place_site(tpl, spot)
 				s.stage = Defs.TEMPLATES[tpl].stages.size() - 1
 				s.done = true
+				if tpl == "portal":
+					s.lit = true
 		sim.rev += 1
 		selection = {}
 		_target = Vector3(near.x + 0.5, 0, near.y + 0.5)
+		_place_camera()
+	if "--portal" in OS.get_cmdline_user_args():  # a lit portal in a cleared spot, for its model and glow (issue #147)
+		var near := Sim.rcell(sim.residents[0]) + Vector2i(-3, 6)
+		for t in sim.trees:
+			if absi(t.cell.x - near.x) <= 5 and absi(t.cell.y - near.y) <= 4:
+				t.alive = false
+		sim._occ_dirty = true
+		var p := sim.place_site("portal", near)
+		p.stage = 1
+		p.done = true
+		p.lit = "--unlit" not in OS.get_cmdline_user_args()
+		sim.rev += 1
+		selection = {}
+		_target = Vector3(near.x + 2.0, 0, near.y + 1.0)
+		_cam.size = 9.0
 		_place_camera()
 	if "--select-bench" in OS.get_cmdline_user_args():
 		_select(bench)

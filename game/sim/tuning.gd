@@ -148,5 +148,7 @@ const BREAK_TIME := [0.0, 10.0, 6.0, 4.0, 2.5]  ## Tier 0 can't break stone.
 const DURABILITY := [0, 10, 25, 60, 150]     ## Uses before a tool breaks.
 const ORE_PICK_TIER := {"diamond": 3, "obsidian": 4}  ## The pickaxe tier an ore needs: iron for diamonds, a diamond pickaxe for obsidian (issue #146).
 const GRAVEL_FLINT_CHANCE := 0.5      ## Chance a broken gravel block drops a flint (issue #146).
+const PORTAL_OBSIDIAN := 10           ## Obsidian in a portal's frame (issue #147).
+const PORTAL_LIGHT_TIME := 4.0        ## Seconds to light a finished portal with flint and steel.
 const FLINT_STEEL_USES := 8           ## Times a flint and steel lights something before it's spent (issues #146, #147).
 const DIAMOND_PICK_TIER := 3            ## The pickaxe tier diamond ore needs: iron (issue #186).

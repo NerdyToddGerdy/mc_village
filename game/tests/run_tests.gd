@@ -64,6 +64,7 @@ func _init() -> void:
 		"test_iron_discovery",
 		"test_slice2_fixture_loads",
 		"test_deep_mine_materials",
+		"test_the_portal",
 		"test_expedition_slots",
 		"test_old_expedition_moves_to_the_overworld_slot",
 		"test_road_to_the_mine",
@@ -4437,3 +4438,50 @@ func test_deep_mine_materials() -> void:
 	run(vil, 60.0)
 	var lit: Array = vil.stacks_where(func(x): return x.type == "flint_and_steel")
 	check(lit.size() == 1 and lit[0].dur == Tuning.FLINT_STEEL_USES, "the bench makes flint and steel (%d)" % lit.size())
+
+
+## The portal: an obsidian frame carried in and built, lit only with flint and steel (issue #147).
+func test_the_portal() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var spot := open_rect(sim, Vector2i(6, 3)).position + Vector2i(1, 0)
+	check(sim.placement_check("portal", spot) == "", "a portal can be placed on open ground")
+	var portal := sim.place_site("portal", spot, 2)
+	check(portal.rot == 0 and portal.size == Vector2i(4, 1) and portal.plot == Rect2i(spot + Vector2i(-1, 0), Vector2i(6, 3)) and not portal.lit, "it never turns, reserves its staging area and starts unlit")
+	check(Defs.TEMPLATES.portal.stages[0].cost == {"obsidian": Tuning.PORTAL_OBSIDIAN}, "the frame costs %d obsidian" % Tuning.PORTAL_OBSIDIAN)
+	check(Sim.staging_cells(portal).all(func(c): return portal.plot.has_point(c) and not Rect2i(portal.origin, portal.size).has_point(c)), "its staging area is in front of the frame")
+	sim.paint_zone(open_rect(sim, Vector2i(2, 2)))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 2), "obsidian", 4)
+	run(sim, 20)
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Portal frame needs 6 more obsidian"), "short of obsidian it says how much: " + stuck_text(sim))
+	# Built from the delivered obsidian.
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 3), "obsidian", 6)
+	run(sim, 120)
+	check(portal.done and not portal.lit and sim.free_count("obsidian") == 0, "the frame is built from the obsidian carried to it")
+	check(sim.events.any(func(ev): return ev.type == "toast" and ev.text.begins_with("The portal frame is built")), "and says what's next")
+	check(sim._work_at("build") == portal.origin, "a finished but unlit frame still counts as work for a builder")
+	# It lights only with flint and steel.
+	run(sim, 20)
+	sim.compute_stuck()
+	check(not portal.lit and stuck_text(sim).contains("Portal: Needs flint and steel to light"), "without flint and steel it waits: " + stuck_text(sim))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "flint_and_steel", 1)
+	run(sim, 60)
+	check(portal.lit and portal.builder == 0, "with flint and steel someone lights it")
+	var back := sim.stacks_where(func(x): return x.type == "flint_and_steel")
+	check(back.size() == 1 and back[0].dur == Tuning.FLINT_STEEL_USES - 1, "the flint and steel is put back with a use fewer (%s)" % [back.map(func(x): return x.dur)])
+	sim.compute_stuck()
+	check(not stuck_text(sim).contains("Portal"), "a lit portal is not stuck")
+	check(Sim.from_state(sim.save_state()).maps.village.sites.any(func(x): return x.tpl == "portal" and x.lit), "the lit state is saved")
+	# A spent flint and steel is gone.
+	var sim2 := Sim.new_game()
+	var p2 := sim2.place_site("portal", open_rect(sim2, Vector2i(6, 3)).position + Vector2i(1, 0))
+	p2.stage = 1
+	p2.done = true
+	sim2.drop_items(Sim.rcell(sim2.residents[0]) + Vector2i(-2, 1), "flint_and_steel", 1, 1)
+	run(sim2, 60)
+	check(p2.lit and sim2.stacks_where(func(x): return x.type == "flint_and_steel").is_empty(), "a spent flint and steel is used up")
+	var fixture := SaveFormat.read("res://tests/fixtures/save_v39.save")
+	check(not fixture.has("error") and Sim.from_state(fixture.data.state).maps.village.sites.any(func(x): return x.tpl == "portal" and x.lit), "the v39 fixture loads with its lit portal")
+	# The Build menu offers it once obsidian has come home.
+	check(not OrderMenus.unlocked({"unlock": "portal"}, Sim.new_game()) and OrderMenus.unlocked({"unlock": "portal"}, sim), "the Build menu lists the portal once obsidian has come home or a portal stands")

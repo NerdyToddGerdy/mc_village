@@ -755,6 +755,8 @@ static func is_station(s: Dictionary) -> bool:
 static func plot_rect(tpl: String, origin: Vector2i, rot: int):
 	if not Defs.TEMPLATES[tpl].has("plot"):
 		return null
+	if tpl == "portal":  # the frame, and two rows of staging area in front (issue #147)
+		return Rect2i(origin + Vector2i(-1, 0), Vector2i(6, 3))
 	if Defs.TEMPLATES[tpl].size == Vector2i(3, 3):  # the storehouse grows back from its door (issue #189)
 		match rot % 4:
 			0: return Rect2i(origin + Vector2i(0, -2), Vector2i(3, 5))
@@ -1026,6 +1028,9 @@ func _on_site_done(s: Dictionary) -> void:
 		return
 	if s.tpl == "storehouse":  # issue #189
 		_toast("The storehouse is built. Craft a chest at the bench (%s): a hauler carries it in, and it holds %d stacks of anything." % [Defs.cost_text({"plank": 8}), Tuning.CHEST_STACKS], 0, s.id)
+		return
+	if s.tpl == "portal":  # issue #147
+		_toast("The portal frame is built. It needs flint and steel to light.", 0, s.id)
 		return
 	if s.tpl == "board":  # it has word of the old mine and the meadow, which the map switcher now shows (issues #105, #136)
 		maps[OldMine.ID].known = true
@@ -1975,6 +1980,33 @@ func _deliver_job(dest: Dictionary, type: String, n: int, stack: Dictionary) -> 
 	return j
 
 
+## Lighting a finished portal (issue #147): fetch flint and steel from a stockpile, carry it to the frame and strike it.
+func _light_job(r: Dictionary):
+	var p: Dictionary = {}
+	for s in m.sites:
+		if s.tpl == "portal" and s.done and not s.lit and s.builder == 0 and not _cooling(s):
+			p = s
+			break
+	if p.is_empty():
+		return null
+	var lighters := stacks_where(func(s): return s.type == "flint_and_steel" and avail(s) > 0)
+	if lighters.is_empty():
+		return null
+	var stack: Dictionary = nearest(lighters, rcell(r))
+	var j := Job.new("build", "Going to light the portal", "the portal")
+	j.work = "build"
+	j.target = p
+	p.builder = r.id
+	j.hold({"t": "builder", "site": p})
+	stack.res += 1
+	var hd := j.hold({"t": "stack", "stack": stack, "n": 1})
+	j.step(_goto(reach(stack.cell), false))
+	j.step({"op": "pickup_lighter", "stack": stack, "hold": hd})
+	j.step(_goto(site_cells(p), true))
+	j.step({"op": "work", "what": "light", "site": p, "label": "Lighting the portal"})
+	return j
+
+
 func _build_job(r: Dictionary, s: Dictionary) -> Job:
 	var j := Job.new("build", "Going to build", "the " + Defs.TEMPLATES[s.tpl].name.to_lower())
 	j.work = "build"
@@ -1986,7 +2018,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table"]:
+	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal"]:
 		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
@@ -2201,6 +2233,18 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			if old != null:
 				drop_items(s.cell, old.type, 1, old.dur)
 			r.armor[slot] = {"type": s.type, "dur": s.dur}
+			rev += 1
+			return true
+		"pickup_lighter":  # flint and steel in the hand, for the portal (issue #147)
+			var ls = m.items.get(st.stack.cell)
+			if not is_same(ls, st.stack) or ls.n < 1:
+				return "gone"
+			ls.n -= 1
+			ls.res -= 1
+			j.holds.erase(st.hold)
+			if ls.n <= 0:
+				m.items.erase(ls.cell)
+			r.carry = {"type": ls.type, "n": 1, "dur": ls.get("dur", full_uses(ls.type))}
 			rev += 1
 			return true
 		"pickup_tool":
@@ -2492,6 +2536,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.SHAFT_DIG if r.pick != null and r.pick.tier > 0 else -1.0
 		"build":
 			return Tuning.LAY_TIME if st.site.tpl == "track" else Tuning.STAGE_TIME
+		"light":
+			return Tuning.PORTAL_LIGHT_TIME
 		"hunt":
 			return Tuning.HUNT_TIME
 		"plant":
@@ -2545,6 +2591,21 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				_hazard(r, cave_in_chance(m.level), Tuning.CAVE_IN_SERIOUS, "a cave-in")
 			_check_find(t.cell)  # issue #111
 			_check_find_diamond(t.cell)  # issue #186
+		"light":  # the frame is lit, and the flint and steel goes back with a use less (issue #147)
+			var portal: Dictionary = st.site
+			if portal.lit:
+				return "gone"
+			portal.lit = true
+			portal.builder = 0
+			if r.carry != null and r.carry.type == "flint_and_steel":
+				var left: int = r.carry.dur - 1
+				if left > 0:
+					drop_items(rcell(r), "flint_and_steel", 1, left)
+				else:
+					_toast("%s’s flint and steel is spent." % r.name, r.id)
+				r.carry = null
+			rev += 1
+			_toast("The portal is lit.", r.id, portal.id)
 		"dig":
 			var shaft: Dictionary = st.site
 			if not shaft.get("shaft", false):
@@ -2774,6 +2835,9 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			var dj = _try_deliver(r, c, m.sites.filter(func(s): return not s.done and site_open(s) and footprint_clear(s)))
 			if dj != null:
 				return _tagged(dj, "build")
+			var lj = _light_job(r)
+			if lj != null:
+				return _tagged(lj, "build")
 			return _road_claim(r, "build", jobs)
 		"farm":
 			if not jobs.has("farm"):
@@ -3673,6 +3737,10 @@ func _stuck_on_map() -> void:
 	for s in m.sites:
 		var tpl: Dictionary = Defs.TEMPLATES[s.tpl]
 		var mid := Vector2(s.origin) + Vector2(s.size) / 2.0
+		if s.tpl == "portal" and s.done:  # the frame stands: it wants flint and steel (issue #147)
+			if not s.lit and s.builder == 0 and stacks_where(func(x): return x.type == "flint_and_steel" and avail(x) > 0).is_empty():
+				_add_stuck("Portal", "Needs flint and steel to light", mid, 2.9, "site", s.id)
+			continue
 		if s.tpl == "track":  # only the segment being laid speaks up; the rest wait their turn (issue #121)
 			if s.done or s.seg != next_track():
 				continue
@@ -3881,7 +3949,7 @@ func _work_at(jb: String):
 				return crop.cell
 		"build":
 			for st in m.sites:
-				if not st.done:
+				if not st.done or (st.tpl == "portal" and not st.lit):  # a finished frame still wants lighting (issue #147)
 					return st.origin
 		"haul":
 			if not m.zone.is_empty():
@@ -3902,6 +3970,8 @@ func site_height(s: Dictionary) -> float:
 		return 0.7 if s.done else 0.2
 	if s.tpl == "board":
 		return 1.5 if s.done else 0.2
+	if s.tpl == "portal":
+		return 2.4 if s.done else 0.2
 	if s.tpl == "chopping_block":
 		return 0.55 if s.done else 0.2
 	if s.tpl == "mason_bench":
@@ -4082,6 +4152,8 @@ func _drop_crop(c: Vector2i) -> void:
 func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 	if m.kind != "village":
 		return "Buildings go in the village"
+	if tpl == "portal":
+		rot = 0
 	var size: Vector2i = Defs.TEMPLATES[tpl].size
 	var foot := Rect2i(origin, size)
 	if origin.x < 0 or origin.y < 0 or origin.x + size.x > w or origin.y + size.y > h:
@@ -4108,12 +4180,16 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 
 
 func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
+	if tpl == "portal":
+		rot = 0
 	var s := {"id": _id(), "kind": "site", "tpl": tpl, "origin": origin, "size": Defs.TEMPLATES[tpl].size,
 		"rot": rot, "stage": 0, "store": {}, "incoming": {}, "builder": 0, "crafter": 0, "crafting": "",
 		"done": false, "owner": 0, "queue": [], "autoq": [], "unreach_until": 0,
 		"plot": plot_rect(tpl, origin, rot), "map": map_id, "worker": 0}
 	if tpl == "fireplace":
 		s.keep_meals = true
+	if tpl == "portal":
+		s.lit = false
 	if not work_of(s).is_empty():
 		s.keep = Tuning.KEEP_STOCK
 	if Defs.TEMPLATES[tpl].has("makes"):
@@ -4325,6 +4401,8 @@ func expedition_board() -> Dictionary:
 ## The cells in front of a board, where the party gathers to leave (issue #105): the row of its
 ## reserved plot next to it. Supplies are packed into crates on the row beyond.
 static func staging_cells(b: Dictionary) -> Array:
+	if b.tpl == "portal":  # in front of the frame, which is four wide (issue #147)
+		return [b.origin + Vector2i(1, 1), b.origin + Vector2i(2, 1), b.origin + Vector2i(3, 1)]
 	var front: Vector2i = [Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, 0)][int(b.rot) % 4]
 	var side := Vector2i(front.y, front.x)
 	return [b.origin + front - side, b.origin + front, b.origin + front + side]
@@ -5002,6 +5080,8 @@ func _step_unload() -> void:
 
 ## Sets items down as stacks that are hauled before anything else (issue #112).
 func _drop_cargo(spot: Vector2i, type: String, n: int, dur := -1) -> void:
+	if type == "obsidian":
+		stats.obsidian_home = true  # the portal can be planned (issue #147)
 	var before := {}
 	for k in m.items:
 		before[k] = true
