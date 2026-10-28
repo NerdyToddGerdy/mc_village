@@ -147,7 +147,7 @@ Track does not speed up mining, combat, or exploration at the destination. It im
 
 The player plans the route, reviews costs and obstacles, and assigns construction. Villagers deliver materials and build visible sections.
 
-Initial scope: point-to-point lines without complex signaling or timetable simulation.
+Initial scope: point-to-point lines without complex signaling or timetable simulation. This is the model throughout, not only for the first slice (#29): each destination gets its own line, and lines meet only at shared stations such as the village and the Nether landing. There are no switches, branches, signals or timetables.
 
 #### Core decisions (Slice 4)
 
@@ -333,7 +333,7 @@ Examples:
 ### Interaction levels
 
 1. Ready-made configurable devices: sensors, switches, gates, loaders, and rail controls.
-2. Later custom circuits connecting inputs, timers, conditions, and outputs.
+2. Not custom circuits (#29): the player never wires their own gates or timers. Automation stays ready-made devices that are configured in focused panels and joined by visible lines.
 
 Initial implementation need not reproduce every Minecraft circuit behavior. Connections must be visible, inspectable, and explain why an output is active.
 
@@ -485,7 +485,7 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 - Outpost staffing and ongoing supply costs.
 - Detailed End and Sift systems.
 - Enchantment discovery and resource costs.
-- How far custom redstone circuits and railway management should extend. (Partly resolved for Slice 4, #29: railways start as one point-to-point line, village to old mine, with no switches, branches, signals or timetables, and no unmanned freight. Custom redstone and wider network management stay open.)
+- How far custom redstone circuits and railway management should extend. (Partly resolved for Slice 4, #29: railways start as one point-to-point line, village to old mine, with no switches, branches, signals or timetables, and no unmanned freight. Decided by the owner for the long term: custom circuits never, and the railway network stays separate point-to-point lines that meet only at shared stations, with no junctions. #29 stays open until Slice 6 has been played, in case the ready-made devices fall short.)
 - Scope of original terminology, assets, and worldbuilding versus direct Minecraft references.
 
 ## 15. Core Experience to Preserve
