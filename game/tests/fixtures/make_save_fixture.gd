@@ -291,6 +291,11 @@ func _initialize() -> void:
 		var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Vector2i(9, 9))
 		cube.hp = 5
 		sim.get_map(NetherLanding.ID).drops_known = ["magma_cream"]
+	if SaveFormat.VERSION >= 43:  # the landing's shelter, built, with 2 meals in the cache (#152)
+		var shelter: Dictionary = sim.on_map(NetherLanding.ID, func(): return sim.place_site("shelter", NetherLanding.SHELTER_AT))
+		shelter.stage = 1
+		shelter.done = true
+		shelter.store = {"bread": 2}
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

@@ -2503,7 +2503,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				return true
 			if r.hunger < Tuning.EAT_BELOW and food_available():
 				return true
-			if not st.bed and tick % Tuning.TPS == 0 and _has_bed(r):
+			if not st.bed and tick % Tuning.TPS == 0 and map_id == "village" and _has_bed(r):
 				return true  # a bed of their own now: go and rest in it
 			r.heal -= Tuning.DT * (1.0 if st.bed else Tuning.HEAL_NO_BED)
 			r.pos = Vector2(rcell(r))
@@ -2527,6 +2527,32 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				st.t = 0.0
 				_strike(r, cr)
 			return not cr.alive
+		"cache_stock":  # meals set down in the cache, above what the party keeps for the way home (issue #152)
+			var cache := shelter_site()
+			var moved := 0
+			for k in expedition.get("provisions", {}).keys():
+				while moved < expedition.get("stock", 0) and expedition.provisions[k] > 0 and _pack_spendable() > 0:
+					expedition.provisions[k] -= 1
+					cache.store[k] = cache.store.get(k, 0) + 1
+					moved += 1
+				if expedition.provisions[k] <= 0:
+					expedition.provisions.erase(k)
+			expedition.stock = 0
+			rev += 1
+			if moved > 0:
+				_toast("%d %s left in the cache." % [moved, "meal" if moved == 1 else "meals"], r.id)
+			return true
+		"cache_take":  # a meal from the cache into the packs, to eat (issue #152)
+			var from := shelter_site()
+			for k in from.get("store", {}):
+				if Defs.MEALS.has(k) and from.store[k] > 0:
+					from.store[k] -= 1
+					if from.store[k] <= 0:
+						from.store.erase(k)
+					expedition.provisions[k] = expedition.get("provisions", {}).get(k, 0) + 1
+					rev += 1
+					return true
+			return "gone"
 		"mark_seen":  # a landmark is seen; the last one surveys the landing (issue #148)
 			if not m.landmarks_seen.has(st.cell):
 				m.landmarks_seen.append(st.cell)
@@ -2596,6 +2622,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.LAY_TIME if st.site.tpl == "track" else Tuning.STAGE_TIME
 		"light", "relight":
 			return Tuning.PORTAL_LIGHT_TIME
+		"shelter":
+			return Tuning.SHELTER_BUILD_TIME
 		"hunt":
 			return Tuning.HUNT_TIME
 		"plant":
@@ -2665,6 +2693,20 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				r.carry = null
 			rev += 1
 			_toast("The portal is lit.", r.id, portal.id)
+		"shelter":  # the party's cobblestone and planks go into the walls (issue #152)
+			var shelter: Dictionary = st.site
+			shelter.builder = 0
+			if shelter.done or not _supplies_cover(Tuning.SHELTER_COST):
+				return "gone"
+			for k in Tuning.SHELTER_COST:
+				expedition.supplies[k] -= Tuning.SHELTER_COST[k]
+				if expedition.supplies[k] <= 0:
+					expedition.supplies.erase(k)
+			shelter.stage = 1
+			shelter.done = true
+			_occ_dirty = true
+			rev += 1
+			_toast("The shelter is built. Injured residents rest in it, and meals left in its cache feed later parties.", r.id)
 		"relight":  # the party's own flint and steel, from the packs (issue #148)
 			var vp := village_portal()
 			if not vp.is_empty():
@@ -3932,6 +3974,8 @@ func _stuck_on_map() -> void:
 			var why := "%s: can't mine, and works slower" % word if r.hurt == 1 else "Seriously %s: waiting at the entrance" % ("burned" if burned else "hurt")
 			if resting(r):
 				why = "%s, resting in bed (%d s)" % [word if r.hurt == 1 else "Seriously " + ("burned" if burned else "hurt"), left] if _has_bed(r) else "%s, resting: no bed of their own, so it's slower (%d s)" % [word, left]
+			elif r.map == NetherLanding.ID and shelter_site().get("done", false):  # issue #152
+				why = "%s, resting at the shelter (%d s)" % [word if r.hurt == 1 else "Seriously " + ("burned" if burned else "hurt"), ceili(r.heal / Tuning.HEAL_NO_BED)]
 			_add_stuck(r.name, why, at, 1.6, "res", r.id, false, true)
 	if m.zone.is_empty():
 		for k in m.farm:
@@ -4541,7 +4585,9 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 			party.append(r.id)
 			break
 	if realm_of(dest) == "nether":  # the first crossing: survey the landing (issue #148)
+		var build_it: bool = shelter_site().is_empty() or not shelter_site().done  # the first crossing builds the shelter (issue #152)
 		return {"dest": dest, "party": party, "target": {"item": "survey", "n": 1}, "meals": 3, "picks": 0, "sticks": 0, "wheat": 0, "list": [],
+			"shelter": build_it, "cobble": Tuning.SHELTER_COST.cobble if build_it else 0, "planks": Tuning.SHELTER_COST.plank if build_it else 0, "stock": 0,
 			"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": false, "clear": false, "fight": false}
 	var meadow := dest == Meadow.ID  # issue #137: wool, and no pickaxes, for the meadow
 	var sticks := fence_left() if meadow else 0  # issue #139: what the pens need
@@ -4744,7 +4790,7 @@ static func pack_capacity(plan: Dictionary) -> int:
 
 ## Room the supplies take: a meal, a spare pickaxe, a stick or a wheat is one item each.
 static func plan_supplies(plan: Dictionary) -> int:
-	return plan.meals + plan.picks + plan.get("sticks", 0) + plan.get("wheat", 0)
+	return plan.meals + plan.picks + plan.get("sticks", 0) + plan.get("wheat", 0) + plan.get("cobble", 0) + plan.get("planks", 0)
 
 
 ## Room left in the packs for what the party brings back.
@@ -4808,6 +4854,8 @@ func plan_problems(plan: Dictionary) -> Array:
 				out.append("Choose something to bring back")
 			elif wanted > room:
 				out.append("The packs only have room for %d of what's wanted" % room)
+	if plan.get("stock", 0) > maxi(0, plan.meals - return_meals(plan)):
+		out.append("Meals for the cache come out of the meals taken, past the walk home")
 	if not plan.policy.values().has(true):
 		out.append("Choose when the party comes home")
 	return out
@@ -4835,7 +4883,7 @@ func plan_expedition(plan: Dictionary) -> String:
 
 ## Meals and spare pickaxes at the board so far, plus those on their way there when `incoming`.
 func packed(incoming := false) -> Dictionary:
-	var out := {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0}
+	var out := {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0}
 	var b := site(expedition.get("board", 0))
 	if b.is_empty():
 		return out
@@ -4849,16 +4897,25 @@ func packed(incoming := false) -> Dictionary:
 				out.wheat += src[k]
 			elif k == "stick":
 				out.sticks += src[k]
+			elif k == "cobble":
+				out.cobble += src[k]
+			elif k == "plank":
+				out.planks += src[k]
 	return out
 
 
 ## What's still to be packed, less what's on its way: {meals, picks, wheat, sticks}.
 func pack_needs() -> Dictionary:
 	if expedition.get("state", "") != "staging":
-		return {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0}
+		return {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0}
 	var p := packed(true)
 	return {"meals": maxi(0, expedition.meals - p.meals), "picks": maxi(0, expedition.picks - p.picks),
-		"wheat": maxi(0, expedition.get("wheat", 0) - p.wheat), "sticks": maxi(0, expedition.get("sticks", 0) - p.sticks)}
+		"wheat": maxi(0, expedition.get("wheat", 0) - p.wheat), "sticks": maxi(0, expedition.get("sticks", 0) - p.sticks),
+		"cobble": maxi(0, expedition.get("cobble", 0) - p.cobble), "planks": maxi(0, expedition.get("planks", 0) - p.planks)}
+
+
+## What a plan can ask to have packed besides meals and spare pickaxes: [the plan's key, the item].
+const SUPPLY_KINDS := [["wheat", "wheat"], ["sticks", "stick"], ["cobble", "cobble"], ["planks", "plank"]]
 
 
 ## A delivery of supplies to the board (issue #107): meals first, then spare pickaxes, the best first.
@@ -4879,7 +4936,7 @@ func _pack_job(r: Dictionary, c: Vector2i):
 		if not picks.is_empty():
 			picks.sort_custom(func(a, x): return Defs.ITEMS[a.type].tier > Defs.ITEMS[x.type].tier or (a.type == x.type and a.dur > x.dur))
 			return _deliver_job(b, picks[0].type, 1, picks[0])
-	for k in [["wheat", "wheat"], ["sticks", "stick"]]:  # for the pens (issue #139)
+	for k in SUPPLY_KINDS:  # for the pens (issue #139) and the landing's shelter (issue #152)
 		if need[k[0]] > 0:
 			var src := stacks_where(func(st): return st.type == k[1] and avail(st) > 0)
 			if not src.is_empty():
@@ -4917,7 +4974,7 @@ func depart_blocker(slot_id := "") -> String:
 	var picks: int = expedition.picks - p.picks
 	if picks > 0:
 		return "Waiting for %d spare %s to pack" % [picks, "pickaxe" if picks == 1 else "pickaxes"]
-	for k in [["wheat", "wheat"], ["sticks", "stick"]]:
+	for k in SUPPLY_KINDS:
 		var n: int = expedition.get(k[0], 0) - p[k[0]]
 		if n > 0:
 			return "Waiting for %s to pack" % Defs.words(k[1], n)
@@ -5005,6 +5062,8 @@ func _arrive_at_site(r: Dictionary) -> void:
 ## the level above. The first of the party into the one they're bound for says so.
 func _enter_level(r: Dictionary, id: String) -> void:
 	var mp: SimMap = maps[id]
+	if id == NetherLanding.ID and shelter_site().is_empty():  # the blueprint the first party builds (issue #152)
+		on_map(id, func(): place_site("shelter", NetherLanding.SHELTER_AT))
 	move_to_map(r, id, mp.entrance)
 	mp.known = true
 	mp.visited = true
@@ -6036,6 +6095,11 @@ func _room_to_promise() -> int:
 ## Meals in the packs the party may eat: all of them if the plan spends the return food, else what's
 ## left above it.
 func spendable_meals() -> int:
+	return _pack_spendable() + (cache_meals() if m.id == NetherLanding.ID else 0)  # the landing's cache feeds the party (issue #152)
+
+
+## Meals in the packs alone that may be eaten.
+func _pack_spendable() -> int:
 	var n := 0
 	for k in expedition.get("provisions", {}):
 		n += expedition.provisions[k]
@@ -6077,7 +6141,11 @@ func _ration_job(r: Dictionary):
 	if spendable_meals() <= 0:
 		return null
 	var j := Job.new("eat", "Going to eat from the packs", "the packs")
-	if not on_road(r):  # on the road, they carry the packs
+	if _pack_spendable() <= 0 and m.id == NetherLanding.ID:  # the cache has them (issue #152)
+		j.label = "Taking a meal from the cache"
+		j.step(_goto(site_cells(shelter_site()), true))
+		j.step({"op": "cache_take"})
+	elif not on_road(r):  # on the road, they carry the packs
 		j.step(_goto([m.entrance], false))
 	j.step({"op": "ration"})
 	j.step({"op": "work", "what": "eat", "label": "Eating from the packs"})
@@ -6089,6 +6157,11 @@ func _ration_job(r: Dictionary):
 ## and carry what's mined into the packs. The seriously hurt wait at the entrance.
 func _site_job(r: Dictionary):
 	var c := rcell(r)
+	if m.id == NetherLanding.ID and r.get("hurt", 0) > 0 and shelter_site().get("done", false):  # the fallback: slower than a bed (issue #152)
+		var rj := Job.new("rest", "Resting at the shelter", "the shelter")
+		rj.step(_goto(site_cells(shelter_site()), true))
+		rj.step({"op": "rest", "bed": false})
+		return rj
 	if r.get("hurt", 0) >= 2:
 		var w := Job.new("hurt", "Waiting at the entrance, seriously hurt", "the entrance")
 		w.step(_goto([m.entrance], false))
@@ -6130,8 +6203,50 @@ func _site_job(r: Dictionary):
 	return pj
 
 
+## The landing's shelter site, or {} (issue #152).
+func shelter_site() -> Dictionary:
+	for s in maps[NetherLanding.ID].sites:
+		if s.tpl == "shelter":
+			return s
+	return {}
+
+
+## Meals in the shelter's cache.
+func cache_meals() -> int:
+	var n := 0
+	var sh := shelter_site()
+	for k in sh.get("store", {}):
+		if Defs.MEALS.has(k):
+			n += sh.store[k]
+	return n
+
+
+## Whether the party's packs hold what a cost asks for.
+func _supplies_cover(cost: Dictionary) -> bool:
+	var sup: Dictionary = expedition.get("supplies", {})
+	for k in cost:
+		if sup.get(k, 0) < cost[k]:
+			return false
+	return true
+
+
 ## What a party member does on the portal landing (issue #148): walk to the landmarks not yet seen, then wait.
 func _landing_job(r: Dictionary, c: Vector2i):
+	var sh := shelter_site()
+	if not sh.is_empty() and not sh.done and expedition.get("shelter", false) and sh.builder == 0 and _supplies_cover(Tuning.SHELTER_COST):
+		var bj := Job.new("build", "Going to build the shelter", "the shelter")
+		bj.work = "build"
+		bj.target = sh
+		sh.builder = r.id
+		bj.hold({"t": "builder", "site": sh})
+		bj.step(_goto(site_cells(sh), true))
+		bj.step({"op": "work", "what": "shelter", "site": sh, "label": "Building the shelter"})
+		return bj
+	if not sh.is_empty() and sh.done and expedition.get("stock", 0) > 0:  # meals left in the cache (issue #152)
+		var cj := Job.new("stock", "Stocking the cache", "the cache")
+		cj.step(_goto(site_cells(sh), true))
+		cj.step({"op": "cache_stock"})
+		return cj
 	var left := m.landmarks.filter(func(x): return not m.landmarks_seen.has(x))
 	if left.is_empty():
 		return null
@@ -6502,8 +6617,8 @@ func policy_met() -> String:
 	if not pending.is_empty():
 		return ""
 	if surveying():  # the landing: home once every landmark has been seen (issue #148)
-		if m.surveyed:
-			return "the landing is surveyed"
+		if m.surveyed and (not ex.get("shelter", false) or shelter_site().get("done", false)):
+			return "the landing is surveyed" if not ex.get("shelter", false) else "the landing is surveyed and the shelter built"
 		if ex.policy.get("low", false) and spendable_meals() <= 0:
 			return "provisions low"
 		return ""
@@ -6606,6 +6721,16 @@ func _stuck_site() -> void:
 	var at := Vector2(m.entrance) + Vector2(0.5, 0.5)
 	if party.any(func(r): return r.job != null and r.job.kind in ["fight", "flee"]):  # issue #151
 		_add_stuck(party_name(slot), "fighting", at, 1.6, "", 0, false, true)
+	if m.id == NetherLanding.ID:  # the shelter and its cache (issue #152)
+		var shelter := shelter_site()
+		if not shelter.is_empty() and not shelter.done and expedition.get("shelter", false):
+			for k in Tuning.SHELTER_COST:
+				var short: int = Tuning.SHELTER_COST[k] - expedition.get("supplies", {}).get(k, 0)
+				if short > 0:
+					_add_stuck("Shelter", "needs %d more %s" % [short, Defs.ITEMS[k].one if short == 1 else Defs.ITEMS[k].many], Vector2(shelter.origin) + Vector2(1.5, 1.5), 1.6, "", 0)
+					break
+		elif shelter.get("done", false) and cache_meals() == 0:
+			_add_stuck("Cache", "empty", Vector2(shelter.origin) + Vector2(1.5, 1.5), 1.6, "", 0, false, true)
 	var to_mine := m.boulders.any(func(b): return b.alive and b.des)
 	if to_mine and party.all(func(r): return r.get("hurt", 0) > 0):
 		_add_stuck(m.name, "Everyone is hurt, so nobody can mine. Call them home", at, 1.6, "", 0)
@@ -7162,7 +7287,11 @@ func _meadow_report() -> Dictionary:
 ## The portal landing's report (issue #148): nothing to bring back yet, a survey to make, and what's known of its dangers.
 func _landing_report() -> Dictionary:
 	var mp: SimMap = maps[NetherLanding.ID]
-	return {"name": mp.name, "told": NetherLanding.TOLD, "visited": mp.visited, "travel": 0.0, "level": 0, "pattern": "",
+	var shelter := shelter_site()
+	var cache := ""
+	if shelter.get("done", false):
+		cache = "Shelter built. Cache: %s" % ("empty" if cache_meals() == 0 else "%d %s" % [cache_meals(), "meal" if cache_meals() == 1 else "meals"])
+	return {"name": mp.name, "told": NetherLanding.TOLD, "visited": mp.visited, "travel": 0.0, "level": 0, "pattern": "", "cache": cache,
 		"resources": mp.drops_known.map(func(k): return {"item": k, "name": Defs.ITEMS[k].label, "reserve": -1, "known": true}),
 		"hazards": NetherLanding.HAZARDS.duplicate() if mp.visited else [], "access": NetherLanding.ACCESS.duplicate() if mp.visited else [],
 		"finds": [], "levels": [], "door": "", "landmarks": mp.landmarks_seen.size(), "landmark_total": mp.landmarks.size()}

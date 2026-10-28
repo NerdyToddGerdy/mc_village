@@ -69,6 +69,7 @@ func _init() -> void:
 		"test_the_nether_landing",
 		"test_nether_hazards",
 		"test_auto_combat",
+		"test_the_shelter_and_cache",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
 		"test_expedition_slots",
@@ -4524,7 +4525,8 @@ func test_the_nether_landing() -> void:
 	sim.maps[NetherLanding.ID].known = true
 	check(sim.adventures().any(func(a): return a.id == NetherLanding.ID and a.name == "Nether: portal landing"), "the board lists the landing once it's known")
 	check(sim.plan_expedition(plan) == "" and sim.expeditions.nether.state == "staging" and sim.expeditions.nether.board == portal.id and sim.expeditions.overworld.is_empty(), "the plan goes in the Nether's slot, packed at the portal")
-	portal.store = {"bread": 3}
+	check(plan.shelter and plan.cobble == Tuning.SHELTER_COST.cobble and plan.planks == Tuning.SHELTER_COST.plank, "the first crossing plan carries the shelter's cobblestone and planks")
+	portal.store = {"bread": 3, "cobble": 4, "plank": 6}
 	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
 	for i in 40 * Tuning.TPS:
 		sim.step()
@@ -4550,6 +4552,11 @@ func test_the_nether_landing() -> void:
 		if landing.surveyed:
 			break
 	check(landing.surveyed and landing.landmarks_seen.size() == 3, "the party surveys the landing, one landmark after another")
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.shelter_site().get("done", false):
+			break
+	check(sim.shelter_site().get("done", false) and sim.expeditions.nether.supplies.is_empty() and landing.sites.size() == 1, "the party builds the shelter from the cobblestone and planks it carried")
 	for i in 120 * Tuning.TPS:
 		sim.step()
 		if sim.expeditions.nether.is_empty():
@@ -4579,6 +4586,9 @@ func test_nether_and_overworld_together() -> void:
 	var nplan := sim.new_plan(NetherLanding.ID)
 	nplan.party = [tomas.id]
 	nplan.meals = 3
+	nplan.shelter = false
+	nplan.cobble = 0
+	nplan.planks = 0
 	check(sim.plan_expedition(nplan) == "", "the Nether party is planned")
 	portal.store = {"bread": 3}
 	var oplan := sim.new_plan(Meadow.ID)
@@ -4932,3 +4942,94 @@ func test_auto_combat() -> void:
 	check(s42.get_map(NetherLanding.ID).creatures.size() == 1 and s42.get_map(NetherLanding.ID).creatures[0].hp == 5, "the v42 fixture loads its hurt magma cube")
 	var f41 := SaveFormat.read("res://tests/fixtures/save_v41.save")
 	check(Sim.from_state(f41.data.state).get_map(NetherLanding.ID).creatures.is_empty(), "an older save has no creatures")
+
+
+## The unstaffed shelter and supply cache at the landing (issue #152).
+func test_the_shelter_and_cache() -> void:
+	var w := fight_world()
+	var sim: Sim = w.sim
+	var tomas: Dictionary = w.tomas
+	var mira: Dictionary = w.mira
+	var landing: SimMap = w.landing
+	landing.landmarks = []
+	sim._enter_level(tomas, NetherLanding.ID)  # (arriving again puts the blueprint down)
+	var sh := sim.shelter_site()
+	check(not sh.is_empty() and sh.tpl == "shelter" and sh.origin == NetherLanding.SHELTER_AT and not sh.done and sh.map == NetherLanding.ID, "the first crossing puts the shelter's blueprint on the landing")
+	check(Defs.TEMPLATES.shelter.stages[0].cost == Tuning.SHELTER_COST and sim.maps.village.sites.all(func(x): return x.tpl != "shelter"), "it costs %s, and isn't a village building" % [Tuning.SHELTER_COST])
+	# Short of supplies, the stuck list says how much.
+	sim.expeditions.nether.shelter = true
+	sim.expeditions.nether.supplies = {"cobble": 4, "plank": 4}
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Shelter: needs 2 more planks"), "short of planks it says so: " + stuck_text(sim))
+	run(sim, 30)
+	check(not sh.done, "and the party doesn't start without all of it")
+	sim.expeditions.nether.supplies = {"cobble": 4, "plank": 6}
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		if sh.done:
+			break
+	check(sh.done and sim.expeditions.nether.supplies.is_empty(), "with it all they build the shelter from what they carried")
+	check(sim.shelter_site().done and not sim.on_map(NetherLanding.ID, func(): return sim.walkable(sh.origin)), "it's a solid building on the landing")
+	# The cache is empty, and says so.
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Cache: empty"), "an empty cache is named: " + stuck_text(sim))
+	check(sim.site_report(NetherLanding.ID).cache == "Shelter built. Cache: empty", "the site report shows the cache")
+	# A party leaves meals in it.
+	sim.expeditions.nether.provisions = {"bread": 4}
+	sim.expeditions.nether.stock = 2
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.pending.size() > 0:
+			sim.choose("press_on")
+		if sim.cache_meals() > 0:
+			break
+	check(sim.cache_meals() == 2 and sim.expeditions.nether.provisions == {"bread": 2} and sim.expeditions.nether.stock == 0, "the party leaves the meals it planned to in the cache (%d)" % sim.cache_meals())
+	check(sim.site_report(NetherLanding.ID).cache == "Shelter built. Cache: 2 meals", "and the report counts them")
+	check(Sim.from_state(sim.save_state()).shelter_site().store == sh.store and Sim.from_state(sim.save_state()).shelter_site().done, "the shelter and its cache are saved")
+	# Later, a party with no food of its own eats from the cache, without going home.
+	sim.expeditions.nether.provisions = {"bread": 1}  # only the walk home
+	tomas.hunger = 20.0
+	var before := sim.cache_meals()
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.pending.size() > 0:
+			sim.choose("press_on")
+		if sim.cache_meals() < before:
+			break
+	check(sim.cache_meals() < before, "a party short of food takes a meal from the cache")
+	for i in 20 * Tuning.TPS:
+		sim.step()
+	check(tomas.hunger > 30.0 and sim.expeditions.nether.get("leg", "") == "out", "and eats it, staying on (hunger %d)" % int(tomas.hunger))
+	# The injured rest there, more slowly than in a bed.
+	mira.hurt = 1
+	mira.heal = 10.0
+	mira.job = null
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("resting at the shelter"), "the stuck list says who rests at the shelter: " + stuck_text(sim))
+	var ticks := 0
+	while mira.hurt > 0 and ticks < 60 * Tuning.TPS:
+		sim.step()
+		if sim.pending.size() > 0:
+			sim.choose("press_on")
+		ticks += 1
+	check(mira.hurt == 0 and ticks > 15 * Tuning.TPS and ticks < 40 * Tuning.TPS, "she heals there, but slower than in a bed: %d s for 10 s of healing" % (ticks / Tuning.TPS))
+	var bed_ticks := 0
+	var home := Sim.new_game()
+	home.add_resident("Tomas", "7A5C8F", Sim.rcell(home.residents[0]) + Vector2i(1, 0))
+	var homebody: Dictionary = home.residents[1]
+	homebody.hurt = 1
+	homebody.heal = 10.0
+	homebody.arriving = false
+	while homebody.hurt > 0 and bed_ticks < 60 * Tuning.TPS:
+		home.step()
+		bed_ticks += 1
+	check(ticks > bed_ticks, "slower than at home with no bed of their own at least (%d s against %d s)" % [ticks / Tuning.TPS, bed_ticks / Tuning.TPS])
+	var f43 := SaveFormat.read("res://tests/fixtures/save_v43.save")
+	var s43 := Sim.from_state(f43.data.state)
+	check(s43.shelter_site().done and s43.cache_meals() == 2, "the v43 fixture loads its shelter and cache")
+	var f42 := SaveFormat.read("res://tests/fixtures/save_v42.save")
+	check(Sim.from_state(f42.data.state).shelter_site().is_empty(), "an older save has no shelter")
+	# Older plans pack no shelter supplies.
+	check(Sim.plan_supplies({"meals": 3, "picks": 0}) == 3, "a plan with no shelter asks for no cobblestone or planks")

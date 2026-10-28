@@ -137,7 +137,18 @@ The landing is a hub with none; the route and fortress maps (#153, #157) place t
 - **Seen:** each creature has a model; it swells for a moment on a blow either way. The stuck list says "Nether party: fighting" while a guard fights or someone moves away.
 - **Saving:** v42. A map keeps its `creatures` and `drops_known`; an older trip avoids combat.
 
-## 10. Tuning table (provisional)
+## 10. The shelter and supply cache (#152)
+
+An **unstaffed** shelter on the landing: nobody lives there, and staffing stays open (#26).
+
+- **The blueprint** goes down at `NetherLanding.SHELTER_AT` the first time a party crosses. It isn't a village building. A first-crossing plan carries its materials, `SHELTER_COST` (4 cobblestone, 6 planks), as **supplies** packed at the portal with the meals (`Sim.SUPPLY_KINDS` now covers cobblestone and planks as well as the pens' wheat and sticks; they take room in the packs like any item).
+- **Building:** once the party holds all of it, one member builds the shelter in `SHELTER_BUILD_TIME` and the supplies are used up. The first crossing's objective is now **survey the landing and build the shelter**: the party comes home once both are done. A later plan carries no materials.
+- **The cache** is the shelter's store. A plan can set aside **meals for the cache** (`stock`, from the meals taken, past the walk home); the party leaves them there. A later party that has run down its own food takes a meal from the cache and eats it, staying on instead of heading home, and the cache counts toward what a party can still spend.
+- **Fallback:** an injured resident at the landing rests in the shelter, at the slow rate of a resident with no bed (`HEAL_NO_BED`): "Ada: Burned, resting at the shelter". Stranded parties shelter there (#158).
+- **The site report** shows "Shelter built. Cache: 2 meals" (or empty). Stuck reasons: "Shelter: needs 2 more planks", "Cache: empty".
+- **Saving:** v43. The landing's sites may hold the shelter, with its cache in the site's store; a trip carries `shelter`, `cobble`, `planks` and `stock`, none for an older trip.
+
+## 11. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -170,3 +181,5 @@ Each build issue adds its rows.
 | `SELF_DEFENSE_RANGE` | 2 | How close a creature must be for a guard to fight it when the party avoids combat. |
 | `ENGAGE_RANGE` | 8 | How far a guard goes after a creature when the party doesn't avoid combat. |
 | Creature table | see §9 | Health, hit chance, serious chance, blow time, reach, notice range and drops, in `Defs.CREATURES`. |
+| `SHELTER_COST` | 4 cobblestone, 6 planks | What a party carries to build the shelter. |
+| `SHELTER_BUILD_TIME` | 10 s | Building it. |

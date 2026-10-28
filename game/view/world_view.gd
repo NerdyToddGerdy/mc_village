@@ -794,6 +794,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "portal":
 		_add_portal(solid if s.done else ghost, s)
 		return
+	if s.tpl == "shelter":
+		_add_shelter(solid if s.done else ghost, s)
+		return
 	if s.tpl == "storehouse":
 		_add_storehouse(solid if s.stage >= 1 else ghost, s)
 		return
@@ -900,6 +903,26 @@ func _add_storehouse(b: Batch, s: Dictionary) -> void:
 		for j in mini(kinds.size(), 3):
 			var x := p.x + 0.08 + j * 0.22
 			_box_turned(b, s, Vector3(x, 0.62, p.y + 0.15), Vector3(x + 0.16, 0.7, p.y + 0.4), Palette.ITEM_COLORS.get(kinds[j], Palette.CHALK))
+
+
+## The landing's shelter (issue #152): a cobblestone floor inside low plank walls, a doorway on the south side, and a crate
+## in it for each few meals in the cache. A blueprint until it's built.
+func _add_shelter(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var done: bool = s.done
+	var floor_c: Color = Palette.COBBLE if done else Color(Palette.BLUE, 0.45)
+	var wall: Color = Palette.PLANK if done else Color(Palette.BLUE, 0.45)
+	b.box(Vector3(o.x, 0, o.y), Vector3(o.x + 3, 0.12, o.y + 3), floor_c, BlockTextures.COBBLES)
+	for k in 3:
+		b.box(Vector3(o.x + k, 0.12, o.y), Vector3(o.x + k + 1, 1.0, o.y + 0.2), wall, BlockTextures.BOARD)  # north
+		b.box(Vector3(o.x, 0.12, o.y + k), Vector3(o.x + 0.2, 1.0, o.y + k + 1), wall, BlockTextures.BOARD)  # west
+		b.box(Vector3(o.x + 2.8, 0.12, o.y + k), Vector3(o.x + 3, 1.0, o.y + k + 1), wall, BlockTextures.BOARD)  # east
+	for k in [0, 2]:  # the south wall, with a gap in the middle
+		b.box(Vector3(o.x + k, 0.12, o.y + 2.8), Vector3(o.x + k + 1, 1.0, o.y + 3), wall, BlockTextures.BOARD)
+	if done:
+		b.box(Vector3(o.x - 0.1, 1.0, o.y - 0.1), Vector3(o.x + 3.1, 1.15, o.y + 3.1), Palette.ROOF, BlockTextures.SHINGLES)
+		for i in mini(3, ceili(sim.cache_meals() / 2.0)):
+			b.box(Vector3(o.x + 0.35 + i * 0.7, 0.12, o.y + 0.4), Vector3(o.x + 0.8 + i * 0.7, 0.55, o.y + 0.85), CRATE, BlockTextures.BOARD)
 
 
 ## The Nether portal (issue #147): a frame of obsidian, four blocks wide, a sill, two pillars and a lintel. Until it's

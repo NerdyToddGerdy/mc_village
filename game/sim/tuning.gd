@@ -168,5 +168,7 @@ const CREATURE_SPEED := 1.4           ## Cells a creature walks in a second (iss
 const AVOID_RANGE := 3                ## How close a hostile creature gets before someone who isn't a guard moves away.
 const SELF_DEFENSE_RANGE := 2         ## How close a creature must be for a guard to fight it when the party avoids combat.
 const ENGAGE_RANGE := 8               ## How far a guard goes after a creature when the party doesn't avoid combat.
+const SHELTER_COST := {"cobble": 4, "plank": 6}   ## What a party carries to build the landing's shelter (issue #152).
+const SHELTER_BUILD_TIME := 10.0      ## Seconds to build it.
 const FLINT_STEEL_USES := 8           ## Times a flint and steel lights something before it's spent (issues #146, #147).
 const DIAMOND_PICK_TIER := 3            ## The pickaxe tier diamond ore needs: iron (issue #186).

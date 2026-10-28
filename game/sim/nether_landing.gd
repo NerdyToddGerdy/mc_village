@@ -38,6 +38,9 @@ const LAYOUT := [
 	"########################",
 ]
 
+## Where the shelter's blueprint goes: three by three, near the arch (issue #152).
+const SHELTER_AT := Vector2i(2, 5)
+
 const TOLD := "A red, burning country on the far side of the portal. Nobody has been through."
 const ACCESS := ["Open netherrack: room for the whole party"]
 const HAZARDS := ["Lava pools in the rock: someone beside one can be burned", "Patches of fire: stepping on one sets someone alight", "Ledges: someone could fall"]

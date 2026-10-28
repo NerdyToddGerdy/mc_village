@@ -242,6 +242,10 @@ const TEMPLATES := {
 	"portal": {"name": "Nether portal", "size": Vector2i(4, 1), "plot": "portal hall", "stages": [
 		{"name": "Portal frame", "verb": "needs", "cost": {"obsidian": Tuning.PORTAL_OBSIDIAN}},
 	]},
+	# The unstaffed shelter and supply cache on the Nether landing (Slice 5, issue #152): built by a party from what it carries.
+	"shelter": {"name": "Shelter", "size": Vector2i(3, 3), "stages": [
+		{"name": "Shelter", "verb": "needs", "cost": Tuning.SHELTER_COST},
+	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},
 		{"name": "Walls", "verb": "need", "cost": {"plank": 16, "log": 4}},

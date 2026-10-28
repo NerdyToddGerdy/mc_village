@@ -2978,6 +2978,11 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 		if tend:
 			c.add_child(_label("Build the pens, lead marked animals in, feed pairs, and hunt only what's over %d of each kind." % plan.target.n, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	c.add_child(_stepper_row("Meals to take", plan.meals, "meals"))
+	if Sim.realm_of(plan.dest) == "nether":  # the landing's shelter and cache (issue #152)
+		if plan.get("shelter", false):
+			c.add_child(_label("Carrying the shelter: %s and %s. The party builds it before it comes home." % [Defs.words("cobble", plan.cobble), Defs.words("plank", plan.planks)], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+		else:
+			c.add_child(_stepper_row("Meals for the cache", plan.get("stock", 0), "stock"))
 	var keep := Sim.return_meals(plan)
 	var mins := Sim.site_minutes(plan)
 	var at := "the meadow" if plan.dest == Meadow.ID else ("the landing" if Sim.realm_of(plan.dest) == "nether" else "the mine")
