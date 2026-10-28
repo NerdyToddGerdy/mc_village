@@ -62,6 +62,15 @@ static func site_key(id: String) -> String:
 	return ""
 
 
+## Every route and site map id, in the order a game makes them: each route, then its site.
+static func map_ids() -> Array:
+	var out: Array = []
+	for k in ROUTES:
+		out.append(ROUTES[k].id)
+		out.append(ROUTES[k].site)
+	return out
+
+
 static func route_ids() -> Array:
 	return ROUTES.keys().map(func(k): return ROUTES[k].id)
 

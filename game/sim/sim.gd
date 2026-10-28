@@ -5031,7 +5031,7 @@ func plan_problems(plan: Dictionary) -> Array:
 				out.append("Choose something to bring back")
 			elif wanted > room:
 				out.append("The packs only have room for %d of what's wanted" % room)
-	if plan.get("stock", 0) > maxi(0, plan.meals - return_meals(plan)):
+	if plan.get("stock", 0) > 0 and plan.get("stock", 0) > maxi(0, plan.meals - return_meals(plan)):
 		out.append("Meals for the cache come out of the meals taken, past the walk home")
 	if not plan.policy.values().has(true):
 		out.append("Choose when the party comes home")
@@ -7634,7 +7634,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.maps = {}
 	# Maps tick in the order a game makes them, so a loaded game replays as the saved one would have:
 	# the village, the old mine, the road, the meadow, then the levels below the mine as they opened.
-	var order := ["village", OldMine.ID, Road.ID, Meadow.ID, NetherLanding.ID] + NetherRoute.route_ids() + NetherRoute.site_ids()
+	var order := ["village", OldMine.ID, Road.ID, Meadow.ID, NetherLanding.ID] + NetherRoute.map_ids()
 	var ids: Array = d.maps.keys()
 	ids.sort_custom(func(a, b): return [order.find(a) if a in order else 9, MineLevels.level_of(a)] < [order.find(b) if b in order else 9, MineLevels.level_of(b)])
 	for id in ids:

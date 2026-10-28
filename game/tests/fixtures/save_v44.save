@@ -4964,7 +4964,12 @@ Vector2i(20, 15): true
 "text": "The party found an iron vein in the old mine."
 }],
 "residents": [{
-"armor": {},
+"armor": {
+"chest": {
+"dur": 12,
+"type": "iron_chestplate"
+}
+},
 "arriving": false,
 "away": false,
 "axe": null,
@@ -4993,7 +4998,7 @@ Vector2i(20, 15): true
 "xp": 3
 },
 "guard": {
-"xp": 0
+"xp": 10
 },
 "haul": {
 "xp": 44
@@ -5035,7 +5040,11 @@ Vector2i(20, 15): true
 "pos": Vector2(23, 22),
 "role": "all",
 "shirt": "2E8C9E",
-"sword": null,
+"sword": {
+"dur": 30,
+"tier": 3,
+"type": "iron_sword"
+},
 "trip": ""
 }, {
 "armor": {},
@@ -5067,7 +5076,7 @@ Vector2i(20, 15): true
 "xp": 0
 },
 "guard": {
-"xp": 10
+"xp": 0
 },
 "haul": {
 "xp": 0
@@ -5096,19 +5105,19 @@ Vector2i(20, 15): true
 "orders": [],
 "pick": null,
 "pos": Vector2(2.7500005, 31),
-"role": "guard",
+"role": "lumber",
 "shirt": "A8457A",
-"sword": {
-"dur": 30,
-"tier": 3,
-"type": "iron_sword"
-},
+"sword": null,
 "trip": ""
 }, {
 "armor": {
 "chest": {
-"dur": 12,
-"type": "iron_chestplate"
+"dur": 5,
+"type": "leather_tunic"
+},
+"feet": {
+"dur": 8,
+"type": "leather_boots"
 }
 },
 "arriving": false,

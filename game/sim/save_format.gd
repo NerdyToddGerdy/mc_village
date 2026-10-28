@@ -44,12 +44,12 @@ static func _v41_to_v42(d: Dictionary) -> Dictionary:
 
 ## v41: the Guard job and iron swords (issue #150). Every resident gets a sword slot (empty), and Guard at no experience.
 static func _v40_to_v41(d: Dictionary) -> Dictionary:
-	for r in d.state.residents:
+	for r in d.state.get("residents", []):
 		r.sword = null
-		r.broken.sword = false
+		r.get("broken", {}).sword = false
 		r.get("kept", {}).sword = false
-		if not r.jobs.has("guard"):
-			r.jobs.guard = {"xp": 0}
+		if not r.get("jobs", {}).has("guard"):
+			r.get("jobs", {}).guard = {"xp": 0}
 	return d
 
 

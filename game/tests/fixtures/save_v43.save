@@ -31,7 +31,7 @@
 "expeditions": {
 "nether": {},
 "overworld": {
-"board": 140,
+"board": 146,
 "broken": 0,
 "cargo": {
 "coal": 3
@@ -45,7 +45,7 @@
 "packed": {
 "bread": 3
 },
-"party": [138],
+"party": [144],
 "picks": 1,
 "policy": {
 "full": true,
@@ -165,7 +165,7 @@ Vector2i(21, 19): true,
 Vector2i(21, 20): true
 },
 "gate": Vector2i(21, 18),
-"id": 227,
+"id": 233,
 "kind": "pen",
 "rect": Rect2i(16, 16, 6, 5)
 }, {
@@ -177,7 +177,7 @@ Vector2i(20, 6): true,
 Vector2i(21, 6): true
 },
 "gate": Vector2i(21, 8),
-"id": 228,
+"id": 234,
 "kind": "pen",
 "rect": Rect2i(17, 6, 5, 5)
 }],
@@ -255,7 +255,7 @@ Vector2i(21, 6): true
 &"fed_at": 23998,
 "id": 101,
 "kind": "animal",
-&"pen": 227,
+&"pen": 233,
 "pos": Vector2(17, 17),
 "species": "cow",
 "unreach_until": 0,
@@ -269,7 +269,7 @@ Vector2i(21, 6): true
 &"fed_at": 23998,
 "id": 103,
 "kind": "animal",
-&"pen": 227,
+&"pen": 233,
 "pos": Vector2(18, 17),
 "species": "cow",
 "unreach_until": 0,
@@ -449,9 +449,9 @@ Vector2i(21, 6): true
 "des": false,
 "dest": null,
 &"grown_at": 26198,
-"id": 229,
+"id": 235,
 "kind": "animal",
-&"pen": 227,
+&"pen": 233,
 "pos": Vector2(18, 18),
 "species": "cow",
 "unreach_until": 0,
@@ -571,6 +571,109 @@ Vector2i(11, 10): true
 "wear": {},
 "zone": {}
 },
+"nether_fortress": {
+"banks": [],
+"boulders": [],
+"bushes": [],
+"creatures": [],
+"diamond_found": false,
+"discovered": true,
+"door": Vector2i(-1, -1),
+"door_state": "",
+"drops_known": [],
+"entrance": Vector2i(0, 8),
+"farm": {},
+"fences": {},
+"fire": {},
+"found": true,
+"gates": {},
+"h": 16,
+"id": "nether_fortress",
+"items": {},
+"kind": "site",
+"known": false,
+"landmarks": [],
+"landmarks_seen": [],
+"lava": {},
+"ledges": [],
+"level": 0,
+"name": "Nether: fortress entrance",
+"pattern": "",
+"pens": [],
+"regrow": {},
+"rock": {
+Vector2i(0, 0): true,
+Vector2i(0, 1): true,
+Vector2i(0, 2): true,
+Vector2i(0, 3): true,
+Vector2i(0, 4): true,
+Vector2i(0, 5): true,
+Vector2i(0, 6): true,
+Vector2i(0, 7): true,
+Vector2i(0, 9): true,
+Vector2i(0, 10): true,
+Vector2i(0, 11): true,
+Vector2i(0, 12): true,
+Vector2i(0, 13): true,
+Vector2i(0, 14): true,
+Vector2i(0, 15): true,
+Vector2i(1, 0): true,
+Vector2i(1, 15): true,
+Vector2i(2, 0): true,
+Vector2i(2, 15): true,
+Vector2i(3, 0): true,
+Vector2i(3, 15): true,
+Vector2i(4, 0): true,
+Vector2i(4, 15): true,
+Vector2i(5, 0): true,
+Vector2i(5, 15): true,
+Vector2i(6, 0): true,
+Vector2i(6, 15): true,
+Vector2i(7, 0): true,
+Vector2i(7, 15): true,
+Vector2i(8, 0): true,
+Vector2i(8, 15): true,
+Vector2i(9, 0): true,
+Vector2i(9, 15): true,
+Vector2i(10, 0): true,
+Vector2i(10, 15): true,
+Vector2i(11, 0): true,
+Vector2i(11, 15): true,
+Vector2i(12, 0): true,
+Vector2i(12, 15): true,
+Vector2i(13, 0): true,
+Vector2i(13, 15): true,
+Vector2i(14, 0): true,
+Vector2i(14, 15): true,
+Vector2i(15, 0): true,
+Vector2i(15, 1): true,
+Vector2i(15, 2): true,
+Vector2i(15, 3): true,
+Vector2i(15, 4): true,
+Vector2i(15, 5): true,
+Vector2i(15, 6): true,
+Vector2i(15, 7): true,
+Vector2i(15, 8): true,
+Vector2i(15, 9): true,
+Vector2i(15, 10): true,
+Vector2i(15, 11): true,
+Vector2i(15, 12): true,
+Vector2i(15, 13): true,
+Vector2i(15, 14): true,
+Vector2i(15, 15): true
+},
+"seen": 0,
+"sheep": [],
+"sites": [],
+"surveyed": false,
+"torches": [],
+"trees": [],
+"visited": false,
+"w": 16,
+"water": {},
+"wear": {},
+"zone": {}
+},
 "nether_landing": {
 "banks": [],
 "boulders": [{
@@ -632,7 +735,7 @@ Vector2i(11, 10): true
 "engaged": false,
 "flash": 0,
 "hp": 5,
-"id": 286,
+"id": 292,
 "kind": "creature",
 "pos": Vector2(9, 9),
 "species": "magma_cube"
@@ -752,12 +855,10 @@ Vector2i(11, 4): true,
 Vector2i(11, 11): true,
 Vector2i(11, 12): true,
 Vector2i(11, 23): true,
-Vector2i(12, 0): true,
 Vector2i(12, 4): true,
 Vector2i(12, 7): true,
 Vector2i(12, 8): true,
 Vector2i(12, 9): true,
-Vector2i(12, 23): true,
 Vector2i(13, 0): true,
 Vector2i(13, 9): true,
 Vector2i(13, 23): true,
@@ -802,7 +903,6 @@ Vector2i(23, 8): true,
 Vector2i(23, 9): true,
 Vector2i(23, 10): true,
 Vector2i(23, 11): true,
-Vector2i(23, 12): true,
 Vector2i(23, 13): true,
 Vector2i(23, 14): true,
 Vector2i(23, 15): true,
@@ -823,7 +923,7 @@ Vector2i(23, 23): true
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 287,
+"id": 293,
 "incoming": {},
 "kind": "site",
 "map": "nether_landing",
@@ -846,6 +946,582 @@ Vector2i(23, 23): true
 "trees": [],
 "visited": false,
 "w": 24,
+"water": {},
+"wear": {},
+"zone": {}
+},
+"nether_piglin": {
+"banks": [],
+"boulders": [],
+"bushes": [],
+"creatures": [],
+"diamond_found": false,
+"discovered": true,
+"door": Vector2i(-1, -1),
+"door_state": "",
+"drops_known": [],
+"entrance": Vector2i(0, 8),
+"farm": {},
+"fences": {},
+"fire": {},
+"found": true,
+"gates": {},
+"h": 16,
+"id": "nether_piglin",
+"items": {},
+"kind": "site",
+"known": false,
+"landmarks": [],
+"landmarks_seen": [],
+"lava": {},
+"ledges": [],
+"level": 0,
+"name": "Nether: piglin camp",
+"pattern": "",
+"pens": [],
+"regrow": {},
+"rock": {
+Vector2i(0, 0): true,
+Vector2i(0, 1): true,
+Vector2i(0, 2): true,
+Vector2i(0, 3): true,
+Vector2i(0, 4): true,
+Vector2i(0, 5): true,
+Vector2i(0, 6): true,
+Vector2i(0, 7): true,
+Vector2i(0, 9): true,
+Vector2i(0, 10): true,
+Vector2i(0, 11): true,
+Vector2i(0, 12): true,
+Vector2i(0, 13): true,
+Vector2i(0, 14): true,
+Vector2i(0, 15): true,
+Vector2i(1, 0): true,
+Vector2i(1, 15): true,
+Vector2i(2, 0): true,
+Vector2i(2, 15): true,
+Vector2i(3, 0): true,
+Vector2i(3, 15): true,
+Vector2i(4, 0): true,
+Vector2i(4, 15): true,
+Vector2i(5, 0): true,
+Vector2i(5, 15): true,
+Vector2i(6, 0): true,
+Vector2i(6, 15): true,
+Vector2i(7, 0): true,
+Vector2i(7, 15): true,
+Vector2i(8, 0): true,
+Vector2i(8, 15): true,
+Vector2i(9, 0): true,
+Vector2i(9, 15): true,
+Vector2i(10, 0): true,
+Vector2i(10, 15): true,
+Vector2i(11, 0): true,
+Vector2i(11, 15): true,
+Vector2i(12, 0): true,
+Vector2i(12, 15): true,
+Vector2i(13, 0): true,
+Vector2i(13, 15): true,
+Vector2i(14, 0): true,
+Vector2i(14, 15): true,
+Vector2i(15, 0): true,
+Vector2i(15, 1): true,
+Vector2i(15, 2): true,
+Vector2i(15, 3): true,
+Vector2i(15, 4): true,
+Vector2i(15, 5): true,
+Vector2i(15, 6): true,
+Vector2i(15, 7): true,
+Vector2i(15, 8): true,
+Vector2i(15, 9): true,
+Vector2i(15, 10): true,
+Vector2i(15, 11): true,
+Vector2i(15, 12): true,
+Vector2i(15, 13): true,
+Vector2i(15, 14): true,
+Vector2i(15, 15): true
+},
+"seen": 0,
+"sheep": [],
+"sites": [],
+"surveyed": false,
+"torches": [],
+"trees": [],
+"visited": false,
+"w": 16,
+"water": {},
+"wear": {},
+"zone": {}
+},
+"nether_quartz": {
+"banks": [],
+"boulders": [],
+"bushes": [],
+"creatures": [],
+"diamond_found": false,
+"discovered": true,
+"door": Vector2i(-1, -1),
+"door_state": "",
+"drops_known": [],
+"entrance": Vector2i(0, 8),
+"farm": {},
+"fences": {},
+"fire": {},
+"found": true,
+"gates": {},
+"h": 16,
+"id": "nether_quartz",
+"items": {},
+"kind": "site",
+"known": false,
+"landmarks": [],
+"landmarks_seen": [],
+"lava": {},
+"ledges": [],
+"level": 0,
+"name": "Nether: quartz site",
+"pattern": "",
+"pens": [],
+"regrow": {},
+"rock": {
+Vector2i(0, 0): true,
+Vector2i(0, 1): true,
+Vector2i(0, 2): true,
+Vector2i(0, 3): true,
+Vector2i(0, 4): true,
+Vector2i(0, 5): true,
+Vector2i(0, 6): true,
+Vector2i(0, 7): true,
+Vector2i(0, 9): true,
+Vector2i(0, 10): true,
+Vector2i(0, 11): true,
+Vector2i(0, 12): true,
+Vector2i(0, 13): true,
+Vector2i(0, 14): true,
+Vector2i(0, 15): true,
+Vector2i(1, 0): true,
+Vector2i(1, 15): true,
+Vector2i(2, 0): true,
+Vector2i(2, 15): true,
+Vector2i(3, 0): true,
+Vector2i(3, 15): true,
+Vector2i(4, 0): true,
+Vector2i(4, 15): true,
+Vector2i(5, 0): true,
+Vector2i(5, 15): true,
+Vector2i(6, 0): true,
+Vector2i(6, 15): true,
+Vector2i(7, 0): true,
+Vector2i(7, 15): true,
+Vector2i(8, 0): true,
+Vector2i(8, 15): true,
+Vector2i(9, 0): true,
+Vector2i(9, 15): true,
+Vector2i(10, 0): true,
+Vector2i(10, 15): true,
+Vector2i(11, 0): true,
+Vector2i(11, 15): true,
+Vector2i(12, 0): true,
+Vector2i(12, 15): true,
+Vector2i(13, 0): true,
+Vector2i(13, 15): true,
+Vector2i(14, 0): true,
+Vector2i(14, 15): true,
+Vector2i(15, 0): true,
+Vector2i(15, 1): true,
+Vector2i(15, 2): true,
+Vector2i(15, 3): true,
+Vector2i(15, 4): true,
+Vector2i(15, 5): true,
+Vector2i(15, 6): true,
+Vector2i(15, 7): true,
+Vector2i(15, 8): true,
+Vector2i(15, 9): true,
+Vector2i(15, 10): true,
+Vector2i(15, 11): true,
+Vector2i(15, 12): true,
+Vector2i(15, 13): true,
+Vector2i(15, 14): true,
+Vector2i(15, 15): true
+},
+"seen": 0,
+"sheep": [],
+"sites": [],
+"surveyed": false,
+"torches": [],
+"trees": [],
+"visited": false,
+"w": 16,
+"water": {},
+"wear": {},
+"zone": {}
+},
+"nether_route_fortress": {
+"banks": [],
+"boulders": [],
+"bushes": [],
+"creatures": [{
+"acc": 0.0,
+"alive": true,
+"angry": false,
+"cell": Vector2i(26, 3),
+"cool": 0.0,
+"engaged": false,
+"flash": 0,
+"hp": 8,
+"id": 133,
+"kind": "creature",
+"pos": Vector2(26, 3),
+"species": "magma_cube"
+}, {
+"acc": 0.0,
+"alive": true,
+"angry": false,
+"cell": Vector2i(36, 2),
+"cool": 0.0,
+"engaged": false,
+"flash": 0,
+"hp": 8,
+"id": 134,
+"kind": "creature",
+"pos": Vector2(36, 2),
+"species": "magma_cube"
+}],
+"diamond_found": false,
+"discovered": false,
+"door": Vector2i(-1, -1),
+"door_state": "",
+"drops_known": [],
+"entrance": Vector2i(0, 3),
+"farm": {},
+"fences": {},
+"fire": {
+Vector2i(37, 3): true
+},
+"found": false,
+"gates": {},
+"h": 7,
+"id": "nether_route_fortress",
+"items": {},
+"kind": "route",
+"known": false,
+"landmarks": [],
+"landmarks_seen": [],
+"lava": {
+Vector2i(34, 1): true,
+Vector2i(34, 2): true,
+Vector2i(34, 4): true,
+Vector2i(34, 5): true,
+Vector2i(35, 1): true,
+Vector2i(35, 2): true,
+Vector2i(35, 4): true,
+Vector2i(35, 5): true,
+Vector2i(36, 1): true,
+Vector2i(36, 2): true,
+Vector2i(36, 4): true,
+Vector2i(36, 5): true,
+Vector2i(37, 1): true,
+Vector2i(37, 2): true,
+Vector2i(37, 4): true,
+Vector2i(37, 5): true,
+Vector2i(38, 1): true,
+Vector2i(38, 2): true,
+Vector2i(38, 4): true,
+Vector2i(38, 5): true
+},
+"ledges": [Vector2i(44, 3)],
+"level": 0,
+"name": "Nether: route to the fortress",
+"pattern": "",
+"pens": [],
+"regrow": {},
+"rock": {
+Vector2i(18, 0): true,
+Vector2i(18, 1): true,
+Vector2i(18, 2): true,
+Vector2i(18, 4): true,
+Vector2i(18, 5): true,
+Vector2i(18, 6): true,
+Vector2i(19, 0): true,
+Vector2i(19, 1): true,
+Vector2i(19, 2): true,
+Vector2i(19, 4): true,
+Vector2i(19, 5): true,
+Vector2i(19, 6): true,
+Vector2i(20, 0): true,
+Vector2i(20, 1): true,
+Vector2i(20, 2): true,
+Vector2i(20, 4): true,
+Vector2i(20, 5): true,
+Vector2i(20, 6): true,
+Vector2i(21, 0): true,
+Vector2i(21, 1): true,
+Vector2i(21, 2): true,
+Vector2i(21, 4): true,
+Vector2i(21, 5): true,
+Vector2i(21, 6): true,
+Vector2i(34, 1): true,
+Vector2i(34, 2): true,
+Vector2i(34, 4): true,
+Vector2i(34, 5): true,
+Vector2i(35, 1): true,
+Vector2i(35, 2): true,
+Vector2i(35, 4): true,
+Vector2i(35, 5): true,
+Vector2i(36, 1): true,
+Vector2i(36, 2): true,
+Vector2i(36, 4): true,
+Vector2i(36, 5): true,
+Vector2i(37, 1): true,
+Vector2i(37, 2): true,
+Vector2i(37, 4): true,
+Vector2i(37, 5): true,
+Vector2i(38, 1): true,
+Vector2i(38, 2): true,
+Vector2i(38, 4): true,
+Vector2i(38, 5): true
+},
+"seen": 1,
+"sheep": [],
+"sites": [],
+"surveyed": false,
+"torches": [],
+"trees": [],
+"visited": false,
+"w": 48,
+"water": {},
+"wear": {},
+"zone": {}
+},
+"nether_route_piglin": {
+"banks": [],
+"boulders": [],
+"bushes": [],
+"creatures": [{
+"acc": 0.0,
+"alive": true,
+"angry": false,
+"cell": Vector2i(30, 3),
+"cool": 0.0,
+"engaged": false,
+"flash": 0,
+"hp": 8,
+"id": 131,
+"kind": "creature",
+"pos": Vector2(30, 3),
+"species": "magma_cube"
+}, {
+"acc": 0.0,
+"alive": true,
+"angry": false,
+"cell": Vector2i(38, 4),
+"cool": 0.0,
+"engaged": false,
+"flash": 0,
+"hp": 10,
+"id": 132,
+"kind": "creature",
+"pos": Vector2(38, 4),
+"species": "zombified_piglin"
+}],
+"diamond_found": false,
+"discovered": false,
+"door": Vector2i(-1, -1),
+"door_state": "",
+"drops_known": [],
+"entrance": Vector2i(0, 3),
+"farm": {},
+"fences": {},
+"fire": {},
+"found": false,
+"gates": {},
+"h": 7,
+"id": "nether_route_piglin",
+"items": {},
+"kind": "route",
+"known": false,
+"landmarks": [],
+"landmarks_seen": [],
+"lava": {
+Vector2i(12, 1): true,
+Vector2i(12, 2): true,
+Vector2i(12, 5): true,
+Vector2i(13, 1): true,
+Vector2i(13, 2): true,
+Vector2i(13, 5): true,
+Vector2i(14, 1): true,
+Vector2i(14, 2): true,
+Vector2i(14, 5): true,
+Vector2i(15, 1): true,
+Vector2i(15, 2): true,
+Vector2i(15, 5): true,
+Vector2i(26, 5): true,
+Vector2i(26, 6): true,
+Vector2i(27, 5): true,
+Vector2i(27, 6): true,
+Vector2i(28, 5): true,
+Vector2i(28, 6): true,
+Vector2i(29, 5): true,
+Vector2i(29, 6): true
+},
+"ledges": [Vector2i(27, 3), Vector2i(28, 3)],
+"level": 0,
+"name": "Nether: route to the piglin camp",
+"pattern": "",
+"pens": [],
+"regrow": {},
+"rock": {
+Vector2i(12, 1): true,
+Vector2i(12, 2): true,
+Vector2i(12, 5): true,
+Vector2i(13, 1): true,
+Vector2i(13, 2): true,
+Vector2i(13, 5): true,
+Vector2i(14, 1): true,
+Vector2i(14, 2): true,
+Vector2i(14, 5): true,
+Vector2i(15, 1): true,
+Vector2i(15, 2): true,
+Vector2i(15, 5): true,
+Vector2i(26, 5): true,
+Vector2i(26, 6): true,
+Vector2i(27, 5): true,
+Vector2i(27, 6): true,
+Vector2i(28, 5): true,
+Vector2i(28, 6): true,
+Vector2i(29, 5): true,
+Vector2i(29, 6): true
+},
+"seen": 1,
+"sheep": [],
+"sites": [],
+"surveyed": false,
+"torches": [],
+"trees": [],
+"visited": false,
+"w": 48,
+"water": {},
+"wear": {},
+"zone": {}
+},
+"nether_route_quartz": {
+"banks": [],
+"boulders": [],
+"bushes": [],
+"creatures": [{
+"acc": 0.0,
+"alive": true,
+"angry": false,
+"cell": Vector2i(27, 3),
+"cool": 0.0,
+"engaged": false,
+"flash": 0,
+"hp": 10,
+"id": 129,
+"kind": "creature",
+"pos": Vector2(27, 3),
+"species": "zombified_piglin"
+}, {
+"acc": 0.0,
+"alive": true,
+"angry": false,
+"cell": Vector2i(43, 2),
+"cool": 0.0,
+"engaged": false,
+"flash": 0,
+"hp": 8,
+"id": 130,
+"kind": "creature",
+"pos": Vector2(43, 2),
+"species": "magma_cube"
+}],
+"diamond_found": false,
+"discovered": false,
+"door": Vector2i(-1, -1),
+"door_state": "",
+"drops_known": [],
+"entrance": Vector2i(0, 3),
+"farm": {},
+"fences": {},
+"fire": {
+Vector2i(27, 1): true,
+Vector2i(29, 5): true
+},
+"found": false,
+"gates": {},
+"h": 7,
+"id": "nether_route_quartz",
+"items": {},
+"kind": "route",
+"known": false,
+"landmarks": [],
+"landmarks_seen": [],
+"lava": {
+Vector2i(18, 0): true,
+Vector2i(18, 1): true,
+Vector2i(18, 2): true,
+Vector2i(18, 4): true,
+Vector2i(18, 5): true,
+Vector2i(18, 6): true,
+Vector2i(19, 0): true,
+Vector2i(19, 1): true,
+Vector2i(19, 2): true,
+Vector2i(19, 4): true,
+Vector2i(19, 5): true,
+Vector2i(19, 6): true,
+Vector2i(20, 0): true,
+Vector2i(20, 1): true,
+Vector2i(20, 2): true,
+Vector2i(20, 4): true,
+Vector2i(20, 5): true,
+Vector2i(20, 6): true,
+Vector2i(21, 0): true,
+Vector2i(21, 1): true,
+Vector2i(21, 2): true,
+Vector2i(21, 4): true,
+Vector2i(21, 5): true,
+Vector2i(21, 6): true
+},
+"ledges": [Vector2i(34, 3), Vector2i(35, 3)],
+"level": 0,
+"name": "Nether: route to the quartz site",
+"pattern": "",
+"pens": [],
+"regrow": {},
+"rock": {
+Vector2i(18, 0): true,
+Vector2i(18, 1): true,
+Vector2i(18, 2): true,
+Vector2i(18, 4): true,
+Vector2i(18, 5): true,
+Vector2i(18, 6): true,
+Vector2i(19, 0): true,
+Vector2i(19, 1): true,
+Vector2i(19, 2): true,
+Vector2i(19, 4): true,
+Vector2i(19, 5): true,
+Vector2i(19, 6): true,
+Vector2i(20, 0): true,
+Vector2i(20, 1): true,
+Vector2i(20, 2): true,
+Vector2i(20, 4): true,
+Vector2i(20, 5): true,
+Vector2i(20, 6): true,
+Vector2i(21, 0): true,
+Vector2i(21, 1): true,
+Vector2i(21, 2): true,
+Vector2i(21, 4): true,
+Vector2i(21, 5): true,
+Vector2i(21, 6): true
+},
+"seen": 1,
+"sheep": [],
+"sites": [],
+"surveyed": false,
+"torches": [],
+"trees": [],
+"visited": false,
+"w": 48,
 "water": {},
 "wear": {},
 "zone": {}
@@ -942,7 +1618,7 @@ Vector2i(23, 23): true
 }, {
 "alive": true,
 "cell": Vector2i(12, 12),
-"claim": 138,
+"claim": 144,
 "des": true,
 "id": 77,
 "kind": "boulder",
@@ -1250,7 +1926,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(13, 1),
 "claim": 0,
 "des": false,
-"id": 150,
+"id": 156,
 "kind": "boulder",
 &"ore": "iron",
 "unreach_until": 0
@@ -1259,7 +1935,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(2, 2),
 "claim": 0,
 "des": false,
-"id": 151,
+"id": 157,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1267,7 +1943,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(4, 2),
 "claim": 0,
 "des": false,
-"id": 152,
+"id": 158,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1275,7 +1951,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(11, 2),
 "claim": 0,
 "des": false,
-"id": 153,
+"id": 159,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1283,7 +1959,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(12, 2),
 "claim": 0,
 "des": false,
-"id": 154,
+"id": 160,
 "kind": "boulder",
 &"ore": "coal",
 "unreach_until": 0
@@ -1292,7 +1968,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(14, 2),
 "claim": 0,
 "des": false,
-"id": 155,
+"id": 161,
 "kind": "boulder",
 &"ore": "iron",
 "unreach_until": 0
@@ -1301,7 +1977,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(1, 3),
 "claim": 0,
 "des": false,
-"id": 156,
+"id": 162,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1309,7 +1985,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(2, 3),
 "claim": 0,
 "des": false,
-"id": 157,
+"id": 163,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1317,7 +1993,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(5, 3),
 "claim": 0,
 "des": false,
-"id": 158,
+"id": 164,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1325,7 +2001,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(8, 3),
 "claim": 0,
 "des": false,
-"id": 159,
+"id": 165,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1333,7 +2009,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(9, 3),
 "claim": 0,
 "des": false,
-"id": 160,
+"id": 166,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1341,7 +2017,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(10, 3),
 "claim": 0,
 "des": false,
-"id": 161,
+"id": 167,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1349,7 +2025,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(12, 3),
 "claim": 0,
 "des": false,
-"id": 162,
+"id": 168,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1357,7 +2033,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(14, 3),
 "claim": 0,
 "des": false,
-"id": 163,
+"id": 169,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1365,7 +2041,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(3, 4),
 "claim": 0,
 "des": false,
-"id": 164,
+"id": 170,
 "kind": "boulder",
 &"loose": true,
 "unreach_until": 0
@@ -1374,7 +2050,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(4, 4),
 "claim": 0,
 "des": false,
-"id": 165,
+"id": 171,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1382,7 +2058,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(5, 4),
 "claim": 0,
 "des": false,
-"id": 166,
+"id": 172,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1390,7 +2066,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(9, 4),
 "claim": 0,
 "des": false,
-"id": 167,
+"id": 173,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1398,7 +2074,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(10, 4),
 "claim": 0,
 "des": false,
-"id": 168,
+"id": 174,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1406,7 +2082,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(11, 4),
 "claim": 0,
 "des": false,
-"id": 169,
+"id": 175,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1414,64 +2090,12 @@ Vector2i(15, 15): true
 "cell": Vector2i(12, 4),
 "claim": 0,
 "des": false,
-"id": 170,
-"kind": "boulder",
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(5, 5),
-"claim": 0,
-"des": false,
-"id": 171,
-"kind": "boulder",
-&"loose": true,
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(7, 5),
-"claim": 0,
-"des": false,
-"id": 172,
-"kind": "boulder",
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(9, 5),
-"claim": 0,
-"des": false,
-"id": 173,
-"kind": "boulder",
-&"loose": true,
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(11, 5),
-"claim": 0,
-"des": false,
-"id": 174,
-"kind": "boulder",
-&"loose": true,
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(12, 5),
-"claim": 0,
-"des": false,
-"id": 175,
-"kind": "boulder",
-&"loose": true,
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(13, 5),
-"claim": 0,
-"des": false,
 "id": 176,
 "kind": "boulder",
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(2, 6),
+"cell": Vector2i(5, 5),
 "claim": 0,
 "des": false,
 "id": 177,
@@ -1480,7 +2104,7 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(6, 6),
+"cell": Vector2i(7, 5),
 "claim": 0,
 "des": false,
 "id": 178,
@@ -1488,23 +2112,25 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(7, 6),
+"cell": Vector2i(9, 5),
 "claim": 0,
 "des": false,
 "id": 179,
 "kind": "boulder",
+&"loose": true,
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(8, 6),
+"cell": Vector2i(11, 5),
 "claim": 0,
 "des": false,
 "id": 180,
 "kind": "boulder",
+&"loose": true,
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(14, 6),
+"cell": Vector2i(12, 5),
 "claim": 0,
 "des": false,
 "id": 181,
@@ -1513,7 +2139,7 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(1, 7),
+"cell": Vector2i(13, 5),
 "claim": 0,
 "des": false,
 "id": 182,
@@ -1521,15 +2147,16 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(2, 7),
+"cell": Vector2i(2, 6),
 "claim": 0,
 "des": false,
 "id": 183,
 "kind": "boulder",
+&"loose": true,
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(8, 7),
+"cell": Vector2i(6, 6),
 "claim": 0,
 "des": false,
 "id": 184,
@@ -1537,7 +2164,7 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(9, 7),
+"cell": Vector2i(7, 6),
 "claim": 0,
 "des": false,
 "id": 185,
@@ -1545,7 +2172,7 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(13, 7),
+"cell": Vector2i(8, 6),
 "claim": 0,
 "des": false,
 "id": 186,
@@ -1553,7 +2180,7 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(4, 8),
+"cell": Vector2i(14, 6),
 "claim": 0,
 "des": false,
 "id": 187,
@@ -1562,7 +2189,7 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(7, 8),
+"cell": Vector2i(1, 7),
 "claim": 0,
 "des": false,
 "id": 188,
@@ -1570,7 +2197,7 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(9, 8),
+"cell": Vector2i(2, 7),
 "claim": 0,
 "des": false,
 "id": 189,
@@ -1578,7 +2205,7 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(10, 8),
+"cell": Vector2i(8, 7),
 "claim": 0,
 "des": false,
 "id": 190,
@@ -1586,7 +2213,7 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(11, 8),
+"cell": Vector2i(9, 7),
 "claim": 0,
 "des": false,
 "id": 191,
@@ -1594,10 +2221,59 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(12, 8),
+"cell": Vector2i(13, 7),
 "claim": 0,
 "des": false,
 "id": 192,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(4, 8),
+"claim": 0,
+"des": false,
+"id": 193,
+"kind": "boulder",
+&"loose": true,
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(7, 8),
+"claim": 0,
+"des": false,
+"id": 194,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(9, 8),
+"claim": 0,
+"des": false,
+"id": 195,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(10, 8),
+"claim": 0,
+"des": false,
+"id": 196,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(11, 8),
+"claim": 0,
+"des": false,
+"id": 197,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(12, 8),
+"claim": 0,
+"des": false,
+"id": 198,
 "kind": "boulder",
 &"ore": "coal",
 "unreach_until": 0
@@ -1606,7 +2282,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(13, 8),
 "claim": 0,
 "des": false,
-"id": 193,
+"id": 199,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1614,7 +2290,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(14, 8),
 "claim": 0,
 "des": false,
-"id": 194,
+"id": 200,
 "kind": "boulder",
 &"loose": true,
 &"ore": "iron",
@@ -1624,7 +2300,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(3, 9),
 "claim": 0,
 "des": false,
-"id": 195,
+"id": 201,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1632,7 +2308,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(7, 9),
 "claim": 0,
 "des": false,
-"id": 196,
+"id": 202,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1640,7 +2316,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(9, 9),
 "claim": 0,
 "des": false,
-"id": 197,
+"id": 203,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1648,7 +2324,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(11, 9),
 "claim": 0,
 "des": false,
-"id": 198,
+"id": 204,
 "kind": "boulder",
 &"ore": "coal",
 "unreach_until": 0
@@ -1657,7 +2333,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(13, 9),
 "claim": 0,
 "des": false,
-"id": 199,
+"id": 205,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1665,7 +2341,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(2, 10),
 "claim": 0,
 "des": false,
-"id": 200,
+"id": 206,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1673,7 +2349,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(3, 10),
 "claim": 0,
 "des": false,
-"id": 201,
+"id": 207,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1681,7 +2357,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(6, 10),
 "claim": 0,
 "des": false,
-"id": 202,
+"id": 208,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1689,7 +2365,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(2, 11),
 "claim": 0,
 "des": false,
-"id": 203,
+"id": 209,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1697,7 +2373,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(3, 11),
 "claim": 0,
 "des": false,
-"id": 204,
+"id": 210,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1705,7 +2381,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(5, 11),
 "claim": 0,
 "des": false,
-"id": 205,
+"id": 211,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1713,7 +2389,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(6, 11),
 "claim": 0,
 "des": false,
-"id": 206,
+"id": 212,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1721,7 +2397,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(8, 11),
 "claim": 0,
 "des": false,
-"id": 207,
+"id": 213,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1729,7 +2405,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(9, 11),
 "claim": 0,
 "des": false,
-"id": 208,
+"id": 214,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1737,7 +2413,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(10, 11),
 "claim": 0,
 "des": false,
-"id": 209,
+"id": 215,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1745,7 +2421,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(12, 11),
 "claim": 0,
 "des": false,
-"id": 210,
+"id": 216,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1753,7 +2429,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(13, 11),
 "claim": 0,
 "des": false,
-"id": 211,
+"id": 217,
 "kind": "boulder",
 &"ore": "coal",
 "unreach_until": 0
@@ -1762,7 +2438,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(14, 11),
 "claim": 0,
 "des": false,
-"id": 212,
+"id": 218,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1770,7 +2446,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(1, 12),
 "claim": 0,
 "des": false,
-"id": 213,
+"id": 219,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1778,7 +2454,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(9, 12),
 "claim": 0,
 "des": false,
-"id": 214,
+"id": 220,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1786,7 +2462,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(12, 12),
 "claim": 0,
 "des": false,
-"id": 215,
+"id": 221,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -1794,64 +2470,12 @@ Vector2i(15, 15): true
 "cell": Vector2i(13, 12),
 "claim": 0,
 "des": false,
-"id": 216,
+"id": 222,
 "kind": "boulder",
 "unreach_until": 0
 }, {
 "alive": true,
 "cell": Vector2i(14, 12),
-"claim": 0,
-"des": false,
-"id": 217,
-"kind": "boulder",
-&"ore": "iron",
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(2, 13),
-"claim": 0,
-"des": false,
-"id": 218,
-"kind": "boulder",
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(8, 13),
-"claim": 0,
-"des": false,
-"id": 219,
-"kind": "boulder",
-&"ore": "gold",
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(11, 13),
-"claim": 0,
-"des": false,
-"id": 220,
-"kind": "boulder",
-&"ore": "coal",
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(12, 13),
-"claim": 0,
-"des": false,
-"id": 221,
-"kind": "boulder",
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(13, 13),
-"claim": 0,
-"des": false,
-"id": 222,
-"kind": "boulder",
-&"ore": "coal",
-"unreach_until": 0
-}, {
-"alive": true,
-"cell": Vector2i(14, 13),
 "claim": 0,
 "des": false,
 "id": 223,
@@ -1860,10 +2484,62 @@ Vector2i(15, 15): true
 "unreach_until": 0
 }, {
 "alive": true,
-"cell": Vector2i(3, 14),
+"cell": Vector2i(2, 13),
 "claim": 0,
 "des": false,
 "id": 224,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(8, 13),
+"claim": 0,
+"des": false,
+"id": 225,
+"kind": "boulder",
+&"ore": "gold",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(11, 13),
+"claim": 0,
+"des": false,
+"id": 226,
+"kind": "boulder",
+&"ore": "coal",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(12, 13),
+"claim": 0,
+"des": false,
+"id": 227,
+"kind": "boulder",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(13, 13),
+"claim": 0,
+"des": false,
+"id": 228,
+"kind": "boulder",
+&"ore": "coal",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(14, 13),
+"claim": 0,
+"des": false,
+"id": 229,
+"kind": "boulder",
+&"ore": "iron",
+"unreach_until": 0
+}, {
+"alive": true,
+"cell": Vector2i(3, 14),
+"claim": 0,
+"des": false,
+"id": 230,
 "kind": "boulder",
 &"ore": "gold",
 "unreach_until": 0
@@ -1872,7 +2548,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(9, 14),
 "claim": 0,
 "des": false,
-"id": 225,
+"id": 231,
 "kind": "boulder",
 &"loose": true,
 &"ore": "coal",
@@ -1882,7 +2558,7 @@ Vector2i(15, 15): true
 "cell": Vector2i(13, 14),
 "claim": 0,
 "des": false,
-"id": 226,
+"id": 232,
 "kind": "boulder",
 &"ore": "coal",
 "unreach_until": 0
@@ -2142,7 +2818,7 @@ Vector2i(39, 6): true
 "crafter": 0,
 "crafting": "",
 "done": false,
-"id": 141,
+"id": 147,
 "incoming": {},
 "kind": "site",
 "map": "road",
@@ -2165,7 +2841,7 @@ Vector2i(39, 6): true
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 142,
+"id": 148,
 "incoming": {},
 "kind": "site",
 &"laid": 2,
@@ -2187,7 +2863,7 @@ Vector2i(39, 6): true
 "crafter": 0,
 "crafting": "",
 "done": false,
-"id": 143,
+"id": 149,
 "incoming": {},
 "kind": "site",
 &"laid": 1,
@@ -2209,7 +2885,7 @@ Vector2i(39, 6): true
 "crafter": 0,
 "crafting": "",
 "done": false,
-"id": 144,
+"id": 150,
 "incoming": {},
 "kind": "site",
 "map": "road",
@@ -2230,7 +2906,7 @@ Vector2i(39, 6): true
 "crafter": 0,
 "crafting": "",
 "done": false,
-"id": 145,
+"id": 151,
 "incoming": {},
 "kind": "site",
 "map": "road",
@@ -2251,7 +2927,7 @@ Vector2i(39, 6): true
 "crafter": 0,
 "crafting": "",
 "done": false,
-"id": 146,
+"id": 152,
 "incoming": {},
 "kind": "site",
 "map": "road",
@@ -2272,7 +2948,7 @@ Vector2i(39, 6): true
 "crafter": 0,
 "crafting": "",
 "done": false,
-"id": 147,
+"id": 153,
 "incoming": {},
 "kind": "site",
 "map": "road",
@@ -2294,7 +2970,7 @@ Vector2i(39, 6): true
 "crafting": "",
 "done": true,
 &"end": "village",
-"id": 148,
+"id": 154,
 "incoming": {},
 "kind": "site",
 "map": "road",
@@ -2316,7 +2992,7 @@ Vector2i(39, 6): true
 "crafting": "",
 "done": false,
 &"end": "mine",
-"id": 149,
+"id": 155,
 "incoming": {},
 "kind": "site",
 "map": "road",
@@ -2536,7 +3212,7 @@ Vector2i(21, 6): true
 "cell": Vector2i(34, 28),
 "claim": 0,
 "des": false,
-"id": 274,
+"id": 280,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -2544,7 +3220,7 @@ Vector2i(21, 6): true
 "cell": Vector2i(35, 4),
 "claim": 0,
 "des": false,
-"id": 275,
+"id": 281,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -2552,7 +3228,7 @@ Vector2i(21, 6): true
 "cell": Vector2i(35, 8),
 "claim": 0,
 "des": false,
-"id": 276,
+"id": 282,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -2560,7 +3236,7 @@ Vector2i(21, 6): true
 "cell": Vector2i(36, 6),
 "claim": 0,
 "des": false,
-"id": 277,
+"id": 283,
 "kind": "boulder",
 "unreach_until": 0
 }, {
@@ -2568,7 +3244,7 @@ Vector2i(21, 6): true
 "cell": Vector2i(38, 4),
 "claim": 0,
 "des": false,
-"id": 278,
+"id": 284,
 "kind": "boulder",
 "unreach_until": 0
 }],
@@ -2605,19 +3281,19 @@ Vector2i(21, 6): true
 }, {
 "berries": 3,
 "cell": Vector2i(35, 9),
-"id": 279,
+"id": 285,
 "kind": "bush",
 "regrow": 0.0
 }, {
 "berries": 3,
 "cell": Vector2i(35, 25),
-"id": 280,
+"id": 286,
 "kind": "bush",
 "regrow": 0.0
 }, {
 "berries": 3,
 "cell": Vector2i(38, 22),
-"id": 281,
+"id": 287,
 "kind": "bush",
 "regrow": 0.0
 }],
@@ -2633,7 +3309,7 @@ Vector2i(22, 22): {
 "cell": Vector2i(22, 22),
 "claim": 0,
 "grow": 6.199999999999986,
-"id": 132,
+"id": 138,
 "kind": "crop",
 "unreach_until": 0
 },
@@ -2641,7 +3317,7 @@ Vector2i(22, 23): {
 "cell": Vector2i(22, 23),
 "claim": 0,
 "grow": 3.8499999999999943,
-"id": 133,
+"id": 139,
 "kind": "crop",
 "unreach_until": 0
 },
@@ -2649,7 +3325,7 @@ Vector2i(23, 22): {
 "cell": Vector2i(23, 22),
 "claim": 0,
 "grow": -1.0,
-"id": 134,
+"id": 140,
 "kind": "crop",
 "unreach_until": 0
 },
@@ -2657,7 +3333,7 @@ Vector2i(23, 23): {
 "cell": Vector2i(23, 23),
 "claim": 0,
 "grow": 1.5000000000000007,
-"id": 135,
+"id": 141,
 "kind": "crop",
 "unreach_until": 0
 }
@@ -2865,7 +3541,7 @@ Vector2i(30, 8): {
 "claim": 0,
 "des": false,
 "dest": null,
-"id": 282,
+"id": 288,
 "kind": "animal",
 "pos": Vector2(32, 6),
 "species": "sheep",
@@ -2877,7 +3553,7 @@ Vector2i(30, 8): {
 "claim": 0,
 "des": false,
 "dest": null,
-"id": 283,
+"id": 289,
 "kind": "animal",
 "pos": Vector2(34, 14),
 "species": "sheep",
@@ -2889,7 +3565,7 @@ Vector2i(30, 8): {
 "claim": 0,
 "des": false,
 "dest": null,
-"id": 284,
+"id": 290,
 "kind": "animal",
 "pos": Vector2(34, 29),
 "species": "sheep",
@@ -2902,7 +3578,7 @@ Vector2i(30, 8): {
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 129,
+"id": 135,
 "incoming": {},
 "kind": "site",
 "map": "village",
@@ -2923,7 +3599,7 @@ Vector2i(30, 8): {
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 130,
+"id": 136,
 "incoming": {},
 "kind": "site",
 "map": "village",
@@ -2944,7 +3620,7 @@ Vector2i(30, 8): {
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 131,
+"id": 137,
 "incoming": {},
 "kind": "site",
 "map": "village",
@@ -2965,7 +3641,7 @@ Vector2i(30, 8): {
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 136,
+"id": 142,
 "incoming": {},
 &"keep_meals": true,
 "kind": "site",
@@ -3186,7 +3862,7 @@ Vector2i(31, 19): true
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 139,
+"id": 145,
 "incoming": {},
 &"keep": 20,
 "kind": "site",
@@ -3202,14 +3878,14 @@ Vector2i(31, 19): true
 "store": {},
 "tpl": "mason_bench",
 "unreach_until": 0,
-"worker": 138
+"worker": 144
 }, {
 "autoq": [],
 "builder": 0,
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 140,
+"id": 146,
 "incoming": {},
 "kind": "site",
 "map": "village",
@@ -3429,7 +4105,7 @@ Vector2i(17, 8): true
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 230,
+"id": 236,
 "incoming": {},
 &"keep": 25,
 "kind": "site",
@@ -3445,14 +4121,14 @@ Vector2i(17, 8): true
 "store": {},
 "tpl": "chopping_block",
 "unreach_until": 0,
-"worker": 137
+"worker": 143
 }, {
 "autoq": [],
 "builder": 0,
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 232,
+"id": 238,
 "incoming": {},
 "kind": "site",
 "map": "village",
@@ -3473,7 +4149,7 @@ Vector2i(17, 8): true
 "crafter": 0,
 "crafting": "",
 "done": true,
-"id": 285,
+"id": 291,
 "incoming": {},
 "kind": "site",
 &"lit": true,
@@ -3859,7 +4535,7 @@ Vector2i(17, 8): true
 "claim": 0,
 "des": false,
 "grow": 90.0,
-"id": 231,
+"id": 237,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -3868,7 +4544,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(32, 3),
 "claim": 0,
 "des": false,
-"id": 234,
+"id": 240,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -3877,7 +4553,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(32, 21),
 "claim": 0,
 "des": false,
-"id": 235,
+"id": 241,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -3886,7 +4562,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(32, 22),
 "claim": 0,
 "des": false,
-"id": 236,
+"id": 242,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -3895,7 +4571,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(32, 26),
 "claim": 0,
 "des": false,
-"id": 237,
+"id": 243,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -3904,7 +4580,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(32, 29),
 "claim": 0,
 "des": false,
-"id": 238,
+"id": 244,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -3913,7 +4589,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(32, 30),
 "claim": 0,
 "des": false,
-"id": 239,
+"id": 245,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -3922,7 +4598,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(33, 0),
 "claim": 0,
 "des": false,
-"id": 240,
+"id": 246,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -3931,7 +4607,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(33, 2),
 "claim": 0,
 "des": false,
-"id": 241,
+"id": 247,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -3940,7 +4616,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(33, 3),
 "claim": 0,
 "des": false,
-"id": 242,
+"id": 248,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -3949,7 +4625,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(33, 6),
 "claim": 0,
 "des": false,
-"id": 243,
+"id": 249,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -3958,7 +4634,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(33, 9),
 "claim": 0,
 "des": false,
-"id": 244,
+"id": 250,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -3967,7 +4643,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(33, 13),
 "claim": 0,
 "des": false,
-"id": 245,
+"id": 251,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -3976,7 +4652,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(33, 20),
 "claim": 0,
 "des": false,
-"id": 246,
+"id": 252,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -3985,7 +4661,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(33, 27),
 "claim": 0,
 "des": false,
-"id": 247,
+"id": 253,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -3994,7 +4670,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(33, 30),
 "claim": 0,
 "des": false,
-"id": 248,
+"id": 254,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -4003,7 +4679,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(33, 31),
 "claim": 0,
 "des": false,
-"id": 249,
+"id": 255,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -4012,7 +4688,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(34, 6),
 "claim": 0,
 "des": false,
-"id": 250,
+"id": 256,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -4021,7 +4697,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(34, 9),
 "claim": 0,
 "des": false,
-"id": 251,
+"id": 257,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -4030,7 +4706,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(34, 11),
 "claim": 0,
 "des": false,
-"id": 252,
+"id": 258,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -4039,7 +4715,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(34, 19),
 "claim": 0,
 "des": false,
-"id": 253,
+"id": 259,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -4048,7 +4724,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(34, 22),
 "claim": 0,
 "des": false,
-"id": 254,
+"id": 260,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -4057,7 +4733,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(35, 3),
 "claim": 0,
 "des": false,
-"id": 255,
+"id": 261,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -4066,7 +4742,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(35, 24),
 "claim": 0,
 "des": false,
-"id": 256,
+"id": 262,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -4075,7 +4751,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(36, 12),
 "claim": 0,
 "des": false,
-"id": 257,
+"id": 263,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -4084,7 +4760,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(36, 18),
 "claim": 0,
 "des": false,
-"id": 258,
+"id": 264,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -4093,7 +4769,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(36, 22),
 "claim": 0,
 "des": false,
-"id": 259,
+"id": 265,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -4102,7 +4778,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(36, 28),
 "claim": 0,
 "des": false,
-"id": 260,
+"id": 266,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -4111,7 +4787,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(37, 3),
 "claim": 0,
 "des": false,
-"id": 261,
+"id": 267,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -4120,7 +4796,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(37, 4),
 "claim": 0,
 "des": false,
-"id": 262,
+"id": 268,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -4129,7 +4805,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(37, 19),
 "claim": 0,
 "des": false,
-"id": 263,
+"id": 269,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -4138,7 +4814,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(37, 24),
 "claim": 0,
 "des": false,
-"id": 264,
+"id": 270,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -4147,7 +4823,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(37, 28),
 "claim": 0,
 "des": false,
-"id": 265,
+"id": 271,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -4156,7 +4832,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(38, 24),
 "claim": 0,
 "des": false,
-"id": 266,
+"id": 272,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -4165,7 +4841,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(38, 26),
 "claim": 0,
 "des": false,
-"id": 267,
+"id": 273,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -4174,7 +4850,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(38, 27),
 "claim": 0,
 "des": false,
-"id": 268,
+"id": 274,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -4183,7 +4859,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(39, 12),
 "claim": 0,
 "des": false,
-"id": 269,
+"id": 275,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -4192,7 +4868,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(39, 20),
 "claim": 0,
 "des": false,
-"id": 270,
+"id": 276,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -4201,7 +4877,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(39, 24),
 "claim": 0,
 "des": false,
-"id": 271,
+"id": 277,
 "kind": "tree",
 "logs": 5,
 "unreach_until": 0
@@ -4210,7 +4886,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(39, 25),
 "claim": 0,
 "des": false,
-"id": 272,
+"id": 278,
 "kind": "tree",
 "logs": 6,
 "unreach_until": 0
@@ -4219,7 +4895,7 @@ Vector2i(17, 8): true
 "cell": Vector2i(39, 29),
 "claim": 0,
 "des": false,
-"id": 273,
+"id": 279,
 "kind": "tree",
 "logs": 4,
 "unreach_until": 0
@@ -4266,7 +4942,7 @@ Vector2i(20, 15): true
 }
 }
 },
-"next_id": 288,
+"next_id": 294,
 "pending": [{
 "kind": "discovery",
 "map": "old_mine",
@@ -4288,7 +4964,12 @@ Vector2i(20, 15): true
 "text": "The party found an iron vein in the old mine."
 }],
 "residents": [{
-"armor": {},
+"armor": {
+"chest": {
+"dur": 12,
+"type": "iron_chestplate"
+}
+},
 "arriving": false,
 "away": false,
 "axe": null,
@@ -4317,7 +4998,7 @@ Vector2i(20, 15): true
 "xp": 3
 },
 "guard": {
-"xp": 0
+"xp": 10
 },
 "haul": {
 "xp": 44
@@ -4359,7 +5040,11 @@ Vector2i(20, 15): true
 "pos": Vector2(23, 22),
 "role": "all",
 "shirt": "2E8C9E",
-"sword": null,
+"sword": {
+"dur": 30,
+"tier": 3,
+"type": "iron_sword"
+},
 "trip": ""
 }, {
 "armor": {},
@@ -4376,7 +5061,7 @@ Vector2i(20, 15): true
 "heal": 0.0,
 "hunger": 99.73611111111117,
 "hurt": 0,
-"id": 137,
+"id": 143,
 "jobs": {
 "build": {
 "xp": 0
@@ -4391,7 +5076,7 @@ Vector2i(20, 15): true
 "xp": 0
 },
 "guard": {
-"xp": 10
+"xp": 0
 },
 "haul": {
 "xp": 0
@@ -4420,19 +5105,19 @@ Vector2i(20, 15): true
 "orders": [],
 "pick": null,
 "pos": Vector2(2.7500005, 31),
-"role": "guard",
+"role": "lumber",
 "shirt": "A8457A",
-"sword": {
-"dur": 30,
-"tier": 3,
-"type": "iron_sword"
-},
+"sword": null,
 "trip": ""
 }, {
 "armor": {
 "chest": {
-"dur": 12,
-"type": "iron_chestplate"
+"dur": 5,
+"type": "leather_tunic"
+},
+"feet": {
+"dur": 8,
+"type": "leather_boots"
 }
 },
 "arriving": false,
@@ -4448,7 +5133,7 @@ Vector2i(20, 15): true
 "heal": 120.0,
 "hunger": 100.0,
 "hurt": 1,
-"id": 138,
+"id": 144,
 "jobs": {
 "build": {
 "xp": 0

@@ -281,12 +281,11 @@ func _initialize() -> void:
 				break
 		sim.stats.obsidian_home = true
 		sim.events.clear()
-	if SaveFormat.VERSION >= 41:  # Tomas the guard, with an iron sword in hand, some practice, and Mira in an iron chestplate (#150)
-		var tomas: Dictionary = sim.residents[1]
-		tomas.role = "guard"
-		tomas.sword = {"type": "iron_sword", "tier": 3, "dur": 30}
-		tomas.jobs.guard.xp = 10
-		sim.residents[2].armor = {"chest": {"type": "iron_chestplate", "dur": 12}}
+	if SaveFormat.VERSION >= 41:  # Ada with an iron sword in hand, some Guard practice and an iron chestplate (#150)
+		var ada: Dictionary = sim.residents[0]
+		ada.sword = {"type": "iron_sword", "tier": 3, "dur": 30}
+		ada.jobs.guard.xp = 10
+		ada.armor = {"chest": {"type": "iron_chestplate", "dur": 12}}
 	if SaveFormat.VERSION >= 42:  # a hurt magma cube on the Nether landing, and the cream it has dropped before (#151)
 		var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Vector2i(9, 9))
 		cube.hp = 5

@@ -508,7 +508,7 @@ func test_every_save_fixture_still_loads() -> void:
 		if v >= 12:
 			check(sim.residents[0].kept.pick, "v%d: a chosen tool stays chosen" % v)
 		else:
-			check(sim.residents.all(func(r): return r.kept == {"axe": false, "pick": false}), "v%d: no tool was chosen in older saves" % v)
+			check(sim.residents.all(func(r): return r.kept == {"axe": false, "pick": false, "sword": false}), "v%d: no tool was chosen in older saves" % v)
 		if v >= 11:
 			check(Sim.level(sim.residents[0], "build") == 3, "v%d: skills survive" % v)
 		else:
@@ -1467,7 +1467,7 @@ func send_to_mine(sim: Sim, r: Dictionary) -> void:
 ## tallies leave out what lies on another map.
 func test_residents_only_work_on_their_own_map() -> void:
 	var sim := Sim.new_game()
-	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, NetherLanding.ID] and sim.map_id == "village", "a new game has the village, the old mine, the road between them, the meadow and the Nether landing, with the village current")
+	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old mine, the road between them, the meadow and the Nether landing, with the village current")
 	var ada: Dictionary = sim.residents[0]
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
 	check(ada.map == "village" and tomas.map == "village", "residents start on the village map")
@@ -1810,18 +1810,18 @@ func test_staging_and_departure() -> void:
 			check(stuck_text(sim).contains("Expedition: Waiting for"), "while packing, the wait shows: " + stuck_text(sim))
 	check(tomas_packed, "village residents pack the supplies (Haul)")
 	check(not ada_village_work, "the party only packs and waits; it takes no other village work")
-	check(sim.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0} and b.tools.size() == 1 and b.tools[0].dur == 9, "2 meals and the spare pickaxe are packed, with its wear (%s)" % [sim.packed()])
+	check(sim.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0} and b.tools.size() == 1 and b.tools[0].dur == 9, "2 meals and the spare pickaxe are packed, with its wear (%s)" % [sim.packed()])
 	check(count(sim, "bread") == 1, "packed meals leave the stockpile")
 	check(sim.at_board(ada) and Sim.staging_cells(b).has(Sim.rcell(ada)), "Ada waits at the board")
 	check(sim.depart_blocker() == "", "everything is ready: %s" % sim.depart_blocker())
 	# Saving while packed keeps it packed.
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
-	check(loaded.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0} and loaded.site(b.id).tools[0].dur == 9, "what's packed survives a save")
+	check(loaded.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0} and loaded.site(b.id).tools[0].dur == 9, "what's packed survives a save")
 	run(loaded, 10)
 	check(loaded.at_board(loaded.residents[0]), "and Ada goes back to the board after loading")
 	# Cancelling on the copy: the supplies go back through haul jobs.
 	loaded.cancel_expedition()
-	check(loaded.expedition.is_empty() and loaded.packed() == {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0}, "cancelling unpacks the board")
+	check(loaded.expedition.is_empty() and loaded.packed() == {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0}, "cancelling unpacks the board")
 	run(loaded, 40)
 	var stored := loaded.stacks_where(func(st): return st.type in ["bread", "stone_pick"] and loaded.in_zone(st.cell))
 	check(stored.map(func(st): return st.type).count("stone_pick") == 1 and count(loaded, "bread") == 3, "the meals and the pickaxe are hauled back to the stockpile")
@@ -4816,7 +4816,7 @@ func test_the_guard_and_iron_gear() -> void:
 	check(old.residents.all(func(r): return r.sword == null and r.broken.sword == false and r.jobs.guard.xp == 0), "an older save loads with no sword and Guard at 0")
 	var f41 := SaveFormat.read("res://tests/fixtures/save_v41.save")
 	var s41 := Sim.from_state(f41.data.state)
-	check(s41.residents[1].role == "guard" and s41.residents[1].sword.type == "iron_sword" and s41.residents[2].armor.chest.type == "iron_chestplate", "the v41 fixture loads its guard, sword and chestplate")
+	check(s41.residents[0].sword.type == "iron_sword" and s41.residents[0].jobs.guard.xp == 10 and s41.residents[0].armor.chest.type == "iron_chestplate", "the v41 fixture loads its sword, Guard practice and chestplate")
 
 
 ## A party at the landing, Tomas a guard with an iron sword and Mira an ordinary resident (issue #151).
