@@ -148,7 +148,25 @@ An **unstaffed** shelter on the landing: nobody lives there, and staffing stays 
 - **The site report** shows "Shelter built. Cache: 2 meals" (or empty). Stuck reasons: "Shelter: needs 2 more planks", "Cache: empty".
 - **Saving:** v43. The landing's sites may hold the shelter, with its cache in the site's store; a trip carries `shelter`, `cobble`, `planks` and `stock`, none for an older trip.
 
-## 11. Tuning table (provisional)
+## 11. Scouting and the Nether routes (#153)
+
+Three **route strips** leave gaps in the landing's edge wall (`NetherRoute.ROUTES`): east to the **quartz site**, north to the **piglin camp**, south to the **fortress entrance**. Each is a 48×7 map of kind `route` that shares the road's geometry (six segments of eight columns, the line along row 3), so the road's fog hides what nobody has walked. Beyond each is a small stub map for its site, to be filled in by #155–#157.
+
+| Route | Terrain, west to east | Creatures |
+|---|---|---|
+| Quartz | The landing's edge, netherrack flats, a **lava channel**, scorched flats (fire), a **broken ledge**, below the quartz | A zombified piglin, a magma cube |
+| Piglin | The landing's edge, a **lava pool**, open flats, a **ruined bridge** (a drop), netherrack hills, the camp's approach | A magma cube, a zombified piglin |
+| Fortress | The landing's edge, open flats, **basalt cliffs** (a cut), ash flats, a **lava lake** (fire), the fortress wall | Two magma cubes |
+
+The obstacles that need a bridge (lava, gaps) or a cut are named in each segment's data, for the line (#159) to deal with. A scout passes by a narrow way beside the lava, with the burns and falls of #149 and the creatures of #151.
+
+- **Scouting:** a plan with `target = {item: "scout", route}` (`Sim.scout_plan`). The party crosses to the landing, walks to the route's gap, steps onto the strip and walks east segment by segment: each segment reached is **revealed** (`SimMap.seen`), with its terrain, obstacle and dangers. At the far end the route is **scouted** (`surveyed`) and the site beyond it is **known**; the party then heads home by the same way. A seriously hurt scout turns back. Guards deal with creatures on the way.
+- **Unknown routes** show as grey posts at the landing's edge, yellow when part-scouted, blue when scouted. Each route that's been entered appears in the map switcher, and so does its site once it's known.
+- **Reports** (`site_report`): for a route, every segment as far as it's been seen, its dangers (including the creatures about in scouted segments), and the travel time once scouted; the landing's report lists the three routes' states. A site's report waits for the issues that build it.
+- **Gating:** an unscouted site can't be a destination ("Nobody has scouted the way there yet"), and a scouted route can't be scouted again. A party can't be sent to a scouted site until it's built ("The way to the quartz site isn't built yet", #155–#157).
+- **Saving:** v44. The routes and sites are added to a save when it loads, unknown. A route keeps `seen` and `surveyed`.
+
+## 12. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -183,3 +201,4 @@ Each build issue adds its rows.
 | Creature table | see §9 | Health, hit chance, serious chance, blow time, reach, notice range and drops, in `Defs.CREATURES`. |
 | `SHELTER_COST` | 4 cobblestone, 6 planks | What a party carries to build the shelter. |
 | `SHELTER_BUILD_TIME` | 10 s | Building it. |
+| Route strip | 48×7, six segments | Cells, in `game/sim/nether_route.gd`. |

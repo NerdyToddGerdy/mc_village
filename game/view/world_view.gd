@@ -192,7 +192,7 @@ func _build_static() -> void:
 	var ghost := Batch.new()
 	var dark := Batch.new()
 	var col := Batch.new()
-	_grade_blocks(sim.m.kind == "site" and sim.m.id != Meadow.ID and sim.m.id != NetherLanding.ID, sim.m.id == NetherLanding.ID)
+	_grade_blocks(sim.m.kind == "site" and sim.m.id != Meadow.ID and not sim.m.id.begins_with("nether"), sim.m.id.begins_with("nether"))
 	if sim.m.id == Meadow.ID:
 		_add_meadow_ground(solid)
 	elif sim.m.kind == "site":
@@ -318,6 +318,12 @@ func _add_landing_features(b: Batch, mp: SimMap) -> void:
 	b.box(Vector3(e.x, 0, e.y + 0.85), Vector3(e.x + 0.3, 1.8, e.y + 1.1), ob, BlockTextures.ROCK)
 	b.box(Vector3(e.x, 1.6, e.y - 0.1), Vector3(e.x + 0.3, 1.9, e.y + 1.1), ob, BlockTextures.ROCK)
 	b.box(Vector3(e.x + 0.05, 0, e.y + 0.15), Vector3(e.x + 0.15, 1.6, e.y + 0.85), PORTAL_GLOW)
+	for rk in NetherRoute.ROUTES:  # a post at each way out: grey while the route is unknown, yellow part-scouted, blue once scouted
+		var ex: Vector2i = NetherRoute.ROUTES[rk].exit
+		var rmap: SimMap = sim.maps[NetherRoute.ROUTES[rk].id]
+		var post: Color = Palette.BLUE if rmap.surveyed else (Palette.YELLOW if rmap.seen > 1 else Palette.CHALK_DIM)
+		b.box(Vector3(ex.x + 0.45, 0, ex.y + 0.45), Vector3(ex.x + 0.55, 1.4, ex.y + 0.55), Palette.LOG, BlockTextures.LOG)
+		b.box(Vector3(ex.x + 0.2, 1.1, ex.y + 0.4), Vector3(ex.x + 0.8, 1.45, ex.y + 0.6), post)
 	for c in mp.landmarks:
 		b.box(Vector3(c.x + 0.25, 0, c.y + 0.25), Vector3(c.x + 0.75, 1.5, c.y + 0.75), NETHER_ROCK.lightened(0.12), BlockTextures.ROCK)
 		b.box(Vector3(c.x + 0.2, 1.5, c.y + 0.2), Vector3(c.x + 0.8, 1.7, c.y + 0.8), NETHER_ROCK.lightened(0.2), BlockTextures.ROCK)
@@ -457,6 +463,9 @@ static var SLEEPER := Color("#6A4A2E")
 ## rocky cut's walls. Past the segments anyone has walked, it's fog (issue #119).
 func _add_route_ground(b: Batch) -> void:
 	var mp := sim.m
+	if mp.id.begins_with("nether"):  # a route out of the portal landing (issue #153)
+		_add_nether_route_ground(b)
+		return
 	for x in mp.w:
 		for y in mp.h:
 			var c := Vector2i(x, y)
@@ -476,6 +485,34 @@ func _add_route_ground(b: Batch) -> void:
 			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (TRODDEN if on_line else Palette.GRASS) * Color(v, v, v), BlockTextures.EARTH if on_line else BlockTextures.GROUND)
 	_add_end_sign(b, Road.VILLAGE_END + Vector2i(0, -1), -1.0, Palette.GRASS)
 	_add_end_sign(b, Road.MINE_END + Vector2i(0, -1), 1.0, Palette.STONE)
+
+
+## A Nether route strip: netherrack, rock and lava as laid out, fire, and the dark where nobody has scouted yet.
+func _add_nether_route_ground(b: Batch) -> void:
+	var mp := sim.m
+	for x in mp.w:
+		for y in mp.h:
+			var c := Vector2i(x, y)
+			var v := 0.96 + _hash(x, y) * 0.08
+			if _in_fog(c):
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.05, y + 1), NETHER_FOG * Color(v, v, v))
+				continue
+			if mp.lava.has(c):
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), NETHER_ROCK.darkened(0.4))
+				b.box(Vector3(x, -0.1, y), Vector3(x + 1, -0.02, y + 1), LAVA * Color(v, v, v))
+				continue
+			if mp.rock.has(c):
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 1.0, y + 1), NETHER_ROCK * Color(v, v, v), BlockTextures.ROCK)
+				continue
+			var ledge: bool = c in mp.ledges
+			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.3 if ledge else 0.0, y + 1), (NETHERRACK * Color(v, v, v)).darkened(0.2 if ledge else 0.0), BlockTextures.COBBLES)
+	for c in mp.fire:
+		if not _in_fog(c):
+			b.box(Vector3(c.x + 0.15, 0, c.y + 0.15), Vector3(c.x + 0.85, 0.4, c.y + 0.85), TORCH_FLAME.darkened(0.15))
+			b.box(Vector3(c.x + 0.3, 0.4, c.y + 0.3), Vector3(c.x + 0.7, 0.85, c.y + 0.7), Color("#F7C948"))
+
+
+static var NETHER_FOG := Color("#2B1A1E")
 
 
 ## True for a cell on the road nobody has walked to yet (issue #119).
@@ -1602,7 +1639,7 @@ func _make_creature(species: String) -> Node3D:
 func _update_creatures() -> void:
 	var here := {}
 	for x in sim.m.creatures:
-		if not x.alive:
+		if not x.alive or _in_fog(x.cell):
 			continue
 		here[x.id] = true
 		if not _creature_nodes.has(x.id):

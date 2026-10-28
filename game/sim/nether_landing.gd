@@ -12,7 +12,7 @@ const NAME := "Nether: portal landing"
 ##   . netherrack   # rock   L lava pool (rock nobody walks into)   M a landmark to survey   o a block to mine
 ##   F a patch of fire (stepping on it sets someone alight)   v a ledge (a drop someone can fall from)
 const LAYOUT := [
-	"########################",
+	"############.###########",
 	"#......................#",
 	"#..LL.........o........#",
 	"#..LL......M..v........#",
@@ -24,7 +24,7 @@ const LAYOUT := [
 	"#....v......####.......#",
 	"#.....FF...............#",
 	"#.........LL...........#",
-	"E.........LL.......o...#",
+	"E.........LL.......o....",
 	"#...............F......#",
 	"#....###...............#",
 	"#....#.......M......v..#",
@@ -35,11 +35,13 @@ const LAYOUT := [
 	"#...............#......#",
 	"#..o............#......#",
 	"#......................#",
-	"########################",
+	"############.###########",
 ]
 
 ## Where the shelter's blueprint goes: three by three, near the arch (issue #152).
 const SHELTER_AT := Vector2i(2, 5)
+
+## Where each route leaves the landing: gaps in its edge wall (issue #153).
 
 const TOLD := "A red, burning country on the far side of the portal. Nobody has been through."
 const ACCESS := ["Open netherrack: room for the whole party"]

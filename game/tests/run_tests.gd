@@ -70,6 +70,7 @@ func _init() -> void:
 		"test_nether_hazards",
 		"test_auto_combat",
 		"test_the_shelter_and_cache",
+		"test_scouting_the_routes",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
 		"test_expedition_slots",
@@ -5033,3 +5034,76 @@ func test_the_shelter_and_cache() -> void:
 	check(Sim.from_state(f42.data.state).shelter_site().is_empty(), "an older save has no shelter")
 	# Older plans pack no shelter supplies.
 	check(Sim.plan_supplies({"meals": 3, "picks": 0}) == 3, "a plan with no shelter asks for no cobblestone or planks")
+
+
+## Scouting the routes out of the landing (issue #153).
+func test_scouting_the_routes() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var portal: Dictionary = w.portal
+	portal.lit = true
+	var landing: SimMap = sim.get_map(NetherLanding.ID)
+	landing.known = true
+	landing.visited = true
+	check(NetherRoute.ROUTES.keys() == ["quartz", "piglin", "fortress"], "three routes: the quartz site, the piglin camp and the fortress entrance")
+	for rk in NetherRoute.ROUTES:
+		var def: Dictionary = NetherRoute.ROUTES[rk]
+		var rm: SimMap = sim.get_map(def.id)
+		check(rm.kind == "route" and rm.w == 48 and rm.seen == 1 and not rm.known and not rm.surveyed and sim.get_map(def.site).kind == "site" and not sim.get_map(def.site).known, "route %s is a strip map with its site beyond it, both unknown" % rk)
+		check(def.segments.size() == Road.segment_count() and landing.in_bounds(def.exit) and sim.on_map(NetherLanding.ID, func(): return sim.walkable(def.exit)), "%s has six segments and leaves the landing by an open gap in its edge" % rk)
+		check(rm.lava.size() > 0 or rm.rock.size() > 0, "")
+	# An unscouted site can't be a destination.
+	var site_plan := sim.new_plan("nether_quartz")
+	site_plan.party = [ada.id]
+	check(sim.plan_problems(site_plan).has("Nobody has scouted the way there yet"), "an unscouted site can't be the target of a mission")
+	var bad := sim.scout_plan("nowhere")
+	bad.party = [ada.id]
+	check(sim.plan_problems(bad).has("Choose a route to scout"), "a scout plan names a route")
+	# A scouting party walks the quartz route.
+	var plan := sim.scout_plan("quartz")
+	plan.party = [ada.id]
+	plan.shelter = false
+	plan.cobble = 0
+	plan.planks = 0
+	check(plan.target == {"item": "scout", "n": 1, "route": "quartz"} and sim.plan_problems(plan).is_empty(), "a scout plan for the quartz route is fine (%s)" % [sim.plan_problems(plan)])
+	check(sim.plan_expedition(plan) == "", "planned")
+	portal.store = {"bread": 3}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)  # in case the portal goes out
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("nether") == "", "and sent")
+	var rm: SimMap = sim.get_map(NetherRoute.ROUTES.quartz.id)
+	var on_route := false
+	var seen_max := 1
+	for i in 400 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		on_route = on_route or ada.map == rm.id
+		seen_max = maxi(seen_max, rm.seen)
+		if sim.expeditions.nether.is_empty():
+			break
+	check(on_route and rm.known and seen_max == Road.segment_count(), "Ada walks out along the route, revealing its segments one by one (%d of %d)" % [seen_max, Road.segment_count()])
+	check(rm.surveyed and sim.get_map("nether_quartz").known, "at its end the route is scouted, and so is the quartz site")
+	check(sim.expeditions.nether.is_empty() and ada.map == "village" and sim.stats.expeditions == 1, "the party comes home through the landing and the portal (%s, %s, leg %s, job %s, lit %s)" % [ada.map, sim.expeditions.nether.keys().size(), sim.expeditions.nether.get("leg", ""), ada.job.kind if ada.job != null else "none", portal.lit])
+	var rep := sim.site_report(NetherRoute.ROUTES.quartz.id)
+	check(rep.segments.all(func(sg): return sg.known) and rep.hazards.any(func(h): return h.contains("Lava")) and rep.travel > 0.0, "the route's report lists every segment, its dangers and its travel time")
+	var unseen := sim.site_report(NetherRoute.ROUTES.piglin.id)
+	check(unseen.segments.filter(func(sg): return sg.known).size() == 1 and unseen.travel < 0.0 and unseen.hazards.is_empty(), "an unscouted route shows only its first segment and no dangers")
+	var lrep := sim.site_report(NetherLanding.ID)
+	check(lrep.routes.filter(func(x): return x.state == "scouted").map(func(x): return x.key) == ["quartz"] and lrep.routes.filter(func(x): return x.state == "unknown").size() == 2, "the landing's report shows the quartz route scouted and the others unknown")
+	check(sim.plan_problems(sim.scout_plan("quartz")).has("That route is already scouted"), "a scouted route can't be scouted again")
+	# The scouted site is a destination (it can't be reached until it's built, #155).
+	site_plan = sim.new_plan("nether_quartz")
+	site_plan.party = [ada.id]
+	check(not sim.plan_problems(site_plan).has("Nobody has scouted the way there yet"), "a scouted site passes that check")
+	# Saved: which routes are revealed.
+	var back := Sim.from_state(sim.save_state())
+	check(back.get_map(NetherRoute.ROUTES.quartz.id).surveyed and back.get_map("nether_quartz").known and not back.get_map(NetherRoute.ROUTES.piglin.id).surveyed, "which routes are revealed is saved")
+	var f44 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v44.save").data.state)
+	check(f44.get_map("nether_route_quartz").surveyed and f44.get_map("nether_quartz").known and f44.get_map("nether_route_piglin").seen == 3, "the v44 fixture loads its scouted routes")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v43.save").data.state)
+	check(old.maps.has("nether_route_quartz") and not old.get_map("nether_route_quartz").surveyed, "an older save gets the routes, unscouted")

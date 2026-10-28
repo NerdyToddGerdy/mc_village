@@ -296,6 +296,15 @@ func _initialize() -> void:
 		shelter.stage = 1
 		shelter.done = true
 		shelter.store = {"bread": 2}
+	if SaveFormat.VERSION >= 44:  # the quartz route scouted, the piglin route scouted as far as its third segment (#153)
+		var quartz := sim.get_map(NetherRoute.ROUTES.quartz.id)
+		quartz.known = true
+		quartz.seen = Road.segment_count()
+		quartz.surveyed = true
+		sim.get_map(NetherRoute.ROUTES.quartz.site).known = true
+		var piglin := sim.get_map(NetherRoute.ROUTES.piglin.id)
+		piglin.known = true
+		piglin.seen = 3
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

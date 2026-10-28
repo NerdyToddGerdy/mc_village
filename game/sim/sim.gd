@@ -251,6 +251,10 @@ func _add_site_maps() -> void:
 		maps[Meadow.ID].known = maps[OldMine.ID].known
 	if not maps.has(NetherLanding.ID):  # the first Nether map: known once the portal is lit (issue #148)
 		maps[NetherLanding.ID] = NetherLanding.build(self)
+	for key in NetherRoute.ROUTES:  # the routes out of the landing, and the sites at their ends: known once scouted (issue #153)
+		if not maps.has(NetherRoute.ROUTES[key].id):
+			maps[NetherRoute.ROUTES[key].id] = NetherRoute.build(self, key)
+			maps[NetherRoute.ROUTES[key].site] = NetherRoute.build_site(self, key)
 
 
 func add_bush(cell: Vector2i) -> Dictionary:
@@ -2527,6 +2531,34 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				st.t = 0.0
 				_strike(r, cr)
 			return not cr.alive
+		"enter_route":  # out of the landing onto a route's west end (issue #153)
+			var def: Dictionary = NetherRoute.ROUTES[st.route]
+			maps[def.id].known = true
+			move_to_map(r, def.id, maps[def.id].entrance)
+			_toast("%s set out along the %s." % [r.name, def.name.substr(8).to_lower()], r.id)
+			return true
+		"reach_segment":  # a segment of the route is seen: its terrain and dangers are known (issue #153)
+			if m.seen < st.idx + 1:
+				m.seen = st.idx + 1
+				rev += 1
+				var rd: Dictionary = NetherRoute.ROUTES[NetherRoute.route_of(map_id)]
+				_toast("The scouts reached %s." % rd.segments[st.idx].name.to_lower(), r.id)
+			return true
+		"route_end":  # the far end: the route is scouted, and so is its site (issue #153)
+			if not m.surveyed:
+				m.surveyed = true
+				var rk := NetherRoute.route_of(map_id)
+				var site: SimMap = maps[NetherRoute.ROUTES[rk].site]
+				site.known = true
+				rev += 1
+				_toast("The route is scouted. The %s is known now." % site.name.substr(8).to_lower(), r.id)
+				if expedition.get("leg", "out") == "out":
+					_head_home("the route is scouted")
+			return true
+		"leave_route":  # back onto the landing, at the edge the route leaves from (issue #153)
+			var back: Dictionary = NetherRoute.ROUTES[NetherRoute.route_of(map_id)]
+			move_to_map(r, NetherLanding.ID, back.exit)
+			return true
 		"cache_stock":  # meals set down in the cache, above what the party keeps for the way home (issue #152)
 			var cache := shelter_site()
 			var moved := 0
@@ -2890,6 +2922,9 @@ func _claim(r: Dictionary) -> void:
 		return
 	if on_road(r):  # walking the road map (issue #118)
 		r.job = _road_walk_job(r)
+		return
+	if m.kind == "route" and realm_of(map_id) == "nether" and not expedition_of(r).is_empty():  # a scout on a Nether route (issue #153)
+		r.job = _route_scout_job(r)
 		return
 	if map_id == Road.ID:  # out on the road for work there (issues #119, #121)
 		r.job = _claim_on_road(r)
@@ -3566,6 +3601,18 @@ func wheat_wanted(id := Meadow.ID) -> int:
 ## Whether the party is tending the pens (issue #139) rather than bringing something back.
 func tending() -> bool:
 	return expedition.get("target", {}).get("item", "") == "pens"
+
+
+## Whether the party is out to scout a route (issue #153).
+func scouting() -> bool:
+	return expedition.get("target", {}).get("item", "") == "scout"
+
+
+## A plan to scout one of the routes out of the landing: "quartz", "piglin" or "fortress".
+func scout_plan(route: String) -> Dictionary:
+	var plan := new_plan(NetherLanding.ID)
+	plan.target = {"item": "scout", "n": 1, "route": route}
+	return plan
 
 
 ## Whether the party is out to survey a place rather than to bring something back (issue #148).
@@ -4617,7 +4664,7 @@ static func cargo_rows(plan: Dictionary) -> Array:
 ## Keeps `target` in step with the list: its first row that's on, preferring one with an amount. Tending the
 ## pens isn't a list, so it's left alone.
 static func sync_target(plan: Dictionary) -> void:
-	if plan.target.item in ["pens", "survey"]:
+	if plan.target.item in ["pens", "survey", "scout"]:
 		return
 	var rows := cargo_rows(plan)
 	var pick: Dictionary = {}
@@ -4826,6 +4873,14 @@ func plan_problems(plan: Dictionary) -> Array:
 		out.append("%s %s is already out" % ["An" if sl == "overworld" else "A", party_name(sl)])
 	if expedition_board().is_empty():
 		out.append("Build an expedition board first")
+	if plan.target.item == "scout":  # which route, and not one already scouted (issue #153)
+		var rk: String = plan.target.get("route", "")
+		if not NetherRoute.ROUTES.has(rk):
+			out.append("Choose a route to scout")
+		elif maps[NetherRoute.ROUTES[rk].id].surveyed:
+			out.append("That route is already scouted")
+	if NetherRoute.site_ids().has(plan.dest) and not maps[plan.dest].known:  # an unscouted site can't be a destination (issue #153)
+		out.append("Nobody has scouted the way there yet")
 	if sl == "nether":  # a crossing needs the portal built and lit (issue #148)
 		if village_portal().is_empty():
 			out.append("Build the portal first")
@@ -4846,7 +4901,7 @@ func plan_problems(plan: Dictionary) -> Array:
 		var room := cargo_room(plan)
 		if room < 1:
 			out.append("The supplies fill the packs. Take fewer, or more people")
-		elif not plan.target.item in ["pens", "survey"]:
+		elif not plan.target.item in ["pens", "survey", "scout"]:
 			var wanted := 0
 			for r in cargo_rows(plan):
 				wanted += r.n
@@ -4867,7 +4922,7 @@ func plan_expedition(plan: Dictionary) -> String:
 	var problems := plan_problems(plan)
 	if not problems.is_empty():
 		return problems[0]
-	if not plan.target.item in ["pens", "survey"]:  # each place keeps its last list (issue #185)
+	if not plan.target.item in ["pens", "survey", "scout"]:  # each place keeps its last list (issue #185)
 		cargo_lists[plan.dest] = plan.get("list", []).map(func(r): return {"item": r.item, "on": r.on, "n": r.n})
 	use_slot(slot_of_dest(plan.dest))
 	expedition = plan.duplicate(true)
@@ -4967,6 +5022,8 @@ func depart_blocker(slot_id := "") -> String:
 		return "Nothing is being packed"
 	if slot == "nether" and not portal_lit():
 		return "The portal isn't lit"
+	if NetherRoute.site_ids().has(expedition.get("dest", "")):  # the way there is scouted, but a party can't be sent yet
+		return "The way to the %s isn't built yet" % maps[expedition.dest].name.to_lower()
 	var p := packed()
 	var meals: int = expedition.meals - p.meals
 	if meals > 0:
@@ -6230,6 +6287,29 @@ func _supplies_cover(cost: Dictionary) -> bool:
 	return true
 
 
+## A scout on a route (issue #153): walk east, segment by segment, to its end, then come back. A creature that threatens
+## them is dealt with first, and a seriously hurt scout turns back.
+func _route_scout_job(r: Dictionary) -> Job:
+	var c := rcell(r)
+	var fj = _fight_job(r, c)
+	if fj != null:
+		return fj
+	if expedition.get("leg", "out") == "home" or m.surveyed or r.get("hurt", 0) >= 2:
+		var hj := Job.new("road", "Heading back to the landing", "the landing")
+		hj.step(_goto([m.entrance], false))
+		hj.step({"op": "leave_route"})
+		return hj
+	var idx: int = m.seen
+	var j := Job.new("scout", "Scouting the route", "the way ahead")
+	if idx < Road.segment_count():
+		j.step(_goto([Vector2i(Road.SEGMENTS[idx].x, NetherRoute.LINE_ROW)], true))
+		j.step({"op": "reach_segment", "idx": idx})
+	else:
+		j.step(_goto([Vector2i(NetherRoute.W - 1, NetherRoute.LINE_ROW)], true))
+		j.step({"op": "route_end"})
+	return j
+
+
 ## What a party member does on the portal landing (issue #148): walk to the landmarks not yet seen, then wait.
 func _landing_job(r: Dictionary, c: Vector2i):
 	var sh := shelter_site()
@@ -6247,6 +6327,14 @@ func _landing_job(r: Dictionary, c: Vector2i):
 		cj.step(_goto(site_cells(sh), true))
 		cj.step({"op": "cache_stock"})
 		return cj
+	if scouting():  # out along the route to scout (issue #153)
+		var rk: String = expedition.target.get("route", "")
+		if NetherRoute.ROUTES.has(rk) and not maps[NetherRoute.ROUTES[rk].id].surveyed:
+			var ej := Job.new("scout", "Setting out to scout the route", "the way out")
+			ej.step(_goto([NetherRoute.ROUTES[rk].exit], true))
+			ej.step({"op": "enter_route", "route": rk})
+			return ej
+		return null
 	var left := m.landmarks.filter(func(x): return not m.landmarks_seen.has(x))
 	if left.is_empty():
 		return null
@@ -6616,6 +6704,8 @@ func policy_met() -> String:
 	var ex := expedition
 	if not pending.is_empty():
 		return ""
+	if scouting():  # a scout comes home when the route is walked, which sends them (issue #153)
+		return "provisions low" if ex.policy.get("low", false) and spendable_meals() <= 0 else ""
 	if surveying():  # the landing: home once every landmark has been seen (issue #148)
 		if m.surveyed and (not ex.get("shelter", false) or shelter_site().get("done", false)):
 			return "the landing is surveyed" if not ex.get("shelter", false) else "the landing is surveyed and the shelter built"
@@ -7203,6 +7293,8 @@ func ore_left(id: String, ore: String) -> int:
 ## the report has only what the village has been told: names, no estimates and no known hazards.
 ## The iron shows as "?" until it's found, and has no estimate until it's surveyed (issue #111).
 func site_report(id: String) -> Dictionary:
+	if NetherRoute.route_of(id) != "" or NetherRoute.site_key(id) != "":
+		return _nether_route_report(id)
 	if id == Meadow.ID:
 		return _meadow_report()
 	if id == NetherLanding.ID:
@@ -7284,14 +7376,50 @@ func _meadow_report() -> Dictionary:
 		"door": "", "herds": herds() if mp.visited else {}}
 
 
+## A Nether route's report, or that of the site at its end (issue #153): what's known of the terrain, the dangers and the
+## travel, segment by segment as far as scouts have seen. The site's resources wait for the issues that build it.
+func _nether_route_report(id: String) -> Dictionary:
+	var rk := NetherRoute.route_of(id)
+	var is_route := rk != ""
+	if not is_route:
+		rk = NetherRoute.site_key(id)
+	var def: Dictionary = NetherRoute.ROUTES[rk]
+	var rm: SimMap = maps[def.id]
+	var segs: Array = []
+	var hazards: Array = []
+	for i in def.segments.size():
+		var sg: Dictionary = def.segments[i]
+		var seen: bool = i < rm.seen
+		segs.append({"name": sg.name if seen else "Not scouted", "terrain": sg.terrain if seen else "unknown", "obstacle": sg.obstacle if seen else "", "known": seen})
+		if seen:
+			for hz in sg.hazards:
+				if not hazards.has(hz):
+					hazards.append(hz)
+	var kinds: Dictionary = {}
+	for cr in rm.creatures:
+		if cr.alive and rm.seen >= Road.segment_at(cr.cell.x) + 1:
+			kinds[Defs.CREATURES[cr.species].name] = true
+	for k in kinds:
+		hazards.append("%s about" % k)
+	var walk: float = Road.SEGMENTS.size() * 8.0 / Tuning.WALK
+	var name: String = def.name if is_route else def.site_name
+	return {"name": name, "told": def.told, "visited": rm.seen > 1 or rm.surveyed, "travel": walk if rm.surveyed else -1.0, "level": 0, "pattern": "",
+		"resources": [], "hazards": hazards, "access": ["A narrow way beside the lava: bridges and cuts come with the line"] if rm.surveyed else [], "finds": [], "levels": [], "door": "",
+		"segments": segs, "scouted": rm.surveyed, "seen": rm.seen}
+
+
 ## The portal landing's report (issue #148): nothing to bring back yet, a survey to make, and what's known of its dangers.
 func _landing_report() -> Dictionary:
 	var mp: SimMap = maps[NetherLanding.ID]
+	var routes: Array = []
+	for rk in NetherRoute.ROUTES:
+		var rmap: SimMap = maps[NetherRoute.ROUTES[rk].id]
+		routes.append({"key": rk, "name": NetherRoute.ROUTES[rk].name.substr(8), "state": "scouted" if rmap.surveyed else ("partly scouted" if rmap.seen > 1 else "unknown"), "told": NetherRoute.ROUTES[rk].told})
 	var shelter := shelter_site()
 	var cache := ""
 	if shelter.get("done", false):
 		cache = "Shelter built. Cache: %s" % ("empty" if cache_meals() == 0 else "%d %s" % [cache_meals(), "meal" if cache_meals() == 1 else "meals"])
-	return {"name": mp.name, "told": NetherLanding.TOLD, "visited": mp.visited, "travel": 0.0, "level": 0, "pattern": "", "cache": cache,
+	return {"name": mp.name, "told": NetherLanding.TOLD, "visited": mp.visited, "travel": 0.0, "level": 0, "pattern": "", "cache": cache, "routes": routes,
 		"resources": mp.drops_known.map(func(k): return {"item": k, "name": Defs.ITEMS[k].label, "reserve": -1, "known": true}),
 		"hazards": NetherLanding.HAZARDS.duplicate() if mp.visited else [], "access": NetherLanding.ACCESS.duplicate() if mp.visited else [],
 		"finds": [], "levels": [], "door": "", "landmarks": mp.landmarks_seen.size(), "landmark_total": mp.landmarks.size()}
@@ -7384,7 +7512,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.maps = {}
 	# Maps tick in the order a game makes them, so a loaded game replays as the saved one would have:
 	# the village, the old mine, the road, the meadow, then the levels below the mine as they opened.
-	var order := ["village", OldMine.ID, Road.ID, Meadow.ID, NetherLanding.ID]
+	var order := ["village", OldMine.ID, Road.ID, Meadow.ID, NetherLanding.ID] + NetherRoute.route_ids() + NetherRoute.site_ids()
 	var ids: Array = d.maps.keys()
 	ids.sort_custom(func(a, b): return [order.find(a) if a in order else 9, MineLevels.level_of(a)] < [order.find(b) if b in order else 9, MineLevels.level_of(b)])
 	for id in ids:

@@ -1680,6 +1680,16 @@ func _screenshot_scene() -> void:
 		sim.rev += 1
 		switch_map(NetherLanding.ID)
 		_cam.size = 14.0
+	if "--nroute" in OS.get_cmdline_user_args():  # a Nether route, scouted as far as its third segment (issue #153)
+		var rm := sim.get_map(NetherRoute.ROUTES.quartz.id)
+		rm.known = true
+		rm.seen = 3
+		sim.get_map(NetherLanding.ID).known = true
+		sim.rev += 1
+		switch_map(rm.id)
+		_target = Vector3(20, 0, 3)
+		_cam.size = 12.0
+		_place_camera()
 	if "--creatures" in OS.get_cmdline_user_args():  # one of each creature on the landing, and a guard facing them (issue #151)
 		var landing := sim.get_map(NetherLanding.ID)
 		landing.known = true
