@@ -120,7 +120,7 @@ Proposed specialties include scout, miner, guard, builder, porter, and trader. T
 #### Core decisions (Slice 3)
 
 - **Party size:** 1–3 residents, and the PC is eligible. All numbers are provisional.
-- **One expedition out at a time.**
+- **One expedition out at a time.** (Superseded in Slice 5, #145: two at once, one Overworld and one Nether.)
 - Party members are absent from village labor while they're away.
 
 ### Decisions and outcomes
@@ -288,6 +288,21 @@ These uses are proposed for our adaptation. Nether resources should enable advan
 Default setbacks include abandoned cargo, damaged equipment, injuries, forced retreat, temporary route closure, and a party sheltering while awaiting assistance.
 
 Stranded parties have visible supplies and a rescue window. Previously discovered terrain remains known after an outpost is lost. Permanent death is undecided and could be difficulty-dependent.
+
+#### Core decisions (Slice 5)
+
+- **Two expeditions at once:** one Overworld and one Nether. A rescue may set out even when both slots are taken.
+- **The portal is built from scratch at the village.** The deeper old-mine levels give diamonds (for a diamond pickaxe), gold and obsidian, which only a diamond pickaxe breaks. Flint and steel lights it. Nothing needed to open it comes only from the Nether.
+- **A hub plus site maps.** A small portal-landing map links to the quartz site, the piglin camp and the fortress entrance by Nether route strips. Scouting reveals the routes.
+- **Visible auto-combat.** Creatures exist on Nether maps and residents fight on their own. The player controls the return policy and retreat, not each blow. There's no village combat.
+- **A Guard job**, levelled like the other jobs. Iron swords and iron armor come from the bench, and armor reduces injuries. Guards engage; everyone else avoids fights and keeps working.
+- **Few creatures, mostly in the fortress:** zombified piglins (neutral) and magma cubes on the routes; blazes and skeletons in the fortress.
+- **No death.** A party that can't go on shelters and waits through a visible rescue window, and a rescue mission brings it home. Missing the window costs cargo and gear, not lives. The PC stays protected.
+- **An unstaffed shelter and supply cache** at the portal landing: a fallback and resupply point.
+- **Piglin trading** for gold from the deeper mine, smelted into ingots, from a fixed table shown before the party commits, never random. Piglins turn hostile only when a rule shown up front is broken.
+- **The fortress is its entrance plus one short delve:** a small hand-laid section with blaze rods and rare salvage. Deeper comes later.
+- **The Nether line** runs from the portal to the quartz site, reusing Slice 4's crew, stations and cart. The village line stays one point-to-point line.
+- **Minecraft names for now** (Nether, piglin, blaze, quartz) as working names.
 
 ## 9. Enchantments
 
@@ -464,7 +479,11 @@ Build a minecart connection and demonstrate faster repeated travel without incre
 
 ### Slice 5 — Nether foothold
 
-One portal region, a quartz site, a trading location, and a fortress entrance. Add scout, gather, trade, and construction missions; shelter, retreat rules, injuries, and a rail connection.
+One portal region, a quartz site, a trading location, and a fortress entrance. Add scout, gather, trade, and construction missions; shelter, retreat rules, injuries, and a rail connection. Implementation detail: `slice-5-spec.md`.
+- **Sites:** the portal landing (the hub), the quartz site, the piglin camp and the fortress entrance with one short delve.
+- **Missions:** scout, gather, trade and construction, plus rescue.
+- **Connection:** the Nether line from the portal to the quartz site.
+- **Danger:** visible auto-combat with a Guard job, and stranding and rescue instead of death.
 
 ### Slice 6 — Specialization and automation
 
@@ -475,18 +494,18 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 - Final title, and target platforms beyond desktop. (Resolved: Godot 4 engine; 3D blocks with an orthographic isometric camera.)
 - Whether PC incapacitation or death has special consequences. (Resolved for Slice 3, #17: the PC can be hurt but never seriously, and the party always gets them home. Death stays open under "Death, rescue, and difficulty settings".)
 - Rest, happiness, and other needs beyond food: depth and pacing. (Resolved for Slice 2, #18: food only.)
-- Combat presentation and degree of player control.
-- Death, rescue, and difficulty settings.
+- Combat presentation and degree of player control. (Partly resolved for Slice 5, #19: Nether expeditions have visible auto-combat. Residents fight on their own, guards engage, and the player controls the return policy and retreat. Village combat stays open.)
+- Death, rescue, and difficulty settings. (Partly resolved for Slice 5, #20: no death. A stranded party shelters through a rescue window, and a rescue mission brings it home. Difficulty settings and permanent death stay open.)
 - Terrain modification, building customization beyond fixed templates, verticality, and camera rotation.
 - Resource regeneration and deposit depletion rules. (Resolved for the village, #22: trees regrow from saplings, and hunting grounds such as the meadow regain their animals over time, each species on its own, with pens and breeding restocking them faster from Slice 3.5. Boulders don't come back, and a mine level's ore doesn't come back once mined, while deeper levels keep the old mine useful (#130). Once every boulder on the village map is gone, a mason's bench can be upgraded into a mineshaft (#204). Depletion at the Nether and later sites is decided with their slices.)
 - Exact party sizes, costs, durations, capacities, and balance values. (Resolved for Slice 3, #23: parties of 1–3, PC eligible. Every number stays provisional.)
 - Recruitment beyond free beds, such as requests or an inn. (Resolved for Slice 2, #24: a traveler arrives for each free bed.)
-- How often expeditions require intervention and how many can run simultaneously. (Resolved for Slice 3, #25: one expedition at a time, and the game stops for the player only at a discovery and at a serious injury, plus a door down once mines have deeper levels, #130.)
-- Outpost staffing and ongoing supply costs.
+- How often expeditions require intervention and how many can run simultaneously. (Resolved for Slice 3, #25: one expedition at a time, and, from Slice 5 (#145), two at once: one Overworld and one Nether. The game stops for the player only at a discovery and at a serious injury, plus a door down once mines have deeper levels, #130.)
+- Outpost staffing and ongoing supply costs. (Partly resolved for Slice 5, #26: the portal landing gets an unstaffed shelter and supply cache. Staffing stays open.)
 - Detailed End and Sift systems.
 - Enchantment discovery and resource costs.
 - How far custom redstone circuits and railway management should extend. (Partly resolved for Slice 4, #29: railways start as one point-to-point line, village to old mine, with no switches, branches, signals or timetables, and no unmanned freight. Decided by the owner for the long term: custom circuits never, and the railway network stays separate point-to-point lines that meet only at shared stations, with no junctions. #29 stays open until Slice 6 has been played, in case the ready-made devices fall short.)
-- Scope of original terminology, assets, and worldbuilding versus direct Minecraft references.
+- Scope of original terminology, assets, and worldbuilding versus direct Minecraft references. (Settled for now, #30: Minecraft names such as Nether, piglin, blaze and quartz are working names.)
 
 ## 15. Core Experience to Preserve
 
