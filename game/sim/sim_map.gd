@@ -37,6 +37,12 @@ var visited := false         ## Someone has been there, so its site report has r
 var found := false           ## Its hidden find (the old mine's iron) has been found (issue #111).
 var discovered := false      ## And surveyed, so it's a known resource with an estimate.
 var diamond_found := false   ## Someone has mined next to a hidden diamond here, so diamonds are a known resource of this level (issue #186).
+var fire := {}               ## Vector2i -> true: burning cells someone can walk onto and be set alight (issue #149).
+var _heat := {}
+var _heat_ready := false
+var landmarks: Array = []    ## Cells a party surveys on the Nether landing (issue #148).
+var landmarks_seen: Array = []   ## Those it has been to.
+var surveyed := false        ## All of them seen.
 var lava := {}               ## Vector2i -> true: rock cells that are lava pools, beside the deep levels' obsidian (issue #146).
 var ledges: Array = []       ## Cells with a drop someone can fall from in the dark (issue #110).
 # The old mine's levels (issue #132).
@@ -67,7 +73,7 @@ func _init(p_w := Tuning.MAP_W, p_h := Tuning.MAP_H) -> void:
 	occ.resize(w * h)
 
 
-const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "diamond_found", "ledges", "water", "lava", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear"]
+const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "diamond_found", "ledges", "water", "lava", "landmarks", "landmarks_seen", "surveyed", "fire", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear"]
 
 
 ## The map as plain data. Reservations and job bookkeeping aren't saved (spec §2, Saving).
@@ -210,6 +216,25 @@ func _shifted_keys(d: Dictionary, off: Vector2i) -> Dictionary:
 
 func in_bounds(c: Vector2i) -> bool:
 	return c.x >= 0 and c.y >= 0 and c.x < w and c.y < h
+
+
+## The cells beside lava, and the burning ones (issue #149): the way round them is dearer, and a step onto them risks a burn.
+func heat() -> Dictionary:
+	if not _heat_ready:
+		for c in lava:
+			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				_heat[c + d] = true
+		for c in fire:
+			_heat[c] = true
+		_heat_ready = true
+	return _heat
+
+
+func beside_lava(c: Vector2i) -> bool:
+	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		if lava.has(c + d):
+			return true
+	return false
 
 
 ## True for an open cell no torch lights (issue #102). Always false in the village.

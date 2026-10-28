@@ -38,6 +38,8 @@ static var STICK := Color("#9C7A4E")
 ## are this much stronger (1 is the village's).
 static var MINE_GRADE := Color("#E0EAFF")
 const MINE_CONTRAST := 1.35
+## The Nether's warm, dark red look (issues #148, #206): a grade like the mine's, but red.
+static var NETHER_GRADE := Color("#E8A590")
 
 static var ITEM_COLORS := {
 	"wool": Color("#ECEAE2"), "mutton": Color("#C2645A"), "berries": Color("#B23A5A"), "wheat": Color("#D8B65A"),

@@ -1198,14 +1198,26 @@ func open_planner() -> void:
 	planner_open = true
 	craft_menu_open = false
 	menu_open = ""
-	if not sim.expedition.is_empty():
+	var busy: bool = not sim.expeditions[plan_slot()].is_empty()
+	if busy and adventure != "" and not sim.adventures().any(func(a): return a.id == adventure):
 		adventure = ""
-	else:
+	if not busy:
 		var known := sim.adventures()
 		if not known.any(func(a): return a.id == adventure):
 			adventure = known[0].id if not known.is_empty() else ""
-	if plan.is_empty() or not sim.expedition.is_empty() or plan.dest != adventure:
+	if plan.is_empty() or busy or plan.dest != adventure:
 		plan = sim.new_plan(adventure if adventure != "" else OldMine.ID)
+
+
+## The expedition slot the board is showing (issue #145): the one the chosen adventure belongs to, or, with none
+## chosen, the first that has a party.
+func plan_slot() -> String:
+	if adventure != "":
+		return Sim.slot_of_dest(adventure)
+	for sl in Sim.SLOTS:
+		if not sim.expeditions[sl].is_empty():
+			return sl
+	return "overworld"
 
 
 ## Opens the expedition board on one adventure (issue #136): its site report and planner. A signpost
@@ -1213,7 +1225,7 @@ func open_planner() -> void:
 func open_adventure(id: String) -> void:
 	if sim.expedition_board().is_empty():
 		return
-	adventure = id if sim.expedition.is_empty() else ""
+	adventure = id
 	open_planner()
 
 
@@ -1290,6 +1302,10 @@ func plan_clear_toggle() -> void:
 
 ## Which level of the old mine the plan is for (issue #132). Its list is the one that place last used.
 func plan_dest(id: String) -> void:
+	if Sim.realm_of(id) == "nether":  # the first crossing is a survey (issue #148)
+		plan = sim.new_plan(id)
+		adventure = id
+		return
 	var tending: bool = plan.target.item == "pens"
 	plan.dest = id
 	plan.list = sim.cargo_list_for(id)
@@ -1326,12 +1342,12 @@ func confirm_plan() -> String:
 
 
 func depart() -> String:
-	return sim.depart()
+	return sim.depart(plan_slot())
 
 
 ## Calls the party home from the site (issue #108).
 func call_home() -> String:
-	return sim.call_home()
+	return sim.call_home(Sim.realm_of(view_map) if view_map != "village" else plan_slot())
 
 
 ## Answers the choice the game stopped for (issues #110, #111), and carries on at the speed it had.
@@ -1342,7 +1358,7 @@ func answer(option: String) -> void:
 
 
 func cancel_expedition() -> void:
-	sim.cancel_expedition()
+	sim.cancel_expedition(plan_slot())
 	adventure = ""
 	plan = sim.new_plan()
 
@@ -1655,6 +1671,15 @@ func _screenshot_scene() -> void:
 		_target = Vector3(near.x + 2.0, 0, near.y + 1.0)
 		_cam.size = 9.0
 		_place_camera()
+	if "--nether" in OS.get_cmdline_user_args():  # the portal landing, seen from the arch, with a landmark surveyed (issue #148)
+		var landing := sim.get_map(NetherLanding.ID)
+		landing.known = true
+		landing.visited = true
+		landing.landmarks_seen = [landing.landmarks[0]]
+		sim.move_to_map(sim.residents[0], NetherLanding.ID, landing.entrance + Vector2i(3, 0))
+		sim.rev += 1
+		switch_map(NetherLanding.ID)
+		_cam.size = 14.0
 	if "--select-bench" in OS.get_cmdline_user_args():
 		_select(bench)
 	if "--craft" in OS.get_cmdline_user_args():

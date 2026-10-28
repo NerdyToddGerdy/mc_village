@@ -180,10 +180,10 @@ func _draw_map() -> void:
 # ---------------------------------------------------------------- static world
 
 ## The mines are colder and harsher than the village (issue #206): a blue-grey grade and stronger texture.
-func _grade_blocks(mine: bool) -> void:
+func _grade_blocks(mine: bool, nether := false) -> void:
 	for m in [_block_mat, _trees_faded.material_override]:
-		m.set_shader_parameter("grade", Palette.MINE_GRADE if mine else Color.WHITE)
-		m.set_shader_parameter("contrast", Palette.MINE_CONTRAST if mine else 1.0)
+		m.set_shader_parameter("grade", Palette.NETHER_GRADE if nether else (Palette.MINE_GRADE if mine else Color.WHITE))
+		m.set_shader_parameter("contrast", Palette.MINE_CONTRAST if mine or nether else 1.0)
 
 
 func _build_static() -> void:
@@ -191,7 +191,7 @@ func _build_static() -> void:
 	var ghost := Batch.new()
 	var dark := Batch.new()
 	var col := Batch.new()
-	_grade_blocks(sim.m.kind == "site" and sim.m.id != Meadow.ID)
+	_grade_blocks(sim.m.kind == "site" and sim.m.id != Meadow.ID and sim.m.id != NetherLanding.ID, sim.m.id == NetherLanding.ID)
 	if sim.m.id == Meadow.ID:
 		_add_meadow_ground(solid)
 	elif sim.m.kind == "site":
@@ -259,25 +259,28 @@ static var DARK_TINT := Color("#2C3445")
 ## and the tunnels no torch reaches drawn darker, so the dark parts read at a glance.
 func _add_site_ground(b: Batch) -> void:
 	var mp := sim.m
+	var nether: bool = mp.id == NetherLanding.ID  # red netherrack, and rock that's nearly black (issue #148)
+	var rock_base: Color = NETHER_ROCK if nether else MINE_ROCK
+	var floor_base: Color = NETHERRACK if nether else MINE_FLOOR
 	for x in mp.w:
 		for y in mp.h:
 			var c := Vector2i(x, y)
 			var v := 0.94 + _hash(x, y) * 0.1
 			if c == mp.door:
-				_add_door(b, c, mp.door_state == "open", MINE_ROCK * Color(v, v, v))
+				_add_door(b, c, mp.door_state == "open", rock_base * Color(v, v, v))
 				continue
 			if mp.lava.has(c):  # a lava pool sunk into the rock (issue #146)
 				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), MINE_ROCK.darkened(0.4))
-				b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0.3, y + 1), LAVA * Color(v, v, v))
+				b.box(Vector3(x, -0.1, y), Vector3(x + 1, -0.02, y + 1), LAVA * Color(v, v, v))
 				continue
 			if mp.rock.has(c) or (sim.boulders.any(func(o): return o.alive and o.get("hidden", false) and o.cell == c)):
-				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.7, y + 1), MINE_ROCK * Color(v, v, v), BlockTextures.ROCK)
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.7, y + 1), rock_base * Color(v, v, v), BlockTextures.ROCK)
 				continue
 			if mp.water.has(c):  # an underground stream (issue #132), below the floor
 				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.45, y + 1), MINE_FLOOR.darkened(0.3))
 				b.box(Vector3(x, -0.45, y), Vector3(x + 1, -0.3, y + 1), (WATER * Color(v, v, v)).darkened(0.25 if mp.is_dark(c) else 0.0))
 				continue
-			var floor_col := MINE_FLOOR * Color(v, v, v)
+			var floor_col := floor_base * Color(v, v, v)
 			if mp.is_dark(c):  # unlit: darker and a little cold, but still read as floor, not a hole
 				floor_col = floor_col.darkened(0.38).lerp(DARK_TINT, 0.25)
 			if c in mp.ledges and mp.visited:  # a ledge: the floor drops, with a pale lip (issue #110)
@@ -285,6 +288,10 @@ func _add_site_ground(b: Batch) -> void:
 				b.box(Vector3(x, -0.3, y), Vector3(x + 1, 0, y + 0.12), floor_col.lightened(0.25), BlockTextures.COBBLES)
 				continue
 			b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0, y + 1), floor_col, BlockTextures.COBBLES)
+	for c in mp.fire:  # a patch of fire (issue #149)
+		b.box(Vector3(c.x + 0.15, 0, c.y + 0.15), Vector3(c.x + 0.85, 0.4, c.y + 0.85), TORCH_FLAME.darkened(0.15))
+		b.box(Vector3(c.x + 0.3, 0.4, c.y + 0.3), Vector3(c.x + 0.7, 0.85, c.y + 0.7), Color("#F7C948"))
+		b.box(Vector3(c.x + 0.42, 0.85, c.y + 0.42), Vector3(c.x + 0.58, 1.1, c.y + 0.58), Color("#FBE58A"))
 	for t in mp.torches:
 		var x: float = t.x + 0.5
 		var z: float = t.y + 0.5
@@ -293,11 +300,34 @@ func _add_site_ground(b: Batch) -> void:
 	# The way back to the village: a timber frame over the entrance, and the party's packs beside it.
 	var e := mp.entrance
 	_add_packs(b, mp, Vector2(e.x + 1.2, e.y + 0.17), 1.0)
+	if nether:  # the portal's far side: an obsidian arch with a violet glow, and the landmarks to survey
+		_add_landing_features(b, mp)
+		return
 	b.box(Vector3(e.x, 0, e.y - 0.05), Vector3(e.x + 0.15, 1.4, e.y + 0.1), Palette.LOG, BlockTextures.LOG)
 	b.box(Vector3(e.x, 0, e.y + 0.9), Vector3(e.x + 0.15, 1.4, e.y + 1.05), Palette.LOG, BlockTextures.LOG)
 	b.box(Vector3(e.x - 0.05, 1.4, e.y - 0.1), Vector3(e.x + 0.2, 1.6, e.y + 1.1), Palette.LOG, BlockTextures.LOG)
 
 
+## The portal landing's far side (issue #148): the obsidian arch you came through, and a ruined pillar at each landmark,
+## with a chalk flag on the ones already seen.
+func _add_landing_features(b: Batch, mp: SimMap) -> void:
+	var e := mp.entrance
+	var ob: Color = Palette.ITEM_COLORS.obsidian
+	b.box(Vector3(e.x, 0, e.y - 0.1), Vector3(e.x + 0.3, 1.8, e.y + 0.15), ob, BlockTextures.ROCK)
+	b.box(Vector3(e.x, 0, e.y + 0.85), Vector3(e.x + 0.3, 1.8, e.y + 1.1), ob, BlockTextures.ROCK)
+	b.box(Vector3(e.x, 1.6, e.y - 0.1), Vector3(e.x + 0.3, 1.9, e.y + 1.1), ob, BlockTextures.ROCK)
+	b.box(Vector3(e.x + 0.05, 0, e.y + 0.15), Vector3(e.x + 0.15, 1.6, e.y + 0.85), PORTAL_GLOW)
+	for c in mp.landmarks:
+		b.box(Vector3(c.x + 0.25, 0, c.y + 0.25), Vector3(c.x + 0.75, 1.5, c.y + 0.75), NETHER_ROCK.lightened(0.12), BlockTextures.ROCK)
+		b.box(Vector3(c.x + 0.2, 1.5, c.y + 0.2), Vector3(c.x + 0.8, 1.7, c.y + 0.8), NETHER_ROCK.lightened(0.2), BlockTextures.ROCK)
+		if mp.landmarks_seen.has(c):
+			b.box(Vector3(c.x + 0.46, 1.7, c.y + 0.46), Vector3(c.x + 0.52, 2.3, c.y + 0.52), Palette.CHALK)
+			b.box(Vector3(c.x + 0.52, 2.05, c.y + 0.46), Vector3(c.x + 0.85, 2.3, c.y + 0.5), Palette.BLUE)
+
+
+static var NETHERRACK := Color("#8A4040")
+static var NETHER_ROCK := Color("#4A2C33")
+static var PORTAL_GLOW := Color("#9A63E0")
 static var WATER := Color("#4E7EA3")
 static var LAVA := Color("#E0561E")
 static var GRAVEL := Color("#8B8681")

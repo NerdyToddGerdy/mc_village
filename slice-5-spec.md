@@ -81,7 +81,33 @@ A **Nether portal** is a village building, 4×1, of an obsidian frame (`PORTAL_O
 - **Seen:** an obsidian frame with violet specks; once lit, a violet plane pulses in it.
 - **Saving:** v39. The portal is an ordinary site with a `lit` flag.
 
-## 6. Tuning table (provisional)
+## 6. The portal landing (#148)
+
+A small Nether map, `nether_landing` (24×24), shown in the map switcher as **Nether: portal landing** once the portal has been lit. It is the hub: route strips (#153) will leave from its edges. A map's id starting with "nether" puts its parties in the Nether slot.
+
+- **Look:** red netherrack, nearly black rock, lava pools sunk in the rock (rock nobody walks into), a ruined pillar at each of three landmarks, and the obsidian arch on the west edge with a violet glow. Its blocks are graded warm and dark (`Palette.NETHER_GRADE`), with the mine's stronger texture.
+- **Planning:** the board's Location dropdown lists the landing once it's known. A Nether plan goes in the Nether slot, is **to survey the landing** (a plan with `target.item == "survey"`, no cargo list and no pickaxes), and needs the portal built and lit ("Build the portal first", "The portal isn't lit"). The planner shows the realm of the chosen destination (`game.plan_slot()`), so a Nether and an Overworld party can be planned, packed and sent in turn.
+- **Packing and crossing:** the party packs at the **portal's staging area**, not the board (`expedition.board` is the portal). At Depart they walk to the cell in front of the portal and step through (`_cross_portal`): moving between maps happens only there. They arrive on the landing's west edge, which makes it known and visited.
+- **The first crossing:** the party walks to each landmark (`mark_seen`); when all three are seen the landing is **surveyed** and the return policy brings them home through the portal. The objective shows in the expedition panel. The shelter (#152) comes later.
+- **Relighting:** the portal can go out while a party is through it (`PORTAL_GUTTER_CHANCE`, as the party starts home). A Nether party carries a flint and steel from the village if there is one (`expedition.lighter`); it relights the portal on the way back, using a use, and the flint and steel comes home with them. Without one the party waits at the dark portal ("The portal has gone out and no one has flint and steel") until the village lights it again. Stranding and rescue are #158's.
+- **Saving:** v40. The landing is added to a save when it loads, unknown. A parties' `lighter` and the landing's `landmarks_seen` and `surveyed` are saved.
+
+## 7. Nether hazards: fire, lava and falls (#149)
+
+Hazards go through the same system as Slice 3's (`_hazard`, `injure`): an injury is slower walking and work with no mining, a serious one stops the game for the retreat, armor turns some aside, and the PC is never seriously hurt. The hazards are cells of the map, so they work on any map that has them: the landing's, and the deep mine's lava.
+
+| Hazard | Where | What happens |
+|---|---|---|
+| **Lava** | Cells of rock that are lava pools. Nobody walks into them or mines them. | Stepping onto a cell beside one risks a burn (`LAVA_CHANCE`, serious `LAVA_SERIOUS`). |
+| **Fire** | Patches of burning netherrack (`SimMap.fire`), walkable. | Stepping onto one sets someone alight: they step off at once, burn for `FIRE_BURN_TIME` more seconds, and each second risks a burn (`FIRE_CHANCE`, serious `FIRE_SERIOUS`). Standing clear of fire stops it. |
+| **Falls** | Ledges (`SimMap.ledges`). On the Nether's maps they need no dark. | Stepping onto one risks a fall (`FALL_CHANCE`, serious `FALL_SERIOUS`). |
+
+- **Paths** go round: a step onto a cell beside lava or on fire costs `HEAT_STEP_COST` against 100, so the weighted path search (the one worn paths use) takes a longer way when there is one. It still goes through when there's no other.
+- **Injuries** remember their cause (`hurt_cause`), so the stuck list says "Ada: Burned: can't mine, and works slower" (or "Seriously burned: waiting at the entrance"). The shelter's own rest, "resting at the shelter", comes with #152.
+- **Site reports** list a map's known hazards once someone has been there: for the landing, lava, fire and ledges; for a deep mine level with lava pools, the lava.
+- **Saving:** `fire` is a map field, saved with the map (the v40 format).
+
+## 8. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -95,3 +121,11 @@ Each build issue adds its rows.
 | Gold ore, gravel, obsidian | levels 2, 3, 5 | First level of each, with 2 / 2 / 4 blocks, more further down. |
 | `PORTAL_OBSIDIAN` | 10 | Obsidian in the portal's frame. |
 | `PORTAL_LIGHT_TIME` | 4 s | Lighting a finished portal. |
+| Landing size | 24×24 | Cells (hand-laid in `game/sim/nether_landing.gd`). |
+| `PORTAL_GUTTER_CHANCE` | 20% | Chance the portal goes out as a party starts home. |
+| `LAVA_CHANCE` | 4% | A burn each time someone steps beside lava. |
+| `LAVA_SERIOUS` | 25% | A lava burn is serious. |
+| `FIRE_BURN_TIME` | 2 s | Burning goes on this long after leaving a fire. |
+| `FIRE_CHANCE` | 40% | A burn each second someone is alight. |
+| `FIRE_SERIOUS` | 20% | A fire burn is serious. |
+| `HEAT_STEP_COST` | 250 | Path cost of a step beside lava or on fire (open ground is 100). |
