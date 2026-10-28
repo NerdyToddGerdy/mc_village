@@ -42,7 +42,18 @@ Slice 5 is done when, from a Slice 4 village, a player can:
 
 #145 two expeditions at once; #146 gold, diamonds and obsidian in the deep mine; #147 the portal; #148 the portal landing; #149 Nether hazards; #150 the Guard job; #151 auto-combat; #152 shelter and cache; #153 scouting; #154 mission types; #155 the quartz site; #156 piglin trading; #157 the fortress; #158 stranding and rescue; #159 the Nether line; #160 the bot and hand playtest.
 
-## 3. Tuning table (provisional)
+## 3. Two expeditions at once (#145)
+
+`sim.expeditions` holds two slots, `overworld` and `nether`; a plan's destination decides its slot (`Sim.slot_of_dest`: ids starting with "nether" are the Nether's). `sim.expedition` is the current slot's, the way `sim.m` is the current map's: the Overworld's at rest, switched by the tick to whichever party is being stepped (`use_slot`, `on_slot`, `each_expedition`). Residents step with their own party's slot (`slot_of`); each map ticks in its realm's slot.
+
+- A taken slot refuses a plan: "An Overworld party is already out" or "A Nether party is already out". A plan with `rescue` set skips that check, so a rescue (#158) can set out when both slots are taken.
+- A resident is in one party only: someone packing with a party or out with it can't join another ("Packing with a party", "Out with the party").
+- A pending choice carries its `slot`, and answering it works that party.
+- The Nether party's stuck reasons are named for it ("Nether party: ...").
+- **Saving:** v37. The one expedition becomes the Overworld's slot and the Nether's is empty; a waiting choice belongs to the Overworld's.
+- Not yet: the Nether row on the expedition board and its planner come with the landing (#148).
+
+## 4. Tuning table (provisional)
 
 Each build issue adds its rows.
 
