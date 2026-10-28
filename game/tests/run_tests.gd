@@ -71,6 +71,7 @@ func _init() -> void:
 		"test_auto_combat",
 		"test_the_shelter_and_cache",
 		"test_scouting_the_routes",
+		"test_mission_types",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
 		"test_expedition_slots",
@@ -5107,3 +5108,63 @@ func test_scouting_the_routes() -> void:
 	check(f44.get_map("nether_route_quartz").surveyed and f44.get_map("nether_quartz").known and f44.get_map("nether_route_piglin").seen == 3, "the v44 fixture loads its scouted routes")
 	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v43.save").data.state)
 	check(old.maps.has("nether_route_quartz") and not old.get_map("nether_route_quartz").surveyed, "an older save gets the routes, unscouted")
+
+
+## The objective picker for Nether plans (issue #154).
+func test_mission_types() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var portal: Dictionary = w.portal
+	check(Sim.OBJECTIVES.keys() == ["survey", "scout", "gather", "trade", "build", "fortress", "rescue"], "the objectives: survey (the first crossing), then scout, gather, trade, build, fortress and rescue")
+	for obj in Sim.OBJECTIVES:
+		check(sim.objective_destinations(obj).is_empty() and sim.objective_why_none(obj) == "Light the portal first" and sim.nether_plan(obj).is_empty(), "%s: with the portal dark there is nowhere to go, and it says why" % obj)
+	portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	var dests := func(o: String) -> Array: return sim.objective_destinations(o).map(func(d): return d.dest + ":" + d.route)
+	check(dests.call("survey") == ["nether_landing:"] and dests.call("build") == ["nether_landing:"], "survey and build can use the landing")
+	check(dests.call("scout") == ["nether_landing:quartz", "nether_landing:piglin", "nether_landing:fortress"], "scout offers the three unscouted routes")
+	for o in ["gather", "trade", "fortress", "rescue"]:
+		check(dests.call(o).is_empty() and sim.objective_why_none(o) != "", "%s has no valid destination yet, and explains why (%s)" % [o, sim.objective_why_none(o)])
+	check(sim.objective_why_none("gather").contains("scout the route to the quartz site"), "gather says to scout the quartz route first")
+	var empty := sim.nether_plan("gather")
+	check(empty.is_empty(), "a plan with no valid destination is empty")
+	# Each objective's defaults.
+	var survey := sim.nether_plan("survey")
+	check(survey.target.item == "survey" and survey.shelter and survey.cobble == Tuning.SHELTER_COST.cobble and survey.fight == false and survey.objective == "survey", "survey: the landing, the shelter's materials, avoiding combat")
+	var scout := sim.nether_plan("scout", sim.objective_destinations("scout")[1])
+	check(scout.target == {"item": "scout", "n": 1, "route": "piglin"} and not scout.shelter and scout.cobble == 0, "scout: the chosen route, no shelter materials")
+	var build := sim.nether_plan("build")
+	check(build.target.item == "build" and build.shelter and build.planks == Tuning.SHELTER_COST.plank, "build: carries the materials")
+	check(Sim.OBJECTIVES.scout.returns == "the route is scouted" and Sim.OBJECTIVES.gather.returns == "the cargo target is reached" and Sim.OBJECTIVES.rescue.returns == "the stranded party is reached", "defaults for coming home: a scout when the route is scouted, a gather at its target, a rescue when the party is reached")
+	# What a scout plan lists is only what it can use: a scouted route drops out.
+	sim.get_map(NetherRoute.ROUTES.quartz.id).surveyed = true
+	sim.get_map("nether_quartz").known = true
+	check(dests.call("scout") == ["nether_landing:piglin", "nether_landing:fortress"], "a scouted route drops off the scout list")
+	check(dests.call("gather") == ["nether_quartz:"] and dests.call("trade").is_empty() and dests.call("fortress").is_empty(), "the quartz site can be gathered from; the piglins and fortress still can't")
+	var gather := sim.nether_plan("gather")
+	check(gather.dest == "nether_quartz" and gather.target.item == "gather" and gather.objective == "gather", "a gather plan for the quartz site")
+	gather.party = [ada.id]
+	check(sim.plan_problems(gather).has("Choose something to bring back"), "(its cargo list waits for the quartz site, #155)")
+	sim.get_map(NetherLanding.ID).surveyed = true
+	check(dests.call("survey").is_empty() and sim.objective_why_none("survey") == "The landing is already surveyed", "a surveyed landing needs no more survey")
+	var shelter: Dictionary = sim.on_map(NetherLanding.ID, func(): return sim.place_site("shelter", NetherLanding.SHELTER_AT))
+	shelter.stage = 1
+	shelter.done = true
+	check(dests.call("build").is_empty() and sim.objective_why_none("build") == "Nothing to build yet: the shelter stands", "a standing shelter leaves nothing to build")
+	# The briefing: dangers, risks and when they come home.
+	var plan := sim.nether_plan("scout")
+	plan.party = [ada.id]
+	var lines := sim.plan_briefing(plan)
+	check(lines.any(func(l): return l.begins_with("Risk: no flint and steel")) and lines[-1] == "Comes home when the route is scouted", "the briefing names the risk of a dark portal, and when they come home (%s)" % [lines])
+	sim.get_map(NetherRoute.ROUTES.piglin.id).seen = 4
+	var lines2 := sim.plan_briefing(sim.nether_plan("scout"))
+	check(lines2.any(func(l): return l.begins_with("Danger: ")), "dangers known on the way are listed")
+	var sword_less := sim.add_resident("Bram", "7A5C8F", Sim.rcell(ada) + Vector2i(1, 0))
+	sim.set_role(sword_less, "guard")
+	var p2 := sim.nether_plan("scout")
+	p2.party = [sword_less.id]
+	check(sim.plan_briefing(p2).any(func(l): return l.begins_with("Risk: no one in the party can fight")), "a guard with no sword is a risk")
+	# Overworld plans keep their form.
+	var old := sim.new_plan(OldMine.ID)
+	check(not old.has("objective") and old.target.item == "coal", "an Overworld plan is still a gather at the old mine")

@@ -3603,6 +3603,128 @@ func tending() -> bool:
 	return expedition.get("target", {}).get("item", "") == "pens"
 
 
+# ---------------------------------------------------------------- mission types (issue #154)
+
+## The objectives a Nether plan can have (brief §8, Missions), in the planner's order: what it is, and when the party comes home
+## by default.
+const OBJECTIVES := {
+	"survey": {"name": "Survey", "sub": "The first crossing: walk the landing's landmarks and build the shelter.", "returns": "the landing is surveyed and the shelter built"},
+	"scout": {"name": "Scout", "sub": "Walk a route out of the landing and reveal it, with the site at its end.", "returns": "the route is scouted"},
+	"gather": {"name": "Gather", "sub": "Bring back a material from a scouted site.", "returns": "the cargo target is reached"},
+	"trade": {"name": "Trade", "sub": "Carry gold to the piglins, from the table shown first.", "returns": "the trades are made"},
+	"build": {"name": "Build", "sub": "Raise a shelter, a crossing or a depot with materials the party carries.", "returns": "the building is done"},
+	"fortress": {"name": "Fortress", "sub": "Delve the fortress entrance for blaze rods and rare salvage.", "returns": "the delve is done, or the party is hurt"},
+	"rescue": {"name": "Rescue", "sub": "Reach a stranded party and bring them home.", "returns": "the stranded party is reached"},
+}
+
+
+## The destinations an objective can use now, as [{dest, label, route}], and why there are none when there aren't:
+## a scouted route's site for a gather, trade or fortress mission, an unscouted route to scout, the landing to survey or build on.
+func objective_destinations(obj: String) -> Array:
+	var out: Array = []
+	match obj:
+		"survey":
+			if not maps[NetherLanding.ID].surveyed and maps[NetherLanding.ID].known:
+				out.append({"dest": NetherLanding.ID, "label": "The portal landing", "route": ""})
+		"scout":
+			if maps[NetherLanding.ID].known:
+				for rk in NetherRoute.ROUTES:
+					if not maps[NetherRoute.ROUTES[rk].id].surveyed:
+						out.append({"dest": NetherLanding.ID, "label": NetherRoute.ROUTES[rk].name.substr(8), "route": rk})
+		"gather", "trade", "fortress":
+			var rk: String = {"gather": "quartz", "trade": "piglin", "fortress": "fortress"}[obj]
+			if maps[NetherRoute.ROUTES[rk].site].known:
+				out.append({"dest": NetherRoute.ROUTES[rk].site, "label": NetherRoute.ROUTES[rk].site_name.substr(8), "route": ""})
+		"build":
+			var sh := shelter_site()
+			if maps[NetherLanding.ID].known and not sh.get("done", false):
+				out.append({"dest": NetherLanding.ID, "label": "A shelter on the landing", "route": ""})
+	return out
+
+
+## Why an objective has nowhere to go, in the player's words.
+func objective_why_none(obj: String) -> String:
+	if not maps[NetherLanding.ID].known:
+		return "Light the portal first"
+	match obj:
+		"survey":
+			return "The landing is already surveyed"
+		"scout":
+			return "Every route is scouted"
+		"gather":
+			return "No site to gather from: scout the route to the quartz site first"
+		"trade":
+			return "No one to trade with: scout the route to the piglin camp first"
+		"fortress":
+			return "No fortress to delve: scout the route to the fortress first"
+		"build":
+			return "Nothing to build yet: the shelter stands"
+		"rescue":
+			return "No one is stranded"
+	return ""
+
+
+## A Nether plan for an objective, with its defaults, or {} when it has no destination (issue #154). `pick` is one of the
+## objective's destinations; the first if left out.
+func nether_plan(obj: String, pick := {}) -> Dictionary:
+	var dests := objective_destinations(obj)
+	if dests.is_empty():
+		return {}
+	if pick.is_empty():
+		pick = dests[0]
+	var plan := new_plan(pick.dest)
+	plan.objective = obj
+	plan.shelter = false
+	plan.cobble = 0
+	plan.planks = 0
+	match obj:
+		"survey":
+			var build_it: bool = not shelter_site().get("done", false)
+			plan.shelter = build_it
+			plan.cobble = Tuning.SHELTER_COST.cobble if build_it else 0
+			plan.planks = Tuning.SHELTER_COST.plank if build_it else 0
+		"scout":
+			plan.target = {"item": "scout", "n": 1, "route": pick.route}
+		"build":
+			plan.target = {"item": "build", "n": 1}
+			plan.shelter = true
+			plan.cobble = Tuning.SHELTER_COST.cobble
+			plan.planks = Tuning.SHELTER_COST.plank
+		"gather":
+			plan.target = {"item": "gather", "n": 8}
+		"trade":
+			plan.target = {"item": "trade", "n": 1}
+		"fortress":
+			plan.target = {"item": "fortress", "n": 1}
+	return plan
+
+
+## What a party is told before it commits (brief §8): the dangers known where it's going, the creatures about, the risks of
+## the crossing, and what the objective needs. Lines of text.
+func plan_briefing(plan: Dictionary) -> Array:
+	var out: Array = []
+	var obj: String = plan.get("objective", "survey")
+	var dest: String = plan.dest
+	var rk: String = plan.target.get("route", "") if plan.target.item == "scout" else ""
+	var rep := site_report(NetherRoute.ROUTES[rk].id if rk != "" else dest)
+	if rep.hazards.is_empty():
+		out.append("No dangers are known there yet" if not rep.visited else "No dangers known")
+	for hz in rep.hazards:
+		out.append("Danger: " + hz)
+	if plan.party.any(func(id): return needs_sword(resident(id))) or not plan.party.any(func(id): return resident(id).role in ["guard", "all"]):
+		out.append("Risk: no one in the party can fight")
+	if realm_of(dest) == "nether" and tool_items("sword", 0).is_empty() and not plan.party.any(func(id): return resident(id).get("sword") != null):
+		out.append("Risk: no sword in the village")
+	if stacks_where(func(s): return s.type == "flint_and_steel" and avail(s) > 0).is_empty():
+		out.append("Risk: no flint and steel to carry, so if the portal goes out the party waits for the village to light it")
+	if obj == "trade":
+		out.append("The piglins' trade table will be shown here before the party commits (#156)")
+	if obj == "rescue":
+		out.append("A rescue may set out even when both parties are out")
+	out.append("Comes home when %s" % OBJECTIVES[obj].returns)
+	return out
+
+
 ## Whether the party is out to scout a route (issue #153).
 func scouting() -> bool:
 	return expedition.get("target", {}).get("item", "") == "scout"
@@ -4664,7 +4786,7 @@ static func cargo_rows(plan: Dictionary) -> Array:
 ## Keeps `target` in step with the list: its first row that's on, preferring one with an amount. Tending the
 ## pens isn't a list, so it's left alone.
 static func sync_target(plan: Dictionary) -> void:
-	if plan.target.item in ["pens", "survey", "scout"]:
+	if plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "gather"]:
 		return
 	var rows := cargo_rows(plan)
 	var pick: Dictionary = {}
@@ -4901,7 +5023,7 @@ func plan_problems(plan: Dictionary) -> Array:
 		var room := cargo_room(plan)
 		if room < 1:
 			out.append("The supplies fill the packs. Take fewer, or more people")
-		elif not plan.target.item in ["pens", "survey", "scout"]:
+		elif not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress"]:
 			var wanted := 0
 			for r in cargo_rows(plan):
 				wanted += r.n
@@ -4922,7 +5044,7 @@ func plan_expedition(plan: Dictionary) -> String:
 	var problems := plan_problems(plan)
 	if not problems.is_empty():
 		return problems[0]
-	if not plan.target.item in ["pens", "survey", "scout"]:  # each place keeps its last list (issue #185)
+	if not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress"]:  # each place keeps its last list (issue #185)
 		cargo_lists[plan.dest] = plan.get("list", []).map(func(r): return {"item": r.item, "on": r.on, "n": r.n})
 	use_slot(slot_of_dest(plan.dest))
 	expedition = plan.duplicate(true)

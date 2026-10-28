@@ -166,7 +166,26 @@ The obstacles that need a bridge (lava, gaps) or a cut are named in each segment
 - **Gating:** an unscouted site can't be a destination ("Nobody has scouted the way there yet"), and a scouted route can't be scouted again. A party can't be sent to a scouted site until it's built ("The way to the quartz site isn't built yet", #155–#157).
 - **Saving:** v44. The routes and sites are added to a save when it loads, unknown. A route keeps `seen` and `surveyed`.
 
-## 12. Tuning table (provisional)
+## 12. Mission types at the expedition board (#154)
+
+A Nether plan has an **objective**, picked in the planner (`Sim.OBJECTIVES`): **Survey** (the first crossing, until the landing is surveyed and the shelter built), **Scout**, **Gather**, **Trade**, **Build**, **Fortress** and **Rescue**. The destination list shows only the places an objective can use now (`Sim.objective_destinations`), and an objective with none is greyed out with its reason (`objective_why_none`).
+
+| Objective | Destinations | Defaults | Comes home when |
+|---|---|---|---|
+| Survey | The landing, until surveyed | The shelter's materials | the landing is surveyed and the shelter built |
+| Scout | Each unscouted route (the party picks one) | No cargo, avoids combat | the route is scouted |
+| Gather | The quartz site, once its route is scouted | A cargo list (its items come with #155) | the cargo target is reached |
+| Trade | The piglin camp, once scouted | The trade table, shown before they commit (#156) | the trades are made |
+| Build | The landing, while the shelter isn't built | The shelter's materials | the building is done |
+| Fortress | The fortress entrance, once scouted | Avoids combat | the delve is done, or the party is hurt |
+| Rescue | A stranded party (#158) | May set out with both slots taken | the stranded party is reached |
+
+- **Explained before commitment:** `Sim.plan_briefing` lists what's known of the dangers where the party is going, the creatures about, the risk of a dark portal with no flint and steel to carry, and a party that can't fight, and says when they come home. The planner shows it under the objective, in yellow for the risks.
+- **Overworld plans** keep their form: a gather at the old mine or the meadow, with no objective.
+- **A plan with no valid destination** isn't offered: its button is disabled, and `nether_plan` returns nothing. Sites a party can't reach yet refuse at Depart ("The way to the quartz site isn't built yet"), until #155–#157 build them.
+- **Saving:** a plan's `objective` is saved with a trip in progress; nothing else changes shape, so no new version.
+
+## 13. Tuning table (provisional)
 
 Each build issue adds its rows.
 
