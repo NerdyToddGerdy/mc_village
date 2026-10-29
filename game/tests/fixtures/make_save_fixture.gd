@@ -304,6 +304,34 @@ func _initialize() -> void:
 		var piglin := sim.get_map(NetherRoute.ROUTES.piglin.id)
 		piglin.known = true
 		piglin.seen = 3
+	if SaveFormat.VERSION >= 45:  # the quartz site visited, two of its quartz blocks mined out (#155)
+		var qsite := sim.get_map("nether_quartz")
+		qsite.visited = true
+		var gone := 0
+		for b in qsite.boulders:
+			if b.ore == "quartz" and gone < 2:
+				b.alive = false
+				gone += 1
+	if SaveFormat.VERSION >= 46:  # the piglin camp turned hostile after a blow, its first piglin hurt (#156)
+		var camp := sim.get_map("nether_piglin")
+		camp.hostile = true
+		for x in camp.creatures:
+			x.angry = true
+		camp.creatures[0].hp = 7
+	if SaveFormat.VERSION >= 47:  # the fortress with one blaze brought down, its salvage still in the chest (#157)
+		var fort := sim.get_map("nether_fortress")
+		fort.creatures.filter(func(x): return x.species == "blaze")[0].alive = false
+		fort.drops_known = ["blaze_rod"]
+	if SaveFormat.VERSION >= 48:  # cargo a stranded party left on the landing, lying where it was dropped (#158)
+		var land := sim.get_map(NetherLanding.ID)
+		land.abandoned = [{"item": "quartz", "n": 6, "cell": Vector2i(5, 12)}]
+		sim.on_map(NetherLanding.ID, func(): sim.drop_items(Vector2i(5, 12), "quartz", 6))
+	if SaveFormat.VERSION >= 49:  # the Nether line part-built: the lava channel bridged, the first two segments laid, the landing station up (#159)
+		var line := sim.nline()
+		line.bridged.append(2)
+		line.laid[0] = Tuning.RAILS_PER_SEGMENT
+		line.laid[1] = Tuning.RAILS_PER_SEGMENT
+		line.stations.landing = true
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

@@ -212,10 +212,10 @@ func _build_static() -> void:
 	for b in sim.boulders:
 		if b.alive and not b.get("hidden", false) and not _in_fog(b.cell):
 			var c: Vector2i = b.cell
-			var body: Color = Palette.ITEM_COLORS.obsidian if b.get("ore", "") == "obsidian" else (GRAVEL if b.get("ore", "") == "gravel" else Palette.STONE)
+			var body: Color = Palette.ITEM_COLORS.obsidian if b.get("ore", "") == "obsidian" else (GRAVEL if b.get("ore", "") == "gravel" else (Palette.ITEM_COLORS.glowstone if b.get("ore", "") == "glowstone" else (NETHER_ROCK.lightened(0.25) if sim.m.id.begins_with("nether") else Palette.STONE)))
 			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), body, BlockTextures.COBBLES if b.get("ore", "") == "gravel" else BlockTextures.ROCK)
 			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), body.lightened(0.06), BlockTextures.ROCK)
-			if b.has("ore") and b.ore != "obsidian":  # flecks of ore on its faces and top (issue #103)
+			if b.has("ore") and b.ore != "obsidian" and b.ore != "glowstone":  # flecks of ore on its faces and top (issue #103)
 				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[Defs.ORES[b.ore].item])
 			if b.get("loose", false) and sim.m.visited:  # a loose ceiling: cracks, and props holding it (issue #110)
 				for k in 2:
@@ -260,7 +260,7 @@ static var DARK_TINT := Color("#2C3445")
 ## and the tunnels no torch reaches drawn darker, so the dark parts read at a glance.
 func _add_site_ground(b: Batch) -> void:
 	var mp := sim.m
-	var nether: bool = mp.id == NetherLanding.ID  # red netherrack, and rock that's nearly black (issue #148)
+	var nether: bool = mp.id.begins_with("nether")  # red netherrack, and rock that's nearly black (issues #148, #155)
 	var rock_base: Color = NETHER_ROCK if nether else MINE_ROCK
 	var floor_base: Color = NETHERRACK if nether else MINE_FLOOR
 	for x in mp.w:
@@ -293,6 +293,11 @@ func _add_site_ground(b: Batch) -> void:
 		b.box(Vector3(c.x + 0.15, 0, c.y + 0.15), Vector3(c.x + 0.85, 0.4, c.y + 0.85), TORCH_FLAME.darkened(0.15))
 		b.box(Vector3(c.x + 0.3, 0.4, c.y + 0.3), Vector3(c.x + 0.7, 0.85, c.y + 0.7), Color("#F7C948"))
 		b.box(Vector3(c.x + 0.42, 0.85, c.y + 0.42), Vector3(c.x + 0.58, 1.1, c.y + 0.58), Color("#FBE58A"))
+	if mp.salvage != Vector2i(-1, -1) and not mp.salvage_taken:  # the fortress's salvage chest (issue #157)
+		var sv := mp.salvage
+		b.box(Vector3(sv.x + 0.15, 0, sv.y + 0.2), Vector3(sv.x + 0.85, 0.45, sv.y + 0.8), Palette.PLANK.darkened(0.2), BlockTextures.BOARD)
+		b.box(Vector3(sv.x + 0.12, 0.38, sv.y + 0.17), Vector3(sv.x + 0.88, 0.55, sv.y + 0.83), Palette.PLANK.darkened(0.35), BlockTextures.BOARD)
+		b.box(Vector3(sv.x + 0.45, 0.3, sv.y + 0.14), Vector3(sv.x + 0.55, 0.45, sv.y + 0.2), Palette.CHALK_DIM)
 	for t in mp.torches:
 		var x: float = t.x + 0.5
 		var z: float = t.y + 0.5
@@ -302,7 +307,14 @@ func _add_site_ground(b: Batch) -> void:
 	var e := mp.entrance
 	_add_packs(b, mp, Vector2(e.x + 1.2, e.y + 0.17), 1.0)
 	if nether:  # the portal's far side: an obsidian arch with a violet glow, and the landmarks to survey
-		_add_landing_features(b, mp)
+		_add_nether_stations(b, mp)
+		if mp.id == NetherLanding.ID:
+			_add_landing_features(b, mp)
+		else:  # a site's way back: two dark posts and a lintel
+			var ob: Color = Palette.ITEM_COLORS.obsidian
+			b.box(Vector3(e.x, 0, e.y - 0.1), Vector3(e.x + 0.3, 1.5, e.y + 0.15), ob, BlockTextures.ROCK)
+			b.box(Vector3(e.x, 0, e.y + 0.85), Vector3(e.x + 0.3, 1.5, e.y + 1.1), ob, BlockTextures.ROCK)
+			b.box(Vector3(e.x, 1.3, e.y - 0.1), Vector3(e.x + 0.3, 1.6, e.y + 1.1), ob, BlockTextures.ROCK)
 		return
 	b.box(Vector3(e.x, 0, e.y - 0.05), Vector3(e.x + 0.15, 1.4, e.y + 0.1), Palette.LOG, BlockTextures.LOG)
 	b.box(Vector3(e.x, 0, e.y + 0.9), Vector3(e.x + 0.15, 1.4, e.y + 1.05), Palette.LOG, BlockTextures.LOG)
@@ -510,9 +522,52 @@ func _add_nether_route_ground(b: Batch) -> void:
 		if not _in_fog(c):
 			b.box(Vector3(c.x + 0.15, 0, c.y + 0.15), Vector3(c.x + 0.85, 0.4, c.y + 0.85), TORCH_FLAME.darkened(0.15))
 			b.box(Vector3(c.x + 0.3, 0.4, c.y + 0.3), Vector3(c.x + 0.7, 0.85, c.y + 0.7), Color("#F7C948"))
+	_add_nether_line(b)
 
 
 static var NETHER_FOG := Color("#2B1A1E")
+
+
+## The Nether line along the quartz route (issue #159): planks over the bridged segments, sleepers and rails as far as they're
+## laid, the two stations and the parked cart.
+func _add_nether_line(b: Batch) -> void:
+	var mp := sim.m
+	if mp.id != NetherRoute.ROUTES.quartz.id or mp.line.is_empty():
+		return
+	var l: Dictionary = mp.line
+	for i in Road.segment_count():
+		if l.bridged.has(i):
+			var x0: int = Road.SEGMENTS[i].x
+			for x in range(x0 + 2, x0 + Road.seg_len(i) - 2):
+				b.box(Vector3(x, -0.12, NetherRoute.LINE_ROW), Vector3(x + 1, 0.0, NetherRoute.LINE_ROW + 1), Palette.PLANK, BlockTextures.BOARD)
+		var len: int = Road.seg_len(i)
+		var cells: int = ceili(float(len) * l.laid[i] / Tuning.RAILS_PER_SEGMENT)
+		for k in cells:
+			var x: int = Road.SEGMENTS[i].x + k
+			b.box(Vector3(x + 0.1, 0.0, NetherRoute.LINE_ROW + 0.35), Vector3(x + 0.9, 0.05, NetherRoute.LINE_ROW + 0.65), Palette.LOG, BlockTextures.LOG)
+			for z in [0.3, 0.62]:
+				b.box(Vector3(x, 0.05, NetherRoute.LINE_ROW + z), Vector3(x + 1, 0.1, NetherRoute.LINE_ROW + z + 0.08), Palette.ITEM_COLORS.rail)
+	if l.stations.landing:
+		b.box(Vector3(1, 0, NetherRoute.LINE_ROW + 1), Vector3(4, 0.3, NetherRoute.LINE_ROW + 2), Palette.COBBLE, BlockTextures.COBBLES)
+	if l.cart and mp.line.stations.site:
+		b.box(Vector3(1.3, 0.3, NetherRoute.LINE_ROW + 1.2), Vector3(2.1, 0.7, NetherRoute.LINE_ROW + 1.8), Palette.ITEM_COLORS.minecart)
+
+
+## The stations on the landing's edge and the quartz site (issue #159).
+func _add_nether_stations(b: Batch, mp: SimMap) -> void:
+	var l: Dictionary = sim.maps[NetherRoute.ROUTES.quartz.id].line
+	if l.is_empty():
+		return
+	if mp.id == NetherLanding.ID and l.stations.landing:
+		var ex: Vector2i = NetherRoute.ROUTES.quartz.exit
+		b.box(Vector3(ex.x - 3, 0, ex.y + 1), Vector3(ex.x, 0.3, ex.y + 2), Palette.COBBLE, BlockTextures.COBBLES)
+		b.box(Vector3(ex.x - 3, 0.3, ex.y + 1), Vector3(ex.x - 2.9, 1.0, ex.y + 2), Palette.PLANK, BlockTextures.BOARD)
+	if mp.id == NetherRoute.ROUTES.quartz.site and l.stations.site:
+		var p: Rect2i = NetherRoute.QUARTZ_STATION_PLOT
+		b.box(Vector3(p.position.x, 0, p.position.y), Vector3(p.position.x + 3, 0.3, p.position.y + 1), Palette.COBBLE, BlockTextures.COBBLES)
+		b.box(Vector3(p.position.x + 2.9, 0.3, p.position.y), Vector3(p.position.x + 3, 1.0, p.position.y + 1), Palette.PLANK, BlockTextures.BOARD)
+		if l.cart:
+			b.box(Vector3(p.position.x + 0.4, 0.3, p.position.y + 0.25), Vector3(p.position.x + 1.4, 0.75, p.position.y + 0.75), Palette.ITEM_COLORS.minecart)
 
 
 ## True for a cell on the road nobody has walked to yet (issue #119).

@@ -72,6 +72,11 @@ func _init() -> void:
 		"test_the_shelter_and_cache",
 		"test_scouting_the_routes",
 		"test_mission_types",
+		"test_the_quartz_site",
+		"test_piglin_trading",
+		"test_the_fortress_delve",
+		"test_stranding_and_rescue",
+		"test_the_nether_line",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
 		"test_expedition_slots",
@@ -1810,18 +1815,18 @@ func test_staging_and_departure() -> void:
 			check(stuck_text(sim).contains("Expedition: Waiting for"), "while packing, the wait shows: " + stuck_text(sim))
 	check(tomas_packed, "village residents pack the supplies (Haul)")
 	check(not ada_village_work, "the party only packs and waits; it takes no other village work")
-	check(sim.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0} and b.tools.size() == 1 and b.tools[0].dur == 9, "2 meals and the spare pickaxe are packed, with its wear (%s)" % [sim.packed()])
+	check(sim.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0, "gold": 0, "rails": 0, "minecarts": 0} and b.tools.size() == 1 and b.tools[0].dur == 9, "2 meals and the spare pickaxe are packed, with its wear (%s)" % [sim.packed()])
 	check(count(sim, "bread") == 1, "packed meals leave the stockpile")
 	check(sim.at_board(ada) and Sim.staging_cells(b).has(Sim.rcell(ada)), "Ada waits at the board")
 	check(sim.depart_blocker() == "", "everything is ready: %s" % sim.depart_blocker())
 	# Saving while packed keeps it packed.
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
-	check(loaded.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0} and loaded.site(b.id).tools[0].dur == 9, "what's packed survives a save")
+	check(loaded.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0, "gold": 0, "rails": 0, "minecarts": 0} and loaded.site(b.id).tools[0].dur == 9, "what's packed survives a save")
 	run(loaded, 10)
 	check(loaded.at_board(loaded.residents[0]), "and Ada goes back to the board after loading")
 	# Cancelling on the copy: the supplies go back through haul jobs.
 	loaded.cancel_expedition()
-	check(loaded.expedition.is_empty() and loaded.packed() == {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0}, "cancelling unpacks the board")
+	check(loaded.expedition.is_empty() and loaded.packed() == {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0, "gold": 0, "rails": 0, "minecarts": 0}, "cancelling unpacks the board")
 	run(loaded, 40)
 	var stored := loaded.stacks_where(func(st): return st.type in ["bread", "stone_pick"] and loaded.in_zone(st.cell))
 	check(stored.map(func(st): return st.type).count("stone_pick") == 1 and count(loaded, "bread") == 3, "the meals and the pickaxe are hauled back to the stockpile")
@@ -4317,7 +4322,7 @@ func test_expedition_slots() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
 	var other := sim.add_resident("Tomas", "7A5C8F", Sim.rcell(ada) + Vector2i(1, 0))
-	check(sim.slot == "overworld" and sim.expedition.is_empty() and sim.expeditions.keys() == ["overworld", "nether"], "two empty slots, the Overworld's current at rest")
+	check(sim.slot == "overworld" and sim.expedition.is_empty() and sim.expeditions.keys() == ["overworld", "nether", "rescue"], "three empty slots, the Overworld's current at rest")
 	check(Sim.slot_of_dest(OldMine.ID) == "overworld" and Sim.slot_of_dest(MineLevels.level_id(2)) == "overworld" and Sim.slot_of_dest("nether_landing") == "nether", "a destination's realm decides its slot")
 	# The current slot is the one `expedition` reads and writes.
 	sim.expeditions.nether = {"state": "out", "dest": "nether_landing", "party": [other.id]}
@@ -4851,7 +4856,7 @@ func test_auto_combat() -> void:
 	var tomas: Dictionary = w.tomas
 	var mira: Dictionary = w.mira
 	var landing: SimMap = w.landing
-	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "blaze"], "four creatures")
+	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "blaze"], "five creatures")
 	# A guard defeats a magma cube, which leaves its cream.
 	var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Sim.rcell(tomas) + Vector2i(5, 0))
 	var xp: int = tomas.jobs.guard.xp
@@ -5143,15 +5148,15 @@ func test_mission_types() -> void:
 	check(dests.call("scout") == ["nether_landing:piglin", "nether_landing:fortress"], "a scouted route drops off the scout list")
 	check(dests.call("gather") == ["nether_quartz:"] and dests.call("trade").is_empty() and dests.call("fortress").is_empty(), "the quartz site can be gathered from; the piglins and fortress still can't")
 	var gather := sim.nether_plan("gather")
-	check(gather.dest == "nether_quartz" and gather.target.item == "gather" and gather.objective == "gather", "a gather plan for the quartz site")
+	check(gather.dest == "nether_quartz" and gather.target == {"item": "quartz", "n": 8} and gather.objective == "gather" and gather.picks == 1, "a gather plan for the quartz site wants 8 quartz, with a spare pickaxe")
 	gather.party = [ada.id]
-	check(sim.plan_problems(gather).has("Choose something to bring back"), "(its cargo list waits for the quartz site, #155)")
+	check(not sim.plan_problems(gather).has("Choose something to bring back"), "its cargo list is the site's quartz and glowstone")
 	sim.get_map(NetherLanding.ID).surveyed = true
 	check(dests.call("survey").is_empty() and sim.objective_why_none("survey") == "The landing is already surveyed", "a surveyed landing needs no more survey")
 	var shelter: Dictionary = sim.on_map(NetherLanding.ID, func(): return sim.place_site("shelter", NetherLanding.SHELTER_AT))
 	shelter.stage = 1
 	shelter.done = true
-	check(dests.call("build").is_empty() and sim.objective_why_none("build") == "Nothing to build yet: the shelter stands", "a standing shelter leaves nothing to build")
+	check(dests.call("build") == ["nether_quartz:"] and sim.objective_why_none("build") == "Nothing to build yet: the shelter stands", "a standing shelter leaves only the Nether line to build, once the quartz route is scouted")
 	# The briefing: dangers, risks and when they come home.
 	var plan := sim.nether_plan("scout")
 	plan.party = [ada.id]
@@ -5168,3 +5173,559 @@ func test_mission_types() -> void:
 	# Overworld plans keep their form.
 	var old := sim.new_plan(OldMine.ID)
 	check(not old.has("objective") and old.target.item == "coal", "an Overworld plan is still a gather at the old mine")
+
+
+## The quartz site and the gather mission to it (issue #155).
+func test_the_quartz_site() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var portal: Dictionary = w.portal
+	var site: SimMap = sim.get_map("nether_quartz")
+	var quartz: Array = site.boulders.filter(func(b): return b.ore == "quartz")
+	var glow: Array = site.boulders.filter(func(b): return b.ore == "glowstone")
+	check(site.pattern == "hand_laid" and site.w == 20 and site.h == 14 and quartz.size() == 8 and glow.size() == 5 and site.lava.size() == 4 and site.entrance == Vector2i(0, 7), "a hand-laid 20×14 site with 8 quartz, 5 glowstone and a lava pool")
+	check(Rect2i(0, 0, 20, 14).encloses(NetherRoute.QUARTZ_STATION_PLOT) and sim.on_map("nether_quartz", func(): return NetherRoute.QUARTZ_STATION_PLOT.size.x == 5 and range(14, 19).all(func(x): return sim.walkable(Vector2i(x, 12)))), "it keeps room clear for the Nether line's far station")
+	check(Defs.ITEMS.quartz.group == "ores" and Defs.ITEMS.glowstone.group == "ores" and Defs.ORES.quartz.item == "quartz", "quartz and glowstone are ores to the tally bar")
+	# Glowstone breaks by hand; quartz needs a pickaxe.
+	ada.pick = null
+	var bare := {"what": "gather", "tool": "pick", "target": glow[0]}
+	check(absf(sim._work_time(ada, bare) - Tuning.GLOWSTONE_TIME) < 0.01, "glowstone breaks by hand in %d s" % Tuning.GLOWSTONE_TIME)
+	check(sim._work_time(ada, {"what": "gather", "tool": "pick", "target": quartz[0]}) < 0.0, "quartz can't")
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 50}
+	check(sim._work_time(ada, {"what": "gather", "tool": "pick", "target": quartz[0]}) > 0.0, "with a pickaxe it can")
+	# A report before and after a visit.
+	portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	sim.get_map(NetherRoute.ROUTES.quartz.id).surveyed = true
+	site.known = true
+	var rep := sim.site_report("nether_quartz")
+	check(rep.resources.map(func(x): return x.item) == ["quartz", "glowstone"] and rep.resources.all(func(x): return x.reserve == -1) and rep.travel > 0.0, "before anyone's been there the report names the finds, reserves unknown")
+	# The gather mission, through the portal, along the route and back.
+	var plan := sim.nether_plan("gather")
+	plan.party = [ada.id]
+	sim.aim_plan(plan, "quartz", 4)
+	plan.policy = {"target": true, "full": true, "low": true}
+	check(sim.plan_problems(plan).is_empty(), "the plan is fine (%s)" % [sim.plan_problems(plan)])
+	check(sim.plan_expedition(plan) == "", "planned")
+	portal.store = {"bread": 3}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "stone_pick", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("nether") == "", "and sent")
+	var maps_seen := {}
+	var left := site.boulders.filter(func(b): return b.alive and b.ore == "quartz").size()
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		maps_seen[ada.map] = true
+		ada.hurt = 0  # the lava and creatures on the way aren't what's tested here: she mines
+		if sim.expeditions.nether.is_empty():
+			break
+	check(maps_seen.has(NetherLanding.ID) and maps_seen.has(NetherRoute.ROUTES.quartz.id) and maps_seen.has("nether_quartz"), "Ada crosses the landing and walks the route to the site (%s)" % [maps_seen.keys()])
+	check(sim.expeditions.nether.is_empty() and ada.map == "village" and sim.stats.expeditions == 1, "and comes home the same way")
+	var brought := 0
+	for st in sim.stacks_where(func(x): return x.type == "quartz"):
+		brought += st.n
+	var mined := left - site.boulders.filter(func(b): return b.alive and b.ore == "quartz").size()
+	check(brought >= 4 and mined * Tuning.ORE_YIELD.quartz == brought, "she brings back the quartz she mined (%d from %d blocks)" % [brought, mined])
+	var rep2 := sim.site_report("nether_quartz")
+	var q: Dictionary = rep2.resources.filter(func(x): return x.item == "quartz")[0]
+	check(site.visited and q.reserve == (quartz.size() - mined) * Tuning.ORE_YIELD.quartz, "the reserve ran down by what was mined (%d left)" % q.reserve)
+	# Deposits don't come back, and it's saved.
+	var back := Sim.from_state(sim.save_state())
+	check(back.ore_left("nether_quartz", "quartz") == quartz.size() - mined and back.get_map("nether_quartz").visited, "the mined-out blocks stay gone, saved")
+	var f45 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v45.save").data.state)
+	check(f45.ore_left("nether_quartz", "quartz") == 6 and f45.get_map("nether_quartz").visited, "the v45 fixture loads the quartz site with two blocks mined")
+	# An older save's empty room becomes the quartz site on loading.
+	var f44 := SaveFormat.read("res://tests/fixtures/save_v44.save")
+	check(Sim.from_state(f44.data.state).get_map("nether_quartz").boulders.size() == 13 and Sim.from_state(f44.data.state).get_map("nether_quartz").known, "an older save's empty room becomes the quartz site, still known")
+
+
+## Piglin trading from a fixed table, and the rule that turns them hostile (issue #156).
+func test_piglin_trading() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var portal: Dictionary = w.portal
+	var camp: SimMap = sim.get_map("nether_piglin")
+	check(camp.pattern == "hand_laid" and camp.w == 20 and camp.creatures.size() == 3 and camp.creatures.all(func(x): return x.species == "piglin" and not x.angry), "a hand-laid camp with three piglins, at peace")
+	check(Defs.CREATURES.piglin.notice == 0 and not sim._dangerous(camp.creatures[0]), "a piglin never goes for anyone")
+	# The table is fixed, and shown.
+	check(Defs.TRADES.size() == 4 and Defs.TRADES.all(func(t): return t.give.keys() == ["gold_ingot"]), "four trades, all for gold ingots")
+	check(Defs.trade_text(Defs.TRADES[0]) == "2 gold ingots for 1 obsidian" and Defs.PIGLIN_RULE == "Piglins turn hostile if anyone in the party strikes one", "in plain words, with the rule")
+	portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	sim.get_map(NetherRoute.ROUTES.piglin.id).surveyed = true
+	camp.known = true
+	var rep := sim.site_report("nether_piglin")
+	check(rep.trades == Defs.TRADES.map(func(t): return Defs.trade_text(t)) and rep.rule == Defs.PIGLIN_RULE and not rep.hostile, "the site report shows the table and the rule")
+	var plan := sim.nether_plan("trade")
+	plan.party = [ada.id]
+	check(plan.target.item == "trade" and plan.dest == "nether_piglin" and plan.gold == 0 and sim.plan_problems(plan).has("Take some gold to trade"), "a trade plan with no gold is refused: take some")
+	var briefing := sim.plan_briefing(plan)
+	check(briefing.filter(func(l): return l.begins_with("Trade: ")).size() == 4 and briefing.has("Rule: " + Defs.PIGLIN_RULE), "the planner's briefing shows the whole table and the rule before the party commits")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "gold_ingot", 6)
+	plan = sim.nether_plan("trade")
+	plan.party = [ada.id]
+	check(plan.gold == 6 and Sim.plan_supplies(plan) == plan.meals + 6, "the plan carries the gold, which counts against the packs")
+	# The trade, through the portal and along the route.
+	check(sim.plan_expedition(plan) == "", "planned")
+	portal.store = {"bread": 3}  # (the gold is carried in from the stockpile)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("nether") == "" and sim.expeditions.nether.supplies.gold_ingot == 6, "the party sets off with 6 gold")
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		ada.hurt = 0
+		if sim.expeditions.nether.is_empty():
+			break
+	check(sim.expeditions.nether.is_empty() and ada.map == "village", "they trade and come home")
+	var got := {}
+	for st in sim.stacks_where(func(x): return true):
+		got[st.type] = got.get(st.type, 0) + st.n
+	check(got.get("obsidian", 0) == 3 and not got.has("gold_ingot"), "6 gold buys 3 obsidian, the first row of the table, and none is left (%s)" % [got])
+	check(sim.expedition_board().get("report", []).any(func(l): return l.begins_with("Traded: ") and "2 gold ingots for 1 obsidian ×3" in l), "the report says what was traded: %s" % [sim.expedition_board().get("report", [])])
+	check(camp.creatures.all(func(x): return x.alive and not x.angry) and not camp.hostile, "the piglins stayed at peace")
+	var f46 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v46.save").data.state)
+	check(f46.get_map("nether_piglin").hostile and f46.get_map("nether_piglin").creatures[0].hp == 7, "the v46 fixture loads its hostile camp")
+	check(Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v45.save").data.state).get_map("nether_piglin").creatures.size() == 3, "an older save's empty room becomes the camp, with its piglins")
+	# Trades only ever come from the shown table.
+	var allowed := {}
+	for t in Defs.TRADES:
+		for k in t.get:
+			allowed[k] = true
+	var odd := 0
+	for gold in range(1, 13):
+		var s2 := Sim.new_game()
+		s2.use_slot("nether")
+		s2.expedition = {"supplies": {"gold_ingot": gold}, "cargo": {}, "provisions": {}, "tools": [], "party": [1], "meals": 0, "picks": 0, "target": {"item": "trade", "n": 1}}
+		s2.m.creatures.clear()
+		while s2._next_trade() >= 0:
+			var ti := s2._next_trade()
+			for k in Defs.TRADES[ti].get:
+				if not allowed.has(k):
+					odd += 1
+			s2.expedition.supplies.gold_ingot -= Defs.TRADES[ti].give.gold_ingot
+	check(odd == 0, "a trade never gives anything but what the table shows")
+	# Breaking the rule turns them hostile, and auto-combat applies.
+	var w2 := fight_world()
+	var s3: Sim = w2.sim
+	var tomas: Dictionary = w2.tomas
+	var camp2: SimMap = s3.get_map("nether_piglin")
+	tomas.map = "nether_piglin"
+	s3.move_to_map(tomas, "nether_piglin", camp2.entrance + Vector2i(2, 0))
+	s3.expeditions.nether.dest = "nether_piglin"
+	s3.expeditions.nether.target = {"item": "trade", "n": 1}
+	s3.expeditions.nether.supplies = {"gold_ingot": 4}
+	var pig: Dictionary = camp2.creatures[0]
+	s3.on_slot("nether", func(): s3.on_map("nether_piglin", func(): s3._strike(tomas, pig)))
+	check(camp2.hostile and camp2.creatures.all(func(x): return x.angry), "striking a piglin turns the whole camp hostile")
+	check(s3.site_report("nether_piglin").hostile and s3.site_report("nether_piglin").hazards.has("The piglins are hostile"), "and the report says so")
+	for i in 20 * Tuning.TPS:
+		s3.step()
+		if not s3.pending.is_empty():
+			s3.choose("press_on")
+	check(s3.expeditions.nether.get("leg", "") == "home" or s3.stats.get("injuries", 0) > 0 or camp2.creatures.any(func(x): return not x.alive), "auto-combat applies: they fight, or the party heads home")
+	check(not s3.expeditions.nether.get("trade_done", false) and s3.expeditions.nether.supplies.get("gold_ingot", 0) == 4, "and no trade is made with a hostile camp")
+	var back := Sim.from_state(s3.save_state())
+	check(back.get_map("nether_piglin").hostile and back.get_map("nether_piglin").creatures.size() == 3, "the camp's state is saved")
+
+
+## The fortress entrance and its one short delve (issue #157).
+func test_the_fortress_delve() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var tomas: Dictionary = w.tomas
+	var portal: Dictionary = w.portal
+	var fort: SimMap = sim.get_map("nether_fortress")
+	check(fort.pattern == "hand_laid" and fort.w == 24 and fort.h == 16 and fort.salvage == Vector2i(21, 13) and fort.door_state == "sealed" and fort.door == Vector2i(22, 13), "a hand-laid fortress with a salvage chest at the far end and a sealed way beside it")
+	var kinds := {}
+	for x in fort.creatures:
+		kinds[x.species] = kinds.get(x.species, 0) + 1
+	check(kinds == {"blaze": 2, "skeleton": 2} and fort.creatures.all(func(x): return Defs.CREATURES[x.species].notice > 0), "two blazes and two skeletons, all hostile")
+	# A blaze drops a rod.
+	var blaze: Dictionary = fort.creatures.filter(func(x): return x.species == "blaze")[0]
+	tomas.sword = {"type": "iron_sword", "tier": 3, "dur": 99}
+	sim.set_role(tomas, "guard")
+	sim.move_to_map(tomas, "nether_fortress", blaze.cell + Vector2i(1, 0))
+	for i in 80:
+		sim.on_map("nether_fortress", func(): sim._strike(tomas, blaze))
+		if not blaze.alive:
+			break
+	check(not blaze.alive and sim.on_map("nether_fortress", func(): return sim.items.values().any(func(it): return it.type == "blaze_rod")) and fort.drops_known == ["blaze_rod"], "a blaze drops a blaze rod")
+	sim.move_to_map(tomas, "village", Sim.rcell(ada) + Vector2i(1, 0))
+	# The planner warns without a guard, and lists the rods as cargo.
+	portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	sim.get_map(NetherRoute.ROUTES.fortress.id).surveyed = true
+	fort.known = true
+	var plan := sim.nether_plan("fortress")
+	check(plan.dest == "nether_fortress" and plan.list.map(func(r): return r.item) == ["blaze_rod", "bone"], "a fortress plan lists blaze rods and bones")
+	var p2 := sim.nether_plan("fortress")
+	p2.party = [tomas.id]
+	tomas.role = "lumber"
+	check(sim.plan_warnings(p2) == ["No guard in the party: a fortress has blazes and skeletons"], "without a guard the planner warns (%s)" % [sim.plan_warnings(p2)])
+	tomas.role = "guard"
+	check(sim.plan_warnings(p2).is_empty(), "with one it doesn't")
+	# The delve: a party with guards walks the halls to the salvage; the game stops once.
+	ada.sword = {"type": "iron_sword", "tier": 3, "dur": 99}
+	ada.armor = {"chest": {"type": "iron_chestplate", "dur": 99}}
+	tomas.armor = {"chest": {"type": "iron_chestplate", "dur": 99}}
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 5
+	check(sim.plan_expedition(plan) == "", "planned")
+	portal.store = {"bread": 5}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("nether") == "", "and sent")
+	var asked := 0
+	var chose := false
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		ada.hurt = 0
+		if not sim.pending.is_empty():
+			if sim.pending[0].kind == "fortress":
+				asked += 1
+				check(sim.pending[0].text.contains("sealed way") and sim.pending[0].options.size() == 2, "the pause names the salvage and the sealed way, with two choices")
+				sim.choose("take")
+				chose = true
+			else:
+				sim.choose("press_on")
+		if sim.expeditions.nether.is_empty():
+			break
+	check(asked == 1 and chose, "the discovery pause fires once (%d)" % asked)
+	check(fort.salvage_taken and sim.expeditions.nether.is_empty() and ada.map == "village", "the salvage is taken and the party comes home")
+	var home := {}
+	for st in sim.stacks_where(func(x): return true):
+		home[st.type] = home.get(st.type, 0) + st.n
+	check(home.get("diamond", 0) == 1 and home.get("iron_ingot", 0) == 4 and home.get("gold_ingot", 0) == 3 and home.get("blaze_rod", 0) >= 1, "the salvage came home: a diamond, 4 iron, 3 gold and a blaze rod (%s)" % [home])
+	var f47 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v47.save").data.state)
+	check(not f47.get_map("nether_fortress").salvage_taken and f47.get_map("nether_fortress").creatures.filter(func(x): return x.alive).size() == 3, "the v47 fixture loads its fortress, a blaze down, the chest full")
+	check(Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v46.save").data.state).get_map("nether_fortress").creatures.size() == 4, "an older save's empty room becomes the fortress")
+	# Taken only once.
+	var before := home.duplicate()
+	sim.expeditions.nether = {"state": "out", "leg": "out", "dest": "nether_fortress", "party": [], "cargo": {}, "supplies": {}, "provisions": {}, "tools": [], "target": {"item": "fortress", "n": 1}}
+	sim.on_slot("nether", func(): sim.on_map("nether_fortress", sim._take_salvage))
+	check(sim.expeditions.nether.cargo.is_empty(), "a second delve finds the chest empty")
+	sim.expeditions.nether = {}
+	check(sim.site_report("nether_fortress").salvage == "The salvage has been taken", "and the report says so")
+	var back := Sim.from_state(sim.save_state())
+	check(back.get_map("nether_fortress").salvage_taken and back.get_map("nether_fortress").creatures.size() == fort.creatures.size(), "the fortress and what's been taken are saved")
+
+
+## Stranding and rescue (issue #158): no death, a window, a rescue slot of its own, and cargo left behind when it's missed.
+func test_stranding_and_rescue() -> void:
+	var w := fight_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var tomas: Dictionary = w.tomas
+	var mira: Dictionary = w.mira
+	var landing: SimMap = w.landing
+	var portal: Dictionary = w.portal
+	landing.landmarks = []
+	var lost: Dictionary = sim.expeditions.nether
+	lost.provisions = {}
+	lost.cargo = {"quartz": 4}
+	lost.tools = [{"type": "stone_pick", "dur": 9}]
+	check(sim.expeditions.keys() == ["overworld", "nether", "rescue"] and Sim.SLOT_REALM.rescue == "nether", "a third slot for rescues, in the Nether")
+	# Out of provisions: stranded, and the game stops with the costs shown.
+	tomas.hunger = 15.0
+	mira.hunger = 15.0
+	for i in 12 * Tuning.TPS:
+		sim.step()
+		if lost.has("stranded"):
+			break
+	check(lost.has("stranded") and lost.stranded.why == "the provisions are gone" and lost.stranded.until > sim.tick, "with its provisions gone and someone hungry the party is stranded")
+	check(not sim.pending.is_empty() and sim.pending[0].kind == "stranded" and sim.pending[0].slot == "nether" and sim.pending[0].options.size() == 2 and "quartz" in sim.pending[0].text and "240 seconds" in sim.pending[0].text, "the game stops, and says what's at stake: the window, and the cargo it would leave")
+	sim.choose("wait")
+	check(sim.stranded_text(lost).contains("Stranded: the provisions are gone. Rescue window 3:5") or sim.stranded_text(lost).contains("Rescue window 4:00"), "the window counts down on screen with the supplies: " + sim.stranded_text(lost))
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Nether party: stranded"), "the stuck list says so: " + stuck_text(sim))
+	run(sim, 20)
+	check(lost.has("stranded") and tomas.job != null and tomas.job.kind == "rest", "they shelter, waiting")
+	# A rescue: it departs although the Nether and the Overworld parties are out.
+	portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	sim.expeditions.overworld = {"state": "out", "leg": "home", "dest": OldMine.ID, "party": [], "cargo": {}}
+	check(sim.objective_destinations("rescue").map(func(d): return d.dest) == ["nether_landing"], "the Rescue objective offers the stranded party's place")
+	var plan := sim.nether_plan("rescue")
+	plan.party = [ada.id]
+	check(plan.rescue and plan.target.item == "rescue" and plan.meals == 6 and sim.plan_problems(plan).is_empty(), "a rescue plan carries provisions, and is fine with both slots taken (%s)" % [sim.plan_problems(plan)])
+	check(sim.plan_expedition(plan) == "" and sim.expeditions.rescue.state == "staging" and sim.expeditions.nether.state == "out" and sim.expeditions.overworld.state == "out", "it's planned in the rescue slot")
+	check(sim.nether_plan("rescue").is_empty() and sim.objective_why_none("rescue") == "A rescue party is already out", "a second rescue isn't offered")
+	portal.store = {"bread": 6}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.pending.size() > 0:
+			sim.choose("press_on")
+		if sim.depart_blocker("rescue") == "":
+			break
+	check(sim.depart("rescue") == "" and sim.expeditions.rescue.state == "out", "the rescue departs")
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if sim.pending.size() > 0:
+			sim.choose("press_on")
+		ada.hurt = 0
+		if not lost.has("stranded"):
+			break
+	check(not lost.has("stranded") and sim.stats.get("rescues", 0) == 1, "the rescue reaches them inside the window")
+	check(lost.leg == "home" and sim.expeditions.rescue.leg == "home" and lost.get("provisions", {}).size() > 0, "everyone heads home, the stranded party with the meals it was brought")
+	sim.expeditions.overworld = {}
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if sim.pending.size() > 0:
+			sim.choose("press_on")
+		ada.hurt = 0
+		if sim.expeditions.nether.is_empty() and sim.expeditions.rescue.is_empty():
+			break
+	check(sim.expeditions.nether.is_empty() and sim.expeditions.rescue.is_empty() and tomas.map == "village" and mira.map == "village" and ada.map == "village", "both parties come home, nobody lost")
+	var home := {}
+	for st in sim.stacks_where(func(x): return true):
+		home[st.type] = home.get(st.type, 0) + st.n
+	check(home.get("quartz", 0) == 4, "and the cargo with them (%s)" % [home])
+	# A missed window: cargo and gear abandoned, nobody dead.
+	var w2 := fight_world()
+	var s2: Sim = w2.sim
+	var l2: SimMap = w2.landing
+	var lost2: Dictionary = s2.expeditions.nether
+	lost2.provisions = {}
+	lost2.cargo = {"quartz": 6, "glowstone": 2}
+	lost2.tools = [{"type": "stone_pick", "dur": 7}]
+	w2.tomas.hunger = 10.0
+	w2.mira.hunger = 10.0
+	l2.landmarks = []
+	for i in 12 * Tuning.TPS:
+		s2.step()
+		if lost2.has("stranded"):
+			break
+	s2.choose("wait")
+	lost2.stranded.until = s2.tick + 40  # the window runs out
+	for i in 60 * Tuning.TPS:
+		s2.step()
+		if not lost2.has("stranded"):
+			break
+	check(not lost2.has("stranded") and lost2.cargo.is_empty() and lost2.tools.is_empty() and lost2.leg == "home", "a missed window: the party sets off on its own, its cargo and spare tools left")
+	check(l2.abandoned.size() == 2 and l2.abandoned.any(func(a): return a.item == "quartz" and a.n == 6), "recorded as abandoned cargo on the map")
+	check(s2.on_map(NetherLanding.ID, func(): return s2.items.values().any(func(it): return it.type == "quartz" and it.n == 6 and it.cell == l2.abandoned[0].cell)), "lying where it was left, for a later mission")
+	check(s2.resident(w2.tomas.id).hurt == 1 and s2.resident(w2.mira.id).hurt == 1 and s2.residents.size() == 3, "the party is hurt, not dead")
+	check(lost2.abandoned.size() == 3, "the report will list what was left behind (%s)" % [lost2.abandoned])
+	# The player can choose to walk at once.
+	var w3 := fight_world()
+	var s3: Sim = w3.sim
+	var lost3: Dictionary = s3.expeditions.nether
+	lost3.provisions = {}
+	lost3.cargo = {"quartz": 2}
+	w3.tomas.hunger = 10.0
+	w3.mira.hunger = 10.0
+	w3.landing.landmarks = []
+	for i in 12 * Tuning.TPS:
+		s3.step()
+		if lost3.has("stranded"):
+			break
+	s3.choose("walk")
+	check(not lost3.has("stranded") and lost3.cargo.is_empty() and lost3.leg == "home", "choosing to walk sets them off at once, leaving the cargo")
+	# The PC is never seriously hurt, and the state is saved.
+	check(s3.resident(w3.ada.id).hurt <= 1, "Ada is protected as before")
+	var s4: Sim = fight_world().sim
+	s4.expeditions.nether.stranded = {"why": "everyone is seriously hurt", "at": NetherLanding.ID, "since": 5, "until": 5000}
+	s4.get_map(NetherLanding.ID).abandoned = [{"item": "quartz", "n": 3, "cell": Vector2i(4, 4)}]
+	var back := Sim.from_state(s4.save_state())
+	check(back.expeditions.nether.stranded.until == 5000 and back.get_map(NetherLanding.ID).abandoned[0].n == 3 and back.expeditions.has("rescue"), "the stranded state, its window and the abandoned cargo are saved")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v47.save").data.state)
+	check(old.expeditions.rescue.is_empty(), "an older save has an empty rescue slot")
+	var f48 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v48.save").data.state)
+	check(f48.get_map(NetherLanding.ID).abandoned.size() == 1 and f48.on_map(NetherLanding.ID, func(): return f48.items.values().any(func(it): return it.type == "quartz" and it.n == 6)), "the v48 fixture loads its abandoned cargo")
+
+
+## Runs one build trip to the quartz site with these supplies at the portal, and returns the ticks it took to reach the site.
+func nline_trip(sim: Sim, w: Dictionary, store: Dictionary, counts: Dictionary) -> int:
+	var portal: Dictionary = w.portal
+	var plan := sim.nether_plan("build", sim.objective_destinations("build").filter(func(d): return d.get("line", false))[0])
+	plan.party = [w.ada.id, w.tomas.id, w.mira.id]
+	plan.meals = 3
+	for k in ["rails", "planks", "cobble", "minecarts"]:
+		plan[k] = counts.get(k, 0)
+	var err := sim.plan_expedition(plan)
+	if err != "":
+		return -1
+	portal.store = store.duplicate()
+	sim.drop_items(Sim.rcell(w.ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	sim.depart("nether")
+	var at := sim.tick
+	var arrived := -1
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		for r in [w.ada, w.tomas, w.mira]:
+			r.hurt = 0
+		if arrived < 0 and w.ada.map == "nether_quartz":
+			arrived = sim.tick - at
+		if sim.expeditions.nether.is_empty():
+			break
+	return arrived
+
+
+## A world with the quartz route scouted, three residents and the Nether line unbuilt.
+func nline_world() -> Dictionary:
+	var w := fight_world()
+	var sim: Sim = w.sim
+	sim.expeditions.nether = {}
+	for r in [w.ada, w.tomas, w.mira]:
+		sim.move_to_map(r, "village", Sim.rcell(w.ada) if r == w.ada else Sim.rcell(w.ada) + Vector2i(1, 1))
+		r.hurt = 0
+		r.hunger = 100.0
+	w.portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	sim.get_map(NetherLanding.ID).landmarks = []
+	sim.get_map(NetherRoute.ROUTES.quartz.id).surveyed = true
+	sim.get_map("nether_quartz").known = true
+	sim.get_map(NetherRoute.ROUTES.quartz.id).creatures.clear()  # the line's work isn't about creatures
+	return w
+
+
+## The Nether line from the portal to the quartz site, built by Build parties from what they carry (issue #159).
+func test_the_nether_line() -> void:
+	var w := nline_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var line := sim.nline()
+	var need := sim.nline_remaining()
+	check(line.laid == [0, 0, 0, 0, 0, 0] and line.bridged.is_empty() and not line.stations.landing and not line.cart and not sim.nline_complete(), "a new line has nothing built")
+	check(need == {"rails": 12, "planks": 28, "cobble": 8, "minecarts": 1}, "it needs 12 rails, 28 planks (two bridges and two stations), 8 cobblestone and a minecart (%s)" % [need])
+	check(Sim.nline_obstacle(2) and Sim.nline_obstacle(4) and not Sim.nline_obstacle(0), "the lava channel and the gap need bridges")
+	var dests := sim.objective_destinations("build")
+	check(dests.any(func(d): return d.get("line", false) and d.dest == "nether_quartz"), "the Build objective offers the line to the quartz site once the route is scouted")
+	var plan := sim.nether_plan("build", dests.filter(func(d): return d.get("line", false))[0])
+	plan.party = [ada.id, w.tomas.id, w.mira.id]
+	check(plan.target.item == "line" and plan.planks + plan.rails + plan.cobble + plan.minecarts + plan.meals <= 45, "the plan carries what three can, most urgent first (%d planks, %d rails, %d cobblestone, %d minecart)" % [plan.planks, plan.rails, plan.cobble, plan.minecarts])
+	var brief := sim.plan_briefing(plan)
+	check(brief.any(func(l): return l.begins_with("Still to build:") and "saves about" in l), "the briefing shows the cost and the time it saves: %s" % [brief.filter(func(l): return l.begins_with("Still to build"))])
+	# Trip A: rails but no planks: the track stops at the lava channel, and says why.
+	var arrived_a := sim.tick
+	var seen_stuck := false
+	var portal: Dictionary = w.portal
+	var pa := sim.nether_plan("build", dests.filter(func(d): return d.get("line", false))[0])
+	pa.party = [ada.id, w.tomas.id, w.mira.id]
+	pa.meals = 3
+	pa.rails = 12
+	pa.planks = 0
+	pa.cobble = 0
+	pa.minecarts = 0
+	check(sim.plan_expedition(pa) == "", "trip A, rails only, is planned")
+	portal.store = {"bread": 3, "rail": 12}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	sim.depart("nether")
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		for r in [ada, w.tomas, w.mira]:
+			r.hurt = 0
+		if not seen_stuck and line.laid[1] >= Tuning.RAILS_PER_SEGMENT and w.ada.map == NetherRoute.ROUTES.quartz.id:
+			sim.compute_stuck()
+			seen_stuck = stuck_text(sim).contains("Track: needs the lava channel bridged first")
+		if sim.expeditions.nether.is_empty():
+			break
+	check(line.laid == [2, 2, 0, 0, 0, 0] and seen_stuck, "A lays the first two segments and stops at the lava channel: 'Track: needs the lava channel bridged first'")
+	# Trip B: planks and the rest of the rails: both bridges, and the track to the end.
+	var tb := nline_trip(sim, w, {"bread": 3, "plank": 16, "rail": 8}, {"rails": 8, "planks": 16})
+	check(line.bridged.size() == 2 and line.laid == [2, 2, 2, 2, 2, 2] and tb > 0, "B bridges the channel and the gap, and lays the rest of the track")
+	check(not sim.nline_complete() and not line.stations.landing, "the stations and the cart are still to come")
+	# Trip C: the stations and the minecart.
+	var tc := nline_trip(sim, w, {"bread": 3, "plank": 12, "cobble": 8, "minecart": 1}, {"planks": 12, "cobble": 8, "minecarts": 1})
+	check(line.stations.landing and line.stations.site and line.cart and sim.nline_complete() and tc > 0, "C builds the landing station, the quartz site station and parks the minecart: the line is complete")
+	# Riding beats walking both ways, and mining is no faster.
+	sim.use_map(NetherRoute.ROUTES.quartz.id)
+	check(absf(sim.ground_speed(Vector2i(10, 3)) - Tuning.CART_SPEED / Tuning.WALK) < 0.01, "on the finished line a rider covers the route at the cart's speed")
+	sim.use_map("village")
+	var t := Sim.nline_times()
+	check(t.saved > 8.0 and t.ride < t.walk, "about %d s saved each way (%d walking, %d riding)" % [roundi(t.saved), roundi(t.walk), roundi(t.ride)])
+	var block: Dictionary = sim.get_map("nether_quartz").boulders.filter(func(b): return b.ore == "quartz")[0]
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 90}
+	var mine_time: float = sim._work_time(ada, {"what": "gather", "tool": "pick", "target": block})
+	var fresh := nline_world()
+	fresh.ada.pick = {"type": "stone_pick", "tier": 2, "dur": 90}
+	check(absf(mine_time - fresh.sim._work_time(fresh.ada, {"what": "gather", "tool": "pick", "target": fresh.sim.get_map("nether_quartz").boulders.filter(func(b): return b.ore == "quartz")[0]})) < 0.001, "mining a block of quartz takes just as long with track")
+	# A trip with the line beats one without.
+	var with_line := nline_gather_ticks(w)
+	var without := nline_gather_ticks(fresh)
+	check(with_line > 0 and without > 0 and with_line < without, "a full line beats walking: to the site in %d s against %d s" % [with_line / Tuning.TPS, without / Tuning.TPS])
+	# Riders are safe from wandering creatures while they move; walkers aren't.
+	var cube := sim.spawn_creature(NetherRoute.ROUTES.quartz.id, "magma_cube", Vector2i(20, 3))
+	sim.move_to_map(ada, NetherRoute.ROUTES.quartz.id, Vector2i(21, 3))
+	ada.job = Job.new("road", "Riding", "the far end")
+	ada.hurt = 0
+	sim.use_map(NetherRoute.ROUTES.quartz.id)
+	sim.expeditions.nether = {"state": "out", "leg": "out", "dest": "nether_quartz", "party": [ada.id]}
+	for i in 60:
+		sim._step_creatures()
+	check(sim._riding(ada) and cube.cool == 0.0 and ada.hurt == 0, "a rider on the line isn't struck")
+	sim.get_map(NetherRoute.ROUTES.quartz.id).line.cart = false
+	for i in 60:
+		sim._step_creatures()
+	sim.use_map("village")
+	check(not sim._riding(ada) and cube.cool > 0.0, "without the line the creature strikes")
+	sim.expeditions.nether = {}
+	# Saved, and an older save has no line.
+	var back := Sim.from_state(sim.save_state())
+	check(back.nline().laid == [2, 2, 2, 2, 2, 2] and back.nline().bridged.size() == 2 and back.nline().stations.site, "the line is saved")
+	var f49 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v49.save").data.state)
+	check(f49.nline().bridged == [2] and f49.nline().laid[1] == 2 and f49.nline().stations.landing and not f49.nline_complete(), "the v49 fixture loads its part-built line")
+	var f48 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v48.save").data.state)
+	check(f48.nline().laid == [0, 0, 0, 0, 0, 0], "an older save has an unbuilt line")
+
+
+## Ticks from setting out to reaching the quartz site on a gather trip.
+func nline_gather_ticks(w: Dictionary) -> int:
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	sim.expeditions.nether = {}
+	sim.move_to_map(ada, "village", Sim.rcell(w.portal) if false else Sim.rcell(w.tomas))
+	var plan := sim.nether_plan("gather")
+	plan.party = [ada.id]
+	sim.aim_plan(plan, "quartz", 2)
+	if sim.plan_expedition(plan) != "":
+		return -1
+	w.portal.store = {"bread": 3}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "stone_pick", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	sim.depart("nether")
+	var at := sim.tick
+	var arrived := -1
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		ada.hurt = 0
+		if ada.map == "nether_quartz":
+			arrived = sim.tick - at
+			break
+	return arrived

@@ -185,7 +185,56 @@ A Nether plan has an **objective**, picked in the planner (`Sim.OBJECTIVES`): **
 - **A plan with no valid destination** isn't offered: its button is disabled, and `nether_plan` returns nothing. Sites a party can't reach yet refuse at Depart ("The way to the quartz site isn't built yet"), until #155–#157 build them.
 - **Saving:** a plan's `objective` is saved with a trip in progress; nothing else changes shape, so no new version.
 
-## 13. Tuning table (provisional)
+## 13. The quartz site (#155)
+
+The scouted quartz route now leads to a hand-laid **quartz site** (`NetherRoute.QUARTZ_LAYOUT`, 20×14): eight blocks of **nether quartz ore** and five of **glowstone** among rock, with a lava pool. Quartz needs a pickaxe; **glowstone breaks by hand** (`GLOWSTONE_TIME`) and needs none. Both are ores, a quartz block yields 2 and a glowstone block 2 (`ORE_YIELD`). They're stockpiled for Slice 6's redstone and workshops; nothing in the village needs them to survive. The site keeps the far side clear (`QUARTZ_STATION_PLOT`) for the Nether line's station (#159).
+
+- **Getting there** is a journey across the Nether, now general (`_nether_transit_job`): through the portal onto the landing, out by the route's gap, east along the strip, onto the site; home the same way. Every step is walked, so lava, fire, ledges and creatures on the way apply (#149, #151). An older save's empty room at the end of the quartz route becomes the site on loading.
+- **The gather mission** works like the old mine's (#109): the party mines from its packs by its cargo list (the site's quartz and glowstone, best first), packs what it mines, eats from its provisions and comes home by its return policy. A gather plan wants 8 quartz and a spare pickaxe by default.
+- **Depletion:** the site report lists each find's reserve (blocks left times the yield) once someone's been there, and it runs down as the party mines. Deposits don't come back (#22).
+- **Saving:** v45. The mined-out blocks and `visited` are saved with the map.
+
+## 14. Piglin trading (#156)
+
+The scouted piglin route leads to a hand-laid **piglin camp** (`NetherRoute.PIGLIN_LAYOUT`, 20×14) with three piglins standing about. A **piglin** is a creature that never goes for anyone (`notice` 0) and only fights back once it's been hit.
+
+- **The trade table** is fixed, shown before a party commits, and never rolls (`Defs.TRADES`): 2 gold ingots for 1 obsidian; 2 gold ingots for 3 string; 1 gold ingot for 2 flint; 4 gold ingots for 1 fire-resistance supply. A trading party works down it in that order, taking the first row its gold pays for, and trading until it can pay for none. It's in the site report (`trades`) and the planner's briefing, which also shows the rule.
+- **The rule**, shown up front: **"Piglins turn hostile if anyone in the party strikes one."** Breaking it turns the whole camp hostile (`SimMap.hostile`): the piglins go for the party, auto-combat applies (#151), no more trading is done there, the report lists "The piglins are hostile", and the party heads home. A trade plan never sets the party to fight, so a guard doesn't attack a peaceful piglin.
+- **The mission** (objective **Trade**): the party carries **gold ingots** from the village as supplies (the planner's "Gold to trade", up to 6 by default, as much as the village has), which take room in the packs like any item. At the camp one member walks up to a piglin and makes every trade the gold pays for; the goods go into the packs (as long as they fit) and come home as cargo. It returns when the trades are made.
+- **The report** says what was traded: "Traded: 2 gold ingots for 1 obsidian ×3".
+- **Saving:** v46. A camp keeps `hostile`, and its piglins their health. An older save's empty room becomes the camp when it loads.
+
+## 15. The fortress entrance and the first delve (#157)
+
+The scouted fortress route leads to a hand-laid **fortress** (`NetherRoute.FORTRESS_LAYOUT`, 24×16): nether brick halls with two **blazes** and two **skeletons**, a **salvage chest** at the far end, and a **sealed way deeper** beside it. Going deeper waits for a later slice; the sealed way is marked as a future objective in the report and is not opened.
+
+- **The mission** (objective **Fortress**): a party walks the halls to the chest. The planner warns without a guard ("No guard in the party: a fortress has blazes and skeletons"). Blazes and skeletons are hostile and come for the party; guards fight them (#151), and a knock-down stops the game for the retreat as always. Blaze rods and bones drop where creatures fall and are packed like any find; the plan's list names both.
+- **The discovery pause** fires once, when the party reaches the chest: take the salvage and **return**, or take it and **press on** (the guards go after what's left, for more rods, and the party returns once the halls are clear). The text names the salvage (`Defs.FORTRESS_SALVAGE`, provisional: a diamond, 4 iron ingots, 3 gold ingots and a blaze rod) and the sealed way.
+- **The salvage is taken once** (`SimMap.salvage_taken`); what doesn't fit in the packs is left on the chest's cell. A later delve finds it empty, and the report says so. The creatures killed stay dead.
+- **Saving:** v47. The fortress keeps its creatures, `salvage_taken` and what they've dropped. An older save's empty room becomes the fortress when it loads.
+
+## 16. Stranding and rescue (#158)
+
+**No death.** A Nether party that can't go on is **stranded**, and a rescue can bring it home inside a window.
+
+- **Stranded** (`_check_stranded`, from `STRAND_WAIT` and the party's state): its provisions are gone and someone's hungry (the cache counts), or everyone is seriously hurt, or the portal is dark with no flint and steel and the party has waited `STRAND_WAIT` at it. The party shelters in the shelter if it's on the landing and one stands, else where it stands, and stops working. **The game pauses** with the costs shown: the window (`RESCUE_WINDOW`, 240 s), the cargo it would leave, and two choices: **Shelter and wait**, or **Set out on their own** now.
+- **The window** is a visible countdown in the expedition panel, with the party's remaining supplies ("Stranded: the provisions are gone. Rescue window 3:52. Supplies: 0 meals, no flint and steel."), and "Nether party: stranded" in the stuck list. The panel's **Plan a rescue** button opens the plan.
+- **A rescue** is a plan with the **Rescue** objective: a **third slot**, `rescue`, a Nether expedition of its own that sets out even when the Overworld and Nether parties are both out. It's planned at the board and packs at the portal like any Nether party (6 meals by default; flint and steel is carried automatically). Its destination is the place the stranded party is; it walks there like any Nether party and **reaches** them: the stranded party gets the meals past the rescue's own walk home, and a flint and steel if it had none, and everyone heads home, the stranded party **with its cargo**. Only one rescue at a time.
+- **A missed window** (or the choice to walk): the party sets off on its own, **slowly and hurt** (an ordinary injury; the PC is protected as ever), and leaves its **cargo and spare tools** where it stood as **abandoned cargo**, lying on that map (`SimMap.abandoned`), which a later mission recovers like any find (a site lists the types in its report). The report says "Left behind: ...". Nobody dies.
+- **Saving:** v48. A trip carries `stranded` (why, where, the window's end) and what it `abandoned`; there's a third, empty `rescue` slot in every older save.
+
+## 17. The Nether line: portal station to the quartz site (#159)
+
+A line along the scouted **quartz route**, built by **Build parties** from what they carry, in the spirit of Slice 4's: bridges, track, a station at each end and a cart. The village line stays a single point-to-point line (#29). It is not built the way Slice 4's is (a crew of residents on a map of their own, with the rail pile and track sites): the Nether has no village labor to spare, so each trip is a Build expedition that lays what its packs hold.
+
+- **State** (`SimMap.line` on the quartz route): the rails laid in each of its six segments, the bridged segments, the two stations (`landing` and `site`) and whether the cart is parked. `Sim.nline_remaining()` is the cost left: 12 rails (`RAILS_PER_SEGMENT`, 2 a segment), two **bridges** over the lava channel and the gap (`NETHER_BRIDGE_PLANKS`, 8 planks each), two **stations** (Slice 4's station cost: 6 planks and 4 cobblestone each), and a **minecart**, built at the village and carried through the portal.
+- **The mission:** the **Build** objective offers "The Nether line to the quartz site" once the route is scouted. The plan carries what's left, most urgent first (bridges' planks, rails, the stations' planks and cobblestone, the cart), up to what a party of three can carry past its meals; the planner's steppers adjust it. The briefing shows what's still to build and the time the line saves. The crew packs at the portal, crosses, **builds the landing station** before setting out, **bridges** and **lays track** west to east on the route as far as its supplies go (a bridge first, since track can't go down over an obstacle), then builds the **station at the quartz site** and **parks the cart** there, and comes home when nothing is left it can do. A big line takes more than one trip. A party member who finds a piece already claimed, or done, takes the next. A bridge's missing planks show in the stuck list: "Track: needs the lava channel bridged first".
+- **Away from village labor:** the crew is a Nether party; the Jobs panel says "In the Nether: laying track".
+- **Riding:** once the line is complete every party on the quartz route rides it at the cart's speed (`CART_SPEED`) both ways: about 10 s saved each way on a 16 s walk. Mining at the site is unchanged (a test guards it). **Riders are safe from wandering creatures and from the lava's burns while they move**; a party that walks isn't.
+- **Seen:** planks over the bridged segments, sleepers and rails as far as they're laid, the stations and the parked cart; the route's report says "Line: 4 of 6 segments laid, 1 of 2 bridges...".
+- **Saving:** v49. The quartz route map keeps its `line`; a trip carries `rails` and `minecarts` in its supplies.
+
+## 18. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -221,3 +270,15 @@ Each build issue adds its rows.
 | `SHELTER_COST` | 4 cobblestone, 6 planks | What a party carries to build the shelter. |
 | `SHELTER_BUILD_TIME` | 10 s | Building it. |
 | Route strip | 48×7, six segments | Cells, in `game/sim/nether_route.gd`. |
+| `ORE_YIELD` quartz / glowstone | 2 / 2 | Items a block drops. |
+| `GLOWSTONE_TIME` | 3 s | Breaking glowstone, by hand or with any tool. |
+| Quartz site | 20×14 | Cells, 8 quartz and 5 glowstone. |
+| Trade table | see §14 | `Defs.TRADES`: gold ingots for obsidian, string, flint and fire resistance. |
+| Piglin camp | 20×14 | Cells, with three piglins (12 health each). |
+| `FORTRESS_SALVAGE` | 1 diamond, 4 iron, 3 gold, 1 blaze rod | The chest's contents. |
+| Fortress | 24×16 | Cells, with two blazes and two skeletons. |
+| `RESCUE_WINDOW` | 240 s | How long a stranded party shelters before it sets off on its own. |
+| `STRAND_WAIT` | 20 s | A party at a dark portal with no flint and steel waits this long before it's stranded. |
+| `NETHER_BRIDGE_PLANKS` | 8 | Planks in a bridge over the lava channel or the gap. |
+| `NETHER_BRIDGE_TIME` | 10 s | Building one. |
+| Nether line | 12 rails, 2 bridges, 2 stations, 1 cart | What the quartz route's line takes, with Slice 4's `RAILS_PER_SEGMENT`, station cost and `CART_SPEED`. |

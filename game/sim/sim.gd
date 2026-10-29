@@ -79,8 +79,10 @@ var expedition: Dictionary:
 		return expeditions[slot]
 	set(v):
 		expeditions[slot] = v
-const SLOTS := ["overworld", "nether"]
-var expeditions := {"overworld": {}, "nether": {}}
+const SLOTS := ["overworld", "nether", "rescue"]
+## Which realm each slot's party works in: a rescue is a Nether expedition of its own, out even when the Nether's is taken (issue #158).
+const SLOT_REALM := {"overworld": "overworld", "nether": "nether", "rescue": "nether"}
+var expeditions := {"overworld": {}, "nether": {}, "rescue": {}}
 var slot := "overworld"   ## Which of `expeditions` is `expedition` now.
 ## Choices waiting for the player, oldest first (issues #110, #111): {kind, text, options, res_id, map}.
 ## The game pauses while there's one.
@@ -153,9 +155,14 @@ func each_expedition(f: Callable) -> void:
 			on_slot(sl, f)
 
 
-## The slot a destination's expedition goes in.
+## The slot a destination's expedition goes in (a rescue's plan picks the rescue slot itself).
 static func slot_of_dest(dest: String) -> String:
 	return realm_of(dest)
+
+
+## Whether the current slot is a party in the Nether, an ordinary one or a rescue.
+func in_nether() -> bool:
+	return SLOT_REALM[slot] == "nether"
 
 
 ## The slot a resident's party is in, else the slot of the realm they're in.
@@ -255,6 +262,10 @@ func _add_site_maps() -> void:
 		if not maps.has(NetherRoute.ROUTES[key].id):
 			maps[NetherRoute.ROUTES[key].id] = NetherRoute.build(self, key)
 			maps[NetherRoute.ROUTES[key].site] = NetherRoute.build_site(self, key)
+		elif key in ["quartz", "piglin", "fortress"] and maps[NetherRoute.ROUTES[key].site].pattern == "":  # an older save's empty room becomes the site (issues #155, #156)
+			var was_known: bool = maps[NetherRoute.ROUTES[key].site].known
+			maps[NetherRoute.ROUTES[key].site] = NetherRoute.build_site(self, key)
+			maps[NetherRoute.ROUTES[key].site].known = was_known
 
 
 func add_bush(cell: Vector2i) -> Dictionary:
@@ -1147,6 +1158,8 @@ func plan_warnings(plan: Dictionary) -> Array:
 		var r := resident(id)
 		if not r.is_empty() and needs_sword(r) and tool_items("sword", 0).is_empty():
 			out.append("No sword for %s" % r.name)
+	if plan.get("objective", "") == "fortress" and not plan.party.any(func(id): return resident(id).get("role", "") in ["guard", "all"]):
+		out.append("No guard in the party: a fortress has blazes and skeletons")  # issue #157
 	return out
 
 
@@ -2555,6 +2568,14 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				if expedition.get("leg", "out") == "out":
 					_head_home("the route is scouted")
 			return true
+		"to_site":  # the route's far end: onto the site (issue #155)
+			var tk := dest_route(expedition.get("dest", ""))
+			_enter_level(r, NetherRoute.ROUTES[tk].site)
+			return true
+		"leave_site":  # off a site, back onto the route's far end (issue #155)
+			var lk := NetherRoute.site_key(map_id)
+			move_to_map(r, NetherRoute.ROUTES[lk].id, Vector2i(NetherRoute.W - 1, NetherRoute.LINE_ROW))
+			return true
 		"leave_route":  # back onto the landing, at the edge the route leaves from (issue #153)
 			var back: Dictionary = NetherRoute.ROUTES[NetherRoute.route_of(map_id)]
 			move_to_map(r, NetherLanding.ID, back.exit)
@@ -2585,6 +2606,75 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 					rev += 1
 					return true
 			return "gone"
+		"wait_stranded":  # sheltering until the rescue (or the window) ends it (issue #158)
+			if not expedition.has("stranded"):
+				return true
+			j.label = "Sheltering, waiting for a rescue"
+			r.pos = Vector2(rcell(r))
+			return false
+		"rescue_reach":  # the stranded are reached: they get what the rescue carries, and everyone heads home (issue #158)
+			var lost: Dictionary = expeditions.nether
+			if not lost.has("stranded"):
+				return true
+			var spare := _pack_spendable()
+			if spare > 0:  # the meals past its own walk home
+				for k in expedition.get("provisions", {}).keys():
+					while spare > 0 and expedition.provisions[k] > 0:
+						expedition.provisions[k] -= 1
+						lost.provisions[k] = lost.get("provisions", {}).get(k, 0) + 1
+						spare -= 1
+			if lost.get("lighter", {}).is_empty() and not expedition.get("lighter", {}).is_empty():
+				lost.lighter = expedition.lighter.duplicate()
+			lost.erase("stranded")
+			lost.leg = "home"
+			lost.home_why = "rescued"
+			for id in lost.party:
+				var lr := resident(id)
+				if not lr.is_empty():
+					fail_job(lr)
+			expedition.leg = "home"
+			expedition.home_why = "the stranded party is reached"
+			for id in expedition.party:
+				fail_job(resident(id))
+			stats.rescues = stats.get("rescues", 0) + 1
+			rev += 1
+			_toast("The stranded party is rescued. Everyone heads home.", r.id)
+			return true
+		"open_salvage":  # the chest at the far end, and the sealed way beside it: the game stops once for the choice (issue #157)
+			if m.salvage_taken or not pending.filter(func(p): return p.kind == "fortress").is_empty():
+				return true
+			if not m.surveyed:
+				m.surveyed = true
+				_ask("fortress", "The party reached a salvage chest at the far end of the fortress. Beside it a sealed way leads deeper, which a later expedition could open.", [
+					{"id": "take", "label": "Take it and return", "cost": "The party takes the salvage (%s) and heads home." % ", ".join(Defs.FORTRESS_SALVAGE.keys().map(func(k): return Defs.words(k, Defs.FORTRESS_SALVAGE[k]))) },
+					{"id": "press", "label": "Take it and press on", "cost": "The party takes the salvage and stays to clear the halls of blazes and skeletons, for more blaze rods. The way deeper stays sealed."},
+				], r.id)
+			return true
+		"trade":  # every trade the gold pays for, down the table; goods go into the packs (issue #156)
+			if m.hostile:
+				return "gone"
+			var made := 0
+			var counts := {}
+			while true:
+				var ti := _next_trade()
+				if ti < 0:
+					break
+				counts[ti] = counts.get(ti, 0) + 1
+				var t: Dictionary = Defs.TRADES[ti]
+				for k in t.give:
+					expedition.supplies[k] -= t.give[k]
+					if expedition.supplies[k] <= 0:
+						expedition.supplies.erase(k)
+				for k in t.get:
+					expedition.cargo[k] = expedition.cargo.get(k, 0) + t.get[k]
+				made += 1
+			for ti in counts:
+				expedition.traded = expedition.get("traded", []) + [Defs.trade_text(Defs.TRADES[ti]) + (" ×%d" % counts[ti] if counts[ti] > 1 else "")]
+			expedition.trade_done = true
+			rev += 1
+			if made > 0:
+				_toast("The party traded with the piglins: %s." % "; ".join(expedition.traded), r.id)
+			return true
 		"mark_seen":  # a landmark is seen; the last one surveys the landing (issue #148)
 			if not m.landmarks_seen.has(st.cell):
 				m.landmarks_seen.append(st.cell)
@@ -2645,6 +2735,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			var tier: int = r[st.tool].tier if r[st.tool] != null else 0
 			if st.tool == "axe":
 				return Tuning.CHOP_TIME[tier]
+			if st.target.get("ore", "") == "glowstone":  # it breaks by hand (issue #155)
+				return Tuning.GLOWSTONE_TIME
 			if tier < Tuning.ORE_PICK_TIER.get(st.target.get("ore", ""), 0):  # diamonds want an iron pickaxe (issue #186), obsidian a diamond one (#146)
 				return -1.0
 			return Tuning.BREAK_TIME[tier] if tier > 0 else -1.0
@@ -2654,6 +2746,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.LAY_TIME if st.site.tpl == "track" else Tuning.STAGE_TIME
 		"light", "relight":
 			return Tuning.PORTAL_LIGHT_TIME
+		"nline":
+			return {"bridge": Tuning.NETHER_BRIDGE_TIME, "rail": Tuning.LAY_TIME, "station": Tuning.STAGE_TIME, "cart": 4.0}[st.task.kind]
 		"shelter":
 			return Tuning.SHELTER_BUILD_TIME
 		"hunt":
@@ -2725,6 +2819,8 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				r.carry = null
 			rev += 1
 			_toast("The portal is lit.", r.id, portal.id)
+		"nline":  # a piece of the Nether line (issue #159)
+			_finish_line_task(st.task, r)
 		"shelter":  # the party's cobblestone and planks go into the walls (issue #152)
 			var shelter: Dictionary = st.site
 			shelter.builder = 0
@@ -2917,14 +3013,17 @@ func _claim(r: Dictionary) -> void:
 		u.step({"op": "unload_wait"})
 		r.job = u
 		return
+	if realm_of(map_id) == "nether" and expedition_of(r).has("stranded"):  # sheltering, waiting for a rescue (issue #158)
+		r.job = _stranded_job(r)
+		return
 	if on_the_way(r):  # out of village labor: off to the signpost, or home from the site (issue #108)
 		r.job = _road_job()
 		return
 	if on_road(r):  # walking the road map (issue #118)
 		r.job = _road_walk_job(r)
 		return
-	if m.kind == "route" and realm_of(map_id) == "nether" and not expedition_of(r).is_empty():  # a scout on a Nether route (issue #153)
-		r.job = _route_scout_job(r)
+	if realm_of(map_id) == "nether" and not expedition_of(r).is_empty() and not at_site(r):  # on the way across the Nether (issues #153, #155)
+		r.job = _nether_transit_job(r)
 		return
 	if map_id == Road.ID:  # out on the road for work there (issues #119, #121)
 		r.job = _claim_on_road(r)
@@ -3198,6 +3297,8 @@ func step() -> void:
 			working += 1
 	if working >= 2 and kinds.size() >= 2:
 		stats.division = true
+	if tick % 10 == 0 and not expeditions.nether.is_empty():  # a party in trouble in the Nether (issue #158)
+		on_slot("nether", _check_stranded)
 	if tick % 5 == 0:
 		compute_stuck()
 
@@ -3249,8 +3350,11 @@ func _step_map() -> void:
 					_arrive_at_site(r)
 			continue
 		_step_resident(r)
+	for sl in SLOTS:  # each party of this map's realm (issue #158)
+		if SLOT_REALM[sl] == realm_of(map_id):
+			use_slot(sl)
+			_step_site()
 	use_slot(realm_of(map_id))
-	_step_site()
 	if map_id == "village":
 		for sl in SLOTS:
 			if expeditions[sl].get("unloading", false):
@@ -3639,6 +3743,12 @@ func objective_destinations(obj: String) -> Array:
 			var sh := shelter_site()
 			if maps[NetherLanding.ID].known and not sh.get("done", false):
 				out.append({"dest": NetherLanding.ID, "label": "A shelter on the landing", "route": ""})
+			if maps[NetherRoute.ROUTES.quartz.id].surveyed and maps[NetherRoute.ROUTES.quartz.site].known and not nline_complete():  # issue #159
+				out.append({"dest": NetherRoute.ROUTES.quartz.site, "label": "The Nether line to the quartz site", "route": "", "line": true})
+		"rescue":  # a stranded party, if no rescue is already out (issue #158)
+			var lost: Dictionary = expeditions.nether
+			if lost.has("stranded") and expeditions.rescue.is_empty():
+				out.append({"dest": lost.stranded.at, "label": "Rescue the party at the %s" % maps[lost.stranded.at].name.substr(8).to_lower(), "route": ""})
 	return out
 
 
@@ -3660,7 +3770,7 @@ func objective_why_none(obj: String) -> String:
 		"build":
 			return "Nothing to build yet: the shelter stands"
 		"rescue":
-			return "No one is stranded"
+			return "A rescue party is already out" if not expeditions.rescue.is_empty() else "No one is stranded"
 	return ""
 
 
@@ -3690,12 +3800,24 @@ func nether_plan(obj: String, pick := {}) -> Dictionary:
 			plan.shelter = true
 			plan.cobble = Tuning.SHELTER_COST.cobble
 			plan.planks = Tuning.SHELTER_COST.plank
-		"gather":
-			plan.target = {"item": "gather", "n": 8}
-		"trade":
+			if pick.get("line", false):  # the Nether line: what's left to build, as much as three can carry (issue #159)
+				plan.target = {"item": "line", "n": 1}
+				plan.shelter = false
+				_line_supplies(plan)
+		"gather":  # the first thing the site gives, as much as 8, with a spare pickaxe (issue #155)
+			plan.picks = 1
+			var first: Array = plan_targets(plan.dest)
+			if not first.is_empty():
+				aim_plan(plan, first[0].item, 8)
+		"trade":  # the gold the village has, up to what the packs take (issue #156)
 			plan.target = {"item": "trade", "n": 1}
+			plan.gold = mini(free_count("gold_ingot"), 6)
 		"fortress":
 			plan.target = {"item": "fortress", "n": 1}
+		"rescue":  # extra meals and a flint and steel (carried automatically) for the stranded; sets out with both slots taken (issue #158)
+			plan.target = {"item": "rescue", "n": 1}
+			plan.rescue = true
+			plan.meals = 6
 	return plan
 
 
@@ -3717,12 +3839,21 @@ func plan_briefing(plan: Dictionary) -> Array:
 		out.append("Risk: no sword in the village")
 	if stacks_where(func(s): return s.type == "flint_and_steel" and avail(s) > 0).is_empty():
 		out.append("Risk: no flint and steel to carry, so if the portal goes out the party waits for the village to light it")
-	if obj == "trade":
-		out.append("The piglins' trade table will be shown here before the party commits (#156)")
+	if plan.target.item == "line":  # issue #159
+		out.append(nline_text())
+	if obj == "trade":  # the fixed table and the rule, before the party commits (issue #156)
+		for t in Defs.TRADES:
+			out.append("Trade: " + Defs.trade_text(t))
+		out.append("Rule: " + Defs.PIGLIN_RULE)
 	if obj == "rescue":
 		out.append("A rescue may set out even when both parties are out")
 	out.append("Comes home when %s" % OBJECTIVES[obj].returns)
 	return out
+
+
+## Whether the party is out to trade with the piglins (issue #156).
+func trading() -> bool:
+	return expedition.get("target", {}).get("item", "") == "trade"
 
 
 ## Whether the party is out to scout a route (issue #153).
@@ -4115,8 +4246,10 @@ func _stuck_on_map() -> void:
 	_stuck_workstations()
 	for sl in SLOTS:
 		on_slot(sl, _stuck_expedition)
-	use_slot(realm_of(map_id))
-	_stuck_site()
+	for sl in SLOTS:
+		if SLOT_REALM[sl] == realm_of(map_id):
+			use_slot(sl)
+			_stuck_site()
 	use_slot("overworld")
 	var has_food: bool = food_available() if m.kind != "route" else on_map("village", food_available)  # the road eats from home
 	for r in on_here:
@@ -4755,7 +4888,8 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 			break
 	if realm_of(dest) == "nether":  # the first crossing: survey the landing (issue #148)
 		var build_it: bool = shelter_site().is_empty() or not shelter_site().done  # the first crossing builds the shelter (issue #152)
-		return {"dest": dest, "party": party, "target": {"item": "survey", "n": 1}, "meals": 3, "picks": 0, "sticks": 0, "wheat": 0, "list": [],
+		return {"dest": dest, "party": party, "target": {"item": "survey", "n": 1}, "meals": 3, "picks": 0, "sticks": 0, "wheat": 0,
+			"list": cargo_list_for(dest) if NetherRoute.site_key(dest) != "" else [],
 			"shelter": build_it, "cobble": Tuning.SHELTER_COST.cobble if build_it else 0, "planks": Tuning.SHELTER_COST.plank if build_it else 0, "stock": 0,
 			"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": false, "clear": false, "fight": false}
 	var meadow := dest == Meadow.ID  # issue #137: wool, and no pickaxes, for the meadow
@@ -4786,7 +4920,7 @@ static func cargo_rows(plan: Dictionary) -> Array:
 ## Keeps `target` in step with the list: its first row that's on, preferring one with an amount. Tending the
 ## pens isn't a list, so it's left alone.
 static func sync_target(plan: Dictionary) -> void:
-	if plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "gather"]:
+	if plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line"]:
 		return
 	var rows := cargo_rows(plan)
 	var pick: Dictionary = {}
@@ -4959,7 +5093,7 @@ static func pack_capacity(plan: Dictionary) -> int:
 
 ## Room the supplies take: a meal, a spare pickaxe, a stick or a wheat is one item each.
 static func plan_supplies(plan: Dictionary) -> int:
-	return plan.meals + plan.picks + plan.get("sticks", 0) + plan.get("wheat", 0) + plan.get("cobble", 0) + plan.get("planks", 0)
+	return plan.meals + plan.picks + plan.get("sticks", 0) + plan.get("wheat", 0) + plan.get("cobble", 0) + plan.get("planks", 0) + plan.get("gold", 0) + plan.get("rails", 0) + plan.get("minecarts", 0)
 
 
 ## Room left in the packs for what the party brings back.
@@ -4991,10 +5125,14 @@ func plan_targets(dest: String) -> Array:
 func plan_problems(plan: Dictionary) -> Array:
 	var out: Array = []
 	var sl := slot_of_dest(plan.dest)  # a rescue sets out even when its slot is taken (issue #145)
-	if not expeditions[sl].is_empty() and not plan.get("rescue", false):
+	if plan.get("rescue", false):
+		sl = "rescue"
+	if not expeditions[sl].is_empty():
 		out.append("%s %s is already out" % ["An" if sl == "overworld" else "A", party_name(sl)])
 	if expedition_board().is_empty():
 		out.append("Build an expedition board first")
+	if plan.target.item == "trade" and plan.get("gold", 0) <= 0:  # nothing to trade with (issue #156)
+		out.append("Take some gold to trade")
 	if plan.target.item == "scout":  # which route, and not one already scouted (issue #153)
 		var rk: String = plan.target.get("route", "")
 		if not NetherRoute.ROUTES.has(rk):
@@ -5003,7 +5141,7 @@ func plan_problems(plan: Dictionary) -> Array:
 			out.append("That route is already scouted")
 	if NetherRoute.site_ids().has(plan.dest) and not maps[plan.dest].known:  # an unscouted site can't be a destination (issue #153)
 		out.append("Nobody has scouted the way there yet")
-	if sl == "nether":  # a crossing needs the portal built and lit (issue #148)
+	if SLOT_REALM[sl] == "nether":  # a crossing needs the portal built and lit (issue #148)
 		if village_portal().is_empty():
 			out.append("Build the portal first")
 		elif not portal_lit():
@@ -5023,7 +5161,7 @@ func plan_problems(plan: Dictionary) -> Array:
 		var room := cargo_room(plan)
 		if room < 1:
 			out.append("The supplies fill the packs. Take fewer, or more people")
-		elif not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress"]:
+		elif not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line"]:
 			var wanted := 0
 			for r in cargo_rows(plan):
 				wanted += r.n
@@ -5044,11 +5182,11 @@ func plan_expedition(plan: Dictionary) -> String:
 	var problems := plan_problems(plan)
 	if not problems.is_empty():
 		return problems[0]
-	if not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress"]:  # each place keeps its last list (issue #185)
+	if not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line"]:  # each place keeps its last list (issue #185)
 		cargo_lists[plan.dest] = plan.get("list", []).map(func(r): return {"item": r.item, "on": r.on, "n": r.n})
-	use_slot(slot_of_dest(plan.dest))
+	use_slot("rescue" if plan.get("rescue", false) else slot_of_dest(plan.dest))
 	expedition = plan.duplicate(true)
-	expedition.board = village_portal().id if slot == "nether" else expedition_board().id  # a Nether party packs at the portal (issue #148)
+	expedition.board = village_portal().id if in_nether() else expedition_board().id  # a Nether party packs at the portal (issue #148)
 	expedition.state = "staging"
 	expedition.packed = {}
 	expedition.tools = []
@@ -5060,7 +5198,7 @@ func plan_expedition(plan: Dictionary) -> String:
 
 ## Meals and spare pickaxes at the board so far, plus those on their way there when `incoming`.
 func packed(incoming := false) -> Dictionary:
-	var out := {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0}
+	var out := {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0, "gold": 0, "rails": 0, "minecarts": 0}
 	var b := site(expedition.get("board", 0))
 	if b.is_empty():
 		return out
@@ -5078,21 +5216,29 @@ func packed(incoming := false) -> Dictionary:
 				out.cobble += src[k]
 			elif k == "plank":
 				out.planks += src[k]
+			elif k == "gold_ingot":
+				out.gold += src[k]
+			elif k == "rail":
+				out.rails += src[k]
+			elif k == "minecart":
+				out.minecarts += src[k]
 	return out
 
 
 ## What's still to be packed, less what's on its way: {meals, picks, wheat, sticks}.
 func pack_needs() -> Dictionary:
 	if expedition.get("state", "") != "staging":
-		return {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0}
+		return {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0, "gold": 0, "rails": 0, "minecarts": 0}
 	var p := packed(true)
 	return {"meals": maxi(0, expedition.meals - p.meals), "picks": maxi(0, expedition.picks - p.picks),
 		"wheat": maxi(0, expedition.get("wheat", 0) - p.wheat), "sticks": maxi(0, expedition.get("sticks", 0) - p.sticks),
-		"cobble": maxi(0, expedition.get("cobble", 0) - p.cobble), "planks": maxi(0, expedition.get("planks", 0) - p.planks)}
+		"cobble": maxi(0, expedition.get("cobble", 0) - p.cobble), "planks": maxi(0, expedition.get("planks", 0) - p.planks),
+		"gold": maxi(0, expedition.get("gold", 0) - p.gold), "rails": maxi(0, expedition.get("rails", 0) - p.rails),
+		"minecarts": maxi(0, expedition.get("minecarts", 0) - p.minecarts)}
 
 
 ## What a plan can ask to have packed besides meals and spare pickaxes: [the plan's key, the item].
-const SUPPLY_KINDS := [["wheat", "wheat"], ["sticks", "stick"], ["cobble", "cobble"], ["planks", "plank"]]
+const SUPPLY_KINDS := [["wheat", "wheat"], ["sticks", "stick"], ["cobble", "cobble"], ["planks", "plank"], ["gold", "gold_ingot"], ["rails", "rail"], ["minecarts", "minecart"]]
 
 
 ## A delivery of supplies to the board (issue #107): meals first, then spare pickaxes, the best first.
@@ -5142,9 +5288,9 @@ func depart_blocker(slot_id := "") -> String:
 		return on_slot(slot_id, depart_blocker)
 	if expedition.get("state", "") != "staging":
 		return "Nothing is being packed"
-	if slot == "nether" and not portal_lit():
+	if in_nether() and not portal_lit():
 		return "The portal isn't lit"
-	if NetherRoute.site_ids().has(expedition.get("dest", "")):  # the way there is scouted, but a party can't be sent yet
+	if NetherRoute.site_ids().has(expedition.get("dest", "")) and maps[expedition.dest].pattern == "":  # scouted, but not built yet
 		return "The way to the %s isn't built yet" % maps[expedition.dest].name.to_lower()
 	var p := packed()
 	var meals: int = expedition.meals - p.meals
@@ -5179,7 +5325,7 @@ func depart(slot_id := "") -> String:
 	expedition.tools = b.get("tools", []).duplicate(true)
 	b.store = {}
 	b.tools = []
-	if slot == "nether":  # the party carries a flint and steel, if the village has one, to relight the portal (issue #148)
+	if in_nether():  # the party carries a flint and steel, if the village has one, to relight the portal (issue #148)
 		var ls := stacks_where(func(s): return s.type == "flint_and_steel" and avail(s) > 0)
 		if not ls.is_empty():
 			var stk: Dictionary = ls[0]
@@ -5225,7 +5371,7 @@ func _cross_portal(r: Dictionary, to: String) -> void:
 	if to == "village":
 		_arrive_home(r)
 	else:
-		_enter_level(r, to)
+		_enter_level(r, NetherLanding.ID)  # every Nether place is reached by way of the landing (issue #155)
 
 
 func _arrive_at_site(r: Dictionary) -> void:
@@ -5287,6 +5433,16 @@ func cancel_expedition(slot_id := "") -> void:
 ## The board's stuck reasons while packing (issue #107). Progress waits in the dim tier; nothing to
 ## pack is a blocker, with the fix.
 func _stuck_expedition() -> void:
+	if building_line() and expedition.get("state", "") == "out" and map_id == NetherRoute.ROUTES.quartz.id:  # the track waits on a bridge (issue #159)
+		var l := nline()
+		for i in Road.segment_count():
+			if l.laid[i] < Tuning.RAILS_PER_SEGMENT:
+				if nline_obstacle(i) and not l.bridged.has(i) and expedition.get("supplies", {}).get("plank", 0) < Tuning.NETHER_BRIDGE_PLANKS:
+					_add_stuck("Track", "needs %s bridged first" % NetherRoute.ROUTES.quartz.segments[i].name.to_lower(), Vector2(Road.SEGMENTS[i].x + 2, NetherRoute.LINE_ROW) + Vector2(0.5, 0.5), 0.6, "", 0)
+				break
+	if expedition.has("stranded"):  # waiting for a rescue (issue #158)
+		var lost: Dictionary = expedition
+		_add_stuck(party_name(slot), "stranded: %s" % lost.stranded.why, Vector2(maps[lost.stranded.at].entrance) + Vector2(0.5, 0.5), 1.9, "", 0, false, true)
 	if expedition.get("state", "") != "staging":
 		return
 	var b := site(expedition.board)
@@ -5518,6 +5674,10 @@ func expedition_report(ex: Dictionary) -> Array:
 	if broken > 0:
 		cost += ", %d %s broken" % [broken, "pickaxe" if broken == 1 else "pickaxes"]
 	lines.append(cost)
+	if not ex.get("abandoned", []).is_empty():  # issue #158
+		lines.append("Left behind: " + ", ".join(ex.abandoned))
+	if not ex.get("traded", []).is_empty():  # issue #156
+		lines.append("Traded: " + "; ".join(ex.traded))
 	if ex.get("cart", false) and ex.has("road_out") and ex.has("road_home"):  # issue #124
 		var took: float = float(ex.road_out[1] - ex.road_out[0] + ex.road_home[1] - ex.road_home[0]) / Tuning.TPS
 		lines.append("By cart: %d s on the road there and back, about %d s saved" % [roundi(took), maxi(0, roundi(2.0 * route_walk_time() - took))])
@@ -5580,7 +5740,8 @@ func road_eta(r: Dictionary) -> float:
 ## Walking speed on a cell, as a share of WALK: wading the stream is slow until it's bridged, and a
 ## worn path is quicker (issue #196).
 func ground_speed(c: Vector2i) -> float:
-	return (Tuning.FORD_SPEED if m.water.has(c) and not bridged(c) else 1.0) * path_speed(c)
+	var ride := Tuning.CART_SPEED / Tuning.WALK if m.id == NetherRoute.ROUTES.quartz.id and nline_complete() else 1.0  # the Nether line (issue #159)
+	return (Tuning.FORD_SPEED if m.water.has(c) and not bridged(c) else 1.0) * path_speed(c) * ride
 
 
 ## How worn a stretch of ground is, as a stage: 0 grass, 1 worn grass, 2 dirt path, 3 packed path.
@@ -6296,7 +6457,7 @@ static func block_yield(item: String) -> int:
 		if Tuning.ANIMAL_DROPS[sp].has(item):
 			return Tuning.ANIMAL_DROPS[sp][item]
 	return {"cobble": Tuning.BOULDER_COBBLE, "coal": Tuning.ORE_YIELD.coal, "iron_ore": Tuning.ORE_YIELD.iron, "diamond": Tuning.ORE_YIELD.diamond,
-		"gold_ore": Tuning.ORE_YIELD.gold, "obsidian": Tuning.ORE_YIELD.obsidian}.get(item, 1)
+		"gold_ore": Tuning.ORE_YIELD.gold, "obsidian": Tuning.ORE_YIELD.obsidian, "quartz": Tuning.ORE_YIELD.quartz, "glowstone": Tuning.ORE_YIELD.glowstone}.get(item, 1)
 
 
 ## Whether a block gives the objective's resource (stone, coal or iron ore), or an animal does when
@@ -6312,6 +6473,8 @@ static func gives(b: Dictionary, item: String) -> bool:
 		"gold_ore": return b.get("ore", "") == "gold"
 		"obsidian": return b.get("ore", "") == "obsidian"
 		"flint": return b.get("ore", "") == "gravel"
+		"quartz": return b.get("ore", "") == "quartz"
+		"glowstone": return b.get("ore", "") == "glowstone"
 	return false
 
 
@@ -6349,10 +6512,20 @@ func _site_job(r: Dictionary):
 	var fj = _fight_job(r, c)  # a guard fights what threatens the party (issue #151)
 	if fj != null:
 		return fj
+	if expedition.get("rescue", false):  # a rescue party looks for the stranded (issue #158)
+		return _rescue_job(r, c)
 	if m.id == Meadow.ID:
 		return _meadow_job(r, c)
 	if m.id == NetherLanding.ID:
 		return _landing_job(r, c)
+	if building_line() and m.id == NetherRoute.ROUTES.quartz.site:  # the far station and the cart (issue #159)
+		var st := nline_task("site", r.id)
+		if not st.is_empty():
+			return _line_job(st, r.id)
+	if m.id == NetherRoute.ROUTES.piglin.site:
+		return _camp_job(r, c)
+	if m.id == NetherRoute.ROUTES.fortress.site:
+		return _delve_job(r, c)
 	var can_mine: bool = r.get("hurt", 0) == 0
 	if can_mine and r.pick == null and not expedition.get("tools", []).is_empty():
 		var t := Job.new("equip", "Taking a spare pickaxe from the packs", "the packs")
@@ -6374,8 +6547,8 @@ func _site_job(r: Dictionary):
 		if find_path(c, adj_set([m.door])) != null:
 			_drop_unused(r, pj)
 			return dj
-	if can_mine and r.pick != null:
-		var targets := m.boulders.filter(func(b): return b.alive and b.des and b.claim == 0 and not _cooling(b))
+	if can_mine:  # glowstone breaks by hand, so no pickaxe is needed for it (issue #155)
+		var targets := m.boulders.filter(func(b): return b.alive and b.des and b.claim == 0 and not _cooling(b) and (r.pick != null or b.get("ore", "") == "glowstone"))
 		if not targets.is_empty():
 			_drop_unused(r, pj)
 			return _gather_job(r, nearest(targets, c))
@@ -6409,6 +6582,68 @@ func _supplies_cover(cost: Dictionary) -> bool:
 	return true
 
 
+## The route key ("quartz"...) a Nether destination is on: a site's, or a route's own.
+static func dest_route(dest: String) -> String:
+	var k := NetherRoute.site_key(dest)
+	return k if k != "" else NetherRoute.route_of(dest)
+
+
+## A party member on the way across the Nether (issue #155): the landing is the hub. Out to a site they cross the landing to its route,
+## walk the route east and step onto the site; home they come back the same way, then through the portal. A creature that
+## threatens them is dealt with first.
+func _nether_transit_job(r: Dictionary) -> Job:
+	var c := rcell(r)
+	var fj = _fight_job(r, c)
+	if fj != null:
+		return fj
+	var home: bool = expedition.get("leg", "out") == "home"
+	if map_id == NetherLanding.ID:
+		if home or dest_route(expedition.get("dest", "")) == "":
+			return _portal_home_job()
+		if building_line():  # the landing's station before setting out (issue #159)
+			var lt := nline_task("landing", r.id)
+			if not lt.is_empty():
+				return _line_job(lt, r.id)
+		var rk := dest_route(expedition.dest)
+		var ej := Job.new("road", "Setting out for the %s" % maps[expedition.dest].name.substr(8).to_lower(), "the way out")
+		ej.step(_goto([NetherRoute.ROUTES[rk].exit], true))
+		ej.step({"op": "enter_route", "route": rk})
+		return ej
+	if m.kind == "route":
+		if scouting() and not home and not m.surveyed and r.get("hurt", 0) < 2:
+			return _route_scout_job(r)
+		if home or r.get("hurt", 0) >= 2 or m.surveyed and scouting():
+			var hj := Job.new("road", "Heading back to the landing", "the landing")
+			hj.step(_goto([m.entrance], false))
+			hj.step({"op": "leave_route"})
+			return hj
+		if building_line() and map_id == NetherRoute.ROUTES.quartz.id:  # bridges and track on the way east (issue #159)
+			var rt := nline_task("route", r.id)
+			if not rt.is_empty():
+				return _line_job(rt, r.id)
+		var oj := Job.new("road", "%s the route to the %s" % ["Riding" if nline_complete() and map_id == NetherRoute.ROUTES.quartz.id else "Walking", maps[expedition.dest].name.substr(8).to_lower()], "the far end")
+		oj.step(_goto([Vector2i(NetherRoute.W - 1, NetherRoute.LINE_ROW)], false))
+		oj.step({"op": "to_site"})
+		return oj
+	var sj := Job.new("road", "Heading back along the route", "the route")  # a site, on the way home
+	sj.step(_goto([m.entrance], false))
+	sj.step({"op": "leave_site"})
+	return sj
+
+
+## Back through the portal: to its far side, relighting it first if it's gone out (issue #148).
+func _portal_home_job() -> Job:
+	var h := Job.new("road", "Heading for the portal", "the portal")
+	h.step(_goto([m.entrance], false))
+	if not portal_lit():
+		if expedition.get("lighter", {}).is_empty():
+			h.step({"op": "wait_portal"})
+		else:
+			h.step({"op": "work", "what": "relight", "label": "Relighting the portal"})
+	h.step({"op": "depart", "to": "village"})
+	return h
+
+
 ## A scout on a route (issue #153): walk east, segment by segment, to its end, then come back. A creature that threatens
 ## them is dealt with first, and a seriously hurt scout turns back.
 func _route_scout_job(r: Dictionary) -> Job:
@@ -6430,6 +6665,398 @@ func _route_scout_job(r: Dictionary) -> Job:
 		j.step(_goto([Vector2i(NetherRoute.W - 1, NetherRoute.LINE_ROW)], true))
 		j.step({"op": "route_end"})
 	return j
+
+
+# ---------------------------------------------------------------- the Nether line (issue #159)
+
+## The line along the quartz route, which a Build party lays from what it carries: bridges over the lava channel and the gap,
+## track (as Slice 4's: `RAILS_PER_SEGMENT` a segment), a station at the landing and one at the quartz site, and a minecart.
+func nline() -> Dictionary:
+	var rm: SimMap = maps[NetherRoute.ROUTES.quartz.id]
+	if rm.line.is_empty():
+		rm.line = NetherRoute.default_line()
+	return rm.line
+
+
+## Whether a segment needs a bridge before track can go down: the lava channel and the gap.
+static func nline_obstacle(seg: int) -> bool:
+	return NetherRoute.ROUTES.quartz.segments[seg].obstacle in ["lava", "gap"]
+
+
+func nline_complete() -> bool:
+	var l := nline()
+	for i in Road.segment_count():
+		if l.laid[i] < Tuning.RAILS_PER_SEGMENT or (nline_obstacle(i) and not l.bridged.has(i)):
+			return false
+	return l.stations.landing and l.stations.site and l.cart
+
+
+## What's still to build, as the items it takes: {rails, planks, cobble, minecarts}.
+func nline_remaining() -> Dictionary:
+	var l := nline()
+	var out := {"rails": 0, "planks": 0, "cobble": 0, "minecarts": 0}
+	for i in Road.segment_count():
+		out.rails += maxi(0, Tuning.RAILS_PER_SEGMENT - l.laid[i])
+		if nline_obstacle(i) and not l.bridged.has(i):
+			out.planks += Tuning.NETHER_BRIDGE_PLANKS
+	var st: Dictionary = Defs.TEMPLATES.station.stages[0].cost
+	for end in ["landing", "site"]:
+		if not l.stations[end]:
+			out.planks += st.plank
+			out.cobble += st.cobble
+	if not l.cart:
+		out.minecarts = 1
+	return out
+
+
+## The next task the party's supplies allow where it is: "route" (bridges, then track west to east), "landing" (its station) or
+## "site" (its station, then the cart once both stand). {} when there's none.
+func nline_task(where: String, who := 0) -> Dictionary:
+	var l := nline()
+	var sup: Dictionary = expedition.get("supplies", {})
+	var claims: Dictionary = expedition.get("line_claims", {})
+	var taken := func(key: String) -> bool:  # someone else is already on it (issue #159)
+		var c: int = claims.get(key, 0)
+		if c == 0 or c == who or who == -1:  # -1 asks whether any task is left, claimed or not
+			return false
+		var o := resident(c)
+		return not o.is_empty() and o.job != null and o.job.kind == "build"
+	var st: Dictionary = Defs.TEMPLATES.station.stages[0].cost
+	match where:
+		"route":
+			for i in Road.segment_count():
+				if nline_obstacle(i) and not l.bridged.has(i) and sup.get("plank", 0) >= Tuning.NETHER_BRIDGE_PLANKS and not taken.call("bridge%d" % i):
+					return {"kind": "bridge", "seg": i, "key": "bridge%d" % i}
+			for i in Road.segment_count():
+				if l.laid[i] < Tuning.RAILS_PER_SEGMENT:
+					if nline_obstacle(i) and not l.bridged.has(i):
+						return {}  # the way is blocked until it's bridged
+					return {"kind": "rail", "seg": i} if sup.get("rail", 0) > 0 else {}
+		"landing":
+			if not l.stations.landing and sup.get("plank", 0) >= st.plank and sup.get("cobble", 0) >= st.cobble and not taken.call("station_landing"):
+				return {"kind": "station", "end": "landing", "key": "station_landing"}
+		"site":
+			if not l.stations.site and sup.get("plank", 0) >= st.plank and sup.get("cobble", 0) >= st.cobble and not taken.call("station_site"):
+				return {"kind": "station", "end": "site", "key": "station_site"}
+			if l.stations.site and l.stations.landing and not l.cart and sup.get("minecart", 0) > 0 and not taken.call("cart"):
+				return {"kind": "cart", "key": "cart"}
+	return {}
+
+
+## Fills a line plan's supplies with what's left to build, most urgent first, up to what a full party of three can carry past
+## its meals.
+func _line_supplies(plan: Dictionary) -> void:
+	var need := nline_remaining()
+	var room: int = Tuning.PARTY_MAX * Tuning.PACK_CAPACITY - plan.meals
+	var st: Dictionary = Defs.TEMPLATES.station.stages[0].cost
+	var unbridged := 0
+	for i in Road.segment_count():
+		if nline_obstacle(i) and not nline().bridged.has(i):
+			unbridged += 1
+	var stations := 0
+	for end in ["landing", "site"]:
+		if not nline().stations[end]:
+			stations += 1
+	var planks: int = unbridged * Tuning.NETHER_BRIDGE_PLANKS
+	var take := {}
+	for k in [["planks", planks], ["rails", need.rails], ["planks_st", stations * st.plank], ["cobble", need.cobble], ["minecarts", need.minecarts]]:
+		var n: int = mini(k[1], maxi(0, room))
+		take[k[0]] = n
+		room -= n
+	plan.planks = take.planks + take.planks_st
+	plan.rails = take.rails
+	plan.cobble = take.cobble
+	plan.minecarts = take.minecarts
+
+
+## What the line costs and saves, for the planner: the items still to build, and the seconds each way once it's done.
+func nline_text() -> String:
+	var need := nline_remaining()
+	var parts: PackedStringArray = []
+	for k in [["rails", "rail"], ["planks", "plank"], ["cobble", "cobble"], ["minecarts", "minecart"]]:
+		if need[k[0]] > 0:
+			parts.append(Defs.words(k[1], need[k[0]]))
+	var t := nline_times()
+	return "Still to build: %s. Once it's done a trip saves about %d s each way (%d s walking, %d s riding)." % [", ".join(parts) if not parts.is_empty() else "nothing", roundi(t.saved), roundi(t.walk), roundi(t.ride)]
+
+
+## Whether the party is out to work on the Nether line.
+func building_line() -> bool:
+	return expedition.get("target", {}).get("item", "") == "line"
+
+
+## A job for a line task: walk to where it's done, and work (issue #159).
+func _line_job(task: Dictionary, who := 0) -> Job:
+	if task.has("key") and who != 0:
+		if not expedition.has("line_claims"):
+			expedition.line_claims = {}
+		expedition.line_claims[task.key] = who
+	var cells: Array
+	var label: String
+	match task.kind:
+		"bridge":
+			cells = [Vector2i(Road.SEGMENTS[task.seg].x + Road.seg_len(task.seg) / 2, NetherRoute.LINE_ROW)]
+			label = "Bridging the %s" % NetherRoute.ROUTES.quartz.segments[task.seg].terrain
+		"rail":
+			cells = [Vector2i(Road.SEGMENTS[task.seg].x + mini(Road.seg_len(task.seg) - 1, expedition.get("supplies", {}).get("rail", 0) % 4), NetherRoute.LINE_ROW)]
+			label = "Laying track"
+		"station":
+			cells = [NetherRoute.ROUTES.quartz.exit + Vector2i(-1, 1)] if task.end == "landing" else [NetherRoute.QUARTZ_STATION_PLOT.position + Vector2i(1, 0)]
+			label = "Building the %s station" % ("landing" if task.end == "landing" else "quartz site")
+		_:
+			cells = [NetherRoute.QUARTZ_STATION_PLOT.position + Vector2i(2, 0)]
+			label = "Parking the minecart"
+	var j := Job.new("build", label, "the line")
+	j.work = "build"
+	j.step(_goto(cells, true))
+	j.step({"op": "work", "what": "nline", "task": task, "label": label})
+	return j
+
+
+## Applies a finished task: the party's supplies are used up and the line grows.
+func _finish_line_task(task: Dictionary, r: Dictionary) -> void:
+	var l := nline()
+	var sup: Dictionary = expedition.supplies
+	var st: Dictionary = Defs.TEMPLATES.station.stages[0].cost
+	match task.kind:  # two of the party can reach for the same piece: the second finds it done, or the supplies gone
+		"bridge":
+			if l.bridged.has(task.seg) or sup.get("plank", 0) < Tuning.NETHER_BRIDGE_PLANKS:
+				return
+			sup.plank -= Tuning.NETHER_BRIDGE_PLANKS
+			l.bridged.append(task.seg)
+			_toast("The bridge over the %s is built." % NetherRoute.ROUTES.quartz.segments[task.seg].terrain, r.id)
+		"rail":
+			if sup.get("rail", 0) <= 0 or l.laid[task.seg] >= Tuning.RAILS_PER_SEGMENT:
+				return
+			sup.rail -= 1
+			l.laid[task.seg] += 1
+			if l.laid[task.seg] >= Tuning.RAILS_PER_SEGMENT:
+				_toast("Track is laid along %s." % NetherRoute.ROUTES.quartz.segments[task.seg].name.to_lower(), r.id)
+		"station":
+			if l.stations[task.end] or sup.get("plank", 0) < st.plank or sup.get("cobble", 0) < st.cobble:
+				return
+			sup.plank -= st.plank
+			sup.cobble -= st.cobble
+			l.stations[task.end] = true
+			_toast("The %s station is built." % ("landing" if task.end == "landing" else "quartz site"), r.id)
+		"cart":
+			if l.cart or sup.get("minecart", 0) <= 0:
+				return
+			sup.minecart -= 1
+			l.cart = true
+			_toast("The minecart is parked at the quartz site station.", r.id)
+	for k in sup.keys():
+		if sup[k] <= 0:
+			sup.erase(k)
+	if nline_complete():
+		_toast("The Nether line is complete. Parties ride it both ways.", r.id)
+	rev += 1
+
+
+## Whether someone is riding the finished line: moving along the quartz route, which creatures and the lava can't touch.
+func _riding(r: Dictionary) -> bool:
+	return maps[r.map].id == NetherRoute.ROUTES.quartz.id and nline_complete() and r.job != null and r.job.kind in ["road", "scout"]
+
+
+## Seconds each way along the quartz route, walking and riding the finished line (issue #159).
+static func nline_times() -> Dictionary:
+	var walk: float = NetherRoute.W / Tuning.WALK
+	return {"walk": walk, "ride": NetherRoute.W / Tuning.CART_SPEED, "saved": walk - NetherRoute.W / Tuning.CART_SPEED}
+
+
+# ---------------------------------------------------------------- stranding and rescue (issue #158)
+
+## The meals a Nether party has: in its packs, and in the shelter's cache once it stands.
+func _meals_left() -> int:
+	var n := 0
+	for k in expedition.get("provisions", {}):
+		n += expedition.provisions[k]
+	return n + cache_meals()
+
+
+## Whether the Nether party out now can't go on, and, if it can't, stranding it: its provisions gone with someone hungry, the
+## portal dark with no flint and steel to relight it, or everyone seriously hurt. Also the countdown of a rescue window.
+func _check_stranded() -> void:
+	var ex := expedition
+	if ex.get("state", "") != "out":
+		return
+	if ex.has("stranded"):
+		if ex.stranded.why.begins_with("the portal is dark") and portal_lit():  # the village lit it again: they can go home (issue #158)
+			ex.erase("stranded")
+			_toast("The portal is lit again. The party is no longer stranded.", ex.party[0])
+			return
+		if tick >= ex.stranded.until:
+			_abandon("the rescue window passed")
+		return
+	var party: Array = ex.party.map(func(id): return resident(id)).filter(func(r): return not r.is_empty())
+	if party.is_empty() or not party.all(func(r): return realm_of(r.map) == "nether" and not r.away):
+		ex.erase("dark_since")
+		return
+	var why := ""
+	if _meals_left() <= 0 and party.any(func(r): return r.hunger < Tuning.EAT_BELOW):
+		why = "the provisions are gone"
+	elif party.all(func(r): return r.get("hurt", 0) >= 2):
+		why = "everyone is seriously hurt"
+	elif ex.get("leg", "out") == "home" and not portal_lit() and ex.get("lighter", {}).is_empty() and party.all(func(r): return r.map == NetherLanding.ID):
+		ex.dark_since = ex.get("dark_since", tick)
+		if tick - ex.dark_since >= int(Tuning.STRAND_WAIT * Tuning.TPS):
+			why = "the portal is dark and no one has flint and steel"
+	else:
+		ex.erase("dark_since")
+	if why != "":
+		_strand(party, why)
+
+
+## The party can't go on: it shelters, and the game stops for the player with the costs shown (issue #158).
+func _strand(party: Array, why: String) -> void:
+	var ex := expedition
+	var at: String = party[0].map
+	ex.stranded = {"why": why, "at": at, "since": tick, "until": tick + int(Tuning.RESCUE_WINDOW * Tuning.TPS)}
+	for r in party:
+		fail_job(r)
+		r.direct = null
+		r.orders.clear()
+	_toast("%s is stranded: %s." % [party_name(slot), why], party[0].id)
+	var cargo_text := "nothing" if ex.get("cargo", {}).is_empty() else ", ".join(ex.cargo.keys().map(func(k): return Defs.words(k, ex.cargo[k])))
+	on_map(at, func(): _ask("stranded", "%s is stranded: %s. It shelters %s. Plan a rescue from the expedition board within %d seconds. If none reaches it, the party walks home on its own, hurt, and leaves its cargo (%s) and spare gear behind." % [
+		party_name(slot), why, "in the shelter" if at == NetherLanding.ID and shelter_site().get("done", false) else "where it stands", int(Tuning.RESCUE_WINDOW), cargo_text], [
+		{"id": "wait", "label": "Shelter and wait", "cost": "%d seconds for a rescue, on what supplies are left." % int(Tuning.RESCUE_WINDOW)},
+		{"id": "walk", "label": "Set out on their own", "cost": "Now, slowly and hurt, leaving the cargo (%s) and spare gear where they stand." % cargo_text},
+	], party[0].id))
+
+
+## The window is missed, or the player chose to walk: the party sets off on its own, slowly and hurt, leaving its cargo and
+## spare tools where it stood as abandoned cargo a later mission can recover. Nobody dies.
+func _abandon(why: String) -> void:
+	var ex := expedition
+	var party: Array = ex.party.map(func(id): return resident(id)).filter(func(r): return not r.is_empty())
+	var left: Array = []
+	var at: String = party[0].map if not party.is_empty() else NetherLanding.ID
+	var cell: Vector2i = rcell(party[0]) if not party.is_empty() else maps[at].entrance
+	on_map(at, func():
+		for k in ex.get("cargo", {}):
+			drop_items(cell, k, ex.cargo[k])
+			m.abandoned.append({"item": k, "n": ex.cargo[k], "cell": cell})
+			if not m.drops_known.has(k) and m.kind == "site":
+				m.drops_known.append(k)
+			left.append(Defs.words(k, ex.cargo[k]))
+		for t in ex.get("tools", []):
+			drop_items(cell, t.type, 1, t.dur)
+			left.append(Defs.words(t.type, 1)))
+	ex.cargo = {}
+	ex.tools = []
+	ex.erase("stranded")
+	ex.abandoned = left
+	ex.leg = "home"
+	ex.home_why = why
+	for r in party:
+		fail_job(r)
+		r.direct = null
+		r.orders.clear()
+		on_map(r.map, func(): injure(r, 1, "the long walk home"))
+	_toast("The party walked home on its own, hurt%s." % (", leaving %s behind" % ", ".join(left) if not left.is_empty() else ""), party[0].id if not party.is_empty() else 0)
+
+
+## The countdown, supplies and cost shown for a stranded party, for the panel.
+func stranded_text(ex: Dictionary) -> String:
+	if not ex.has("stranded"):
+		return ""
+	var left := maxi(0, int((ex.stranded.until - tick) / Tuning.TPS))
+	var meals := 0
+	for k in ex.get("provisions", {}):
+		meals += ex.provisions[k]
+	return "Stranded: %s. Rescue window %d:%02d. Supplies: %s, %s." % [ex.stranded.why, left / 60, left % 60, "%d %s" % [meals, "meal" if meals == 1 else "meals"], "flint and steel" if ex.get("lighter", {}).size() > 0 else "no flint and steel"]
+
+
+## A stranded party member shelters in the shelter if the party is on the landing and it stands, else stays put.
+func _stranded_job(r: Dictionary) -> Job:
+	var sh := shelter_site()
+	var j := Job.new("rest", "Sheltering, waiting for a rescue", "the shelter" if map_id == NetherLanding.ID and sh.get("done", false) else "where they stand")
+	if map_id == NetherLanding.ID and sh.get("done", false):
+		j.step(_goto(site_cells(sh), true))
+	if r.get("hurt", 0) > 0:
+		j.step({"op": "rest", "bed": false})
+	j.step({"op": "wait_stranded"})
+	return j
+
+
+## A rescue party at the place it was sent: walk to the stranded, then reach them.
+func _rescue_job(r: Dictionary, c: Vector2i):
+	var lost: Dictionary = expeditions.nether
+	if not lost.has("stranded"):
+		return null
+	var who: Array = lost.party.map(func(id): return resident(id)).filter(func(o): return not o.is_empty() and o.map == map_id)
+	if who.is_empty():
+		return null
+	var near: Dictionary = nearest(who.map(func(o): return {"cell": rcell(o), "id": o.id}), c)
+	var j := Job.new("rescue", "Going to the stranded party", "the stranded party")
+	if manhattan(near.cell, c) > 2:
+		j.step(_goto([near.cell], false))
+	j.step({"op": "rescue_reach"})
+	return j
+
+
+## Whether the party is out to delve the fortress (issue #157).
+func delving() -> bool:
+	return expedition.get("target", {}).get("item", "") == "fortress"
+
+
+## What a party member does in the fortress (issue #157): walk the halls to the salvage chest at the far end, the guards
+## dealing with whatever comes. Once it's taken they pack what's lying about.
+func _delve_job(r: Dictionary, c: Vector2i):
+	if m.salvage_taken or not delving() or r.get("hurt", 0) > 0:
+		return _stow_job(r, c)
+	var j := Job.new("scout", "Delving the fortress", "the salvage chest")
+	j.step(_goto([m.salvage], true))
+	j.step({"op": "open_salvage"})
+	return j
+
+
+## The salvage goes into the packs, what doesn't fit left on the chest's cell; taken once (issue #157).
+func _take_salvage() -> void:
+	if m.salvage_taken:
+		return
+	m.salvage_taken = true
+	for k in Defs.FORTRESS_SALVAGE:
+		var n: int = Defs.FORTRESS_SALVAGE[k]
+		var fit := mini(n, maxi(0, pack_room()))
+		if fit > 0:
+			expedition.cargo[k] = expedition.cargo.get(k, 0) + fit
+		if n - fit > 0:
+			drop_items(m.salvage, k, n - fit)
+	rev += 1
+	_toast("The party took the salvage.", expedition.party[0])
+
+
+## What a party member does at the piglin camp (issue #156): with gold in the packs, walk up to a piglin and trade, down the
+## table as shown. Once the trades are made, or the camp has turned hostile, there's nothing more to do.
+func _camp_job(r: Dictionary, c: Vector2i):
+	if not trading() or expedition.get("trade_done", false) or m.hostile:
+		return null
+	var piglins := m.creatures.filter(func(x): return x.alive and x.species == "piglin")
+	if piglins.is_empty():
+		return null
+	var p: Dictionary = nearest(piglins, c)
+	var j := Job.new("trade", "Going to the piglins to trade", "a piglin")
+	j.step({"op": "chase", "target": p, "planned_for": null})
+	j.step({"op": "trade"})
+	return j
+
+
+## The first row of the table the packs can pay for, or -1.
+func _next_trade() -> int:
+	var gold: int = expedition.get("supplies", {}).get("gold_ingot", 0)
+	for i in Defs.TRADES.size():
+		var t: Dictionary = Defs.TRADES[i]
+		var paid := 0
+		for k in t.give:
+			paid += t.give[k]
+		var got := 0
+		for k in t.get:
+			got += t.get[k]
+		if gold >= t.give.get("gold_ingot", 0) and pack_room() + paid >= got:
+			return i
+	return -1
 
 
 ## What a party member does on the portal landing (issue #148): walk to the landmarks not yet seen, then wait.
@@ -6489,7 +7116,7 @@ func _dangerous(x: Dictionary) -> bool:
 ## One tick of the map's creatures: each notices the nearest resident in range (a neutral one only after it's been hit),
 ## closes in, and strikes when it's close enough and its blow is ready.
 func _step_creatures() -> void:
-	var folks := here()
+	var folks := here().filter(func(o): return not _riding(o))  # riders move too fast to be caught (issue #159)
 	for x in m.creatures:
 		if not x.alive:
 			continue
@@ -6535,6 +7162,12 @@ func _strike(r: Dictionary, cr: Dictionary) -> void:
 		dmg = Tuning.SWORD_DAMAGE
 		_wear(r, "sword")
 	cr.flash = tick + 6
+	if cr.species == "piglin" and not m.hostile:  # the rule shown up front is broken (issue #156)
+		m.hostile = true
+		for x in m.creatures:
+			if x.species == "piglin":
+				x.angry = true
+		_toast("The piglins turn hostile.", r.id)
 	if not _roll(Tuning.HIT_CHANCE + 0.08 * (level(r, "guard") - 1)):
 		return
 	cr.hp -= dmg
@@ -6826,6 +7459,18 @@ func policy_met() -> String:
 	var ex := expedition
 	if not pending.is_empty():
 		return ""
+	if ex.get("rescue", false):  # a rescue party comes home once it has reached them, which sends it (issue #158)
+		return ""
+	if building_line():  # home once the line work at the far end is done (issue #159)
+		return "the line work is done" if nline_task("site", -1).is_empty() else ""
+	if delving():  # home once the salvage is taken and the halls are clear, if they pressed on (issue #157)
+		if m.salvage_taken and ex.get("pressing", false) and not m.creatures.any(func(x): return x.alive and Defs.CREATURES[x.species].notice > 0):
+			return "the halls are cleared"
+		return "provisions low" if ex.policy.get("low", false) and spendable_meals() <= 0 else ""
+	if trading():  # the trades are made, or the piglins have turned (issue #156)
+		if ex.get("trade_done", false) or m.hostile:
+			return "the piglins turned hostile" if m.hostile else "the trades are made"
+		return "provisions low" if ex.policy.get("low", false) and spendable_meals() <= 0 else ""
 	if scouting():  # a scout comes home when the route is walked, which sends them (issue #153)
 		return "provisions low" if ex.policy.get("low", false) and spendable_meals() <= 0 else ""
 	if surveying():  # the landing: home once every landmark has been seen (issue #148)
@@ -6899,7 +7544,7 @@ func _head_home(why: String) -> void:
 		r.direct = null
 		r.orders.clear()
 	_toast("Heading home: %s." % why, expedition.party[0])
-	if slot == "nether" and portal_lit() and rng.randf() < Tuning.PORTAL_GUTTER_CHANCE:  # a hazard: the portal goes out (issue #148)
+	if in_nether() and portal_lit() and rng.randf() < Tuning.PORTAL_GUTTER_CHANCE:  # a hazard: the portal goes out (issue #148)
 		village_portal().lit = false
 		rev += 1
 		_toast("The portal has gone out behind the party.", expedition.party[0])
@@ -6999,6 +7644,18 @@ func choose(option: String) -> void:
 				_head_home("the door is marked for another trip")
 		["door", "keep"]:
 			pass  # the door stays marked; the next trip can be planned for the level below
+		["stranded", "wait"]:
+			pass  # they shelter; the window runs
+		["stranded", "walk"]:
+			_abandon("the party set out on its own")
+		["fortress", "take"]:
+			_take_salvage()
+			if expedition.get("leg", "out") == "out":
+				_head_home("the salvage is taken")
+		["fortress", "press"]:
+			_take_salvage()
+			expedition.fight = true  # the guards go after what's left (issue #157)
+			expedition.pressing = true
 	use_slot(prev_slot)
 	use_map(prev)
 	rev += 1
@@ -7178,6 +7835,8 @@ func _burn_step(r: Dictionary) -> void:
 
 ## Stepping onto a ledge in the dark can be a fall.
 func _ledge_step(r: Dictionary, c: Vector2i) -> void:
+	if _riding(r):
+		return
 	if m.fire.has(c):  # stepping onto a fire sets someone alight (issue #149)
 		r.burn = Tuning.FIRE_BURN_TIME
 		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning")
@@ -7415,6 +8074,8 @@ func ore_left(id: String, ore: String) -> int:
 ## the report has only what the village has been told: names, no estimates and no known hazards.
 ## The iron shows as "?" until it's found, and has no estimate until it's surveyed (issue #111).
 func site_report(id: String) -> Dictionary:
+	if NetherRoute.site_key(id) != "" and maps[id].pattern != "":  # a built site (issues #155-#157)
+		return _nether_site_report(id)
 	if NetherRoute.route_of(id) != "" or NetherRoute.site_key(id) != "":
 		return _nether_route_report(id)
 	if id == Meadow.ID:
@@ -7525,9 +8186,61 @@ func _nether_route_report(id: String) -> Dictionary:
 		hazards.append("%s about" % k)
 	var walk: float = Road.SEGMENTS.size() * 8.0 / Tuning.WALK
 	var name: String = def.name if is_route else def.site_name
-	return {"name": name, "told": def.told, "visited": rm.seen > 1 or rm.surveyed, "travel": walk if rm.surveyed else -1.0, "level": 0, "pattern": "",
+	var line_text := ""
+	if rk == "quartz" and rm.surveyed:  # the Nether line's progress (issue #159)
+		var ln := nline()
+		var laid := 0
+		for n in ln.laid:
+			laid += 1 if n >= Tuning.RAILS_PER_SEGMENT else 0
+		line_text = "Line: %d of %d segments laid, %d of 2 bridges, %d of 2 stations, %s" % [laid, Road.segment_count(), ln.bridged.size(), (1 if ln.stations.landing else 0) + (1 if ln.stations.site else 0), "cart parked" if ln.cart else "no cart"]
+	return {"name": name, "told": def.told, "line": line_text, "visited": rm.seen > 1 or rm.surveyed, "travel": walk if rm.surveyed else -1.0, "level": 0, "pattern": "",
 		"resources": [], "hazards": hazards, "access": ["A narrow way beside the lava: bridges and cuts come with the line"] if rm.surveyed else [], "finds": [], "levels": [], "door": "",
 		"segments": segs, "scouted": rm.surveyed, "seen": rm.seen}
+
+
+## A built Nether site's report (issues #155-#157): what's there and how much is left, its dangers, the time to get there from
+## the landing, and what the site has room for.
+func _nether_site_report(id: String) -> Dictionary:
+	var mp: SimMap = maps[id]
+	var rk := NetherRoute.site_key(id)
+	var def: Dictionary = NetherRoute.ROUTES[rk]
+	var res: Array = []
+	for ore in ["quartz", "glowstone"]:
+		if mp.boulders.any(func(b): return b.get("ore", "") == ore):
+			res.append({"item": Defs.ORES[ore].item, "name": Defs.ITEMS[Defs.ORES[ore].item].label, "reserve": ore_left(id, ore) * Tuning.ORE_YIELD[ore] if mp.visited else -1, "known": true})
+	if rk_of_site(id) == "fortress":  # what the halls give, known from the start (issue #157)
+		for k in ["blaze_rod", "bone"]:
+			res.append({"item": k, "name": Defs.ITEMS[k].label, "reserve": -1, "known": true})
+	for k in mp.drops_known:
+		if not res.any(func(x): return x.item == k):
+			res.append({"item": k, "name": Defs.ITEMS[k].label, "reserve": -1, "known": true})
+	var hazards: Array = []
+	if mp.visited and not mp.lava.is_empty():
+		hazards.append("Lava pools in the rock: someone beside one can be burned")
+	var walk: float = (Road.SEGMENTS.size() * 8.0 + NetherLanding.LAYOUT[0].length() / 2.0) / Tuning.WALK
+	var out := {"name": def.site_name, "told": def.told, "visited": mp.visited, "travel": walk, "level": 0, "pattern": "", "resources": res, "hazards": hazards,
+		"access": [rk_access(rk)] if mp.visited else [], "finds": [], "levels": [], "door": ""}
+	if rk == "fortress":  # issue #157
+		if mp.visited:
+			out.hazards.append("Blazes and skeletons in the halls")
+			out.hazards.append("A sealed way leads deeper: a later expedition")
+		out.salvage = "A salvage chest at the far end" if not mp.salvage_taken else "The salvage has been taken"
+	if rk == "piglin":  # the table and the rule are shown before a party commits (issue #156)
+		out.trades = Defs.TRADES.map(func(t): return Defs.trade_text(t))
+		out.rule = Defs.PIGLIN_RULE
+		out.hostile = mp.hostile
+		if mp.hostile:
+			out.hazards.append("The piglins are hostile")
+	return out
+
+
+static func rk_of_site(id: String) -> String:
+	return NetherRoute.site_key(id)
+
+
+## What a site has room for, by its route.
+static func rk_access(rk: String) -> String:
+	return {"quartz": "Room beside the far wall for the Nether line's station", "fortress": "Halls, narrow in places"}.get(rk, "Room for the party")
 
 
 ## The portal landing's report (issue #148): nothing to bring back yet, a survey to make, and what's known of its dangers.
@@ -7661,7 +8374,9 @@ static func from_state(d: Dictionary) -> Sim:
 	if d.has("expeditions"):
 		s.expeditions = d.expeditions.duplicate(true)
 	else:  # a state from before the slots (issue #145)
-		s.expeditions = {"overworld": d.get("expedition", {}).duplicate(true), "nether": {}}
+		s.expeditions = {"overworld": d.get("expedition", {}).duplicate(true), "nether": {}, "rescue": {}}
+	if not s.expeditions.has("rescue"):  # a state from before the rescue slot (issue #158)
+		s.expeditions.rescue = {}
 	s.pending = d.get("pending", []).duplicate(true)
 	s.cart = d.get("cart", {}).duplicate(true)
 	var new_meadow := not s.maps.has(Meadow.ID)

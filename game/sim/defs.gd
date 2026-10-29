@@ -37,6 +37,12 @@ const ITEMS := {
 	"obsidian": {"one": "obsidian", "many": "obsidian", "label": "Obsidian", "group": "ores"},
 	"flint": {"one": "flint", "many": "flint", "label": "Flint", "group": "ores"},
 	"flint_and_steel": {"one": "flint and steel", "many": "flint and steels", "uses": Tuning.FLINT_STEEL_USES, "group": "tools"},
+	# From the quartz site (issue #155): stockpiled for Slice 6; nothing the village needs to survive.
+	"quartz": {"one": "nether quartz", "many": "nether quartz", "label": "Quartz", "group": "ores"},
+	"glowstone": {"one": "glowstone", "many": "glowstone", "label": "Glowstone", "group": "ores"},
+	# What the piglins trade (issue #156).
+	"string": {"one": "string", "many": "string", "label": "String", "group": "ores"},
+	"fire_resistance": {"one": "fire-resistance supply", "many": "fire-resistance supplies", "label": "Fire resistance", "group": "ores"},
 	# What the Nether's creatures leave (issue #151), carried home as cargo.
 	"magma_cream": {"one": "magma cream", "many": "magma cream", "label": "Magma cream", "group": "ores"},
 	"bone": {"one": "bone", "many": "bones", "label": "Bones", "group": "ores"},
@@ -95,11 +101,38 @@ const CREATURES := {
 	"magma_cube": {"name": "Magma cube", "hp": 8, "hit": 0.4, "serious": 0.25, "cool": 1.6, "reach": 1, "notice": 5, "drops": {"magma_cream": 1}},
 	"zombified_piglin": {"name": "Zombified piglin", "hp": 10, "hit": 0.5, "serious": 0.3, "cool": 1.4, "reach": 1, "notice": 0, "drops": {"gold_ingot": 1}},
 	"skeleton": {"name": "Skeleton", "hp": 6, "hit": 0.3, "serious": 0.2, "cool": 2.0, "reach": 4, "notice": 6, "drops": {"bone": 1}},
+	"piglin": {"name": "Piglin", "hp": 12, "hit": 0.5, "serious": 0.3, "cool": 1.4, "reach": 1, "notice": 0, "drops": {}},
 	"blaze": {"name": "Blaze", "hp": 10, "hit": 0.3, "serious": 0.3, "cool": 2.2, "reach": 5, "notice": 7, "drops": {"blaze_rod": 1}},
 }
 
+## The piglins' fixed trade table (issue #156), in the order a trading party works down it: what they take, and what they give.
+## It's shown in the site report and the planner before a party commits, and never changes or rolls.
+const TRADES := [
+	{"give": {"gold_ingot": 2}, "get": {"obsidian": 1}},
+	{"give": {"gold_ingot": 2}, "get": {"string": 3}},
+	{"give": {"gold_ingot": 1}, "get": {"flint": 2}},
+	{"give": {"gold_ingot": 4}, "get": {"fire_resistance": 1}},
+]
+## What the fortress's salvage chest holds (issue #157), provisional.
+const FORTRESS_SALVAGE := {"diamond": 1, "iron_ingot": 4, "gold_ingot": 3, "blaze_rod": 1}
+## The rule that turns the piglins hostile, shown up front (brief §8).
+const PIGLIN_RULE := "Piglins turn hostile if anyone in the party strikes one"
+
+
+## "2 gold ingots for 1 obsidian".
+static func trade_text(t: Dictionary) -> String:
+	var give: PackedStringArray = []
+	for k in t.give:
+		give.append(words(k, t.give[k]))
+	var get: PackedStringArray = []
+	for k in t.get:
+		get.append(words(k, t.get[k]))
+	return "%s for %s" % [", ".join(give), ", ".join(get)]
+
+
 ## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.
 const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}, "diamond": {"item": "diamond", "name": "Diamond ore"},
+	"quartz": {"item": "quartz", "name": "Nether quartz ore"}, "glowstone": {"item": "glowstone", "name": "Glowstone"},
 	"gold": {"item": "gold_ore", "name": "Gold ore"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}
 
 ## `pattern` (bench) and `fuel` (fireplace) are display only, for the Craft panel's crafting grid and

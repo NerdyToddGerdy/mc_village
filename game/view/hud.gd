@@ -2047,6 +2047,9 @@ func _status(sim: Sim, r: Dictionary) -> String:
 		return "%s, about %d s" % [r.job.label, ceili(sim.road_eta(r))]
 	if r.map == Road.ID and not sim.on_road(r) and r.job != null:  # out working on the road (issue #122)
 		return "On the road: %s" % r.job.label.to_lower()
+	var ex := sim.expedition_of(r)
+	if Sim.realm_of(r.map) == "nether" and ex.get("target", {}).get("item", "") == "line" and r.job != null and r.job.kind == "build":  # issue #159
+		return "In the Nether: %s" % r.job.label.to_lower()
 	return r.job.label if r.job != null else "Idle"
 
 
@@ -2791,7 +2794,7 @@ func _refresh_loc_drop(sim: Sim) -> void:
 ## off is left), its name, how many are wanted (Max: as much as fits), and ▲ ▼ to reorder. The packs' bar below
 ## shows the wanted amounts against the room.
 func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
-	if plan.target.item in ["survey", "scout", "build", "trade", "fortress"]:  # these bring nothing back: the objective row says what they do (issues #148, #154)
+	if plan.target.item in ["survey", "scout", "build", "trade", "fortress", "rescue"]:  # these bring nothing back: the objective row says what they do (issues #148, #154)
 		return
 	var head := HBoxContainer.new()
 	var l := _label("Bring back, best first", true)
@@ -3008,6 +3011,11 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 		if tend:
 			c.add_child(_label("Build the pens, lead marked animals in, feed pairs, and hunt only what's over %d of each kind." % plan.target.n, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	c.add_child(_stepper_row("Meals to take", plan.meals, "meals"))
+	if plan.target.item == "line":  # what the line crew carries, past its meals (issue #159)
+		for k in [["Rails", "rails"], ["Planks", "planks"], ["Cobblestone", "cobble"], ["Minecarts", "minecarts"]]:
+			c.add_child(_stepper_row(k[0], plan.get(k[1], 0), k[1]))
+	if plan.target.item == "trade":  # the gold carried, which takes room in the packs (issue #156)
+		c.add_child(_stepper_row("Gold to trade", plan.get("gold", 0), "gold"))
 	if Sim.realm_of(plan.dest) == "nether":  # the landing's shelter and cache (issue #152)
 		if plan.get("shelter", false):
 			c.add_child(_label("Carrying the shelter: %s and %s. The party builds it before it comes home." % [Defs.words("cobble", plan.cobble), Defs.words("plank", plan.planks)], false, Palette.CHALK_DIM, Palette.CAPTION, true))
@@ -3208,6 +3216,12 @@ func _fill_out(c: Container, sim: Sim) -> void:
 	var names := Sim.names_text(party.map(func(r): return r.name))
 	var are := "is" if party.size() == 1 else "are"
 	var home: bool = ex.get("leg", "out") == "home"
+	if ex.has("stranded"):  # the rescue window, supplies and what's at stake (issue #158)
+		c.add_child(_label(sim.stranded_text(ex), false, Palette.YELLOW, Palette.BODY, true))
+		var rb := _button("Plan a rescue", func(): game.plan_objective("rescue"), "Primary")
+		rb.disabled = sim.objective_destinations("rescue").is_empty()
+		rb.tooltip_text = "Send a party with provisions and flint and steel. It can set out even with both parties out." if not rb.disabled else sim.objective_why_none("rescue")
+		c.add_child(rb)
 	if not road.is_empty():
 		var when := ceili(sim.road_eta(road[0]))
 		c.add_child(_label("%s %s on the road %s, there in %d s." % [names, are, "home" if home else "to the " + mp.name.to_lower(), when], false, Palette.CHALK, Palette.BODY, true))
