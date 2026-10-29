@@ -293,6 +293,11 @@ func _add_site_ground(b: Batch) -> void:
 		b.box(Vector3(c.x + 0.15, 0, c.y + 0.15), Vector3(c.x + 0.85, 0.4, c.y + 0.85), TORCH_FLAME.darkened(0.15))
 		b.box(Vector3(c.x + 0.3, 0.4, c.y + 0.3), Vector3(c.x + 0.7, 0.85, c.y + 0.7), Color("#F7C948"))
 		b.box(Vector3(c.x + 0.42, 0.85, c.y + 0.42), Vector3(c.x + 0.58, 1.1, c.y + 0.58), Color("#FBE58A"))
+	if mp.salvage != Vector2i(-1, -1) and not mp.salvage_taken:  # the fortress's salvage chest (issue #157)
+		var sv := mp.salvage
+		b.box(Vector3(sv.x + 0.15, 0, sv.y + 0.2), Vector3(sv.x + 0.85, 0.45, sv.y + 0.8), Palette.PLANK.darkened(0.2), BlockTextures.BOARD)
+		b.box(Vector3(sv.x + 0.12, 0.38, sv.y + 0.17), Vector3(sv.x + 0.88, 0.55, sv.y + 0.83), Palette.PLANK.darkened(0.35), BlockTextures.BOARD)
+		b.box(Vector3(sv.x + 0.45, 0.3, sv.y + 0.14), Vector3(sv.x + 0.55, 0.45, sv.y + 0.2), Palette.CHALK_DIM)
 	for t in mp.torches:
 		var x: float = t.x + 0.5
 		var z: float = t.y + 0.5

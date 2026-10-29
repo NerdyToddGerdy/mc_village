@@ -136,6 +136,16 @@ static func _build_laid(s: Sim, key: String, rows: Array) -> SimMap:
 					m.boulders.append(OldMine._block(s, c, "quartz"))
 				"g":
 					m.boulders.append(OldMine._block(s, c, "glowstone"))
+				"B", "S":
+					var sp := "blaze" if rows[y][x] == "B" else "skeleton"
+					m.creatures.append({"id": s._id(), "kind": "creature", "species": sp, "cell": c, "pos": Vector2(c), "alive": true,
+						"hp": Defs.CREATURES[sp].hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0})
+				"V":
+					m.salvage = c
+				"D":
+					m.rock[c] = true
+					m.door = c
+					m.door_state = "sealed"
 				"P":
 					m.creatures.append({"id": s._id(), "kind": "creature", "species": "piglin", "cell": c, "pos": Vector2(c), "alive": true,
 						"hp": Defs.CREATURES.piglin.hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0})
@@ -202,6 +212,28 @@ const PIGLIN_LAYOUT := [
 ]
 
 
+## The fortress entrance and its one short delve (issue #157): B a blaze, S a skeleton, V the salvage chest at the far end, and
+## D the sealed way deeper, which a later expedition will open.
+const FORTRESS_LAYOUT := [
+	"########################",
+	"#.........#............#",
+	"#..S......#.....B......#",
+	"#.........#............#",
+	"#.........#............#",
+	"#####.#########.########",
+	"#......................#",
+	"#......................#",
+	"E.......##..##.........#",
+	"#......................#",
+	"#......................#",
+	"##########.######.######",
+	"#.........#............#",
+	"#..B......#..........VD#",
+	"#..S......#............#",
+	"########################",
+]
+
+
 ## Room kept clear for the Nether line's far station (issue #159): its platform and the plot a loading station grows into.
 const QUARTZ_STATION_PLOT := Rect2i(14, 12, 5, 1)
 const QUARTZ_TOLD := "Where nether quartz is said to lie, with glowstone in the rock."
@@ -214,6 +246,8 @@ static func build_site(s: Sim, key: String) -> SimMap:
 		return _build_laid(s, key, QUARTZ_LAYOUT)
 	if key == "piglin":
 		return _build_laid(s, key, PIGLIN_LAYOUT)
+	if key == "fortress":
+		return _build_laid(s, key, FORTRESS_LAYOUT)
 	var def: Dictionary = ROUTES[key]
 	var m := SimMap.new(16, 16)
 	m.id = def.site

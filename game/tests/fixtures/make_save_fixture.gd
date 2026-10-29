@@ -318,6 +318,10 @@ func _initialize() -> void:
 		for x in camp.creatures:
 			x.angry = true
 		camp.creatures[0].hp = 7
+	if SaveFormat.VERSION >= 47:  # the fortress with one blaze brought down, its salvage still in the chest (#157)
+		var fort := sim.get_map("nether_fortress")
+		fort.creatures.filter(func(x): return x.species == "blaze")[0].alive = false
+		fort.drops_known = ["blaze_rod"]
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

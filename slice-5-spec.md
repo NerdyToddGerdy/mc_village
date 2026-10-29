@@ -204,7 +204,16 @@ The scouted piglin route leads to a hand-laid **piglin camp** (`NetherRoute.PIGL
 - **The report** says what was traded: "Traded: 2 gold ingots for 1 obsidian ×3".
 - **Saving:** v46. A camp keeps `hostile`, and its piglins their health. An older save's empty room becomes the camp when it loads.
 
-## 15. Tuning table (provisional)
+## 15. The fortress entrance and the first delve (#157)
+
+The scouted fortress route leads to a hand-laid **fortress** (`NetherRoute.FORTRESS_LAYOUT`, 24×16): nether brick halls with two **blazes** and two **skeletons**, a **salvage chest** at the far end, and a **sealed way deeper** beside it. Going deeper waits for a later slice; the sealed way is marked as a future objective in the report and is not opened.
+
+- **The mission** (objective **Fortress**): a party walks the halls to the chest. The planner warns without a guard ("No guard in the party: a fortress has blazes and skeletons"). Blazes and skeletons are hostile and come for the party; guards fight them (#151), and a knock-down stops the game for the retreat as always. Blaze rods and bones drop where creatures fall and are packed like any find; the plan's list names both.
+- **The discovery pause** fires once, when the party reaches the chest: take the salvage and **return**, or take it and **press on** (the guards go after what's left, for more rods, and the party returns once the halls are clear). The text names the salvage (`Defs.FORTRESS_SALVAGE`, provisional: a diamond, 4 iron ingots, 3 gold ingots and a blaze rod) and the sealed way.
+- **The salvage is taken once** (`SimMap.salvage_taken`); what doesn't fit in the packs is left on the chest's cell. A later delve finds it empty, and the report says so. The creatures killed stay dead.
+- **Saving:** v47. The fortress keeps its creatures, `salvage_taken` and what they've dropped. An older save's empty room becomes the fortress when it loads.
+
+## 16. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -245,3 +254,5 @@ Each build issue adds its rows.
 | Quartz site | 20×14 | Cells, 8 quartz and 5 glowstone. |
 | Trade table | see §14 | `Defs.TRADES`: gold ingots for obsidian, string, flint and fire resistance. |
 | Piglin camp | 20×14 | Cells, with three piglins (12 health each). |
+| `FORTRESS_SALVAGE` | 1 diamond, 4 iron, 3 gold, 1 blaze rod | The chest's contents. |
+| Fortress | 24×16 | Cells, with two blazes and two skeletons. |

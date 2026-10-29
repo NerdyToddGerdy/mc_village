@@ -113,6 +113,8 @@ const TRADES := [
 	{"give": {"gold_ingot": 1}, "get": {"flint": 2}},
 	{"give": {"gold_ingot": 4}, "get": {"fire_resistance": 1}},
 ]
+## What the fortress's salvage chest holds (issue #157), provisional.
+const FORTRESS_SALVAGE := {"diamond": 1, "iron_ingot": 4, "gold_ingot": 3, "blaze_rod": 1}
 ## The rule that turns the piglins hostile, shown up front (brief §8).
 const PIGLIN_RULE := "Piglins turn hostile if anyone in the party strikes one"
 

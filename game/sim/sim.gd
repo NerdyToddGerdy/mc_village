@@ -255,7 +255,7 @@ func _add_site_maps() -> void:
 		if not maps.has(NetherRoute.ROUTES[key].id):
 			maps[NetherRoute.ROUTES[key].id] = NetherRoute.build(self, key)
 			maps[NetherRoute.ROUTES[key].site] = NetherRoute.build_site(self, key)
-		elif key in ["quartz", "piglin"] and maps[NetherRoute.ROUTES[key].site].pattern == "":  # an older save's empty room becomes the site (issues #155, #156)
+		elif key in ["quartz", "piglin", "fortress"] and maps[NetherRoute.ROUTES[key].site].pattern == "":  # an older save's empty room becomes the site (issues #155, #156)
 			var was_known: bool = maps[NetherRoute.ROUTES[key].site].known
 			maps[NetherRoute.ROUTES[key].site] = NetherRoute.build_site(self, key)
 			maps[NetherRoute.ROUTES[key].site].known = was_known
@@ -1151,6 +1151,8 @@ func plan_warnings(plan: Dictionary) -> Array:
 		var r := resident(id)
 		if not r.is_empty() and needs_sword(r) and tool_items("sword", 0).is_empty():
 			out.append("No sword for %s" % r.name)
+	if plan.get("objective", "") == "fortress" and not plan.party.any(func(id): return resident(id).get("role", "") in ["guard", "all"]):
+		out.append("No guard in the party: a fortress has blazes and skeletons")  # issue #157
 	return out
 
 
@@ -2597,6 +2599,16 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 					rev += 1
 					return true
 			return "gone"
+		"open_salvage":  # the chest at the far end, and the sealed way beside it: the game stops once for the choice (issue #157)
+			if m.salvage_taken or not pending.filter(func(p): return p.kind == "fortress").is_empty():
+				return true
+			if not m.surveyed:
+				m.surveyed = true
+				_ask("fortress", "The party reached a salvage chest at the far end of the fortress. Beside it a sealed way leads deeper, which a later expedition could open.", [
+					{"id": "take", "label": "Take it and return", "cost": "The party takes the salvage (%s) and heads home." % ", ".join(Defs.FORTRESS_SALVAGE.keys().map(func(k): return Defs.words(k, Defs.FORTRESS_SALVAGE[k]))) },
+					{"id": "press", "label": "Take it and press on", "cost": "The party takes the salvage and stays to clear the halls of blazes and skeletons, for more blaze rods. The way deeper stays sealed."},
+				], r.id)
+			return true
 		"trade":  # every trade the gold pays for, down the table; goods go into the packs (issue #156)
 			if m.hostile:
 				return "gone"
@@ -4805,7 +4817,8 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 			break
 	if realm_of(dest) == "nether":  # the first crossing: survey the landing (issue #148)
 		var build_it: bool = shelter_site().is_empty() or not shelter_site().done  # the first crossing builds the shelter (issue #152)
-		return {"dest": dest, "party": party, "target": {"item": "survey", "n": 1}, "meals": 3, "picks": 0, "sticks": 0, "wheat": 0, "list": [],
+		return {"dest": dest, "party": party, "target": {"item": "survey", "n": 1}, "meals": 3, "picks": 0, "sticks": 0, "wheat": 0,
+			"list": cargo_list_for(dest) if NetherRoute.site_key(dest) != "" else [],
 			"shelter": build_it, "cobble": Tuning.SHELTER_COST.cobble if build_it else 0, "planks": Tuning.SHELTER_COST.plank if build_it else 0, "stock": 0,
 			"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": false, "clear": false, "fight": false}
 	var meadow := dest == Meadow.ID  # issue #137: wool, and no pickaxes, for the meadow
@@ -6414,6 +6427,8 @@ func _site_job(r: Dictionary):
 		return _landing_job(r, c)
 	if m.id == NetherRoute.ROUTES.piglin.site:
 		return _camp_job(r, c)
+	if m.id == NetherRoute.ROUTES.fortress.site:
+		return _delve_job(r, c)
 	var can_mine: bool = r.get("hurt", 0) == 0
 	if can_mine and r.pick == null and not expedition.get("tools", []).is_empty():
 		var t := Job.new("equip", "Taking a spare pickaxe from the packs", "the packs")
@@ -6545,6 +6560,38 @@ func _route_scout_job(r: Dictionary) -> Job:
 		j.step(_goto([Vector2i(NetherRoute.W - 1, NetherRoute.LINE_ROW)], true))
 		j.step({"op": "route_end"})
 	return j
+
+
+## Whether the party is out to delve the fortress (issue #157).
+func delving() -> bool:
+	return expedition.get("target", {}).get("item", "") == "fortress"
+
+
+## What a party member does in the fortress (issue #157): walk the halls to the salvage chest at the far end, the guards
+## dealing with whatever comes. Once it's taken they pack what's lying about.
+func _delve_job(r: Dictionary, c: Vector2i):
+	if m.salvage_taken or not delving() or r.get("hurt", 0) > 0:
+		return _stow_job(r, c)
+	var j := Job.new("scout", "Delving the fortress", "the salvage chest")
+	j.step(_goto([m.salvage], true))
+	j.step({"op": "open_salvage"})
+	return j
+
+
+## The salvage goes into the packs, what doesn't fit left on the chest's cell; taken once (issue #157).
+func _take_salvage() -> void:
+	if m.salvage_taken:
+		return
+	m.salvage_taken = true
+	for k in Defs.FORTRESS_SALVAGE:
+		var n: int = Defs.FORTRESS_SALVAGE[k]
+		var fit := mini(n, maxi(0, pack_room()))
+		if fit > 0:
+			expedition.cargo[k] = expedition.cargo.get(k, 0) + fit
+		if n - fit > 0:
+			drop_items(m.salvage, k, n - fit)
+	rev += 1
+	_toast("The party took the salvage.", expedition.party[0])
 
 
 ## What a party member does at the piglin camp (issue #156): with gold in the packs, walk up to a piglin and trade, down the
@@ -6978,6 +7025,10 @@ func policy_met() -> String:
 	var ex := expedition
 	if not pending.is_empty():
 		return ""
+	if delving():  # home once the salvage is taken and the halls are clear, if they pressed on (issue #157)
+		if m.salvage_taken and ex.get("pressing", false) and not m.creatures.any(func(x): return x.alive and Defs.CREATURES[x.species].notice > 0):
+			return "the halls are cleared"
+		return "provisions low" if ex.policy.get("low", false) and spendable_meals() <= 0 else ""
 	if trading():  # the trades are made, or the piglins have turned (issue #156)
 		if ex.get("trade_done", false) or m.hostile:
 			return "the piglins turned hostile" if m.hostile else "the trades are made"
@@ -7155,6 +7206,14 @@ func choose(option: String) -> void:
 				_head_home("the door is marked for another trip")
 		["door", "keep"]:
 			pass  # the door stays marked; the next trip can be planned for the level below
+		["fortress", "take"]:
+			_take_salvage()
+			if expedition.get("leg", "out") == "out":
+				_head_home("the salvage is taken")
+		["fortress", "press"]:
+			_take_salvage()
+			expedition.fight = true  # the guards go after what's left (issue #157)
+			expedition.pressing = true
 	use_slot(prev_slot)
 	use_map(prev)
 	rev += 1
@@ -7698,14 +7757,23 @@ func _nether_site_report(id: String) -> Dictionary:
 	for ore in ["quartz", "glowstone"]:
 		if mp.boulders.any(func(b): return b.get("ore", "") == ore):
 			res.append({"item": Defs.ORES[ore].item, "name": Defs.ITEMS[Defs.ORES[ore].item].label, "reserve": ore_left(id, ore) * Tuning.ORE_YIELD[ore] if mp.visited else -1, "known": true})
+	if rk_of_site(id) == "fortress":  # what the halls give, known from the start (issue #157)
+		for k in ["blaze_rod", "bone"]:
+			res.append({"item": k, "name": Defs.ITEMS[k].label, "reserve": -1, "known": true})
 	for k in mp.drops_known:
-		res.append({"item": k, "name": Defs.ITEMS[k].label, "reserve": -1, "known": true})
+		if not res.any(func(x): return x.item == k):
+			res.append({"item": k, "name": Defs.ITEMS[k].label, "reserve": -1, "known": true})
 	var hazards: Array = []
 	if mp.visited and not mp.lava.is_empty():
 		hazards.append("Lava pools in the rock: someone beside one can be burned")
 	var walk: float = (Road.SEGMENTS.size() * 8.0 + NetherLanding.LAYOUT[0].length() / 2.0) / Tuning.WALK
 	var out := {"name": def.site_name, "told": def.told, "visited": mp.visited, "travel": walk, "level": 0, "pattern": "", "resources": res, "hazards": hazards,
 		"access": [rk_access(rk)] if mp.visited else [], "finds": [], "levels": [], "door": ""}
+	if rk == "fortress":  # issue #157
+		if mp.visited:
+			out.hazards.append("Blazes and skeletons in the halls")
+			out.hazards.append("A sealed way leads deeper: a later expedition")
+		out.salvage = "A salvage chest at the far end" if not mp.salvage_taken else "The salvage has been taken"
 	if rk == "piglin":  # the table and the rule are shown before a party commits (issue #156)
 		out.trades = Defs.TRADES.map(func(t): return Defs.trade_text(t))
 		out.rule = Defs.PIGLIN_RULE
@@ -7715,9 +7783,13 @@ func _nether_site_report(id: String) -> Dictionary:
 	return out
 
 
+static func rk_of_site(id: String) -> String:
+	return NetherRoute.site_key(id)
+
+
 ## What a site has room for, by its route.
 static func rk_access(rk: String) -> String:
-	return {"quartz": "Room beside the far wall for the Nether line's station"}.get(rk, "Room for the party")
+	return {"quartz": "Room beside the far wall for the Nether line's station", "fortress": "Halls, narrow in places"}.get(rk, "Room for the party")
 
 
 ## The portal landing's report (issue #148): nothing to bring back yet, a survey to make, and what's known of its dangers.

@@ -74,6 +74,7 @@ func _init() -> void:
 		"test_mission_types",
 		"test_the_quartz_site",
 		"test_piglin_trading",
+		"test_the_fortress_delve",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
 		"test_expedition_slots",
@@ -5336,3 +5337,89 @@ func test_piglin_trading() -> void:
 	check(not s3.expeditions.nether.get("trade_done", false) and s3.expeditions.nether.supplies.get("gold_ingot", 0) == 4, "and no trade is made with a hostile camp")
 	var back := Sim.from_state(s3.save_state())
 	check(back.get_map("nether_piglin").hostile and back.get_map("nether_piglin").creatures.size() == 3, "the camp's state is saved")
+
+
+## The fortress entrance and its one short delve (issue #157).
+func test_the_fortress_delve() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var tomas: Dictionary = w.tomas
+	var portal: Dictionary = w.portal
+	var fort: SimMap = sim.get_map("nether_fortress")
+	check(fort.pattern == "hand_laid" and fort.w == 24 and fort.h == 16 and fort.salvage == Vector2i(21, 13) and fort.door_state == "sealed" and fort.door == Vector2i(22, 13), "a hand-laid fortress with a salvage chest at the far end and a sealed way beside it")
+	var kinds := {}
+	for x in fort.creatures:
+		kinds[x.species] = kinds.get(x.species, 0) + 1
+	check(kinds == {"blaze": 2, "skeleton": 2} and fort.creatures.all(func(x): return Defs.CREATURES[x.species].notice > 0), "two blazes and two skeletons, all hostile")
+	# A blaze drops a rod.
+	var blaze: Dictionary = fort.creatures.filter(func(x): return x.species == "blaze")[0]
+	tomas.sword = {"type": "iron_sword", "tier": 3, "dur": 99}
+	sim.set_role(tomas, "guard")
+	sim.move_to_map(tomas, "nether_fortress", blaze.cell + Vector2i(1, 0))
+	for i in 80:
+		sim.on_map("nether_fortress", func(): sim._strike(tomas, blaze))
+		if not blaze.alive:
+			break
+	check(not blaze.alive and sim.on_map("nether_fortress", func(): return sim.items.values().any(func(it): return it.type == "blaze_rod")) and fort.drops_known == ["blaze_rod"], "a blaze drops a blaze rod")
+	sim.move_to_map(tomas, "village", Sim.rcell(ada) + Vector2i(1, 0))
+	# The planner warns without a guard, and lists the rods as cargo.
+	portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	sim.get_map(NetherRoute.ROUTES.fortress.id).surveyed = true
+	fort.known = true
+	var plan := sim.nether_plan("fortress")
+	check(plan.dest == "nether_fortress" and plan.list.map(func(r): return r.item) == ["blaze_rod", "bone"], "a fortress plan lists blaze rods and bones")
+	var p2 := sim.nether_plan("fortress")
+	p2.party = [tomas.id]
+	tomas.role = "lumber"
+	check(sim.plan_warnings(p2) == ["No guard in the party: a fortress has blazes and skeletons"], "without a guard the planner warns (%s)" % [sim.plan_warnings(p2)])
+	tomas.role = "guard"
+	check(sim.plan_warnings(p2).is_empty(), "with one it doesn't")
+	# The delve: a party with guards walks the halls to the salvage; the game stops once.
+	ada.sword = {"type": "iron_sword", "tier": 3, "dur": 99}
+	ada.armor = {"chest": {"type": "iron_chestplate", "dur": 99}}
+	tomas.armor = {"chest": {"type": "iron_chestplate", "dur": 99}}
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 5
+	check(sim.plan_expedition(plan) == "", "planned")
+	portal.store = {"bread": 5}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("nether") == "", "and sent")
+	var asked := 0
+	var chose := false
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		ada.hurt = 0
+		if not sim.pending.is_empty():
+			if sim.pending[0].kind == "fortress":
+				asked += 1
+				check(sim.pending[0].text.contains("sealed way") and sim.pending[0].options.size() == 2, "the pause names the salvage and the sealed way, with two choices")
+				sim.choose("take")
+				chose = true
+			else:
+				sim.choose("press_on")
+		if sim.expeditions.nether.is_empty():
+			break
+	check(asked == 1 and chose, "the discovery pause fires once (%d)" % asked)
+	check(fort.salvage_taken and sim.expeditions.nether.is_empty() and ada.map == "village", "the salvage is taken and the party comes home")
+	var home := {}
+	for st in sim.stacks_where(func(x): return true):
+		home[st.type] = home.get(st.type, 0) + st.n
+	check(home.get("diamond", 0) == 1 and home.get("iron_ingot", 0) == 4 and home.get("gold_ingot", 0) == 3 and home.get("blaze_rod", 0) >= 1, "the salvage came home: a diamond, 4 iron, 3 gold and a blaze rod (%s)" % [home])
+	var f47 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v47.save").data.state)
+	check(not f47.get_map("nether_fortress").salvage_taken and f47.get_map("nether_fortress").creatures.filter(func(x): return x.alive).size() == 3, "the v47 fixture loads its fortress, a blaze down, the chest full")
+	check(Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v46.save").data.state).get_map("nether_fortress").creatures.size() == 4, "an older save's empty room becomes the fortress")
+	# Taken only once.
+	var before := home.duplicate()
+	sim.expeditions.nether = {"state": "out", "leg": "out", "dest": "nether_fortress", "party": [], "cargo": {}, "supplies": {}, "provisions": {}, "tools": [], "target": {"item": "fortress", "n": 1}}
+	sim.on_slot("nether", func(): sim.on_map("nether_fortress", sim._take_salvage))
+	check(sim.expeditions.nether.cargo.is_empty(), "a second delve finds the chest empty")
+	sim.expeditions.nether = {}
+	check(sim.site_report("nether_fortress").salvage == "The salvage has been taken", "and the report says so")
+	var back := Sim.from_state(sim.save_state())
+	check(back.get_map("nether_fortress").salvage_taken and back.get_map("nether_fortress").creatures.size() == fort.creatures.size(), "the fortress and what's been taken are saved")
