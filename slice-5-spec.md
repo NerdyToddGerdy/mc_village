@@ -107,7 +107,85 @@ Hazards go through the same system as Slice 3's (`_hazard`, `injure`): an injury
 - **Site reports** list a map's known hazards once someone has been there: for the landing, lava, fire and ledges; for a deep mine level with lava pools, the lava.
 - **Saving:** `fire` is a map field, saved with the map (the v40 format).
 
-## 8. Tuning table (provisional)
+## 8. The Guard, iron swords and iron armor (#150)
+
+- **Guard job:** a tenth job, `guard`, levelled like the others (experience from practice, five levels), with the Jobs board's on/off and priority. It needs **no workstation**. A guard hauls in the village; the work of the job is fighting on expeditions (#151). Ada does everything, so she fights too, though she's never seriously hurt. A higher level means quicker, more accurate blows (`HIT_TIME`, `HIT_CHANCE`). No traveler arrives skilled as a Guard (`Defs.SKILL_POOL`): they're made from the Jobs board.
+- **Iron sword:** a tool of kind `sword` (tier 3, `SWORD_USES`): 2 iron ingots and a stick at the bench. A guard with none takes one lying about and keeps it, like a tool. A blow with it does `SWORD_DAMAGE` against `BARE_DAMAGE`. It wears with every blow.
+- **Iron chestplate:** the only piece in Slice 5: 8 iron ingots at the bench, worn in the chest slot. It turns aside `IRON_GUARD` of injuries (a leather tunic: 15%) and wears out after `IRON_ARMOR_USES` blows taken. Armor already lowers hazard injuries; fights use the same rule (#151).
+- **Toolsmith:** with a toolsmith, a guard's sword gets a spare when iron and a stick are on hand, like a spare pickaxe.
+- **Planner:** a guard going with no sword to hand shows "No sword for Bram". It warns; it doesn't stop the plan. Guards carry their sword and armor with them; spare swords in the packs are not built yet.
+- **Saving:** v41. Every resident has a `sword` slot and Guard at no experience.
+
+## 9. Visible auto-combat (#151)
+
+Creatures live on a Nether map (`SimMap.creatures`, each with health) and never leave it: a creature is data of one map, and only residents cross the portal. There's no village combat. Fights are decided by the sim's seeded random numbers, so a game replays the same.
+
+| Creature | Health | Where | Behaviour | Drops |
+|---|---|---|---|---|
+| Magma cube | 8 | Routes | Hostile: notices someone within 5 cells, closes in, strikes next to them. | Magma cream |
+| Zombified piglin | 10 | Routes | Neutral: only fights back once it's been hit. | A gold ingot |
+| Skeleton | 6 | Fortress | Hostile, ranged (strikes from 4 cells). | A bone |
+| Blaze | 10 | Fortress | Hostile, ranged (strikes from 5 cells), notices from 7. | A blaze rod |
+
+The landing is a hub with none; the route and fortress maps (#153, #157) place them.
+
+- **A creature's blow** is a hazard roll (`_hazard`): armor wears and turns some aside, an injury is slower walking and work, and a **knock-down** is a serious injury, which stops the game for the retreat as any serious injury does. There's no death. Ada is never seriously hurt.
+- **Guards** (and Ada) go for a creature that's after the party, wherever it is; or one within `SELF_DEFENSE_RANGE` of anyone. A blow lands by chance (`HIT_CHANCE`, 8% more a level), takes `HIT_TIME` (quicker the higher the level), does `SWORD_DAMAGE` with a sword and `BARE_DAMAGE` without, and wears the sword. A creature brought down gives the guard a point of Guard practice.
+- **Everyone else** moves away from a dangerous creature within `AVOID_RANGE`, and goes back to work.
+- **Return policy:** a plan's `fight` is false by default: the party **avoids combat except in self-defense**, so guards don't go looking for a neutral piglin. With `fight` set, guards go after any creature within `ENGAGE_RANGE`.
+- **Drops** lie where the creature fell, and join the level's cargo list once seen (the landing's report lists them), so the party packs them like any find.
+- **Seen:** each creature has a model; it swells for a moment on a blow either way. The stuck list says "Nether party: fighting" while a guard fights or someone moves away.
+- **Saving:** v42. A map keeps its `creatures` and `drops_known`; an older trip avoids combat.
+
+## 10. The shelter and supply cache (#152)
+
+An **unstaffed** shelter on the landing: nobody lives there, and staffing stays open (#26).
+
+- **The blueprint** goes down at `NetherLanding.SHELTER_AT` the first time a party crosses. It isn't a village building. A first-crossing plan carries its materials, `SHELTER_COST` (4 cobblestone, 6 planks), as **supplies** packed at the portal with the meals (`Sim.SUPPLY_KINDS` now covers cobblestone and planks as well as the pens' wheat and sticks; they take room in the packs like any item).
+- **Building:** once the party holds all of it, one member builds the shelter in `SHELTER_BUILD_TIME` and the supplies are used up. The first crossing's objective is now **survey the landing and build the shelter**: the party comes home once both are done. A later plan carries no materials.
+- **The cache** is the shelter's store. A plan can set aside **meals for the cache** (`stock`, from the meals taken, past the walk home); the party leaves them there. A later party that has run down its own food takes a meal from the cache and eats it, staying on instead of heading home, and the cache counts toward what a party can still spend.
+- **Fallback:** an injured resident at the landing rests in the shelter, at the slow rate of a resident with no bed (`HEAL_NO_BED`): "Ada: Burned, resting at the shelter". Stranded parties shelter there (#158).
+- **The site report** shows "Shelter built. Cache: 2 meals" (or empty). Stuck reasons: "Shelter: needs 2 more planks", "Cache: empty".
+- **Saving:** v43. The landing's sites may hold the shelter, with its cache in the site's store; a trip carries `shelter`, `cobble`, `planks` and `stock`, none for an older trip.
+
+## 11. Scouting and the Nether routes (#153)
+
+Three **route strips** leave gaps in the landing's edge wall (`NetherRoute.ROUTES`): east to the **quartz site**, north to the **piglin camp**, south to the **fortress entrance**. Each is a 48×7 map of kind `route` that shares the road's geometry (six segments of eight columns, the line along row 3), so the road's fog hides what nobody has walked. Beyond each is a small stub map for its site, to be filled in by #155–#157.
+
+| Route | Terrain, west to east | Creatures |
+|---|---|---|
+| Quartz | The landing's edge, netherrack flats, a **lava channel**, scorched flats (fire), a **broken ledge**, below the quartz | A zombified piglin, a magma cube |
+| Piglin | The landing's edge, a **lava pool**, open flats, a **ruined bridge** (a drop), netherrack hills, the camp's approach | A magma cube, a zombified piglin |
+| Fortress | The landing's edge, open flats, **basalt cliffs** (a cut), ash flats, a **lava lake** (fire), the fortress wall | Two magma cubes |
+
+The obstacles that need a bridge (lava, gaps) or a cut are named in each segment's data, for the line (#159) to deal with. A scout passes by a narrow way beside the lava, with the burns and falls of #149 and the creatures of #151.
+
+- **Scouting:** a plan with `target = {item: "scout", route}` (`Sim.scout_plan`). The party crosses to the landing, walks to the route's gap, steps onto the strip and walks east segment by segment: each segment reached is **revealed** (`SimMap.seen`), with its terrain, obstacle and dangers. At the far end the route is **scouted** (`surveyed`) and the site beyond it is **known**; the party then heads home by the same way. A seriously hurt scout turns back. Guards deal with creatures on the way.
+- **Unknown routes** show as grey posts at the landing's edge, yellow when part-scouted, blue when scouted. Each route that's been entered appears in the map switcher, and so does its site once it's known.
+- **Reports** (`site_report`): for a route, every segment as far as it's been seen, its dangers (including the creatures about in scouted segments), and the travel time once scouted; the landing's report lists the three routes' states. A site's report waits for the issues that build it.
+- **Gating:** an unscouted site can't be a destination ("Nobody has scouted the way there yet"), and a scouted route can't be scouted again. A party can't be sent to a scouted site until it's built ("The way to the quartz site isn't built yet", #155–#157).
+- **Saving:** v44. The routes and sites are added to a save when it loads, unknown. A route keeps `seen` and `surveyed`.
+
+## 12. Mission types at the expedition board (#154)
+
+A Nether plan has an **objective**, picked in the planner (`Sim.OBJECTIVES`): **Survey** (the first crossing, until the landing is surveyed and the shelter built), **Scout**, **Gather**, **Trade**, **Build**, **Fortress** and **Rescue**. The destination list shows only the places an objective can use now (`Sim.objective_destinations`), and an objective with none is greyed out with its reason (`objective_why_none`).
+
+| Objective | Destinations | Defaults | Comes home when |
+|---|---|---|---|
+| Survey | The landing, until surveyed | The shelter's materials | the landing is surveyed and the shelter built |
+| Scout | Each unscouted route (the party picks one) | No cargo, avoids combat | the route is scouted |
+| Gather | The quartz site, once its route is scouted | A cargo list (its items come with #155) | the cargo target is reached |
+| Trade | The piglin camp, once scouted | The trade table, shown before they commit (#156) | the trades are made |
+| Build | The landing, while the shelter isn't built | The shelter's materials | the building is done |
+| Fortress | The fortress entrance, once scouted | Avoids combat | the delve is done, or the party is hurt |
+| Rescue | A stranded party (#158) | May set out with both slots taken | the stranded party is reached |
+
+- **Explained before commitment:** `Sim.plan_briefing` lists what's known of the dangers where the party is going, the creatures about, the risk of a dark portal with no flint and steel to carry, and a party that can't fight, and says when they come home. The planner shows it under the objective, in yellow for the risks.
+- **Overworld plans** keep their form: a gather at the old mine or the meadow, with no objective.
+- **A plan with no valid destination** isn't offered: its button is disabled, and `nether_plan` returns nothing. Sites a party can't reach yet refuse at Depart ("The way to the quartz site isn't built yet"), until #155–#157 build them.
+- **Saving:** a plan's `objective` is saved with a trip in progress; nothing else changes shape, so no new version.
+
+## 13. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -129,3 +207,17 @@ Each build issue adds its rows.
 | `FIRE_CHANCE` | 40% | A burn each second someone is alight. |
 | `FIRE_SERIOUS` | 20% | A fire burn is serious. |
 | `HEAT_STEP_COST` | 250 | Path cost of a step beside lava or on fire (open ground is 100). |
+| `SWORD_USES` | 40 | Blows an iron sword lands before it breaks. |
+| `IRON_ARMOR_USES` | 20 | Blows an iron chestplate takes before it wears out. |
+| `IRON_GUARD` | 35% | Share of injuries an iron chestplate turns aside. |
+| `BARE_DAMAGE` / `SWORD_DAMAGE` | 1 / 4 | A blow without and with a sword. |
+| `HIT_TIME` | 1.2 s | Between a guard's blows at Guard level 1. |
+| `HIT_CHANCE` | 60% | A blow lands at Guard level 1, 8% more a level. |
+| `CREATURE_SPEED` | 1.4 cells/s | How fast a creature closes in. |
+| `AVOID_RANGE` | 3 | How close a hostile creature gets before a non-guard moves away. |
+| `SELF_DEFENSE_RANGE` | 2 | How close a creature must be for a guard to fight it when the party avoids combat. |
+| `ENGAGE_RANGE` | 8 | How far a guard goes after a creature when the party doesn't avoid combat. |
+| Creature table | see §9 | Health, hit chance, serious chance, blow time, reach, notice range and drops, in `Defs.CREATURES`. |
+| `SHELTER_COST` | 4 cobblestone, 6 planks | What a party carries to build the shelter. |
+| `SHELTER_BUILD_TIME` | 10 s | Building it. |
+| Route strip | 48×7, six segments | Cells, in `game/sim/nether_route.gd`. |

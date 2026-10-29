@@ -1205,8 +1205,23 @@ func open_planner() -> void:
 		var known := sim.adventures()
 		if not known.any(func(a): return a.id == adventure):
 			adventure = known[0].id if not known.is_empty() else ""
-	if plan.is_empty() or busy or plan.dest != adventure:
+	if plan.is_empty() or busy or not plan_matches_adventure():
 		plan = sim.new_plan(adventure if adventure != "" else OldMine.ID)
+
+
+## Whether the plan is for the adventure chosen: the same place, or, for the Nether, any of its places (a gather at the quartz
+## site is planned from the landing's row, issue #154).
+func plan_matches_adventure() -> bool:
+	return plan.dest == adventure or (Sim.realm_of(plan.dest) == "nether" and Sim.realm_of(adventure) == "nether")
+
+
+## Picks a Nether objective (issue #154), keeping the party chosen. `pick` is one of its destinations, for a scout's route.
+func plan_objective(obj: String, pick := {}) -> void:
+	var p := sim.nether_plan(obj, pick)
+	if p.is_empty():
+		return
+	p.party = plan.party.duplicate()
+	plan = p
 
 
 ## The expedition slot the board is showing (issue #145): the one the chosen adventure belongs to, or, with none
@@ -1680,6 +1695,30 @@ func _screenshot_scene() -> void:
 		sim.rev += 1
 		switch_map(NetherLanding.ID)
 		_cam.size = 14.0
+	if "--nroute" in OS.get_cmdline_user_args():  # a Nether route, scouted as far as its third segment (issue #153)
+		var rm := sim.get_map(NetherRoute.ROUTES.quartz.id)
+		rm.known = true
+		rm.seen = 3
+		sim.get_map(NetherLanding.ID).known = true
+		sim.rev += 1
+		switch_map(rm.id)
+		_target = Vector3(20, 0, 3)
+		_cam.size = 12.0
+		_place_camera()
+	if "--creatures" in OS.get_cmdline_user_args():  # one of each creature on the landing, and a guard facing them (issue #151)
+		var landing := sim.get_map(NetherLanding.ID)
+		landing.known = true
+		landing.visited = true
+		var at := landing.entrance + Vector2i(5, 0)
+		var k := 0
+		for sp in Defs.CREATURES:
+			var cr := sim.spawn_creature(NetherLanding.ID, sp, at + Vector2i(k * 2, k % 2 * 2))
+			cr.engaged = false
+			k += 1
+		sim.move_to_map(sim.residents[0], NetherLanding.ID, landing.entrance + Vector2i(2, 0))
+		sim.rev += 1
+		switch_map(NetherLanding.ID)
+		_cam.size = 9.0
 	if "--select-bench" in OS.get_cmdline_user_args():
 		_select(bench)
 	if "--craft" in OS.get_cmdline_user_args():
@@ -1776,6 +1815,16 @@ func _screenshot_scene() -> void:
 		_select(b)
 		if "--plan" in OS.get_cmdline_user_args():  # past the adventures list, planning for the old mine (issue #136)
 			open_adventure(OldMine.ID)
+		elif "--plan-nether" in OS.get_cmdline_user_args():  # planning a Nether trip: the portal lit, the objective picker (issues #148, #154)
+			var np := sim.place_site("portal", Sim.rcell(sim.residents[0]) + Vector2i(-2, 7))
+			np.stage = 1
+			np.done = true
+			np.lit = true
+			sim.get_map(NetherLanding.ID).known = true
+			sim.get_map(NetherRoute.ROUTES.quartz.id).surveyed = true
+			sim.get_map(NetherRoute.ROUTES.quartz.site).known = true
+			open_adventure(NetherLanding.ID)
+			plan = sim.nether_plan("scout")
 		elif "--plan-meadow" in OS.get_cmdline_user_args():  # planning for the meadow (issue #137)
 			sim.get_map(Meadow.ID).visited = true
 			open_adventure(Meadow.ID)

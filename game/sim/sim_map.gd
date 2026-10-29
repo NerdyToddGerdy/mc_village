@@ -37,9 +37,11 @@ var visited := false         ## Someone has been there, so its site report has r
 var found := false           ## Its hidden find (the old mine's iron) has been found (issue #111).
 var discovered := false      ## And surveyed, so it's a known resource with an estimate.
 var diamond_found := false   ## Someone has mined next to a hidden diamond here, so diamonds are a known resource of this level (issue #186).
+var creatures: Array = []    ## The Nether's creatures on this map, with their health (issue #151).
 var fire := {}               ## Vector2i -> true: burning cells someone can walk onto and be set alight (issue #149).
 var _heat := {}
 var _heat_ready := false
+var drops_known: Array = []  ## Items creatures here have dropped, which join the cargo list (issue #151).
 var landmarks: Array = []    ## Cells a party surveys on the Nether landing (issue #148).
 var landmarks_seen: Array = []   ## Those it has been to.
 var surveyed := false        ## All of them seen.
@@ -73,7 +75,7 @@ func _init(p_w := Tuning.MAP_W, p_h := Tuning.MAP_H) -> void:
 	occ.resize(w * h)
 
 
-const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "diamond_found", "ledges", "water", "lava", "landmarks", "landmarks_seen", "surveyed", "fire", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear"]
+const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "diamond_found", "ledges", "water", "lava", "landmarks", "landmarks_seen", "surveyed", "fire", "creatures", "drops_known", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear"]
 
 
 ## The map as plain data. Reservations and job bookkeeping aren't saved (spec §2, Saving).
@@ -96,6 +98,7 @@ func save() -> Dictionary:
 		"sites": sites_out}
 	for k in SAVED:
 		d[k] = get(k)
+	d.creatures = creatures.duplicate(true)  # a copy, so a loaded game doesn't share them
 	return d
 
 
@@ -113,6 +116,7 @@ static func from_save(d: Dictionary) -> SimMap:
 	m.farm = d.get("farm", {}).duplicate(true)
 	m.sites = d.sites.duplicate(true)
 	m.pens = d.get("pens", []).duplicate(true)
+	m.creatures = d.get("creatures", []).duplicate(true)
 	for o in m.trees + m.boulders + m.sheep + m.farm.values():
 		o.claim = 0
 		o.unreach_until = 0

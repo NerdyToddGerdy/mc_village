@@ -281,6 +281,29 @@ func _initialize() -> void:
 				break
 		sim.stats.obsidian_home = true
 		sim.events.clear()
+	if SaveFormat.VERSION >= 41:  # Ada with an iron sword in hand, some Guard practice and an iron chestplate (#150)
+		var ada: Dictionary = sim.residents[0]
+		ada.sword = {"type": "iron_sword", "tier": 3, "dur": 30}
+		ada.jobs.guard.xp = 10
+		ada.armor = {"chest": {"type": "iron_chestplate", "dur": 12}}
+	if SaveFormat.VERSION >= 42:  # a hurt magma cube on the Nether landing, and the cream it has dropped before (#151)
+		var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Vector2i(9, 9))
+		cube.hp = 5
+		sim.get_map(NetherLanding.ID).drops_known = ["magma_cream"]
+	if SaveFormat.VERSION >= 43:  # the landing's shelter, built, with 2 meals in the cache (#152)
+		var shelter: Dictionary = sim.on_map(NetherLanding.ID, func(): return sim.place_site("shelter", NetherLanding.SHELTER_AT))
+		shelter.stage = 1
+		shelter.done = true
+		shelter.store = {"bread": 2}
+	if SaveFormat.VERSION >= 44:  # the quartz route scouted, the piglin route scouted as far as its third segment (#153)
+		var quartz := sim.get_map(NetherRoute.ROUTES.quartz.id)
+		quartz.known = true
+		quartz.seen = Road.segment_count()
+		quartz.surveyed = true
+		sim.get_map(NetherRoute.ROUTES.quartz.site).known = true
+		var piglin := sim.get_map(NetherRoute.ROUTES.piglin.id)
+		piglin.known = true
+		piglin.seen = 3
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

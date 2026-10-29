@@ -172,6 +172,7 @@ func _draw_map() -> void:
 	_build_occluders()
 	_update_people()
 	_update_sheep()
+	_update_creatures()
 	_build_cart()
 	_update_portal_glow()
 	_build_live()
@@ -191,7 +192,7 @@ func _build_static() -> void:
 	var ghost := Batch.new()
 	var dark := Batch.new()
 	var col := Batch.new()
-	_grade_blocks(sim.m.kind == "site" and sim.m.id != Meadow.ID and sim.m.id != NetherLanding.ID, sim.m.id == NetherLanding.ID)
+	_grade_blocks(sim.m.kind == "site" and sim.m.id != Meadow.ID and not sim.m.id.begins_with("nether"), sim.m.id.begins_with("nether"))
 	if sim.m.id == Meadow.ID:
 		_add_meadow_ground(solid)
 	elif sim.m.kind == "site":
@@ -317,6 +318,12 @@ func _add_landing_features(b: Batch, mp: SimMap) -> void:
 	b.box(Vector3(e.x, 0, e.y + 0.85), Vector3(e.x + 0.3, 1.8, e.y + 1.1), ob, BlockTextures.ROCK)
 	b.box(Vector3(e.x, 1.6, e.y - 0.1), Vector3(e.x + 0.3, 1.9, e.y + 1.1), ob, BlockTextures.ROCK)
 	b.box(Vector3(e.x + 0.05, 0, e.y + 0.15), Vector3(e.x + 0.15, 1.6, e.y + 0.85), PORTAL_GLOW)
+	for rk in NetherRoute.ROUTES:  # a post at each way out: grey while the route is unknown, yellow part-scouted, blue once scouted
+		var ex: Vector2i = NetherRoute.ROUTES[rk].exit
+		var rmap: SimMap = sim.maps[NetherRoute.ROUTES[rk].id]
+		var post: Color = Palette.BLUE if rmap.surveyed else (Palette.YELLOW if rmap.seen > 1 else Palette.CHALK_DIM)
+		b.box(Vector3(ex.x + 0.45, 0, ex.y + 0.45), Vector3(ex.x + 0.55, 1.4, ex.y + 0.55), Palette.LOG, BlockTextures.LOG)
+		b.box(Vector3(ex.x + 0.2, 1.1, ex.y + 0.4), Vector3(ex.x + 0.8, 1.45, ex.y + 0.6), post)
 	for c in mp.landmarks:
 		b.box(Vector3(c.x + 0.25, 0, c.y + 0.25), Vector3(c.x + 0.75, 1.5, c.y + 0.75), NETHER_ROCK.lightened(0.12), BlockTextures.ROCK)
 		b.box(Vector3(c.x + 0.2, 1.5, c.y + 0.2), Vector3(c.x + 0.8, 1.7, c.y + 0.8), NETHER_ROCK.lightened(0.2), BlockTextures.ROCK)
@@ -456,6 +463,9 @@ static var SLEEPER := Color("#6A4A2E")
 ## rocky cut's walls. Past the segments anyone has walked, it's fog (issue #119).
 func _add_route_ground(b: Batch) -> void:
 	var mp := sim.m
+	if mp.id.begins_with("nether"):  # a route out of the portal landing (issue #153)
+		_add_nether_route_ground(b)
+		return
 	for x in mp.w:
 		for y in mp.h:
 			var c := Vector2i(x, y)
@@ -475,6 +485,34 @@ func _add_route_ground(b: Batch) -> void:
 			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (TRODDEN if on_line else Palette.GRASS) * Color(v, v, v), BlockTextures.EARTH if on_line else BlockTextures.GROUND)
 	_add_end_sign(b, Road.VILLAGE_END + Vector2i(0, -1), -1.0, Palette.GRASS)
 	_add_end_sign(b, Road.MINE_END + Vector2i(0, -1), 1.0, Palette.STONE)
+
+
+## A Nether route strip: netherrack, rock and lava as laid out, fire, and the dark where nobody has scouted yet.
+func _add_nether_route_ground(b: Batch) -> void:
+	var mp := sim.m
+	for x in mp.w:
+		for y in mp.h:
+			var c := Vector2i(x, y)
+			var v := 0.96 + _hash(x, y) * 0.08
+			if _in_fog(c):
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 0.05, y + 1), NETHER_FOG * Color(v, v, v))
+				continue
+			if mp.lava.has(c):
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), NETHER_ROCK.darkened(0.4))
+				b.box(Vector3(x, -0.1, y), Vector3(x + 1, -0.02, y + 1), LAVA * Color(v, v, v))
+				continue
+			if mp.rock.has(c):
+				b.box(Vector3(x, -0.6, y), Vector3(x + 1, 1.0, y + 1), NETHER_ROCK * Color(v, v, v), BlockTextures.ROCK)
+				continue
+			var ledge: bool = c in mp.ledges
+			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.3 if ledge else 0.0, y + 1), (NETHERRACK * Color(v, v, v)).darkened(0.2 if ledge else 0.0), BlockTextures.COBBLES)
+	for c in mp.fire:
+		if not _in_fog(c):
+			b.box(Vector3(c.x + 0.15, 0, c.y + 0.15), Vector3(c.x + 0.85, 0.4, c.y + 0.85), TORCH_FLAME.darkened(0.15))
+			b.box(Vector3(c.x + 0.3, 0.4, c.y + 0.3), Vector3(c.x + 0.7, 0.85, c.y + 0.7), Color("#F7C948"))
+
+
+static var NETHER_FOG := Color("#2B1A1E")
 
 
 ## True for a cell on the road nobody has walked to yet (issue #119).
@@ -793,6 +831,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "portal":
 		_add_portal(solid if s.done else ghost, s)
 		return
+	if s.tpl == "shelter":
+		_add_shelter(solid if s.done else ghost, s)
+		return
 	if s.tpl == "storehouse":
 		_add_storehouse(solid if s.stage >= 1 else ghost, s)
 		return
@@ -899,6 +940,26 @@ func _add_storehouse(b: Batch, s: Dictionary) -> void:
 		for j in mini(kinds.size(), 3):
 			var x := p.x + 0.08 + j * 0.22
 			_box_turned(b, s, Vector3(x, 0.62, p.y + 0.15), Vector3(x + 0.16, 0.7, p.y + 0.4), Palette.ITEM_COLORS.get(kinds[j], Palette.CHALK))
+
+
+## The landing's shelter (issue #152): a cobblestone floor inside low plank walls, a doorway on the south side, and a crate
+## in it for each few meals in the cache. A blueprint until it's built.
+func _add_shelter(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var done: bool = s.done
+	var floor_c: Color = Palette.COBBLE if done else Color(Palette.BLUE, 0.45)
+	var wall: Color = Palette.PLANK if done else Color(Palette.BLUE, 0.45)
+	b.box(Vector3(o.x, 0, o.y), Vector3(o.x + 3, 0.12, o.y + 3), floor_c, BlockTextures.COBBLES)
+	for k in 3:
+		b.box(Vector3(o.x + k, 0.12, o.y), Vector3(o.x + k + 1, 1.0, o.y + 0.2), wall, BlockTextures.BOARD)  # north
+		b.box(Vector3(o.x, 0.12, o.y + k), Vector3(o.x + 0.2, 1.0, o.y + k + 1), wall, BlockTextures.BOARD)  # west
+		b.box(Vector3(o.x + 2.8, 0.12, o.y + k), Vector3(o.x + 3, 1.0, o.y + k + 1), wall, BlockTextures.BOARD)  # east
+	for k in [0, 2]:  # the south wall, with a gap in the middle
+		b.box(Vector3(o.x + k, 0.12, o.y + 2.8), Vector3(o.x + k + 1, 1.0, o.y + 3), wall, BlockTextures.BOARD)
+	if done:
+		b.box(Vector3(o.x - 0.1, 1.0, o.y - 0.1), Vector3(o.x + 3.1, 1.15, o.y + 3.1), Palette.ROOF, BlockTextures.SHINGLES)
+		for i in mini(3, ceili(sim.cache_meals() / 2.0)):
+			b.box(Vector3(o.x + 0.35 + i * 0.7, 0.12, o.y + 0.4), Vector3(o.x + 0.8 + i * 0.7, 0.55, o.y + 0.85), CRATE, BlockTextures.BOARD)
 
 
 ## The Nether portal (issue #147): a frame of obsidian, four blocks wide, a sill, two pillars and a lintel. Until it's
@@ -1539,6 +1600,58 @@ func _update_sheep() -> void:
 	for id in _sheep_nodes:  # sheep on a map that isn't in view
 		if not here.has(id):
 			_sheep_nodes[id].visible = false
+
+
+# ---------------------------------------------------------------- the Nether's creatures (issue #151)
+
+static var CREATURE_COLORS := {"magma_cube": Color("#C4501E"), "zombified_piglin": Color("#C98A83"), "skeleton": Color("#DCD7C5"), "blaze": Color("#F2B531")}
+var _creature_nodes := {}   ## Creature id -> its model.
+
+
+func _make_creature(species: String) -> Node3D:
+	var n := Node3D.new()
+	var body := Node3D.new()
+	body.name = "Body"
+	n.add_child(body)
+	var col: Color = CREATURE_COLORS[species]
+	match species:
+		"magma_cube":  # a squat cube with a darker crust and a glowing seam
+			_part(body, Vector3(0.62, 0.5, 0.62), 0.0, col.darkened(0.25))
+			_part(body, Vector3(0.64, 0.12, 0.64), 0.2, Color("#F7C948"))
+			_part(body, Vector3(0.5, 0.14, 0.5), 0.5, col)
+		"zombified_piglin":  # a pink head over a green rag of a shirt
+			_part(body, Vector3(0.26, 0.3, 0.26), 0.0, Color("#4B4F5C"))
+			_part(body, Vector3(0.34, 0.44, 0.34), 0.3, Color("#6E8E58"))
+			_part(body, Vector3(0.32, 0.3, 0.32), 0.74, col)
+		"skeleton":  # thin and pale
+			_part(body, Vector3(0.18, 0.4, 0.18), 0.0, col)
+			_part(body, Vector3(0.28, 0.4, 0.2), 0.4, col.darkened(0.08))
+			_part(body, Vector3(0.26, 0.26, 0.26), 0.8, col)
+		_:  # a blaze: a head over three yellow rods that hover
+			_part(body, Vector3(0.3, 0.3, 0.3), 0.7, col)
+			for k in 3:
+				_part(body, Vector3(0.08, 0.5, 0.08), 0.15 + k * 0.05, col.darkened(0.2)).position.x = -0.18 + k * 0.18
+	add_child(n)
+	return n
+
+
+## Draws the creatures of the map in view, a little larger for a moment after a blow either way.
+func _update_creatures() -> void:
+	var here := {}
+	for x in sim.m.creatures:
+		if not x.alive or _in_fog(x.cell):
+			continue
+		here[x.id] = true
+		if not _creature_nodes.has(x.id):
+			_creature_nodes[x.id] = _make_creature(x.species)
+		var n: Node3D = _creature_nodes[x.id]
+		n.visible = true
+		n.position = Vector3(x.pos.x + 0.5, 0, x.pos.y + 0.5)
+		(n.get_node("Body") as Node3D).scale = Vector3.ONE * (1.25 if sim.tick < x.flash else 1.0)
+	for id in _creature_nodes.keys():
+		if not here.has(id):
+			_creature_nodes[id].queue_free()
+			_creature_nodes.erase(id)
 
 
 const HOP_STRIDE := 0.5    ## Cells walked per hop.

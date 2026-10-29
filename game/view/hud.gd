@@ -2725,7 +2725,7 @@ func _fill_planner(c: Container, sim: Sim) -> void:
 				return
 			if game.adventure == "" or not rows.any(func(a): return a.id == game.adventure):
 				game.adventure = rows[0].id
-			if game.plan.is_empty() or game.plan.dest != game.adventure:  # the planner was left open while an expedition ended
+			if game.plan.is_empty() or not game.plan_matches_adventure():  # the planner was left open while an expedition ended
 				game.plan = sim.new_plan(game.adventure)
 			_fill_plan(c, sim)
 
@@ -2791,9 +2791,7 @@ func _refresh_loc_drop(sim: Sim) -> void:
 ## off is left), its name, how many are wanted (Max: as much as fits), and ▲ ▼ to reorder. The packs' bar below
 ## shows the wanted amounts against the room.
 func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
-	if plan.target.item == "survey":  # the first crossing brings nothing back (issue #148)
-		c.add_child(_label("Survey the landing", true))
-		c.add_child(_label("Walk to its landmarks and come home. Nothing to bring back this time.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	if plan.target.item in ["survey", "scout", "build", "trade", "fortress"]:  # these bring nothing back: the objective row says what they do (issues #148, #154)
 		return
 	var head := HBoxContainer.new()
 	var l := _label("Bring back, best first", true)
@@ -2952,11 +2950,45 @@ func _add_party_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
 		c.add_child(b)
 
 
+## The Nether's objective picker (issue #154): one button for each, greyed out with its reason when it has nowhere to go; a scout
+## picks a route; then the briefing.
+func _add_objectives(c: Container, sim: Sim, plan: Dictionary) -> void:
+	c.add_child(_label("Objective", true))
+	var row := HFlowContainer.new()
+	row.add_theme_constant_override("h_separation", 4)
+	var cur: String = plan.get("objective", "survey")
+	for obj in Sim.OBJECTIVES:
+		var dests := sim.objective_destinations(obj)
+		var b := _button(Sim.OBJECTIVES[obj].name, func(): game.plan_objective(obj), "Secondary")
+		b.toggle_mode = true
+		b.set_pressed_no_signal(obj == cur)
+		b.disabled = dests.is_empty()
+		b.tooltip_text = Sim.OBJECTIVES[obj].sub if not dests.is_empty() else sim.objective_why_none(obj)
+		row.add_child(b)
+	c.add_child(row)
+	c.add_child(_label(Sim.OBJECTIVES[cur].sub, false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	if cur == "scout":
+		var routes := HFlowContainer.new()
+		routes.add_theme_constant_override("h_separation", 4)
+		for d in sim.objective_destinations("scout"):
+			var rb := _button(d.label.replace("route to the ", "").capitalize(), func(): game.plan_objective("scout", d), "Secondary")
+			rb.toggle_mode = true
+			rb.set_pressed_no_signal(plan.target.get("route", "") == d.route)
+			routes.add_child(rb)
+		c.add_child(routes)
+	for l in sim.plan_briefing(plan):
+		c.add_child(_label(l, false, Palette.YELLOW if l.begins_with("Risk") or l.begins_with("Danger") else Palette.CHALK_DIM, Palette.CAPTION, true))
+
+
 ## The objective, provisions, spare pickaxes, the packs they share, the return policy, and Start packing.
 func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 	var tend: bool = plan.target.item in ["pens", "survey"]
 	if not plan.party.is_empty():  # issue #140: the party's armor against the hazards
 		c.add_child(_label(_protection_text(sim, plan.party), false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	if Sim.realm_of(plan.dest) == "nether":  # the objective, and what the party is told before it commits (issue #154)
+		_add_objectives(c, sim, plan)
+	for w in sim.plan_warnings(plan):  # a guard with no sword (issue #150)
+		c.add_child(_label(w, false, Palette.YELLOW, Palette.CAPTION, true))
 	_add_cargo_list(c, plan, tend)
 	var meadow: bool = plan.dest == Meadow.ID and not sim.get_map(Meadow.ID).pens.is_empty()
 	if meadow:  # issue #139: or tend the pens
@@ -2976,6 +3008,11 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 		if tend:
 			c.add_child(_label("Build the pens, lead marked animals in, feed pairs, and hunt only what's over %d of each kind." % plan.target.n, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	c.add_child(_stepper_row("Meals to take", plan.meals, "meals"))
+	if Sim.realm_of(plan.dest) == "nether":  # the landing's shelter and cache (issue #152)
+		if plan.get("shelter", false):
+			c.add_child(_label("Carrying the shelter: %s and %s. The party builds it before it comes home." % [Defs.words("cobble", plan.cobble), Defs.words("plank", plan.planks)], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+		else:
+			c.add_child(_stepper_row("Meals for the cache", plan.get("stock", 0), "stock"))
 	var keep := Sim.return_meals(plan)
 	var mins := Sim.site_minutes(plan)
 	var at := "the meadow" if plan.dest == Meadow.ID else ("the landing" if Sim.realm_of(plan.dest) == "nether" else "the mine")
