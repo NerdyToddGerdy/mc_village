@@ -2791,7 +2791,7 @@ func _refresh_loc_drop(sim: Sim) -> void:
 ## off is left), its name, how many are wanted (Max: as much as fits), and ▲ ▼ to reorder. The packs' bar below
 ## shows the wanted amounts against the room.
 func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
-	if plan.target.item in ["survey", "scout", "build", "trade", "fortress"]:  # these bring nothing back: the objective row says what they do (issues #148, #154)
+	if plan.target.item in ["survey", "scout", "build", "trade", "fortress", "rescue"]:  # these bring nothing back: the objective row says what they do (issues #148, #154)
 		return
 	var head := HBoxContainer.new()
 	var l := _label("Bring back, best first", true)
@@ -3210,6 +3210,12 @@ func _fill_out(c: Container, sim: Sim) -> void:
 	var names := Sim.names_text(party.map(func(r): return r.name))
 	var are := "is" if party.size() == 1 else "are"
 	var home: bool = ex.get("leg", "out") == "home"
+	if ex.has("stranded"):  # the rescue window, supplies and what's at stake (issue #158)
+		c.add_child(_label(sim.stranded_text(ex), false, Palette.YELLOW, Palette.BODY, true))
+		var rb := _button("Plan a rescue", func(): game.plan_objective("rescue"), "Primary")
+		rb.disabled = sim.objective_destinations("rescue").is_empty()
+		rb.tooltip_text = "Send a party with provisions and flint and steel. It can set out even with both parties out." if not rb.disabled else sim.objective_why_none("rescue")
+		c.add_child(rb)
 	if not road.is_empty():
 		var when := ceili(sim.road_eta(road[0]))
 		c.add_child(_label("%s %s on the road %s, there in %d s." % [names, are, "home" if home else "to the " + mp.name.to_lower(), when], false, Palette.CHALK, Palette.BODY, true))

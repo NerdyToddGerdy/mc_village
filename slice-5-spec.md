@@ -213,7 +213,17 @@ The scouted fortress route leads to a hand-laid **fortress** (`NetherRoute.FORTR
 - **The salvage is taken once** (`SimMap.salvage_taken`); what doesn't fit in the packs is left on the chest's cell. A later delve finds it empty, and the report says so. The creatures killed stay dead.
 - **Saving:** v47. The fortress keeps its creatures, `salvage_taken` and what they've dropped. An older save's empty room becomes the fortress when it loads.
 
-## 16. Tuning table (provisional)
+## 16. Stranding and rescue (#158)
+
+**No death.** A Nether party that can't go on is **stranded**, and a rescue can bring it home inside a window.
+
+- **Stranded** (`_check_stranded`, from `STRAND_WAIT` and the party's state): its provisions are gone and someone's hungry (the cache counts), or everyone is seriously hurt, or the portal is dark with no flint and steel and the party has waited `STRAND_WAIT` at it. The party shelters in the shelter if it's on the landing and one stands, else where it stands, and stops working. **The game pauses** with the costs shown: the window (`RESCUE_WINDOW`, 240 s), the cargo it would leave, and two choices: **Shelter and wait**, or **Set out on their own** now.
+- **The window** is a visible countdown in the expedition panel, with the party's remaining supplies ("Stranded: the provisions are gone. Rescue window 3:52. Supplies: 0 meals, no flint and steel."), and "Nether party: stranded" in the stuck list. The panel's **Plan a rescue** button opens the plan.
+- **A rescue** is a plan with the **Rescue** objective: a **third slot**, `rescue`, a Nether expedition of its own that sets out even when the Overworld and Nether parties are both out. It's planned at the board and packs at the portal like any Nether party (6 meals by default; flint and steel is carried automatically). Its destination is the place the stranded party is; it walks there like any Nether party and **reaches** them: the stranded party gets the meals past the rescue's own walk home, and a flint and steel if it had none, and everyone heads home, the stranded party **with its cargo**. Only one rescue at a time.
+- **A missed window** (or the choice to walk): the party sets off on its own, **slowly and hurt** (an ordinary injury; the PC is protected as ever), and leaves its **cargo and spare tools** where it stood as **abandoned cargo**, lying on that map (`SimMap.abandoned`), which a later mission recovers like any find (a site lists the types in its report). The report says "Left behind: ...". Nobody dies.
+- **Saving:** v48. A trip carries `stranded` (why, where, the window's end) and what it `abandoned`; there's a third, empty `rescue` slot in every older save.
+
+## 17. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -256,3 +266,5 @@ Each build issue adds its rows.
 | Piglin camp | 20×14 | Cells, with three piglins (12 health each). |
 | `FORTRESS_SALVAGE` | 1 diamond, 4 iron, 3 gold, 1 blaze rod | The chest's contents. |
 | Fortress | 24×16 | Cells, with two blazes and two skeletons. |
+| `RESCUE_WINDOW` | 240 s | How long a stranded party shelters before it sets off on its own. |
+| `STRAND_WAIT` | 20 s | A party at a dark portal with no flint and steel waits this long before it's stranded. |

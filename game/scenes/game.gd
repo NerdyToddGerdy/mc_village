@@ -1227,6 +1227,8 @@ func plan_objective(obj: String, pick := {}) -> void:
 ## The expedition slot the board is showing (issue #145): the one the chosen adventure belongs to, or, with none
 ## chosen, the first that has a party.
 func plan_slot() -> String:
+	if not plan.is_empty() and plan.get("rescue", false):  # a rescue has a slot of its own (issue #158)
+		return "rescue"
 	if adventure != "":
 		return Sim.slot_of_dest(adventure)
 	for sl in Sim.SLOTS:

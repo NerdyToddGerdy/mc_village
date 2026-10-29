@@ -171,5 +171,7 @@ const ENGAGE_RANGE := 8               ## How far a guard goes after a creature w
 const SHELTER_COST := {"cobble": 4, "plank": 6}   ## What a party carries to build the landing's shelter (issue #152).
 const SHELTER_BUILD_TIME := 10.0      ## Seconds to build it.
 const GLOWSTONE_TIME := 3.0           ## Seconds to break a block of glowstone, by hand or with any tool (issue #155).
+const RESCUE_WINDOW := 240.0          ## Seconds a stranded party shelters before it sets off on its own (issue #158).
+const STRAND_WAIT := 20.0             ## Seconds the party waits at a dark portal with no flint and steel before it's stranded.
 const FLINT_STEEL_USES := 8           ## Times a flint and steel lights something before it's spent (issues #146, #147).
 const DIAMOND_PICK_TIER := 3            ## The pickaxe tier diamond ore needs: iron (issue #186).

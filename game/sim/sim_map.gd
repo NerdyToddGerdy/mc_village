@@ -37,6 +37,7 @@ var visited := false         ## Someone has been there, so its site report has r
 var found := false           ## Its hidden find (the old mine's iron) has been found (issue #111).
 var discovered := false      ## And surveyed, so it's a known resource with an estimate.
 var diamond_found := false   ## Someone has mined next to a hidden diamond here, so diamonds are a known resource of this level (issue #186).
+var abandoned: Array = []    ## Cargo a stranded party left here, {item, n, cell}: lying where it was dropped, for a later mission (issue #158).
 var salvage := Vector2i(-1, -1)   ## The fortress's salvage chest (issue #157).
 var salvage_taken := false   ## Taken once, whatever the party chose.
 var hostile := false         ## The piglins here have turned hostile: someone broke the rule shown up front (issue #156).
@@ -78,7 +79,7 @@ func _init(p_w := Tuning.MAP_W, p_h := Tuning.MAP_H) -> void:
 	occ.resize(w * h)
 
 
-const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "diamond_found", "ledges", "water", "lava", "landmarks", "landmarks_seen", "surveyed", "fire", "creatures", "hostile", "salvage", "salvage_taken", "drops_known", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear"]
+const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "diamond_found", "ledges", "water", "lava", "landmarks", "landmarks_seen", "surveyed", "fire", "creatures", "hostile", "abandoned", "salvage", "salvage_taken", "drops_known", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear"]
 
 
 ## The map as plain data. Reservations and job bookkeeping aren't saved (spec §2, Saving).

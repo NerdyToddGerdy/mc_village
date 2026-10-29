@@ -322,6 +322,10 @@ func _initialize() -> void:
 		var fort := sim.get_map("nether_fortress")
 		fort.creatures.filter(func(x): return x.species == "blaze")[0].alive = false
 		fort.drops_known = ["blaze_rod"]
+	if SaveFormat.VERSION >= 48:  # cargo a stranded party left on the landing, lying where it was dropped (#158)
+		var land := sim.get_map(NetherLanding.ID)
+		land.abandoned = [{"item": "quartz", "n": 6, "cell": Vector2i(5, 12)}]
+		sim.on_map(NetherLanding.ID, func(): sim.drop_items(Vector2i(5, 12), "quartz", 6))
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

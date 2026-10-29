@@ -75,6 +75,7 @@ func _init() -> void:
 		"test_the_quartz_site",
 		"test_piglin_trading",
 		"test_the_fortress_delve",
+		"test_stranding_and_rescue",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
 		"test_expedition_slots",
@@ -4320,7 +4321,7 @@ func test_expedition_slots() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
 	var other := sim.add_resident("Tomas", "7A5C8F", Sim.rcell(ada) + Vector2i(1, 0))
-	check(sim.slot == "overworld" and sim.expedition.is_empty() and sim.expeditions.keys() == ["overworld", "nether"], "two empty slots, the Overworld's current at rest")
+	check(sim.slot == "overworld" and sim.expedition.is_empty() and sim.expeditions.keys() == ["overworld", "nether", "rescue"], "three empty slots, the Overworld's current at rest")
 	check(Sim.slot_of_dest(OldMine.ID) == "overworld" and Sim.slot_of_dest(MineLevels.level_id(2)) == "overworld" and Sim.slot_of_dest("nether_landing") == "nether", "a destination's realm decides its slot")
 	# The current slot is the one `expedition` reads and writes.
 	sim.expeditions.nether = {"state": "out", "dest": "nether_landing", "party": [other.id]}
@@ -5423,3 +5424,128 @@ func test_the_fortress_delve() -> void:
 	check(sim.site_report("nether_fortress").salvage == "The salvage has been taken", "and the report says so")
 	var back := Sim.from_state(sim.save_state())
 	check(back.get_map("nether_fortress").salvage_taken and back.get_map("nether_fortress").creatures.size() == fort.creatures.size(), "the fortress and what's been taken are saved")
+
+
+## Stranding and rescue (issue #158): no death, a window, a rescue slot of its own, and cargo left behind when it's missed.
+func test_stranding_and_rescue() -> void:
+	var w := fight_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var tomas: Dictionary = w.tomas
+	var mira: Dictionary = w.mira
+	var landing: SimMap = w.landing
+	var portal: Dictionary = w.portal
+	landing.landmarks = []
+	var lost: Dictionary = sim.expeditions.nether
+	lost.provisions = {}
+	lost.cargo = {"quartz": 4}
+	lost.tools = [{"type": "stone_pick", "dur": 9}]
+	check(sim.expeditions.keys() == ["overworld", "nether", "rescue"] and Sim.SLOT_REALM.rescue == "nether", "a third slot for rescues, in the Nether")
+	# Out of provisions: stranded, and the game stops with the costs shown.
+	tomas.hunger = 15.0
+	mira.hunger = 15.0
+	for i in 12 * Tuning.TPS:
+		sim.step()
+		if lost.has("stranded"):
+			break
+	check(lost.has("stranded") and lost.stranded.why == "the provisions are gone" and lost.stranded.until > sim.tick, "with its provisions gone and someone hungry the party is stranded")
+	check(not sim.pending.is_empty() and sim.pending[0].kind == "stranded" and sim.pending[0].slot == "nether" and sim.pending[0].options.size() == 2 and "quartz" in sim.pending[0].text and "240 seconds" in sim.pending[0].text, "the game stops, and says what's at stake: the window, and the cargo it would leave")
+	sim.choose("wait")
+	check(sim.stranded_text(lost).contains("Stranded: the provisions are gone. Rescue window 3:5") or sim.stranded_text(lost).contains("Rescue window 4:00"), "the window counts down on screen with the supplies: " + sim.stranded_text(lost))
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Nether party: stranded"), "the stuck list says so: " + stuck_text(sim))
+	run(sim, 20)
+	check(lost.has("stranded") and tomas.job != null and tomas.job.kind == "rest", "they shelter, waiting")
+	# A rescue: it departs although the Nether and the Overworld parties are out.
+	portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	sim.expeditions.overworld = {"state": "out", "leg": "home", "dest": OldMine.ID, "party": [], "cargo": {}}
+	check(sim.objective_destinations("rescue").map(func(d): return d.dest) == ["nether_landing"], "the Rescue objective offers the stranded party's place")
+	var plan := sim.nether_plan("rescue")
+	plan.party = [ada.id]
+	check(plan.rescue and plan.target.item == "rescue" and plan.meals == 6 and sim.plan_problems(plan).is_empty(), "a rescue plan carries provisions, and is fine with both slots taken (%s)" % [sim.plan_problems(plan)])
+	check(sim.plan_expedition(plan) == "" and sim.expeditions.rescue.state == "staging" and sim.expeditions.nether.state == "out" and sim.expeditions.overworld.state == "out", "it's planned in the rescue slot")
+	check(sim.nether_plan("rescue").is_empty() and sim.objective_why_none("rescue") == "A rescue party is already out", "a second rescue isn't offered")
+	portal.store = {"bread": 6}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.pending.size() > 0:
+			sim.choose("press_on")
+		if sim.depart_blocker("rescue") == "":
+			break
+	check(sim.depart("rescue") == "" and sim.expeditions.rescue.state == "out", "the rescue departs")
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if sim.pending.size() > 0:
+			sim.choose("press_on")
+		ada.hurt = 0
+		if not lost.has("stranded"):
+			break
+	check(not lost.has("stranded") and sim.stats.get("rescues", 0) == 1, "the rescue reaches them inside the window")
+	check(lost.leg == "home" and sim.expeditions.rescue.leg == "home" and lost.get("provisions", {}).size() > 0, "everyone heads home, the stranded party with the meals it was brought")
+	sim.expeditions.overworld = {}
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if sim.pending.size() > 0:
+			sim.choose("press_on")
+		ada.hurt = 0
+		if sim.expeditions.nether.is_empty() and sim.expeditions.rescue.is_empty():
+			break
+	check(sim.expeditions.nether.is_empty() and sim.expeditions.rescue.is_empty() and tomas.map == "village" and mira.map == "village" and ada.map == "village", "both parties come home, nobody lost")
+	var home := {}
+	for st in sim.stacks_where(func(x): return true):
+		home[st.type] = home.get(st.type, 0) + st.n
+	check(home.get("quartz", 0) == 4, "and the cargo with them (%s)" % [home])
+	# A missed window: cargo and gear abandoned, nobody dead.
+	var w2 := fight_world()
+	var s2: Sim = w2.sim
+	var l2: SimMap = w2.landing
+	var lost2: Dictionary = s2.expeditions.nether
+	lost2.provisions = {}
+	lost2.cargo = {"quartz": 6, "glowstone": 2}
+	lost2.tools = [{"type": "stone_pick", "dur": 7}]
+	w2.tomas.hunger = 10.0
+	w2.mira.hunger = 10.0
+	l2.landmarks = []
+	for i in 12 * Tuning.TPS:
+		s2.step()
+		if lost2.has("stranded"):
+			break
+	s2.choose("wait")
+	lost2.stranded.until = s2.tick + 40  # the window runs out
+	for i in 60 * Tuning.TPS:
+		s2.step()
+		if not lost2.has("stranded"):
+			break
+	check(not lost2.has("stranded") and lost2.cargo.is_empty() and lost2.tools.is_empty() and lost2.leg == "home", "a missed window: the party sets off on its own, its cargo and spare tools left")
+	check(l2.abandoned.size() == 2 and l2.abandoned.any(func(a): return a.item == "quartz" and a.n == 6), "recorded as abandoned cargo on the map")
+	check(s2.on_map(NetherLanding.ID, func(): return s2.items.values().any(func(it): return it.type == "quartz" and it.n == 6 and it.cell == l2.abandoned[0].cell)), "lying where it was left, for a later mission")
+	check(s2.resident(w2.tomas.id).hurt == 1 and s2.resident(w2.mira.id).hurt == 1 and s2.residents.size() == 3, "the party is hurt, not dead")
+	check(lost2.abandoned.size() == 3, "the report will list what was left behind (%s)" % [lost2.abandoned])
+	# The player can choose to walk at once.
+	var w3 := fight_world()
+	var s3: Sim = w3.sim
+	var lost3: Dictionary = s3.expeditions.nether
+	lost3.provisions = {}
+	lost3.cargo = {"quartz": 2}
+	w3.tomas.hunger = 10.0
+	w3.mira.hunger = 10.0
+	w3.landing.landmarks = []
+	for i in 12 * Tuning.TPS:
+		s3.step()
+		if lost3.has("stranded"):
+			break
+	s3.choose("walk")
+	check(not lost3.has("stranded") and lost3.cargo.is_empty() and lost3.leg == "home", "choosing to walk sets them off at once, leaving the cargo")
+	# The PC is never seriously hurt, and the state is saved.
+	check(s3.resident(w3.ada.id).hurt <= 1, "Ada is protected as before")
+	var s4: Sim = fight_world().sim
+	s4.expeditions.nether.stranded = {"why": "everyone is seriously hurt", "at": NetherLanding.ID, "since": 5, "until": 5000}
+	s4.get_map(NetherLanding.ID).abandoned = [{"item": "quartz", "n": 3, "cell": Vector2i(4, 4)}]
+	var back := Sim.from_state(s4.save_state())
+	check(back.expeditions.nether.stranded.until == 5000 and back.get_map(NetherLanding.ID).abandoned[0].n == 3 and back.expeditions.has("rescue"), "the stranded state, its window and the abandoned cargo are saved")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v47.save").data.state)
+	check(old.expeditions.rescue.is_empty(), "an older save has an empty rescue slot")
+	var f48 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v48.save").data.state)
+	check(f48.get_map(NetherLanding.ID).abandoned.size() == 1 and f48.on_map(NetherLanding.ID, func(): return f48.items.values().any(func(it): return it.type == "quartz" and it.n == 6)), "the v48 fixture loads its abandoned cargo")
