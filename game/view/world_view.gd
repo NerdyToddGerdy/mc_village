@@ -307,6 +307,7 @@ func _add_site_ground(b: Batch) -> void:
 	var e := mp.entrance
 	_add_packs(b, mp, Vector2(e.x + 1.2, e.y + 0.17), 1.0)
 	if nether:  # the portal's far side: an obsidian arch with a violet glow, and the landmarks to survey
+		_add_nether_stations(b, mp)
 		if mp.id == NetherLanding.ID:
 			_add_landing_features(b, mp)
 		else:  # a site's way back: two dark posts and a lintel
@@ -521,9 +522,52 @@ func _add_nether_route_ground(b: Batch) -> void:
 		if not _in_fog(c):
 			b.box(Vector3(c.x + 0.15, 0, c.y + 0.15), Vector3(c.x + 0.85, 0.4, c.y + 0.85), TORCH_FLAME.darkened(0.15))
 			b.box(Vector3(c.x + 0.3, 0.4, c.y + 0.3), Vector3(c.x + 0.7, 0.85, c.y + 0.7), Color("#F7C948"))
+	_add_nether_line(b)
 
 
 static var NETHER_FOG := Color("#2B1A1E")
+
+
+## The Nether line along the quartz route (issue #159): planks over the bridged segments, sleepers and rails as far as they're
+## laid, the two stations and the parked cart.
+func _add_nether_line(b: Batch) -> void:
+	var mp := sim.m
+	if mp.id != NetherRoute.ROUTES.quartz.id or mp.line.is_empty():
+		return
+	var l: Dictionary = mp.line
+	for i in Road.segment_count():
+		if l.bridged.has(i):
+			var x0: int = Road.SEGMENTS[i].x
+			for x in range(x0 + 2, x0 + Road.seg_len(i) - 2):
+				b.box(Vector3(x, -0.12, NetherRoute.LINE_ROW), Vector3(x + 1, 0.0, NetherRoute.LINE_ROW + 1), Palette.PLANK, BlockTextures.BOARD)
+		var len: int = Road.seg_len(i)
+		var cells: int = ceili(float(len) * l.laid[i] / Tuning.RAILS_PER_SEGMENT)
+		for k in cells:
+			var x: int = Road.SEGMENTS[i].x + k
+			b.box(Vector3(x + 0.1, 0.0, NetherRoute.LINE_ROW + 0.35), Vector3(x + 0.9, 0.05, NetherRoute.LINE_ROW + 0.65), Palette.LOG, BlockTextures.LOG)
+			for z in [0.3, 0.62]:
+				b.box(Vector3(x, 0.05, NetherRoute.LINE_ROW + z), Vector3(x + 1, 0.1, NetherRoute.LINE_ROW + z + 0.08), Palette.ITEM_COLORS.rail)
+	if l.stations.landing:
+		b.box(Vector3(1, 0, NetherRoute.LINE_ROW + 1), Vector3(4, 0.3, NetherRoute.LINE_ROW + 2), Palette.COBBLE, BlockTextures.COBBLES)
+	if l.cart and mp.line.stations.site:
+		b.box(Vector3(1.3, 0.3, NetherRoute.LINE_ROW + 1.2), Vector3(2.1, 0.7, NetherRoute.LINE_ROW + 1.8), Palette.ITEM_COLORS.minecart)
+
+
+## The stations on the landing's edge and the quartz site (issue #159).
+func _add_nether_stations(b: Batch, mp: SimMap) -> void:
+	var l: Dictionary = sim.maps[NetherRoute.ROUTES.quartz.id].line
+	if l.is_empty():
+		return
+	if mp.id == NetherLanding.ID and l.stations.landing:
+		var ex: Vector2i = NetherRoute.ROUTES.quartz.exit
+		b.box(Vector3(ex.x - 3, 0, ex.y + 1), Vector3(ex.x, 0.3, ex.y + 2), Palette.COBBLE, BlockTextures.COBBLES)
+		b.box(Vector3(ex.x - 3, 0.3, ex.y + 1), Vector3(ex.x - 2.9, 1.0, ex.y + 2), Palette.PLANK, BlockTextures.BOARD)
+	if mp.id == NetherRoute.ROUTES.quartz.site and l.stations.site:
+		var p: Rect2i = NetherRoute.QUARTZ_STATION_PLOT
+		b.box(Vector3(p.position.x, 0, p.position.y), Vector3(p.position.x + 3, 0.3, p.position.y + 1), Palette.COBBLE, BlockTextures.COBBLES)
+		b.box(Vector3(p.position.x + 2.9, 0.3, p.position.y), Vector3(p.position.x + 3, 1.0, p.position.y + 1), Palette.PLANK, BlockTextures.BOARD)
+		if l.cart:
+			b.box(Vector3(p.position.x + 0.4, 0.3, p.position.y + 0.25), Vector3(p.position.x + 1.4, 0.75, p.position.y + 0.75), Palette.ITEM_COLORS.minecart)
 
 
 ## True for a cell on the road nobody has walked to yet (issue #119).

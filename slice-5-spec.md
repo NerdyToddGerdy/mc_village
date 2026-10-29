@@ -223,7 +223,18 @@ The scouted fortress route leads to a hand-laid **fortress** (`NetherRoute.FORTR
 - **A missed window** (or the choice to walk): the party sets off on its own, **slowly and hurt** (an ordinary injury; the PC is protected as ever), and leaves its **cargo and spare tools** where it stood as **abandoned cargo**, lying on that map (`SimMap.abandoned`), which a later mission recovers like any find (a site lists the types in its report). The report says "Left behind: ...". Nobody dies.
 - **Saving:** v48. A trip carries `stranded` (why, where, the window's end) and what it `abandoned`; there's a third, empty `rescue` slot in every older save.
 
-## 17. Tuning table (provisional)
+## 17. The Nether line: portal station to the quartz site (#159)
+
+A line along the scouted **quartz route**, built by **Build parties** from what they carry, in the spirit of Slice 4's: bridges, track, a station at each end and a cart. The village line stays a single point-to-point line (#29). It is not built the way Slice 4's is (a crew of residents on a map of their own, with the rail pile and track sites): the Nether has no village labor to spare, so each trip is a Build expedition that lays what its packs hold.
+
+- **State** (`SimMap.line` on the quartz route): the rails laid in each of its six segments, the bridged segments, the two stations (`landing` and `site`) and whether the cart is parked. `Sim.nline_remaining()` is the cost left: 12 rails (`RAILS_PER_SEGMENT`, 2 a segment), two **bridges** over the lava channel and the gap (`NETHER_BRIDGE_PLANKS`, 8 planks each), two **stations** (Slice 4's station cost: 6 planks and 4 cobblestone each), and a **minecart**, built at the village and carried through the portal.
+- **The mission:** the **Build** objective offers "The Nether line to the quartz site" once the route is scouted. The plan carries what's left, most urgent first (bridges' planks, rails, the stations' planks and cobblestone, the cart), up to what a party of three can carry past its meals; the planner's steppers adjust it. The briefing shows what's still to build and the time the line saves. The crew packs at the portal, crosses, **builds the landing station** before setting out, **bridges** and **lays track** west to east on the route as far as its supplies go (a bridge first, since track can't go down over an obstacle), then builds the **station at the quartz site** and **parks the cart** there, and comes home when nothing is left it can do. A big line takes more than one trip. A party member who finds a piece already claimed, or done, takes the next. A bridge's missing planks show in the stuck list: "Track: needs the lava channel bridged first".
+- **Away from village labor:** the crew is a Nether party; the Jobs panel says "In the Nether: laying track".
+- **Riding:** once the line is complete every party on the quartz route rides it at the cart's speed (`CART_SPEED`) both ways: about 10 s saved each way on a 16 s walk. Mining at the site is unchanged (a test guards it). **Riders are safe from wandering creatures and from the lava's burns while they move**; a party that walks isn't.
+- **Seen:** planks over the bridged segments, sleepers and rails as far as they're laid, the stations and the parked cart; the route's report says "Line: 4 of 6 segments laid, 1 of 2 bridges...".
+- **Saving:** v49. The quartz route map keeps its `line`; a trip carries `rails` and `minecarts` in its supplies.
+
+## 18. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -268,3 +279,6 @@ Each build issue adds its rows.
 | Fortress | 24×16 | Cells, with two blazes and two skeletons. |
 | `RESCUE_WINDOW` | 240 s | How long a stranded party shelters before it sets off on its own. |
 | `STRAND_WAIT` | 20 s | A party at a dark portal with no flint and steel waits this long before it's stranded. |
+| `NETHER_BRIDGE_PLANKS` | 8 | Planks in a bridge over the lava channel or the gap. |
+| `NETHER_BRIDGE_TIME` | 10 s | Building one. |
+| Nether line | 12 rails, 2 bridges, 2 stations, 1 cart | What the quartz route's line takes, with Slice 4's `RAILS_PER_SEGMENT`, station cost and `CART_SPEED`. |

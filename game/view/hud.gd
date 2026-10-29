@@ -2047,6 +2047,9 @@ func _status(sim: Sim, r: Dictionary) -> String:
 		return "%s, about %d s" % [r.job.label, ceili(sim.road_eta(r))]
 	if r.map == Road.ID and not sim.on_road(r) and r.job != null:  # out working on the road (issue #122)
 		return "On the road: %s" % r.job.label.to_lower()
+	var ex := sim.expedition_of(r)
+	if Sim.realm_of(r.map) == "nether" and ex.get("target", {}).get("item", "") == "line" and r.job != null and r.job.kind == "build":  # issue #159
+		return "In the Nether: %s" % r.job.label.to_lower()
 	return r.job.label if r.job != null else "Idle"
 
 
@@ -3008,6 +3011,9 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 		if tend:
 			c.add_child(_label("Build the pens, lead marked animals in, feed pairs, and hunt only what's over %d of each kind." % plan.target.n, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	c.add_child(_stepper_row("Meals to take", plan.meals, "meals"))
+	if plan.target.item == "line":  # what the line crew carries, past its meals (issue #159)
+		for k in [["Rails", "rails"], ["Planks", "planks"], ["Cobblestone", "cobble"], ["Minecarts", "minecarts"]]:
+			c.add_child(_stepper_row(k[0], plan.get(k[1], 0), k[1]))
 	if plan.target.item == "trade":  # the gold carried, which takes room in the packs (issue #156)
 		c.add_child(_stepper_row("Gold to trade", plan.get("gold", 0), "gold"))
 	if Sim.realm_of(plan.dest) == "nether":  # the landing's shelter and cache (issue #152)

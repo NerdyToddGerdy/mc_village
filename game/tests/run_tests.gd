@@ -76,6 +76,7 @@ func _init() -> void:
 		"test_piglin_trading",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
+		"test_the_nether_line",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
 		"test_expedition_slots",
@@ -5549,3 +5550,182 @@ func test_stranding_and_rescue() -> void:
 	check(old.expeditions.rescue.is_empty(), "an older save has an empty rescue slot")
 	var f48 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v48.save").data.state)
 	check(f48.get_map(NetherLanding.ID).abandoned.size() == 1 and f48.on_map(NetherLanding.ID, func(): return f48.items.values().any(func(it): return it.type == "quartz" and it.n == 6)), "the v48 fixture loads its abandoned cargo")
+
+
+## Runs one build trip to the quartz site with these supplies at the portal, and returns the ticks it took to reach the site.
+func nline_trip(sim: Sim, w: Dictionary, store: Dictionary, counts: Dictionary) -> int:
+	var portal: Dictionary = w.portal
+	var plan := sim.nether_plan("build", sim.objective_destinations("build").filter(func(d): return d.get("line", false))[0])
+	plan.party = [w.ada.id, w.tomas.id, w.mira.id]
+	plan.meals = 3
+	for k in ["rails", "planks", "cobble", "minecarts"]:
+		plan[k] = counts.get(k, 0)
+	var err := sim.plan_expedition(plan)
+	if err != "":
+		return -1
+	portal.store = store.duplicate()
+	sim.drop_items(Sim.rcell(w.ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	sim.depart("nether")
+	var at := sim.tick
+	var arrived := -1
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		for r in [w.ada, w.tomas, w.mira]:
+			r.hurt = 0
+		if arrived < 0 and w.ada.map == "nether_quartz":
+			arrived = sim.tick - at
+		if sim.expeditions.nether.is_empty():
+			break
+	return arrived
+
+
+## A world with the quartz route scouted, three residents and the Nether line unbuilt.
+func nline_world() -> Dictionary:
+	var w := fight_world()
+	var sim: Sim = w.sim
+	sim.expeditions.nether = {}
+	for r in [w.ada, w.tomas, w.mira]:
+		sim.move_to_map(r, "village", Sim.rcell(w.ada) if r == w.ada else Sim.rcell(w.ada) + Vector2i(1, 1))
+		r.hurt = 0
+		r.hunger = 100.0
+	w.portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	sim.get_map(NetherLanding.ID).landmarks = []
+	sim.get_map(NetherRoute.ROUTES.quartz.id).surveyed = true
+	sim.get_map("nether_quartz").known = true
+	sim.get_map(NetherRoute.ROUTES.quartz.id).creatures.clear()  # the line's work isn't about creatures
+	return w
+
+
+## The Nether line from the portal to the quartz site, built by Build parties from what they carry (issue #159).
+func test_the_nether_line() -> void:
+	var w := nline_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var line := sim.nline()
+	var need := sim.nline_remaining()
+	check(line.laid == [0, 0, 0, 0, 0, 0] and line.bridged.is_empty() and not line.stations.landing and not line.cart and not sim.nline_complete(), "a new line has nothing built")
+	check(need == {"rails": 12, "planks": 28, "cobble": 8, "minecarts": 1}, "it needs 12 rails, 28 planks (two bridges and two stations), 8 cobblestone and a minecart (%s)" % [need])
+	check(Sim.nline_obstacle(2) and Sim.nline_obstacle(4) and not Sim.nline_obstacle(0), "the lava channel and the gap need bridges")
+	var dests := sim.objective_destinations("build")
+	check(dests.any(func(d): return d.get("line", false) and d.dest == "nether_quartz"), "the Build objective offers the line to the quartz site once the route is scouted")
+	var plan := sim.nether_plan("build", dests.filter(func(d): return d.get("line", false))[0])
+	plan.party = [ada.id, w.tomas.id, w.mira.id]
+	check(plan.target.item == "line" and plan.planks + plan.rails + plan.cobble + plan.minecarts + plan.meals <= 45, "the plan carries what three can, most urgent first (%d planks, %d rails, %d cobblestone, %d minecart)" % [plan.planks, plan.rails, plan.cobble, plan.minecarts])
+	var brief := sim.plan_briefing(plan)
+	check(brief.any(func(l): return l.begins_with("Still to build:") and "saves about" in l), "the briefing shows the cost and the time it saves: %s" % [brief.filter(func(l): return l.begins_with("Still to build"))])
+	# Trip A: rails but no planks: the track stops at the lava channel, and says why.
+	var arrived_a := sim.tick
+	var seen_stuck := false
+	var portal: Dictionary = w.portal
+	var pa := sim.nether_plan("build", dests.filter(func(d): return d.get("line", false))[0])
+	pa.party = [ada.id, w.tomas.id, w.mira.id]
+	pa.meals = 3
+	pa.rails = 12
+	pa.planks = 0
+	pa.cobble = 0
+	pa.minecarts = 0
+	check(sim.plan_expedition(pa) == "", "trip A, rails only, is planned")
+	portal.store = {"bread": 3, "rail": 12}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	sim.depart("nether")
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		for r in [ada, w.tomas, w.mira]:
+			r.hurt = 0
+		if not seen_stuck and line.laid[1] >= Tuning.RAILS_PER_SEGMENT and w.ada.map == NetherRoute.ROUTES.quartz.id:
+			sim.compute_stuck()
+			seen_stuck = stuck_text(sim).contains("Track: needs the lava channel bridged first")
+		if sim.expeditions.nether.is_empty():
+			break
+	check(line.laid == [2, 2, 0, 0, 0, 0] and seen_stuck, "A lays the first two segments and stops at the lava channel: 'Track: needs the lava channel bridged first'")
+	# Trip B: planks and the rest of the rails: both bridges, and the track to the end.
+	var tb := nline_trip(sim, w, {"bread": 3, "plank": 16, "rail": 8}, {"rails": 8, "planks": 16})
+	check(line.bridged.size() == 2 and line.laid == [2, 2, 2, 2, 2, 2] and tb > 0, "B bridges the channel and the gap, and lays the rest of the track")
+	check(not sim.nline_complete() and not line.stations.landing, "the stations and the cart are still to come")
+	# Trip C: the stations and the minecart.
+	var tc := nline_trip(sim, w, {"bread": 3, "plank": 12, "cobble": 8, "minecart": 1}, {"planks": 12, "cobble": 8, "minecarts": 1})
+	check(line.stations.landing and line.stations.site and line.cart and sim.nline_complete() and tc > 0, "C builds the landing station, the quartz site station and parks the minecart: the line is complete")
+	# Riding beats walking both ways, and mining is no faster.
+	sim.use_map(NetherRoute.ROUTES.quartz.id)
+	check(absf(sim.ground_speed(Vector2i(10, 3)) - Tuning.CART_SPEED / Tuning.WALK) < 0.01, "on the finished line a rider covers the route at the cart's speed")
+	sim.use_map("village")
+	var t := Sim.nline_times()
+	check(t.saved > 8.0 and t.ride < t.walk, "about %d s saved each way (%d walking, %d riding)" % [roundi(t.saved), roundi(t.walk), roundi(t.ride)])
+	var block: Dictionary = sim.get_map("nether_quartz").boulders.filter(func(b): return b.ore == "quartz")[0]
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 90}
+	var mine_time: float = sim._work_time(ada, {"what": "gather", "tool": "pick", "target": block})
+	var fresh := nline_world()
+	fresh.ada.pick = {"type": "stone_pick", "tier": 2, "dur": 90}
+	check(absf(mine_time - fresh.sim._work_time(fresh.ada, {"what": "gather", "tool": "pick", "target": fresh.sim.get_map("nether_quartz").boulders.filter(func(b): return b.ore == "quartz")[0]})) < 0.001, "mining a block of quartz takes just as long with track")
+	# A trip with the line beats one without.
+	var with_line := nline_gather_ticks(w)
+	var without := nline_gather_ticks(fresh)
+	check(with_line > 0 and without > 0 and with_line < without, "a full line beats walking: to the site in %d s against %d s" % [with_line / Tuning.TPS, without / Tuning.TPS])
+	# Riders are safe from wandering creatures while they move; walkers aren't.
+	var cube := sim.spawn_creature(NetherRoute.ROUTES.quartz.id, "magma_cube", Vector2i(20, 3))
+	sim.move_to_map(ada, NetherRoute.ROUTES.quartz.id, Vector2i(21, 3))
+	ada.job = Job.new("road", "Riding", "the far end")
+	ada.hurt = 0
+	sim.use_map(NetherRoute.ROUTES.quartz.id)
+	sim.expeditions.nether = {"state": "out", "leg": "out", "dest": "nether_quartz", "party": [ada.id]}
+	for i in 60:
+		sim._step_creatures()
+	check(sim._riding(ada) and cube.cool == 0.0 and ada.hurt == 0, "a rider on the line isn't struck")
+	sim.get_map(NetherRoute.ROUTES.quartz.id).line.cart = false
+	for i in 60:
+		sim._step_creatures()
+	sim.use_map("village")
+	check(not sim._riding(ada) and cube.cool > 0.0, "without the line the creature strikes")
+	sim.expeditions.nether = {}
+	# Saved, and an older save has no line.
+	var back := Sim.from_state(sim.save_state())
+	check(back.nline().laid == [2, 2, 2, 2, 2, 2] and back.nline().bridged.size() == 2 and back.nline().stations.site, "the line is saved")
+	var f49 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v49.save").data.state)
+	check(f49.nline().bridged == [2] and f49.nline().laid[1] == 2 and f49.nline().stations.landing and not f49.nline_complete(), "the v49 fixture loads its part-built line")
+	var f48 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v48.save").data.state)
+	check(f48.nline().laid == [0, 0, 0, 0, 0, 0], "an older save has an unbuilt line")
+
+
+## Ticks from setting out to reaching the quartz site on a gather trip.
+func nline_gather_ticks(w: Dictionary) -> int:
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	sim.expeditions.nether = {}
+	sim.move_to_map(ada, "village", Sim.rcell(w.portal) if false else Sim.rcell(w.tomas))
+	var plan := sim.nether_plan("gather")
+	plan.party = [ada.id]
+	sim.aim_plan(plan, "quartz", 2)
+	if sim.plan_expedition(plan) != "":
+		return -1
+	w.portal.store = {"bread": 3}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "stone_pick", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	sim.depart("nether")
+	var at := sim.tick
+	var arrived := -1
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		ada.hurt = 0
+		if ada.map == "nether_quartz":
+			arrived = sim.tick - at
+			break
+	return arrived

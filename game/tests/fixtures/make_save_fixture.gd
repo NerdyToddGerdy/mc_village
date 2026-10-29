@@ -326,6 +326,12 @@ func _initialize() -> void:
 		var land := sim.get_map(NetherLanding.ID)
 		land.abandoned = [{"item": "quartz", "n": 6, "cell": Vector2i(5, 12)}]
 		sim.on_map(NetherLanding.ID, func(): sim.drop_items(Vector2i(5, 12), "quartz", 6))
+	if SaveFormat.VERSION >= 49:  # the Nether line part-built: the lava channel bridged, the first two segments laid, the landing station up (#159)
+		var line := sim.nline()
+		line.bridged.append(2)
+		line.laid[0] = Tuning.RAILS_PER_SEGMENT
+		line.laid[1] = Tuning.RAILS_PER_SEGMENT
+		line.stations.landing = true
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}
