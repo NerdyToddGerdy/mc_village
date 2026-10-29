@@ -304,6 +304,14 @@ func _initialize() -> void:
 		var piglin := sim.get_map(NetherRoute.ROUTES.piglin.id)
 		piglin.known = true
 		piglin.seen = 3
+	if SaveFormat.VERSION >= 45:  # the quartz site visited, two of its quartz blocks mined out (#155)
+		var qsite := sim.get_map("nether_quartz")
+		qsite.visited = true
+		var gone := 0
+		for b in qsite.boulders:
+			if b.ore == "quartz" and gone < 2:
+				b.alive = false
+				gone += 1
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

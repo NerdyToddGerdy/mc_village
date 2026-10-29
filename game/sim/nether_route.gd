@@ -110,6 +110,35 @@ static func build(s: Sim, key: String) -> SimMap:
 	return m
 
 
+## A hand-laid site from its rows.
+static func _build_laid(s: Sim, key: String, rows: Array) -> SimMap:
+	var def: Dictionary = ROUTES[key]
+	var m := SimMap.new(rows[0].length(), rows.size())
+	m.id = def.site
+	m.kind = "site"
+	m.name = def.site_name
+	m.known = false
+	m.found = true
+	m.discovered = true
+	m.pattern = "hand_laid"
+	for y in rows.size():
+		for x in rows[y].length():
+			var c := Vector2i(x, y)
+			match rows[y][x]:
+				"#":
+					m.rock[c] = true
+				"L":
+					m.rock[c] = true
+					m.lava[c] = true
+				"E":
+					m.entrance = c
+				"q":
+					m.boulders.append(OldMine._block(s, c, "quartz"))
+				"g":
+					m.boulders.append(OldMine._block(s, c, "glowstone"))
+	return m
+
+
 static func _lava(m: SimMap, x0: int, x1: int, rows: Array) -> void:
 	for x in range(x0, x1 + 1):
 		for y in rows:
@@ -133,8 +162,34 @@ static func _ledge(m: SimMap, cells: Array) -> void:
 		m.ledges.append(c)
 
 
-## The site at a route's end, as a small map for #155 to fill (the quartz site), #156 (the piglin camp) and #157 (the fortress).
+## The quartz site (issue #155), west to east: the party arrives at E.
+##   # rock   L lava (rock nobody walks into)   q a block of nether quartz ore   g glowstone, which breaks by hand
+const QUARTZ_LAYOUT := [
+	"####################",
+	"#..................#",
+	"#..q.......g...L...#",
+	"#..q..###......L...#",
+	"#.....###..q.......#",
+	"#.........q.....g..#",
+	"#..g....L..........#",
+	"E.......L...q......#",
+	"#..........###.....#",
+	"#.q........###..g..#",
+	"#.........q........#",
+	"#....g.........q...#",
+	"#..................#",
+	"####################",
+]
+## Room kept clear for the Nether line's far station (issue #159): its platform and the plot a loading station grows into.
+const QUARTZ_STATION_PLOT := Rect2i(14, 12, 5, 1)
+const QUARTZ_TOLD := "Where nether quartz is said to lie, with glowstone in the rock."
+
+
+## The site at a route's end. The quartz site is hand-laid (#155); the piglin camp (#156) and the fortress entrance (#157)
+## have their own layouts, and until they do they're an empty room.
 static func build_site(s: Sim, key: String) -> SimMap:
+	if key == "quartz":
+		return _build_laid(s, key, QUARTZ_LAYOUT)
 	var def: Dictionary = ROUTES[key]
 	var m := SimMap.new(16, 16)
 	m.id = def.site

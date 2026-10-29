@@ -212,10 +212,10 @@ func _build_static() -> void:
 	for b in sim.boulders:
 		if b.alive and not b.get("hidden", false) and not _in_fog(b.cell):
 			var c: Vector2i = b.cell
-			var body: Color = Palette.ITEM_COLORS.obsidian if b.get("ore", "") == "obsidian" else (GRAVEL if b.get("ore", "") == "gravel" else Palette.STONE)
+			var body: Color = Palette.ITEM_COLORS.obsidian if b.get("ore", "") == "obsidian" else (GRAVEL if b.get("ore", "") == "gravel" else (Palette.ITEM_COLORS.glowstone if b.get("ore", "") == "glowstone" else (NETHER_ROCK.lightened(0.25) if sim.m.id.begins_with("nether") else Palette.STONE)))
 			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), body, BlockTextures.COBBLES if b.get("ore", "") == "gravel" else BlockTextures.ROCK)
 			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), body.lightened(0.06), BlockTextures.ROCK)
-			if b.has("ore") and b.ore != "obsidian":  # flecks of ore on its faces and top (issue #103)
+			if b.has("ore") and b.ore != "obsidian" and b.ore != "glowstone":  # flecks of ore on its faces and top (issue #103)
 				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[Defs.ORES[b.ore].item])
 			if b.get("loose", false) and sim.m.visited:  # a loose ceiling: cracks, and props holding it (issue #110)
 				for k in 2:
@@ -260,7 +260,7 @@ static var DARK_TINT := Color("#2C3445")
 ## and the tunnels no torch reaches drawn darker, so the dark parts read at a glance.
 func _add_site_ground(b: Batch) -> void:
 	var mp := sim.m
-	var nether: bool = mp.id == NetherLanding.ID  # red netherrack, and rock that's nearly black (issue #148)
+	var nether: bool = mp.id.begins_with("nether")  # red netherrack, and rock that's nearly black (issues #148, #155)
 	var rock_base: Color = NETHER_ROCK if nether else MINE_ROCK
 	var floor_base: Color = NETHERRACK if nether else MINE_FLOOR
 	for x in mp.w:
@@ -302,7 +302,13 @@ func _add_site_ground(b: Batch) -> void:
 	var e := mp.entrance
 	_add_packs(b, mp, Vector2(e.x + 1.2, e.y + 0.17), 1.0)
 	if nether:  # the portal's far side: an obsidian arch with a violet glow, and the landmarks to survey
-		_add_landing_features(b, mp)
+		if mp.id == NetherLanding.ID:
+			_add_landing_features(b, mp)
+		else:  # a site's way back: two dark posts and a lintel
+			var ob: Color = Palette.ITEM_COLORS.obsidian
+			b.box(Vector3(e.x, 0, e.y - 0.1), Vector3(e.x + 0.3, 1.5, e.y + 0.15), ob, BlockTextures.ROCK)
+			b.box(Vector3(e.x, 0, e.y + 0.85), Vector3(e.x + 0.3, 1.5, e.y + 1.1), ob, BlockTextures.ROCK)
+			b.box(Vector3(e.x, 1.3, e.y - 0.1), Vector3(e.x + 0.3, 1.6, e.y + 1.1), ob, BlockTextures.ROCK)
 		return
 	b.box(Vector3(e.x, 0, e.y - 0.05), Vector3(e.x + 0.15, 1.4, e.y + 0.1), Palette.LOG, BlockTextures.LOG)
 	b.box(Vector3(e.x, 0, e.y + 0.9), Vector3(e.x + 0.15, 1.4, e.y + 1.05), Palette.LOG, BlockTextures.LOG)

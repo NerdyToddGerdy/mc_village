@@ -185,7 +185,16 @@ A Nether plan has an **objective**, picked in the planner (`Sim.OBJECTIVES`): **
 - **A plan with no valid destination** isn't offered: its button is disabled, and `nether_plan` returns nothing. Sites a party can't reach yet refuse at Depart ("The way to the quartz site isn't built yet"), until #155–#157 build them.
 - **Saving:** a plan's `objective` is saved with a trip in progress; nothing else changes shape, so no new version.
 
-## 13. Tuning table (provisional)
+## 13. The quartz site (#155)
+
+The scouted quartz route now leads to a hand-laid **quartz site** (`NetherRoute.QUARTZ_LAYOUT`, 20×14): eight blocks of **nether quartz ore** and five of **glowstone** among rock, with a lava pool. Quartz needs a pickaxe; **glowstone breaks by hand** (`GLOWSTONE_TIME`) and needs none. Both are ores, a quartz block yields 2 and a glowstone block 2 (`ORE_YIELD`). They're stockpiled for Slice 6's redstone and workshops; nothing in the village needs them to survive. The site keeps the far side clear (`QUARTZ_STATION_PLOT`) for the Nether line's station (#159).
+
+- **Getting there** is a journey across the Nether, now general (`_nether_transit_job`): through the portal onto the landing, out by the route's gap, east along the strip, onto the site; home the same way. Every step is walked, so lava, fire, ledges and creatures on the way apply (#149, #151). An older save's empty room at the end of the quartz route becomes the site on loading.
+- **The gather mission** works like the old mine's (#109): the party mines from its packs by its cargo list (the site's quartz and glowstone, best first), packs what it mines, eats from its provisions and comes home by its return policy. A gather plan wants 8 quartz and a spare pickaxe by default.
+- **Depletion:** the site report lists each find's reserve (blocks left times the yield) once someone's been there, and it runs down as the party mines. Deposits don't come back (#22).
+- **Saving:** v45. The mined-out blocks and `visited` are saved with the map.
+
+## 14. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -221,3 +230,6 @@ Each build issue adds its rows.
 | `SHELTER_COST` | 4 cobblestone, 6 planks | What a party carries to build the shelter. |
 | `SHELTER_BUILD_TIME` | 10 s | Building it. |
 | Route strip | 48×7, six segments | Cells, in `game/sim/nether_route.gd`. |
+| `ORE_YIELD` quartz / glowstone | 2 / 2 | Items a block drops. |
+| `GLOWSTONE_TIME` | 3 s | Breaking glowstone, by hand or with any tool. |
+| Quartz site | 20×14 | Cells, 8 quartz and 5 glowstone. |

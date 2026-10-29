@@ -72,6 +72,7 @@ func _init() -> void:
 		"test_the_shelter_and_cache",
 		"test_scouting_the_routes",
 		"test_mission_types",
+		"test_the_quartz_site",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
 		"test_expedition_slots",
@@ -5143,9 +5144,9 @@ func test_mission_types() -> void:
 	check(dests.call("scout") == ["nether_landing:piglin", "nether_landing:fortress"], "a scouted route drops off the scout list")
 	check(dests.call("gather") == ["nether_quartz:"] and dests.call("trade").is_empty() and dests.call("fortress").is_empty(), "the quartz site can be gathered from; the piglins and fortress still can't")
 	var gather := sim.nether_plan("gather")
-	check(gather.dest == "nether_quartz" and gather.target.item == "gather" and gather.objective == "gather", "a gather plan for the quartz site")
+	check(gather.dest == "nether_quartz" and gather.target == {"item": "quartz", "n": 8} and gather.objective == "gather" and gather.picks == 1, "a gather plan for the quartz site wants 8 quartz, with a spare pickaxe")
 	gather.party = [ada.id]
-	check(sim.plan_problems(gather).has("Choose something to bring back"), "(its cargo list waits for the quartz site, #155)")
+	check(not sim.plan_problems(gather).has("Choose something to bring back"), "its cargo list is the site's quartz and glowstone")
 	sim.get_map(NetherLanding.ID).surveyed = true
 	check(dests.call("survey").is_empty() and sim.objective_why_none("survey") == "The landing is already surveyed", "a surveyed landing needs no more survey")
 	var shelter: Dictionary = sim.on_map(NetherLanding.ID, func(): return sim.place_site("shelter", NetherLanding.SHELTER_AT))
@@ -5168,3 +5169,74 @@ func test_mission_types() -> void:
 	# Overworld plans keep their form.
 	var old := sim.new_plan(OldMine.ID)
 	check(not old.has("objective") and old.target.item == "coal", "an Overworld plan is still a gather at the old mine")
+
+
+## The quartz site and the gather mission to it (issue #155).
+func test_the_quartz_site() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var portal: Dictionary = w.portal
+	var site: SimMap = sim.get_map("nether_quartz")
+	var quartz: Array = site.boulders.filter(func(b): return b.ore == "quartz")
+	var glow: Array = site.boulders.filter(func(b): return b.ore == "glowstone")
+	check(site.pattern == "hand_laid" and site.w == 20 and site.h == 14 and quartz.size() == 8 and glow.size() == 5 and site.lava.size() == 4 and site.entrance == Vector2i(0, 7), "a hand-laid 20×14 site with 8 quartz, 5 glowstone and a lava pool")
+	check(Rect2i(0, 0, 20, 14).encloses(NetherRoute.QUARTZ_STATION_PLOT) and sim.on_map("nether_quartz", func(): return NetherRoute.QUARTZ_STATION_PLOT.size.x == 5 and range(14, 19).all(func(x): return sim.walkable(Vector2i(x, 12)))), "it keeps room clear for the Nether line's far station")
+	check(Defs.ITEMS.quartz.group == "ores" and Defs.ITEMS.glowstone.group == "ores" and Defs.ORES.quartz.item == "quartz", "quartz and glowstone are ores to the tally bar")
+	# Glowstone breaks by hand; quartz needs a pickaxe.
+	ada.pick = null
+	var bare := {"what": "gather", "tool": "pick", "target": glow[0]}
+	check(absf(sim._work_time(ada, bare) - Tuning.GLOWSTONE_TIME) < 0.01, "glowstone breaks by hand in %d s" % Tuning.GLOWSTONE_TIME)
+	check(sim._work_time(ada, {"what": "gather", "tool": "pick", "target": quartz[0]}) < 0.0, "quartz can't")
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 50}
+	check(sim._work_time(ada, {"what": "gather", "tool": "pick", "target": quartz[0]}) > 0.0, "with a pickaxe it can")
+	# A report before and after a visit.
+	portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	sim.get_map(NetherRoute.ROUTES.quartz.id).surveyed = true
+	site.known = true
+	var rep := sim.site_report("nether_quartz")
+	check(rep.resources.map(func(x): return x.item) == ["quartz", "glowstone"] and rep.resources.all(func(x): return x.reserve == -1) and rep.travel > 0.0, "before anyone's been there the report names the finds, reserves unknown")
+	# The gather mission, through the portal, along the route and back.
+	var plan := sim.nether_plan("gather")
+	plan.party = [ada.id]
+	sim.aim_plan(plan, "quartz", 4)
+	plan.policy = {"target": true, "full": true, "low": true}
+	check(sim.plan_problems(plan).is_empty(), "the plan is fine (%s)" % [sim.plan_problems(plan)])
+	check(sim.plan_expedition(plan) == "", "planned")
+	portal.store = {"bread": 3}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "stone_pick", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("nether") == "", "and sent")
+	var maps_seen := {}
+	var left := site.boulders.filter(func(b): return b.alive and b.ore == "quartz").size()
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		maps_seen[ada.map] = true
+		ada.hurt = 0  # the lava and creatures on the way aren't what's tested here: she mines
+		if sim.expeditions.nether.is_empty():
+			break
+	check(maps_seen.has(NetherLanding.ID) and maps_seen.has(NetherRoute.ROUTES.quartz.id) and maps_seen.has("nether_quartz"), "Ada crosses the landing and walks the route to the site (%s)" % [maps_seen.keys()])
+	check(sim.expeditions.nether.is_empty() and ada.map == "village" and sim.stats.expeditions == 1, "and comes home the same way")
+	var brought := 0
+	for st in sim.stacks_where(func(x): return x.type == "quartz"):
+		brought += st.n
+	var mined := left - site.boulders.filter(func(b): return b.alive and b.ore == "quartz").size()
+	check(brought >= 4 and mined * Tuning.ORE_YIELD.quartz == brought, "she brings back the quartz she mined (%d from %d blocks)" % [brought, mined])
+	var rep2 := sim.site_report("nether_quartz")
+	var q: Dictionary = rep2.resources.filter(func(x): return x.item == "quartz")[0]
+	check(site.visited and q.reserve == (quartz.size() - mined) * Tuning.ORE_YIELD.quartz, "the reserve ran down by what was mined (%d left)" % q.reserve)
+	# Deposits don't come back, and it's saved.
+	var back := Sim.from_state(sim.save_state())
+	check(back.ore_left("nether_quartz", "quartz") == quartz.size() - mined and back.get_map("nether_quartz").visited, "the mined-out blocks stay gone, saved")
+	var f45 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v45.save").data.state)
+	check(f45.ore_left("nether_quartz", "quartz") == 6 and f45.get_map("nether_quartz").visited, "the v45 fixture loads the quartz site with two blocks mined")
+	# An older save's empty room becomes the quartz site on loading.
+	var f44 := SaveFormat.read("res://tests/fixtures/save_v44.save")
+	check(Sim.from_state(f44.data.state).get_map("nether_quartz").boulders.size() == 13 and Sim.from_state(f44.data.state).get_map("nether_quartz").known, "an older save's empty room becomes the quartz site, still known")
