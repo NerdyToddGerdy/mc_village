@@ -6881,6 +6881,10 @@ func _check_stranded() -> void:
 	if ex.get("state", "") != "out":
 		return
 	if ex.has("stranded"):
+		if ex.stranded.why.begins_with("the portal is dark") and portal_lit():  # the village lit it again: they can go home (issue #158)
+			ex.erase("stranded")
+			_toast("The portal is lit again. The party is no longer stranded.", ex.party[0])
+			return
 		if tick >= ex.stranded.until:
 			_abandon("the rescue window passed")
 		return

@@ -1815,18 +1815,18 @@ func test_staging_and_departure() -> void:
 			check(stuck_text(sim).contains("Expedition: Waiting for"), "while packing, the wait shows: " + stuck_text(sim))
 	check(tomas_packed, "village residents pack the supplies (Haul)")
 	check(not ada_village_work, "the party only packs and waits; it takes no other village work")
-	check(sim.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0} and b.tools.size() == 1 and b.tools[0].dur == 9, "2 meals and the spare pickaxe are packed, with its wear (%s)" % [sim.packed()])
+	check(sim.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0, "gold": 0, "rails": 0, "minecarts": 0} and b.tools.size() == 1 and b.tools[0].dur == 9, "2 meals and the spare pickaxe are packed, with its wear (%s)" % [sim.packed()])
 	check(count(sim, "bread") == 1, "packed meals leave the stockpile")
 	check(sim.at_board(ada) and Sim.staging_cells(b).has(Sim.rcell(ada)), "Ada waits at the board")
 	check(sim.depart_blocker() == "", "everything is ready: %s" % sim.depart_blocker())
 	# Saving while packed keeps it packed.
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
-	check(loaded.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0} and loaded.site(b.id).tools[0].dur == 9, "what's packed survives a save")
+	check(loaded.packed() == {"meals": 2, "picks": 1, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0, "gold": 0, "rails": 0, "minecarts": 0} and loaded.site(b.id).tools[0].dur == 9, "what's packed survives a save")
 	run(loaded, 10)
 	check(loaded.at_board(loaded.residents[0]), "and Ada goes back to the board after loading")
 	# Cancelling on the copy: the supplies go back through haul jobs.
 	loaded.cancel_expedition()
-	check(loaded.expedition.is_empty() and loaded.packed() == {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0}, "cancelling unpacks the board")
+	check(loaded.expedition.is_empty() and loaded.packed() == {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0, "gold": 0, "rails": 0, "minecarts": 0}, "cancelling unpacks the board")
 	run(loaded, 40)
 	var stored := loaded.stacks_where(func(st): return st.type in ["bread", "stone_pick"] and loaded.in_zone(st.cell))
 	check(stored.map(func(st): return st.type).count("stone_pick") == 1 and count(loaded, "bread") == 3, "the meals and the pickaxe are hauled back to the stockpile")
@@ -4856,7 +4856,7 @@ func test_auto_combat() -> void:
 	var tomas: Dictionary = w.tomas
 	var mira: Dictionary = w.mira
 	var landing: SimMap = w.landing
-	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "blaze"], "four creatures")
+	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "blaze"], "five creatures")
 	# A guard defeats a magma cube, which leaves its cream.
 	var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Sim.rcell(tomas) + Vector2i(5, 0))
 	var xp: int = tomas.jobs.guard.xp
@@ -5156,7 +5156,7 @@ func test_mission_types() -> void:
 	var shelter: Dictionary = sim.on_map(NetherLanding.ID, func(): return sim.place_site("shelter", NetherLanding.SHELTER_AT))
 	shelter.stage = 1
 	shelter.done = true
-	check(dests.call("build").is_empty() and sim.objective_why_none("build") == "Nothing to build yet: the shelter stands", "a standing shelter leaves nothing to build")
+	check(dests.call("build") == ["nether_quartz:"] and sim.objective_why_none("build") == "Nothing to build yet: the shelter stands", "a standing shelter leaves only the Nether line to build, once the quartz route is scouted")
 	# The briefing: dangers, risks and when they come home.
 	var plan := sim.nether_plan("scout")
 	plan.party = [ada.id]
