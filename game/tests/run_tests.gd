@@ -73,6 +73,7 @@ func _init() -> void:
 		"test_scouting_the_routes",
 		"test_mission_types",
 		"test_the_quartz_site",
+		"test_piglin_trading",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
 		"test_expedition_slots",
@@ -5240,3 +5241,98 @@ func test_the_quartz_site() -> void:
 	# An older save's empty room becomes the quartz site on loading.
 	var f44 := SaveFormat.read("res://tests/fixtures/save_v44.save")
 	check(Sim.from_state(f44.data.state).get_map("nether_quartz").boulders.size() == 13 and Sim.from_state(f44.data.state).get_map("nether_quartz").known, "an older save's empty room becomes the quartz site, still known")
+
+
+## Piglin trading from a fixed table, and the rule that turns them hostile (issue #156).
+func test_piglin_trading() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var portal: Dictionary = w.portal
+	var camp: SimMap = sim.get_map("nether_piglin")
+	check(camp.pattern == "hand_laid" and camp.w == 20 and camp.creatures.size() == 3 and camp.creatures.all(func(x): return x.species == "piglin" and not x.angry), "a hand-laid camp with three piglins, at peace")
+	check(Defs.CREATURES.piglin.notice == 0 and not sim._dangerous(camp.creatures[0]), "a piglin never goes for anyone")
+	# The table is fixed, and shown.
+	check(Defs.TRADES.size() == 4 and Defs.TRADES.all(func(t): return t.give.keys() == ["gold_ingot"]), "four trades, all for gold ingots")
+	check(Defs.trade_text(Defs.TRADES[0]) == "2 gold ingots for 1 obsidian" and Defs.PIGLIN_RULE == "Piglins turn hostile if anyone in the party strikes one", "in plain words, with the rule")
+	portal.lit = true
+	sim.get_map(NetherLanding.ID).known = true
+	sim.get_map(NetherRoute.ROUTES.piglin.id).surveyed = true
+	camp.known = true
+	var rep := sim.site_report("nether_piglin")
+	check(rep.trades == Defs.TRADES.map(func(t): return Defs.trade_text(t)) and rep.rule == Defs.PIGLIN_RULE and not rep.hostile, "the site report shows the table and the rule")
+	var plan := sim.nether_plan("trade")
+	plan.party = [ada.id]
+	check(plan.target.item == "trade" and plan.dest == "nether_piglin" and plan.gold == 0 and sim.plan_problems(plan).has("Take some gold to trade"), "a trade plan with no gold is refused: take some")
+	var briefing := sim.plan_briefing(plan)
+	check(briefing.filter(func(l): return l.begins_with("Trade: ")).size() == 4 and briefing.has("Rule: " + Defs.PIGLIN_RULE), "the planner's briefing shows the whole table and the rule before the party commits")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "gold_ingot", 6)
+	plan = sim.nether_plan("trade")
+	plan.party = [ada.id]
+	check(plan.gold == 6 and Sim.plan_supplies(plan) == plan.meals + 6, "the plan carries the gold, which counts against the packs")
+	# The trade, through the portal and along the route.
+	check(sim.plan_expedition(plan) == "", "planned")
+	portal.store = {"bread": 3}  # (the gold is carried in from the stockpile)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("nether") == "" and sim.expeditions.nether.supplies.gold_ingot == 6, "the party sets off with 6 gold")
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		ada.hurt = 0
+		if sim.expeditions.nether.is_empty():
+			break
+	check(sim.expeditions.nether.is_empty() and ada.map == "village", "they trade and come home")
+	var got := {}
+	for st in sim.stacks_where(func(x): return true):
+		got[st.type] = got.get(st.type, 0) + st.n
+	check(got.get("obsidian", 0) == 3 and not got.has("gold_ingot"), "6 gold buys 3 obsidian, the first row of the table, and none is left (%s)" % [got])
+	check(sim.expedition_board().get("report", []).any(func(l): return l.begins_with("Traded: ") and "2 gold ingots for 1 obsidian ×3" in l), "the report says what was traded: %s" % [sim.expedition_board().get("report", [])])
+	check(camp.creatures.all(func(x): return x.alive and not x.angry) and not camp.hostile, "the piglins stayed at peace")
+	var f46 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v46.save").data.state)
+	check(f46.get_map("nether_piglin").hostile and f46.get_map("nether_piglin").creatures[0].hp == 7, "the v46 fixture loads its hostile camp")
+	check(Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v45.save").data.state).get_map("nether_piglin").creatures.size() == 3, "an older save's empty room becomes the camp, with its piglins")
+	# Trades only ever come from the shown table.
+	var allowed := {}
+	for t in Defs.TRADES:
+		for k in t.get:
+			allowed[k] = true
+	var odd := 0
+	for gold in range(1, 13):
+		var s2 := Sim.new_game()
+		s2.use_slot("nether")
+		s2.expedition = {"supplies": {"gold_ingot": gold}, "cargo": {}, "provisions": {}, "tools": [], "party": [1], "meals": 0, "picks": 0, "target": {"item": "trade", "n": 1}}
+		s2.m.creatures.clear()
+		while s2._next_trade() >= 0:
+			var ti := s2._next_trade()
+			for k in Defs.TRADES[ti].get:
+				if not allowed.has(k):
+					odd += 1
+			s2.expedition.supplies.gold_ingot -= Defs.TRADES[ti].give.gold_ingot
+	check(odd == 0, "a trade never gives anything but what the table shows")
+	# Breaking the rule turns them hostile, and auto-combat applies.
+	var w2 := fight_world()
+	var s3: Sim = w2.sim
+	var tomas: Dictionary = w2.tomas
+	var camp2: SimMap = s3.get_map("nether_piglin")
+	tomas.map = "nether_piglin"
+	s3.move_to_map(tomas, "nether_piglin", camp2.entrance + Vector2i(2, 0))
+	s3.expeditions.nether.dest = "nether_piglin"
+	s3.expeditions.nether.target = {"item": "trade", "n": 1}
+	s3.expeditions.nether.supplies = {"gold_ingot": 4}
+	var pig: Dictionary = camp2.creatures[0]
+	s3.on_slot("nether", func(): s3.on_map("nether_piglin", func(): s3._strike(tomas, pig)))
+	check(camp2.hostile and camp2.creatures.all(func(x): return x.angry), "striking a piglin turns the whole camp hostile")
+	check(s3.site_report("nether_piglin").hostile and s3.site_report("nether_piglin").hazards.has("The piglins are hostile"), "and the report says so")
+	for i in 20 * Tuning.TPS:
+		s3.step()
+		if not s3.pending.is_empty():
+			s3.choose("press_on")
+	check(s3.expeditions.nether.get("leg", "") == "home" or s3.stats.get("injuries", 0) > 0 or camp2.creatures.any(func(x): return not x.alive), "auto-combat applies: they fight, or the party heads home")
+	check(not s3.expeditions.nether.get("trade_done", false) and s3.expeditions.nether.supplies.get("gold_ingot", 0) == 4, "and no trade is made with a hostile camp")
+	var back := Sim.from_state(s3.save_state())
+	check(back.get_map("nether_piglin").hostile and back.get_map("nether_piglin").creatures.size() == 3, "the camp's state is saved")

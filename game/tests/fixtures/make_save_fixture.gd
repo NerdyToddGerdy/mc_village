@@ -312,6 +312,12 @@ func _initialize() -> void:
 			if b.ore == "quartz" and gone < 2:
 				b.alive = false
 				gone += 1
+	if SaveFormat.VERSION >= 46:  # the piglin camp turned hostile after a blow, its first piglin hurt (#156)
+		var camp := sim.get_map("nether_piglin")
+		camp.hostile = true
+		for x in camp.creatures:
+			x.angry = true
+		camp.creatures[0].hp = 7
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

@@ -3008,6 +3008,8 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 		if tend:
 			c.add_child(_label("Build the pens, lead marked animals in, feed pairs, and hunt only what's over %d of each kind." % plan.target.n, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	c.add_child(_stepper_row("Meals to take", plan.meals, "meals"))
+	if plan.target.item == "trade":  # the gold carried, which takes room in the packs (issue #156)
+		c.add_child(_stepper_row("Gold to trade", plan.get("gold", 0), "gold"))
 	if Sim.realm_of(plan.dest) == "nether":  # the landing's shelter and cache (issue #152)
 		if plan.get("shelter", false):
 			c.add_child(_label("Carrying the shelter: %s and %s. The party builds it before it comes home." % [Defs.words("cobble", plan.cobble), Defs.words("plank", plan.planks)], false, Palette.CHALK_DIM, Palette.CAPTION, true))

@@ -255,7 +255,7 @@ func _add_site_maps() -> void:
 		if not maps.has(NetherRoute.ROUTES[key].id):
 			maps[NetherRoute.ROUTES[key].id] = NetherRoute.build(self, key)
 			maps[NetherRoute.ROUTES[key].site] = NetherRoute.build_site(self, key)
-		elif key == "quartz" and maps[NetherRoute.ROUTES[key].site].pattern == "":  # an older save's empty room becomes the quartz site (issue #155)
+		elif key in ["quartz", "piglin"] and maps[NetherRoute.ROUTES[key].site].pattern == "":  # an older save's empty room becomes the site (issues #155, #156)
 			var was_known: bool = maps[NetherRoute.ROUTES[key].site].known
 			maps[NetherRoute.ROUTES[key].site] = NetherRoute.build_site(self, key)
 			maps[NetherRoute.ROUTES[key].site].known = was_known
@@ -2597,6 +2597,31 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 					rev += 1
 					return true
 			return "gone"
+		"trade":  # every trade the gold pays for, down the table; goods go into the packs (issue #156)
+			if m.hostile:
+				return "gone"
+			var made := 0
+			var counts := {}
+			while true:
+				var ti := _next_trade()
+				if ti < 0:
+					break
+				counts[ti] = counts.get(ti, 0) + 1
+				var t: Dictionary = Defs.TRADES[ti]
+				for k in t.give:
+					expedition.supplies[k] -= t.give[k]
+					if expedition.supplies[k] <= 0:
+						expedition.supplies.erase(k)
+				for k in t.get:
+					expedition.cargo[k] = expedition.cargo.get(k, 0) + t.get[k]
+				made += 1
+			for ti in counts:
+				expedition.traded = expedition.get("traded", []) + [Defs.trade_text(Defs.TRADES[ti]) + (" ×%d" % counts[ti] if counts[ti] > 1 else "")]
+			expedition.trade_done = true
+			rev += 1
+			if made > 0:
+				_toast("The party traded with the piglins: %s." % "; ".join(expedition.traded), r.id)
+			return true
 		"mark_seen":  # a landmark is seen; the last one surveys the landing (issue #148)
 			if not m.landmarks_seen.has(st.cell):
 				m.landmarks_seen.append(st.cell)
@@ -3709,8 +3734,9 @@ func nether_plan(obj: String, pick := {}) -> Dictionary:
 			var first: Array = plan_targets(plan.dest)
 			if not first.is_empty():
 				aim_plan(plan, first[0].item, 8)
-		"trade":
+		"trade":  # the gold the village has, up to what the packs take (issue #156)
 			plan.target = {"item": "trade", "n": 1}
+			plan.gold = mini(free_count("gold_ingot"), 6)
 		"fortress":
 			plan.target = {"item": "fortress", "n": 1}
 	return plan
@@ -3734,12 +3760,19 @@ func plan_briefing(plan: Dictionary) -> Array:
 		out.append("Risk: no sword in the village")
 	if stacks_where(func(s): return s.type == "flint_and_steel" and avail(s) > 0).is_empty():
 		out.append("Risk: no flint and steel to carry, so if the portal goes out the party waits for the village to light it")
-	if obj == "trade":
-		out.append("The piglins' trade table will be shown here before the party commits (#156)")
+	if obj == "trade":  # the fixed table and the rule, before the party commits (issue #156)
+		for t in Defs.TRADES:
+			out.append("Trade: " + Defs.trade_text(t))
+		out.append("Rule: " + Defs.PIGLIN_RULE)
 	if obj == "rescue":
 		out.append("A rescue may set out even when both parties are out")
 	out.append("Comes home when %s" % OBJECTIVES[obj].returns)
 	return out
+
+
+## Whether the party is out to trade with the piglins (issue #156).
+func trading() -> bool:
+	return expedition.get("target", {}).get("item", "") == "trade"
 
 
 ## Whether the party is out to scout a route (issue #153).
@@ -4976,7 +5009,7 @@ static func pack_capacity(plan: Dictionary) -> int:
 
 ## Room the supplies take: a meal, a spare pickaxe, a stick or a wheat is one item each.
 static func plan_supplies(plan: Dictionary) -> int:
-	return plan.meals + plan.picks + plan.get("sticks", 0) + plan.get("wheat", 0) + plan.get("cobble", 0) + plan.get("planks", 0)
+	return plan.meals + plan.picks + plan.get("sticks", 0) + plan.get("wheat", 0) + plan.get("cobble", 0) + plan.get("planks", 0) + plan.get("gold", 0)
 
 
 ## Room left in the packs for what the party brings back.
@@ -5012,6 +5045,8 @@ func plan_problems(plan: Dictionary) -> Array:
 		out.append("%s %s is already out" % ["An" if sl == "overworld" else "A", party_name(sl)])
 	if expedition_board().is_empty():
 		out.append("Build an expedition board first")
+	if plan.target.item == "trade" and plan.get("gold", 0) <= 0:  # nothing to trade with (issue #156)
+		out.append("Take some gold to trade")
 	if plan.target.item == "scout":  # which route, and not one already scouted (issue #153)
 		var rk: String = plan.target.get("route", "")
 		if not NetherRoute.ROUTES.has(rk):
@@ -5077,7 +5112,7 @@ func plan_expedition(plan: Dictionary) -> String:
 
 ## Meals and spare pickaxes at the board so far, plus those on their way there when `incoming`.
 func packed(incoming := false) -> Dictionary:
-	var out := {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0}
+	var out := {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0, "gold": 0}
 	var b := site(expedition.get("board", 0))
 	if b.is_empty():
 		return out
@@ -5095,21 +5130,24 @@ func packed(incoming := false) -> Dictionary:
 				out.cobble += src[k]
 			elif k == "plank":
 				out.planks += src[k]
+			elif k == "gold_ingot":
+				out.gold += src[k]
 	return out
 
 
 ## What's still to be packed, less what's on its way: {meals, picks, wheat, sticks}.
 func pack_needs() -> Dictionary:
 	if expedition.get("state", "") != "staging":
-		return {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0}
+		return {"meals": 0, "picks": 0, "wheat": 0, "sticks": 0, "cobble": 0, "planks": 0, "gold": 0}
 	var p := packed(true)
 	return {"meals": maxi(0, expedition.meals - p.meals), "picks": maxi(0, expedition.picks - p.picks),
 		"wheat": maxi(0, expedition.get("wheat", 0) - p.wheat), "sticks": maxi(0, expedition.get("sticks", 0) - p.sticks),
-		"cobble": maxi(0, expedition.get("cobble", 0) - p.cobble), "planks": maxi(0, expedition.get("planks", 0) - p.planks)}
+		"cobble": maxi(0, expedition.get("cobble", 0) - p.cobble), "planks": maxi(0, expedition.get("planks", 0) - p.planks),
+		"gold": maxi(0, expedition.get("gold", 0) - p.gold)}
 
 
 ## What a plan can ask to have packed besides meals and spare pickaxes: [the plan's key, the item].
-const SUPPLY_KINDS := [["wheat", "wheat"], ["sticks", "stick"], ["cobble", "cobble"], ["planks", "plank"]]
+const SUPPLY_KINDS := [["wheat", "wheat"], ["sticks", "stick"], ["cobble", "cobble"], ["planks", "plank"], ["gold", "gold_ingot"]]
 
 
 ## A delivery of supplies to the board (issue #107): meals first, then spare pickaxes, the best first.
@@ -5535,6 +5573,8 @@ func expedition_report(ex: Dictionary) -> Array:
 	if broken > 0:
 		cost += ", %d %s broken" % [broken, "pickaxe" if broken == 1 else "pickaxes"]
 	lines.append(cost)
+	if not ex.get("traded", []).is_empty():  # issue #156
+		lines.append("Traded: " + "; ".join(ex.traded))
 	if ex.get("cart", false) and ex.has("road_out") and ex.has("road_home"):  # issue #124
 		var took: float = float(ex.road_out[1] - ex.road_out[0] + ex.road_home[1] - ex.road_home[0]) / Tuning.TPS
 		lines.append("By cart: %d s on the road there and back, about %d s saved" % [roundi(took), maxi(0, roundi(2.0 * route_walk_time() - took))])
@@ -6372,6 +6412,8 @@ func _site_job(r: Dictionary):
 		return _meadow_job(r, c)
 	if m.id == NetherLanding.ID:
 		return _landing_job(r, c)
+	if m.id == NetherRoute.ROUTES.piglin.site:
+		return _camp_job(r, c)
 	var can_mine: bool = r.get("hurt", 0) == 0
 	if can_mine and r.pick == null and not expedition.get("tools", []).is_empty():
 		var t := Job.new("equip", "Taking a spare pickaxe from the packs", "the packs")
@@ -6505,6 +6547,37 @@ func _route_scout_job(r: Dictionary) -> Job:
 	return j
 
 
+## What a party member does at the piglin camp (issue #156): with gold in the packs, walk up to a piglin and trade, down the
+## table as shown. Once the trades are made, or the camp has turned hostile, there's nothing more to do.
+func _camp_job(r: Dictionary, c: Vector2i):
+	if not trading() or expedition.get("trade_done", false) or m.hostile:
+		return null
+	var piglins := m.creatures.filter(func(x): return x.alive and x.species == "piglin")
+	if piglins.is_empty():
+		return null
+	var p: Dictionary = nearest(piglins, c)
+	var j := Job.new("trade", "Going to the piglins to trade", "a piglin")
+	j.step({"op": "chase", "target": p, "planned_for": null})
+	j.step({"op": "trade"})
+	return j
+
+
+## The first row of the table the packs can pay for, or -1.
+func _next_trade() -> int:
+	var gold: int = expedition.get("supplies", {}).get("gold_ingot", 0)
+	for i in Defs.TRADES.size():
+		var t: Dictionary = Defs.TRADES[i]
+		var paid := 0
+		for k in t.give:
+			paid += t.give[k]
+		var got := 0
+		for k in t.get:
+			got += t.get[k]
+		if gold >= t.give.get("gold_ingot", 0) and pack_room() + paid >= got:
+			return i
+	return -1
+
+
 ## What a party member does on the portal landing (issue #148): walk to the landmarks not yet seen, then wait.
 func _landing_job(r: Dictionary, c: Vector2i):
 	var sh := shelter_site()
@@ -6608,6 +6681,12 @@ func _strike(r: Dictionary, cr: Dictionary) -> void:
 		dmg = Tuning.SWORD_DAMAGE
 		_wear(r, "sword")
 	cr.flash = tick + 6
+	if cr.species == "piglin" and not m.hostile:  # the rule shown up front is broken (issue #156)
+		m.hostile = true
+		for x in m.creatures:
+			if x.species == "piglin":
+				x.angry = true
+		_toast("The piglins turn hostile.", r.id)
 	if not _roll(Tuning.HIT_CHANCE + 0.08 * (level(r, "guard") - 1)):
 		return
 	cr.hp -= dmg
@@ -6899,6 +6978,10 @@ func policy_met() -> String:
 	var ex := expedition
 	if not pending.is_empty():
 		return ""
+	if trading():  # the trades are made, or the piglins have turned (issue #156)
+		if ex.get("trade_done", false) or m.hostile:
+			return "the piglins turned hostile" if m.hostile else "the trades are made"
+		return "provisions low" if ex.policy.get("low", false) and spendable_meals() <= 0 else ""
 	if scouting():  # a scout comes home when the route is walked, which sends them (issue #153)
 		return "provisions low" if ex.policy.get("low", false) and spendable_meals() <= 0 else ""
 	if surveying():  # the landing: home once every landmark has been seen (issue #148)
@@ -7621,8 +7704,15 @@ func _nether_site_report(id: String) -> Dictionary:
 	if mp.visited and not mp.lava.is_empty():
 		hazards.append("Lava pools in the rock: someone beside one can be burned")
 	var walk: float = (Road.SEGMENTS.size() * 8.0 + NetherLanding.LAYOUT[0].length() / 2.0) / Tuning.WALK
-	return {"name": def.site_name, "told": def.told, "visited": mp.visited, "travel": walk, "level": 0, "pattern": "", "resources": res, "hazards": hazards,
+	var out := {"name": def.site_name, "told": def.told, "visited": mp.visited, "travel": walk, "level": 0, "pattern": "", "resources": res, "hazards": hazards,
 		"access": [rk_access(rk)] if mp.visited else [], "finds": [], "levels": [], "door": ""}
+	if rk == "piglin":  # the table and the rule are shown before a party commits (issue #156)
+		out.trades = Defs.TRADES.map(func(t): return Defs.trade_text(t))
+		out.rule = Defs.PIGLIN_RULE
+		out.hostile = mp.hostile
+		if mp.hostile:
+			out.hazards.append("The piglins are hostile")
+	return out
 
 
 ## What a site has room for, by its route.

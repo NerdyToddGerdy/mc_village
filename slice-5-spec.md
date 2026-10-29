@@ -194,7 +194,17 @@ The scouted quartz route now leads to a hand-laid **quartz site** (`NetherRoute.
 - **Depletion:** the site report lists each find's reserve (blocks left times the yield) once someone's been there, and it runs down as the party mines. Deposits don't come back (#22).
 - **Saving:** v45. The mined-out blocks and `visited` are saved with the map.
 
-## 14. Tuning table (provisional)
+## 14. Piglin trading (#156)
+
+The scouted piglin route leads to a hand-laid **piglin camp** (`NetherRoute.PIGLIN_LAYOUT`, 20×14) with three piglins standing about. A **piglin** is a creature that never goes for anyone (`notice` 0) and only fights back once it's been hit.
+
+- **The trade table** is fixed, shown before a party commits, and never rolls (`Defs.TRADES`): 2 gold ingots for 1 obsidian; 2 gold ingots for 3 string; 1 gold ingot for 2 flint; 4 gold ingots for 1 fire-resistance supply. A trading party works down it in that order, taking the first row its gold pays for, and trading until it can pay for none. It's in the site report (`trades`) and the planner's briefing, which also shows the rule.
+- **The rule**, shown up front: **"Piglins turn hostile if anyone in the party strikes one."** Breaking it turns the whole camp hostile (`SimMap.hostile`): the piglins go for the party, auto-combat applies (#151), no more trading is done there, the report lists "The piglins are hostile", and the party heads home. A trade plan never sets the party to fight, so a guard doesn't attack a peaceful piglin.
+- **The mission** (objective **Trade**): the party carries **gold ingots** from the village as supplies (the planner's "Gold to trade", up to 6 by default, as much as the village has), which take room in the packs like any item. At the camp one member walks up to a piglin and makes every trade the gold pays for; the goods go into the packs (as long as they fit) and come home as cargo. It returns when the trades are made.
+- **The report** says what was traded: "Traded: 2 gold ingots for 1 obsidian ×3".
+- **Saving:** v46. A camp keeps `hostile`, and its piglins their health. An older save's empty room becomes the camp when it loads.
+
+## 15. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -233,3 +243,5 @@ Each build issue adds its rows.
 | `ORE_YIELD` quartz / glowstone | 2 / 2 | Items a block drops. |
 | `GLOWSTONE_TIME` | 3 s | Breaking glowstone, by hand or with any tool. |
 | Quartz site | 20×14 | Cells, 8 quartz and 5 glowstone. |
+| Trade table | see §14 | `Defs.TRADES`: gold ingots for obsidian, string, flint and fire resistance. |
+| Piglin camp | 20×14 | Cells, with three piglins (12 health each). |

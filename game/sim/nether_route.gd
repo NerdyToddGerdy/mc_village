@@ -136,6 +136,9 @@ static func _build_laid(s: Sim, key: String, rows: Array) -> SimMap:
 					m.boulders.append(OldMine._block(s, c, "quartz"))
 				"g":
 					m.boulders.append(OldMine._block(s, c, "glowstone"))
+				"P":
+					m.creatures.append({"id": s._id(), "kind": "creature", "species": "piglin", "cell": c, "pos": Vector2(c), "alive": true,
+						"hp": Defs.CREATURES.piglin.hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0})
 	return m
 
 
@@ -180,6 +183,25 @@ const QUARTZ_LAYOUT := [
 	"#..................#",
 	"####################",
 ]
+## The piglin camp (issue #156): P a piglin, standing about; huts are rock to walk round.
+const PIGLIN_LAYOUT := [
+	"####################",
+	"#..................#",
+	"#..###.........##..#",
+	"#..#...P.......#...#",
+	"#..###.........##..#",
+	"#..................#",
+	"#.......P..........#",
+	"E..................#",
+	"#..................#",
+	"#...##.....###.....#",
+	"#...#......#...P...#",
+	"#...##.....###.....#",
+	"#..................#",
+	"####################",
+]
+
+
 ## Room kept clear for the Nether line's far station (issue #159): its platform and the plot a loading station grows into.
 const QUARTZ_STATION_PLOT := Rect2i(14, 12, 5, 1)
 const QUARTZ_TOLD := "Where nether quartz is said to lie, with glowstone in the rock."
@@ -190,6 +212,8 @@ const QUARTZ_TOLD := "Where nether quartz is said to lie, with glowstone in the 
 static func build_site(s: Sim, key: String) -> SimMap:
 	if key == "quartz":
 		return _build_laid(s, key, QUARTZ_LAYOUT)
+	if key == "piglin":
+		return _build_laid(s, key, PIGLIN_LAYOUT)
 	var def: Dictionary = ROUTES[key]
 	var m := SimMap.new(16, 16)
 	m.id = def.site
