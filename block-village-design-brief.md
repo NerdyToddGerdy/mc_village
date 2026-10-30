@@ -188,7 +188,9 @@ Main settlements remain in the Overworld initially. Other dimensions support cam
 
 Access is a village project: discover clues, investigate, gather materials, establish a portal, scout the far side, and develop supported routes.
 
-The End and Sift are not yet designed in detail. Their exact mechanics, resources, access requirements, and progression remain open.
+**The End (#289).** Reached through a **stronghold and its portal** (the stronghold is an adventure of its own, #262). The party lands on the obsidian platform beside the central dragon, the boss. The smaller outer islands are reached by **bridging out**, built by the residents the way the roads and bridges to the mine, the meadow and the Nether routes are. The dragon fight, what the islands hold and what the End unlocks are still open.
+
+**The Sift (#290)** is parked. Minecraft is adding a dimension reached from the Ancient City, and the Sift will be designed once more is known about it, arriving as an upgrade. It gives discoveries that open new options.
 
 ## 8. Nether Expedition System
 
@@ -530,7 +532,7 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 - Recruitment beyond free beds, such as requests or an inn. (Resolved for Slice 2, #24: a traveler arrives for each free bed.)
 - How often expeditions require intervention and how many can run simultaneously. (Resolved for Slice 3, #25: one expedition at a time, and, from Slice 5 (#145), two at once: one Overworld and one Nether. The game stops for the player only at a discovery and at a serious injury, plus a door down once mines have deeper levels, #130.)
 - Outpost costs beyond supply runs. (Decided, #26: outposts, camps and depots are **unstaffed**. A one-off build plus supplies delivered by cart or party, as the shelter cache and the freight chain do; they go dark if left unsupplied. Terrain modification, building customization beyond fixed templates, verticality and camera rotation are decided too, #21: a flat map with discrete height layers only where a site needs them, and a fixed camera, revisited only if a slice needs it.)
-- Detailed End and Sift systems.
+- Detailed End systems (#289: access, arrival and bridging decided; the dragon fight, the islands and rewards are open) and the Sift (#290, parked until Minecraft's version is known).
 - Enchantment discovery and resource costs. (Resolved for Slice 6, #28: enchanted books from expeditions teach recipes permanently; each costs lapis plus one ingredient. See §9.)
 - Railway management beyond point-to-point lines. (Decided, #29: custom circuits never; redstone stays ready-made devices joined by dust lines, and the railway network stays separate point-to-point lines that meet only at shared stations, with no junctions. Slice 6 built the first of it. Revisit only if the ready-made devices prove to fall short in play.)
 - Scope of original terminology, assets, and worldbuilding versus direct Minecraft references. (Settled for now, #30: Minecraft names such as Nether, piglin, blaze and quartz are working names.)
