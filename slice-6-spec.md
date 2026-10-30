@@ -105,7 +105,16 @@ Each enchantment changes only its own number, by the item's type (`Defs.ITEMS[ty
 - **Complete** when the village station is built, all six rails are laid and the landing station stands (`pline_complete()`). A party then **rides** the rails on the landing at the cart's speed.
 - **Saving:** `portal_line: {laid}` (v54). The village station is a site; the landing station is the Nether line's flag.
 
-## 9. Tuning table (provisional)
+## 9. The freight cart (#169)
+
+- **Ordering:** once the portal line is complete (§8), the portal station's panel offers **Order a freight cart**. A hauler carries a minecart from the stockpile to the station and parks it (`freight.state` "ordered" → "home"). One cart.
+- **State:** `freight` = {state: ordered / home / going / unloading / returning, pos (0 at the village station, 1 at the landing station), load, approved, acc}. It carries goods and no riders.
+- **Approval:** the cart **never departs on its own**. **Approve departure** (the station panel) sets `approved`; it leaves once the portal is lit, and the approval is used up with the trip. Cancel approval takes it back. (The dispatcher, #173, will give the same go-ahead from a device.)
+- **The trip:** `FREIGHT_TRIP_TIME` (14 s) one way, the portal `FREIGHT_CROSS` (0.3) of the way along; drawn moving along the village side and then the landing's rails with its load stacked on it. At the landing it unloads into the **shelter's cache** at `LOAD_RATE`, up to `CACHE_CAPACITY` (60) items in all, then returns empty. Nobody needs to be in the Nether.
+- **Stuck reasons:** "Freight cart: waiting for approval" (loaded, at the station); "the portal is unlit" (at the station approved, or held at the crossing); "the cache is full" (or "there's no shelter to unload into"); "needs a minecart from the village".
+- **Saving:** `freight` (v55). Until the loader (#172) there's no way to put goods on it in play; tests load it directly.
+
+## 10. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -122,3 +131,6 @@ Each build issue adds its rows.
 | `FIRE_PROTECTION_CUT` | −50% | Chance of harm from fire and lava, per Fire protection piece. |
 | `PORTAL_LINE_RAILS` | 6 | Rails on the landing side of the portal line. |
 | `PORTAL_STATION_REACH` | 6 | Cells from the portal frame the village station may stand. |
+| `FREIGHT_TRIP_TIME` | 14 s | One way along the portal line. |
+| `FREIGHT_CROSS` | 0.3 | How far along the trip the portal is. |
+| `CACHE_CAPACITY` | 60 | Items the shelter's cache holds in all. |

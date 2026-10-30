@@ -80,6 +80,7 @@ func _init() -> void:
 		"test_enchanting_an_item",
 		"test_the_enchantment_effects",
 		"test_the_portal_line",
+		"test_the_freight_cart",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5783,6 +5784,106 @@ func test_the_portal_line() -> void:
 	check(old.portal_line.laid == 0 and old.portal_station().is_empty(), "an older save has no portal line")
 	var f54 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v54.save").data.state)
 	check(f54.portal_line.laid == 3 and f54.portal_station().get("done", false) and not f54.pline_complete(), "the v54 fixture loads its station and half-laid rails")
+
+
+## A world with the portal line complete (station, rails, landing station) and the shelter built, for the freight cart.
+func freight_world() -> Dictionary:
+	var w := nline_world()
+	var sim: Sim = w.sim
+	var st := sim.place_site("portal_station", portal_station_spot(sim, w.portal))
+	st.stage = 1
+	st.done = true
+	sim.portal_line.laid = Tuning.PORTAL_LINE_RAILS
+	sim.nline().stations.landing = true
+	var sh: Dictionary = sim.on_map(NetherLanding.ID, func(): return sim.place_site("shelter", NetherLanding.SHELTER_AT))
+	sh.stage = 1
+	sh.done = true
+	w.station = st
+	w.shelter = sh
+	return w
+
+
+## The freight cart (issue #169): a minecart hauled to the portal station, a load, the player's approval, and the trip to the cache.
+func test_the_freight_cart() -> void:
+	var w := freight_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	check(sim.freight.is_empty() and sim.freight_place().is_empty(), "a new game has no freight cart")
+	var fresh := nline_world()
+	check(fresh.sim.order_freight_cart() == "Finish the portal line first", "the cart waits for a finished line")
+	check(sim.order_freight_cart() == "" and sim.freight.state == "ordered" and sim.order_freight_cart() != "", "ordering one starts it, once")
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Freight cart: needs a minecart from the village"), "with no minecart it says so")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "minecart", 1)
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.freight.state == "home":
+			break
+	check(sim.freight.state == "home" and sim.freight.pos == 0.0, "a hauler brings a minecart to the portal station and parks it")
+	var minecarts: Array = sim.maps.village.items.values().filter(func(x): return x.type == "minecart")
+	check(minecarts.is_empty(), "the minecart left the stockpile")
+	var shelter: Dictionary = w.shelter
+	sim.freight.load = {"bread": 10, "iron_ingot": 2}
+	# Nothing goes without the player's approval.
+	for i in 40 * Tuning.TPS:
+		sim.step()
+	sim.compute_stuck()
+	check(sim.freight.state == "home" and sim.freight.pos == 0.0 and stuck_text(sim).contains("Freight cart: waiting for approval"), "an unapproved cart never departs, and says it's waiting")
+	check(sim.approve_freight() == "" and sim.freight.approved, "the player approves")
+	w.portal.lit = false
+	for i in 5 * Tuning.TPS:
+		sim.step()
+	sim.compute_stuck()
+	check(sim.freight.state == "home" and stuck_text(sim).contains("Freight cart: the portal is unlit"), "an unlit portal holds an approved cart: 'the portal is unlit'")
+	w.portal.lit = true
+	var mid := false
+	var saw_place := ""
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.freight.state == "going" and sim.freight.pos > 0.5 and not mid:
+			mid = true
+			var place := sim.freight_place()
+			saw_place = place.get("map", "")
+			var back := Sim.from_state(sim.save_state())
+			check(back.freight.state == "going" and absf(back.freight.pos - sim.freight.pos) < 0.0001 and back.freight.load == {"bread": 10, "iron_ingot": 2}, "a cart mid-trip is saved with its load and position")
+		if sim.freight.state == "home" and sim.freight.pos == 0.0 and mid:
+			break
+	check(mid and saw_place == NetherLanding.ID, "it ran through the portal onto the landing")
+	check(shelter.store.get("bread", 0) == 10 and shelter.store.get("iron_ingot", 0) == 2 and sim.freight.load.is_empty(), "the load went into the cache")
+	check(sim.freight.state == "home" and sim.freight.pos == 0.0 and not sim.freight.approved, "the cart came home empty, and wants approval again")
+	# The portal going out stops a cart at the crossing.
+	sim.freight.load = {"bread": 4}
+	sim.approve_freight()
+	for i in 400:
+		sim.step()
+		if sim.freight.state == "going" and sim.freight.pos > 0.1:
+			break
+	w.portal.lit = false
+	for i in 20 * Tuning.TPS:
+		sim.step()
+	sim.compute_stuck()
+	check(sim.freight.state == "going" and absf(sim.freight.pos - Tuning.FREIGHT_CROSS) < 0.001 and stuck_text(sim).contains("Freight cart: the portal is unlit"), "an unlit portal stops it at the crossing")
+	w.portal.lit = true
+	# A full cache holds the unloading.
+	shelter.store = {"bread": Tuning.CACHE_CAPACITY - 1}
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if sim.freight.state == "unloading":
+			break
+	for i in 5 * Tuning.TPS:
+		sim.step()
+	sim.compute_stuck()
+	check(sim.freight.state == "unloading" and sim.cache_items() == Tuning.CACHE_CAPACITY and stuck_text(sim).contains("Freight cart: the cache is full"), "a full cache stops the unloading: 'the cache is full'")
+	shelter.store = {}
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if sim.freight.state == "home":
+			break
+	check(sim.freight.state == "home" and shelter.store.get("bread", 0) == 3, "once there's room it unloads and returns")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v54.save").data.state)
+	check(old.freight.is_empty(), "an older save has no freight cart")
+	var f55 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v55.save").data.state)
+	check(f55.freight.state == "going" and f55.freight.load == {"bread": 5} and f55.freight_place().get("map", "") == NetherLanding.ID, "the v55 fixture loads its cart mid-trip")
 
 
 ## Ticks from setting out to reaching the quartz site on a gather trip.

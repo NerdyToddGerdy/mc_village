@@ -354,6 +354,8 @@ func _initialize() -> void:
 					ps.stage = 1
 					ps.done = true
 		sim.portal_line.laid = 3
+	if SaveFormat.VERSION >= 55:  # a freight cart on its way through the portal with five loaves (#169)
+		sim.freight = {"state": "going", "pos": 0.4, "load": {"bread": 5}, "approved": false, "acc": 0.0}
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

@@ -658,12 +658,28 @@ static var CART_DARK := Color("#3E4448")
 ## people at the cart's place.
 func _build_cart() -> void:
 	var c: Dictionary = sim.cart
-	var sig := "" if c.is_empty() or map_id != Road.ID else "%.2f%s" % [c.x, c.load]
+	var fp := sim.freight_place()
+	var fsig: String = "" if fp.is_empty() or fp.map != map_id else "f%s%.2f%s" % [fp.map, sim.freight.pos, sim.freight.load]
+	var msig := "" if c.is_empty() or map_id != Road.ID else "%.2f%s" % [c.x, c.load]
+	var sig := msig + fsig
 	if sig == _cart_sig:
 		return
 	_cart_sig = sig
 	var b := Batch.new()
-	if sig != "":
+	if fsig != "":  # the portal line's freight cart, with its load stacked on it (issue #169)
+		var fx: float = fp.at.x + 0.5
+		var fz: float = fp.at.y + 0.5
+		b.box(Vector3(fx - 0.42, 0.12, fz - 0.3), Vector3(fx + 0.42, 0.5, fz + 0.3), Palette.ITEM_COLORS.minecart)
+		b.box(Vector3(fx - 0.36, 0.42, fz - 0.24), Vector3(fx + 0.36, 0.51, fz + 0.24), CART_DARK)
+		for k in [-0.26, 0.26]:
+			b.box(Vector3(fx + k - 0.08, 0.0, fz - 0.34), Vector3(fx + k + 0.08, 0.16, fz + 0.34), Palette.SLATE_DEEP)
+		var fn := 0
+		for k in sim.freight.load:
+			var col: Color = Palette.item_color(k)
+			for i in mini(sim.freight.load[k], 6 - fn):
+				b.box(Vector3(fx - 0.35 + float(fn % 3) * 0.25, 0.5, fz - 0.18 + float(fn / 3) * 0.2), Vector3(fx - 0.15 + float(fn % 3) * 0.25, 0.64, fz - 0.02 + float(fn / 3) * 0.2), col)
+				fn += 1
+	if msig != "":
 		var x: float = c.x + 0.5
 		var z := Road.LINE_ROW + 0.5
 		var y: float = 0.14 if Road.bridge_rect().has_point(Vector2i(roundi(c.x), Road.LINE_ROW)) and sim.bridge().get("done", false) else 0.0

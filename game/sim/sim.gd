@@ -94,6 +94,10 @@ var cart := {}
 ## The portal line's Nether side (issue #168): `laid` rails of NetherLanding.TRACK, laid by a Build party. The village station is a
 ## site beside the portal; the landing station is the Nether line's, so the two lines share it.
 var portal_line := {"laid": 0}
+## The portal line's freight cart (issue #169), or {} until one is ordered:
+##   {state: "ordered" (a hauler is bringing a minecart), "home", "going", "unloading" or "returning", pos (0 at the village station, 1 at
+##    the landing station), load: {item: n}, approved, acc}
+var freight := {}
 var stuck: Array = []        ## {who, why, map, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
 var _fence_claims := {}      ## Vector2i -> the resident putting up that pen fence (issue #139). Not saved.
 var _plant_claims := {}      ## Vector2i -> the lumberjack going to plant a sapling there (issue #177). Not saved.
@@ -2411,6 +2415,14 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			rev += 1
 			_toast("The minecart is parked at the village station.", r.id)
 			return true
+		"freight_dock":  # the freight cart parked at the portal station (issue #169)
+			if r.carry == null or freight.get("state", "") != "ordered":
+				return "gone"
+			r.carry = null
+			freight.state = "home"
+			rev += 1
+			_toast("The freight cart is parked at the portal station.", r.id)
+			return true
 		"board":  # into the cart (issue #124)
 			if cart.is_empty():
 				return true
@@ -3382,6 +3394,7 @@ func step() -> void:
 			working += 1
 	if working >= 2 and kinds.size() >= 2:
 		stats.division = true
+	_step_freight()
 	if tick % 10 == 0 and not expeditions.nether.is_empty():  # a party in trouble in the Nether (issue #158)
 		on_slot("nether", _check_stranded)
 	if tick % 5 == 0:
@@ -4337,6 +4350,7 @@ func _stuck_on_map() -> void:
 				mid, site_height(s) + 0.4, "site", s.id, false, standing)
 	_stuck_unstaffed()
 	_stuck_workstations()
+	_stuck_freight()
 	for sl in SLOTS:
 		on_slot(sl, _stuck_expedition)
 	for sl in SLOTS:
@@ -6212,6 +6226,8 @@ func _road_claim(r: Dictionary, kind: String, jobs: Array):
 			if jobs.has("haul"):
 				j = _dock_job(r, c)
 				if j == null:
+					j = _freight_dock_job(r, c)
+				if j == null:
 					j = _platform_haul(r, true)
 		"gather":
 			if r.get("hurt", 0) == 0:
@@ -7098,6 +7114,166 @@ func pline_text() -> String:
 		if need[k[0]] > 0:
 			parts.append(Defs.words(k[1], need[k[0]]))
 	return "Still to lay on the Nether side: %s. The landing station is shared with the Nether line." % (", ".join(parts) if not parts.is_empty() else "nothing")
+
+
+# ---------------------------------------------------------------- the freight cart (issue #169)
+
+## Why a freight cart can't be ordered, or "".
+func order_freight_cart_blocker() -> String:
+	if not freight.is_empty():
+		return "There's a freight cart already"
+	if not pline_complete():
+		return "Finish the portal line first"
+	return ""
+
+
+## Orders the line's freight cart: a hauler brings a minecart from the village to the portal station. Returns why it can't, or "".
+func order_freight_cart() -> String:
+	var why := order_freight_cart_blocker()
+	if why != "":
+		return why
+	freight = {"state": "ordered", "pos": 0.0, "load": {}, "approved": false, "acc": 0.0}
+	rev += 1
+	return ""
+
+
+## A finished minecart from the stockpile, hauled to the portal station and parked as the freight cart.
+func _freight_dock_job(r: Dictionary, c: Vector2i):
+	if freight.get("state", "") != "ordered" or residents.any(func(o): return o.job != null and o.job.steps.any(func(x): return x.op == "freight_dock")):
+		return null
+	var carts: Array = maps.village.items.values().filter(func(x): return x.type == "minecart" and avail(x) > 0)
+	if carts.is_empty():
+		return null
+	var from: Dictionary = nearest(carts, c)
+	var j := Job.new("haul", "Hauling the minecart to the portal station", "the portal station")
+	j.work = "haul"
+	from.res += 1
+	var sh := j.hold({"t": "stack", "stack": from, "n": 1})
+	j.step(_goto(reach(from.cell), false))
+	j.step({"op": "pickup", "stack": from, "n": 1, "hold": sh})
+	j.step(_goto(site_cells(portal_station()), true))
+	j.step({"op": "freight_dock"})
+	return j
+
+
+## The player's go-ahead for the cart's departure (issue #169). Returns why it can't, or "".
+func approve_freight() -> String:
+	if freight.get("state", "") != "home":
+		return "There's no freight cart at the station"
+	if freight.load.is_empty():
+		return "The freight cart is empty"
+	freight.approved = true
+	rev += 1
+	return ""
+
+
+func cancel_freight_approval() -> void:
+	if freight.get("state", "") == "home" and freight.approved:
+		freight.approved = false
+		rev += 1
+
+
+## Items in the shelter's cache, all kinds.
+func cache_items() -> int:
+	var n := 0
+	var sh := shelter_site()
+	for k in sh.get("store", {}):
+		n += sh.store[k]
+	return n
+
+
+func cache_room() -> int:
+	return maxi(0, Tuning.CACHE_CAPACITY - cache_items()) if shelter_site().get("done", false) else 0
+
+
+## Why the freight cart can't go on now, or "": the portal's out when it's at the crossing, or the cache has no room.
+func freight_block() -> String:
+	var st: String = freight.get("state", "")
+	if st == "ordered":
+		return "needs a minecart from the village"
+	if st == "home" and not freight.load.is_empty() and not freight.approved:
+		return "waiting for approval"
+	var at_portal: bool = (st == "home" and freight.approved) or (st in ["going", "returning"] and absf(freight.pos - Tuning.FREIGHT_CROSS) < 0.0001)
+	if at_portal and not portal_lit():
+		return "the portal is unlit"
+	if st == "unloading" and cache_room() <= 0:
+		return "the cache is full" if shelter_site().get("done", false) else "there's no shelter to unload into"
+	return ""
+
+
+func _step_freight() -> void:
+	if freight.is_empty() or freight.state == "ordered":
+		return
+	var step := Tuning.DT / Tuning.FREIGHT_TRIP_TIME
+	match freight.state:
+		"home":
+			if freight.approved and portal_lit() and not freight.load.is_empty():
+				freight.state = "going"
+				freight.approved = false
+				rev += 1
+		"going":
+			if freight.pos < Tuning.FREIGHT_CROSS and freight.pos + step >= Tuning.FREIGHT_CROSS:
+				freight.pos = Tuning.FREIGHT_CROSS
+			if freight.pos == Tuning.FREIGHT_CROSS and not portal_lit():
+				return
+			freight.pos = minf(1.0, freight.pos + step)
+			if freight.pos >= 1.0:
+				freight.state = "unloading"
+				freight.acc = 0.0
+				rev += 1
+		"unloading":
+			var sh := shelter_site()
+			if not sh.get("done", false):
+				return
+			freight.acc += Tuning.LOAD_RATE * Tuning.DT
+			while freight.acc >= 1.0 and not freight.load.is_empty() and cache_room() > 0:
+				freight.acc -= 1.0
+				var k: String = freight.load.keys()[0]
+				sh.store[k] = sh.store.get(k, 0) + 1
+				freight.load[k] -= 1
+				if freight.load[k] <= 0:
+					freight.load.erase(k)
+				rev += 1
+			if freight.load.is_empty():
+				freight.state = "returning"
+				stats.freight_trips = stats.get("freight_trips", 0) + 1
+				_toast("The freight cart has unloaded into the cache and is heading back.", 0, portal_station().get("id", 0))
+		"returning":
+			if freight.pos > Tuning.FREIGHT_CROSS and freight.pos - step <= Tuning.FREIGHT_CROSS:
+				freight.pos = Tuning.FREIGHT_CROSS
+			if freight.pos == Tuning.FREIGHT_CROSS and not portal_lit():
+				return
+			freight.pos = maxf(0.0, freight.pos - step)
+			if freight.pos <= 0.0:
+				freight.state = "home"
+				rev += 1
+
+
+## Where the freight cart is, as {map, at: Vector2 (a cell's corner)}, or {} when there's none or no station to put it at.
+func freight_place() -> Dictionary:
+	var ps := portal_station()
+	if freight.is_empty() or freight.state == "ordered" or ps.is_empty():
+		return {}
+	var p: float = freight.pos
+	if p <= Tuning.FREIGHT_CROSS:
+		var pf := village_portal()
+		var a := Vector2(ps.origin) + Vector2(1.0, 0.0)
+		var b := Vector2(pf.origin) + Vector2(1.0, 1.0)
+		return {"map": "village", "at": a.lerp(b, p / Tuning.FREIGHT_CROSS)}
+	var path: Array = NetherLanding.TRACK.duplicate()
+	path.append(NetherLanding.STATION_AT + Vector2i(1, 0))
+	var f := (p - Tuning.FREIGHT_CROSS) / (1.0 - Tuning.FREIGHT_CROSS) * (path.size() - 1)
+	var i := mini(int(f), path.size() - 2)
+	return {"map": NetherLanding.ID, "at": Vector2(path[i]).lerp(Vector2(path[i + 1]), f - i)}
+
+
+func _stuck_freight() -> void:
+	var ps := portal_station()
+	if freight.is_empty() or ps.is_empty() or map_id != "village":
+		return
+	var why := freight_block()
+	if why != "":
+		_add_stuck("Freight cart", why, Vector2(ps.origin) + Vector2(1.5, 0.5), 1.2, "site", ps.id, false, why == "waiting for approval")
 
 
 # ---------------------------------------------------------------- enchanting (issues #165-#167)
@@ -8766,7 +8942,7 @@ func save_state() -> Dictionary:
 		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made, "cargo_lists": cargo_lists.duplicate(true),
 		"herd_floor": herd_floor.duplicate(), "rng_state": rng.state, "seed": seed,
 		"expeditions": expeditions.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true),
-		"portal_line": portal_line.duplicate(true)}
+		"portal_line": portal_line.duplicate(true), "freight": freight.duplicate(true)}
 
 
 static func from_state(d: Dictionary) -> Sim:
@@ -8809,6 +8985,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.pending = d.get("pending", []).duplicate(true)
 	s.cart = d.get("cart", {}).duplicate(true)
 	s.portal_line = d.get("portal_line", {"laid": 0}).duplicate(true)
+	s.freight = d.get("freight", {}).duplicate(true)
 	var new_meadow := not s.maps.has(Meadow.ID)
 	s._add_site_maps()
 	if new_meadow and d.has("meadow_sheep"):  # an older save's off-map meadow: its sheep count carries over (issue #137)

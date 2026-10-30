@@ -1239,6 +1239,22 @@ func cancel_enchant(i: int) -> void:
 	sim.cancel_enchant(i)
 
 
+func order_freight_cart() -> void:
+	var why := sim.order_freight_cart()
+	if why != "":
+		_hud.add_toast({"text": why, "res_id": 0, "site_id": 0})
+
+
+func approve_freight() -> void:
+	var why := sim.approve_freight()
+	if why != "":
+		_hud.add_toast({"text": why, "res_id": 0, "site_id": 0})
+
+
+func cancel_freight_approval() -> void:
+	sim.cancel_freight_approval()
+
+
 func plan_slot() -> String:
 	if not plan.is_empty() and plan.get("rescue", false):  # a rescue has a slot of its own (issue #158)
 		return "rescue"

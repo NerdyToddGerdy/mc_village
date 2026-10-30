@@ -2176,6 +2176,9 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	if s.tpl == "station" and s.done:  # issue #123
 		_fill_station(c, sim, s)
 		return
+	if s.tpl == "portal_station" and s.done:  # issues #168, #169
+		_fill_portal_station(c, sim, s)
+		return
 	if not s.done:
 		var st := sim.current_stage(s)
 		var stage_line: String = "Stage %d of %d: %s" % [s.stage + 1, tpl.stages.size(), st.name.to_lower()] if tpl.stages.size() > 1 else "Blueprint"
@@ -3350,6 +3353,36 @@ func _fill_route(c: Container, sim: Sim) -> void:
 			b.tooltip_text = "A platform beside the line where the cart stops, loads and unloads: %s." % Defs.cost_text(Defs.TEMPLATES.station.stages[0].cost)
 			c.add_child(b)
 	_add_line(c, sim)
+
+
+## The portal station (issues #168, #169): the line's state, and the freight cart with its load and the departure approval.
+func _fill_portal_station(c: Container, sim: Sim, s: Dictionary) -> void:
+	c.add_child(_head("Portal station", "Village end"))
+	var line := "complete" if sim.pline_complete() else "%d of %d rails laid%s" % [sim.portal_line.laid, Tuning.PORTAL_LINE_RAILS, "" if sim.nline().stations.landing else ", no landing station"]
+	c.add_child(_row("The portal line", line))
+	var fr: Dictionary = sim.freight
+	if fr.is_empty():
+		var why := sim.order_freight_cart_blocker()
+		var b := _button("Order a freight cart", func(): game.order_freight_cart(), "Primary")
+		b.disabled = why != ""
+		b.tooltip_text = why if why != "" else "A hauler brings a minecart from the stockpile and parks it here as the line's freight cart."
+		c.add_child(b)
+		c.add_child(_label("The freight cart carries goods through the portal to the Nether cache, never riders. It only leaves when you approve it.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	else:
+		var states := {"ordered": "Waiting for a minecart", "home": "Parked at the station", "going": "On its way to the landing", "unloading": "Unloading into the cache", "returning": "Coming home empty"}
+		c.add_child(_row("Freight cart", states[fr.state]))
+		if fr.state != "ordered":
+			c.add_child(_row("Load", ", ".join(fr.load.keys().map(func(k): return Defs.words(k, fr.load[k]))) if not fr.load.is_empty() else "empty"))
+		if fr.state == "home":
+			if fr.approved:
+				c.add_child(_button("Cancel approval", func(): game.cancel_freight_approval()))
+			else:
+				var ab := _button("Approve departure", func(): game.approve_freight(), "Primary")
+				ab.disabled = fr.load.is_empty()
+				ab.tooltip_text = "Send the loaded cart through the portal to the cache." if not fr.load.is_empty() else "Nothing is loaded."
+				c.add_child(ab)
+	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
+		c.add_child(_reason(x.why))
 
 
 ## A station (issue #123): the line's state, where the cart is, and what's on the platform.
