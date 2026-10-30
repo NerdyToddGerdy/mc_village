@@ -414,24 +414,34 @@ static func recipe_job(rec: Dictionary) -> String:
 	return "craft"
 
 
-## A resident's level in a job, 1 to 5, from their experience (spec §5).
+## Total experience for a level. Levels 2 to 5 are the fixed table; past it the same gentle power
+## curve carries on, so there's no top level (issue #236).
+static func xp_for(lv: int) -> int:
+	if lv <= 1:
+		return 0
+	if lv <= Tuning.SKILL_CORE:
+		return Tuning.SKILL_LEVELS[lv - 2]
+	return roundi(Tuning.SKILL_TAIL_XP * pow(lv - 1, Tuning.SKILL_TAIL_POWER))
+
+
+## A resident's level in a job, from their experience (spec §5).
 static func level(r: Dictionary, job: String) -> int:
 	var xp: int = r.jobs[job].get("xp", 0)
 	var lv := 1
 	for need in Tuning.SKILL_LEVELS:
 		if xp >= need:
 			lv += 1
+	if lv > Tuning.SKILL_CORE - 1:  # past the table, climb the curve
+		while xp >= xp_for(lv + 1):
+			lv += 1
 	return lv
 
 
-## Progress from the current level to the next, 0..1 (1 at the top level).
+## Progress from the current level to the next, 0..1.
 static func level_progress(r: Dictionary, job: String) -> float:
 	var lv := level(r, job)
-	if lv > Tuning.SKILL_LEVELS.size():
-		return 1.0
-	var lo: int = 0 if lv == 1 else Tuning.SKILL_LEVELS[lv - 2]
-	var hi: int = Tuning.SKILL_LEVELS[lv - 1]
-	return float(r.jobs[job].get("xp", 0) - lo) / float(hi - lo)
+	var lo := xp_for(lv)
+	return float(r.jobs[job].get("xp", 0) - lo) / float(xp_for(lv + 1) - lo)
 
 
 ## One finished task's worth of experience. Says so when it brings a new level.
@@ -444,15 +454,26 @@ func gain_xp(r: Dictionary, job: String) -> void:
 		rev += 1
 
 
-## How much faster a resident works at a job: 15% per level above 1.
+## How much faster a resident works at a job: 15% per level above 1 up to level 5, then a little
+## less with every level, so the speed climbs towards a ceiling instead of running away.
 static func skill_speed(r: Dictionary, job: String) -> float:
-	return 1.0 + Tuning.SKILL_SPEED * (level(r, job) - 1)
+	var lv := level(r, job)
+	var speed := 1.0 + Tuning.SKILL_SPEED * (mini(lv, Tuning.SKILL_CORE) - 1)
+	if lv > Tuning.SKILL_CORE:
+		speed += Tuning.SKILL_TAIL_SPEED * (1.0 - pow(Tuning.SKILL_TAIL_DECAY, lv - Tuning.SKILL_CORE)) / (1.0 - Tuning.SKILL_TAIL_DECAY)
+	return speed
 
 
-## +1 at level 3 and +1 more at level 5: extra logs, cobblestone, wheat, and carry capacity.
+## The milestones past the core: one at level 10, another at 15, and so on.
+static func tail_steps(lv: int) -> int:
+	return lv / Tuning.SKILL_TAIL_STEP - 1 if lv >= 2 * Tuning.SKILL_TAIL_STEP else 0
+
+
+## +1 at level 3 and +1 more at level 5, then +1 at every milestone from level 10: extra logs,
+## cobblestone, wheat, and carry capacity.
 static func skill_bonus(r: Dictionary, job: String) -> int:
 	var lv := level(r, job)
-	return (1 if lv >= 3 else 0) + (1 if lv >= 5 else 0)
+	return (1 if lv >= 3 else 0) + (1 if lv >= 5 else 0) + tail_steps(lv)
 
 
 ## Items one trip can carry, with the Haul skill's bonus.
@@ -3080,7 +3101,7 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			for o in rec.out:
 				var uses := -1
 				if Defs.is_tool_item(o):  # Toolsmith: +20% uses per level above 1
-					uses = roundi(full_uses(o) * (1.0 + Tuning.TOOLSMITH_USES * (level(r, "toolsmith") - 1)))
+					uses = roundi(full_uses(o) * (1.0 + Tuning.TOOLSMITH_USES * (mini(level(r, "toolsmith"), Tuning.SKILL_CORE) - 1 + tail_steps(level(r, "toolsmith")))))
 				drop_items(rcell(r), o, rec.out[o], uses)
 				if Defs.MEALS.has(o):  # a village-book goal (issue #198)
 					stats.meals_cooked = stats.get("meals_cooked", 0) + rec.out[o]
@@ -8211,7 +8232,7 @@ func _strike(r: Dictionary, cr: Dictionary) -> void:
 			if x.species == "piglin":
 				x.angry = true
 		_toast("The piglins turn hostile.", r.id)
-	if not _roll(Tuning.HIT_CHANCE + 0.08 * (level(r, "guard") - 1)):
+	if not _roll(Tuning.HIT_CHANCE + 0.08 * (mini(level(r, "guard"), Tuning.SKILL_CORE) - 1)):
 		return
 	cr.hp -= dmg
 	cr.angry = true

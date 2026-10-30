@@ -105,7 +105,13 @@ const SURVEY_USES := 3                  ## Pickaxe uses investigating takes.
 
 # Skills (issue #47/#48, slice-2-spec.md §5).
 const SKILL_LEVELS := [8, 25, 50, 90]   ## Experience for levels 2, 3, 4 and 5; one point per finished task.
-const SKILL_SPEED := 0.15               ## Work speed added per level above 1.
+const SKILL_SPEED := 0.15               ## Work speed added per level above 1, up to the top core level.
+const SKILL_CORE := 5                   ## The last level on the fixed table; past it the levels carry on (issue #236).
+const SKILL_TAIL_XP := 8.0              ## Past the core, the total experience for level L is SKILL_TAIL_XP * (L - 1) ^ SKILL_TAIL_POWER.
+const SKILL_TAIL_POWER := 1.7
+const SKILL_TAIL_SPEED := 0.04          ## Speed added by the first level past the core; each next level adds SKILL_TAIL_DECAY times the one before, so speed tends to a ceiling.
+const SKILL_TAIL_DECAY := 0.85
+const SKILL_TAIL_STEP := 5              ## From level 2 x this, every this many levels give one more item per yield and 20% more tool uses.
 const TOOLSMITH_USES := 0.2             ## Extra tool uses per Toolsmith level above 1.
 const ARRIVAL_LEVEL := 3                ## A new arrival's level in their one skilled job.
 const CRAFT_TIME := 3.0                 ## Seconds per bench recipe.

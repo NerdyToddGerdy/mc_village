@@ -1977,7 +1977,7 @@ func _board_cell(r: Dictionary, jb: String) -> Control:
 	v.add_child(bar)
 	p.add_child(v)
 	var xp: int = r.jobs[jb].get("xp", 0)
-	var lv_text := "level %d, the top level" % lv if lv > Tuning.SKILL_LEVELS.size() else "level %d: %d of %d points to level %d" % [lv, xp, Tuning.SKILL_LEVELS[lv - 1], lv + 1]
+	var lv_text := "level %d: %d of %d points to level %d" % [lv, xp, Sim.xp_for(lv + 1), lv + 1]
 	p.tooltip_text = "%s, %s: %s%s." % [r.name, Defs.JOB_NAMES[jb], lv_text, ". Their job" if r.role == jb else ""]
 	return p
 
