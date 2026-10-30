@@ -889,6 +889,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "shelter":
 		_add_shelter(solid if s.done else ghost, s)
 		return
+	if s.tpl == "enchanting_workshop":
+		_add_enchanting_workshop(solid if s.done else ghost, s)
+		return
 	if s.tpl == "storehouse":
 		_add_storehouse(solid if s.stage >= 1 else ghost, s)
 		return
@@ -995,6 +998,19 @@ func _add_storehouse(b: Batch, s: Dictionary) -> void:
 		for j in mini(kinds.size(), 3):
 			var x := p.x + 0.08 + j * 0.22
 			_box_turned(b, s, Vector3(x, 0.62, p.y + 0.15), Vector3(x + 0.16, 0.7, p.y + 0.4), Palette.ITEM_COLORS.get(kinds[j], Palette.CHALK))
+
+
+## The enchanting workshop (issue #165): an obsidian table with a lectern, an open book and a violet glow. A blueprint until it's built.
+func _add_enchanting_workshop(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var done: bool = s.done
+	var ob: Color = Palette.ITEM_COLORS.obsidian if done else Color(Palette.BLUE, 0.45)
+	b.box(Vector3(o.x + 0.1, 0, o.y + 0.1), Vector3(o.x + 0.9, 0.7, o.y + 0.9), ob, BlockTextures.ROCK)
+	if not done:
+		return
+	b.box(Vector3(o.x + 0.2, 0.7, o.y + 0.25), Vector3(o.x + 0.8, 0.78, o.y + 0.75), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(o.x + 0.28, 0.78, o.y + 0.32), Vector3(o.x + 0.72, 0.84, o.y + 0.68), Palette.ITEM_COLORS.book_efficiency)
+	b.box(Vector3(o.x + 0.42, 0.9, o.y + 0.42), Vector3(o.x + 0.58, 1.06, o.y + 0.58), PORTAL_GLOW)
 
 
 ## The landing's shelter (issue #152): a cobblestone floor inside low plank walls, a doorway on the south side, and a crate

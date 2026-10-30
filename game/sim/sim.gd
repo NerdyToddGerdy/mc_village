@@ -1053,6 +1053,9 @@ func _on_site_done(s: Dictionary) -> void:
 	if s.tpl == "portal":  # issue #147
 		_toast("The portal frame is built. It needs flint and steel to light.", 0, s.id)
 		return
+	if s.tpl == "enchanting_workshop":  # issue #165
+		_toast("The enchanting workshop is built. An Enchanter carries enchanted books to it, and it learns their recipes for good.", 0, s.id)
+		return
 	if s.tpl == "board":  # it has word of the old mine and the meadow, which the map switcher now shows (issues #105, #136)
 		maps[OldMine.ID].known = true
 		road().known = true
@@ -2061,7 +2064,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal"]:
+	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop"]:
 		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
@@ -2581,6 +2584,18 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			var back: Dictionary = NetherRoute.ROUTES[NetherRoute.route_of(map_id)]
 			move_to_map(r, NetherLanding.ID, back.exit)
 			return true
+		"learn_book":  # the book is read into the workshop: its recipe is known for good, and the book is used up (issue #165)
+			var ws: Dictionary = st.site
+			var ench: String = Defs.ITEMS[st.book].book
+			ws.store[st.book] = ws.store.get(st.book, 0) - 1
+			if ws.store[st.book] <= 0:
+				ws.store.erase(st.book)
+			if not ws.known.has(ench):
+				ws.known.append(ench)
+				stats.enchants_learned = stats.get("enchants_learned", 0) + 1
+				_toast("The enchanting workshop learned %s." % Defs.ENCHANTS[ench].name, r.id, ws.id)
+			rev += 1
+			return true
 		"cache_stock":  # meals set down in the cache, above what the party keeps for the way home (issue #152)
 			var cache := shelter_site()
 			var moved := 0
@@ -3062,7 +3077,7 @@ func _claim(r: Dictionary) -> void:
 
 ## The kinds of work, in the order a resident looks for them. Hauling comes last, so a resident's
 ## own job always comes before it.
-const CLAIM_ORDER := ["station", "build", "farm", "gather", "haul"]
+const CLAIM_ORDER := ["station", "enchant", "build", "farm", "gather", "haul"]
 
 
 ## A job of this kind for `r`, using only the jobs in `jobs`, or null.
@@ -3081,6 +3096,10 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			var dj = _try_deliver(r, c, m.sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty()), st_jobs)
 			if dj != null:
 				return _tagged(dj, recipe_job(Defs.recipe(dj.target.queue[bench_active(dj.target, st_jobs)])))
+		"enchant":  # the Enchanter: carry a book to the workshop, or work an order (issues #165, #166)
+			if not jobs.has("enchant"):
+				return null
+			return _enchant_claim(r, c)
 		"build":
 			if not jobs.has("build"):
 				return null
@@ -4325,12 +4344,17 @@ func _stuck_unstaffed() -> void:
 			continue
 		var at = _work_at(jb)
 		if at != null:
-			_add_stuck(Defs.JOB_NAMES[jb], "No one is a %s" % Defs.JOB_SKILLED[jb], Vector2(at) + Vector2(0.5, 0.5), 0.8, "", 0)
+			_add_stuck(Defs.JOB_NAMES[jb], "No one is %s %s" % ["an" if Defs.JOB_SKILLED[jb][0] in "aeiou" else "a", Defs.JOB_SKILLED[jb]], Vector2(at) + Vector2(0.5, 0.5), 0.8, "", 0)
 
 
 ## What holds up a chopping block or mason's bench (issue #177), and a stonemason with no pickaxe.
 ## A target reached or a full pile is waiting, not stuck: the overflow goes to the stockpile.
 func _stuck_workstations() -> void:
+	var ws := enchanting_workshop()  # a book nobody is about to carry (issue #165)
+	if not ws.is_empty() and not _staffed("enchant"):
+		for b in learnable_books():
+			_add_stuck("Book", "waiting to be carried to the workshop", Vector2(b.cell) + Vector2(0.5, 0.5), 0.6, "", 0, false, true)
+			break
 	for s in m.sites:
 		var wk := work_of(s)
 		if not s.done or wk.is_empty():
@@ -4402,6 +4426,10 @@ func _work_at(jb: String):
 			for st in m.sites:
 				if not st.done or (st.tpl == "portal" and not st.lit):  # a finished frame still wants lighting (issue #147)
 					return st.origin
+		"enchant":  # a book to learn, or an order (issues #165, #166)
+			var ew := enchanting_workshop()
+			if not ew.is_empty() and (not learnable_books().is_empty() or not ew.orders.is_empty()):
+				return ew.origin
 		"haul":
 			if not m.zone.is_empty():
 				var hs = _haul_source(Vector2i.ZERO)
@@ -4415,6 +4443,8 @@ func _work_at(jb: String):
 
 
 func site_height(s: Dictionary) -> float:
+	if s.tpl == "enchanting_workshop":
+		return 1.1 if s.done else 0.2
 	if s.tpl == "bench":
 		return 0.75 if s.done else 0.2
 	if s.tpl == "fireplace":
@@ -4641,6 +4671,9 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 		s.keep_meals = true
 	if tpl == "portal":
 		s.lit = false
+	if tpl == "enchanting_workshop":
+		s.known = []   # the recipes its books have taught it (issue #165)
+		s.orders = []  # enchantments ordered, in turn (issue #166)
 	if not work_of(s).is_empty():
 		s.keep = Tuning.KEEP_STOCK
 	if Defs.TEMPLATES[tpl].has("makes"):
@@ -6869,6 +6902,62 @@ func _riding(r: Dictionary) -> bool:
 static func nline_times() -> Dictionary:
 	var walk: float = NetherRoute.W / Tuning.WALK
 	return {"walk": walk, "ride": NetherRoute.W / Tuning.CART_SPEED, "saved": walk - NetherRoute.W / Tuning.CART_SPEED}
+
+
+# ---------------------------------------------------------------- enchanting (issues #165-#167)
+
+## What an enchantment does, in the words shown on the workshop's panel and the item's tooltip (issue #167).
+static func enchant_text(ench: String) -> String:
+	match ench:
+		"efficiency":
+			return "Tools only: work %d%% faster." % roundi((Tuning.EFFICIENCY_SPEED - 1.0) * 100.0)
+		"unbreaking":
+			return "Tools, swords and armor: wear %d%% slower." % roundi((1.0 - Tuning.UNBREAKING_WEAR) * 100.0)
+		"protection":
+			return "Armor only: %d%% fewer creature injuries." % roundi(Tuning.PROTECTION_CUT * 100.0)
+		"fire_protection":
+			return "Armor only: %d%% less harm from fire and lava." % roundi(Tuning.FIRE_PROTECTION_CUT * 100.0)
+	return ""
+
+
+## The village's finished enchanting workshop, or {}.
+func enchanting_workshop() -> Dictionary:
+	for s in maps.village.sites:
+		if s.tpl == "enchanting_workshop" and s.done:
+			return s
+	return {}
+
+
+## Whether the workshop knows an enchantment.
+func enchant_known(ench: String) -> bool:
+	var ws := enchanting_workshop()
+	return not ws.is_empty() and ws.known.has(ench)
+
+
+## Loose books lying about that would teach the workshop something it doesn't know yet, in the village.
+func learnable_books() -> Array:
+	if enchanting_workshop().is_empty() or map_id != "village":
+		return []
+	return stacks_where(func(s): return Defs.ITEMS[s.type].has("book") and avail(s) > 0 and not enchant_known(Defs.ITEMS[s.type].book))
+
+
+## What an Enchanter does: carry a new book to the workshop (issue #165), else work an order (#166).
+func _enchant_claim(r: Dictionary, c: Vector2i):
+	var ws := enchanting_workshop()
+	if ws.is_empty() or r.get("hurt", 0) > 0:
+		return null
+	var books := learnable_books()
+	if not books.is_empty():
+		var st: Dictionary = nearest(books, c)
+		var j := _deliver_job(ws, st.type, 1, st)
+		j.step({"op": "learn_book", "site": ws, "book": st.type})
+		return _tagged(j, "enchant")
+	return _enchant_order_job(r, c, ws)
+
+
+## Works an enchantment order (issue #166): filled in when enchanting is built.
+func _enchant_order_job(_r: Dictionary, _c: Vector2i, _ws: Dictionary):
+	return null
 
 
 # ---------------------------------------------------------------- stranding and rescue (issue #158)

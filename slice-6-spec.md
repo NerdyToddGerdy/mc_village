@@ -55,7 +55,16 @@ An **enchanted book** is an item that names one enchantment: `book_efficiency`, 
 - **The discovery pause:** the first book found, from any source, stops the game once, says what it teaches ("... would teach that recipe for good"), and is carried on.
 - **Saving:** v51. Book items, chest blocks with their `book`, and `stats.book_found`.
 
-## 5. Tuning table (provisional)
+## 5. The enchanting workshop and the Enchanter (#165)
+
+A village building, 1×1, of an **obsidian table with a lectern**: `4 obsidian, 2 diamonds and 6 planks` (stage "Workshop"). The Build menu lists it once an enchanted book has been found (`stats.book_found`) or a workshop stands. It reserves a plot for a later **library**.
+
+- **Enchanter** is a job like Slice 2's: levelled from practice (a point for each task finished), on the Jobs board with its on/off and priority, and with the workshop as its workstation (`JOB_STATIONS`), one resident to a workshop. Ada does everything. No traveler arrives as one (`SKILL_POOL`). Every resident starts at the first level.
+- **Learning:** an Enchanter (or Ada) carries a loose enchanted book from the stockpile to the workshop, where it **learns that recipe permanently** (`site.known`) and the book is **used up**. Only a book that teaches an unknown recipe is carried: a second copy stays where it is. The workshop's panel lists each recipe, known or "unknown: needs its book", with its cost and what it does.
+- **Stuck reasons:** "Workshop needs 4 more obsidian" while it's being built; "Enchanter: No one is an enchanter" when a book or an order waits and no one has the job; "Book: waiting to be carried to the workshop" beside the book itself.
+- **Saving:** v52. Every resident gets `enchant` at no experience; the workshop site keeps `known` and `orders`.
+
+## 6. Tuning table (provisional)
 
 Each build issue adds its rows.
 

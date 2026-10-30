@@ -225,19 +225,19 @@ const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
 ## Lumberjack and Stonemason replaced Mine in issue #177.
-const JOBS := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt", "guard"]
+const JOBS := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt", "guard", "enchant"]
 ## The jobs a traveler can arrive skilled in: the Guard is trained in the village, not arrived with (issue #150).
 const SKILL_POOL := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
 const JOB_NAMES := {"lumber": "Lumberjack", "mason": "Stonemason", "haul": "Haul", "build": "Build", "craft": "Craft", "toolsmith": "Toolsmith",
-	"farm": "Farm", "cook": "Cook", "hunt": "Hunt", "guard": "Guard"}
+	"farm": "Farm", "cook": "Cook", "hunt": "Hunt", "guard": "Guard", "enchant": "Enchanter"}
 ## "Tomas is a skilled farmer."
 const JOB_SKILLED := {"lumber": "lumberjack", "mason": "stonemason", "haul": "hauler", "build": "builder", "craft": "crafter", "toolsmith": "toolsmith",
-	"farm": "farmer", "cook": "cook", "hunt": "hunter", "guard": "guard"}
+	"farm": "farmer", "cook": "cook", "hunt": "hunter", "guard": "guard", "enchant": "enchanter"}
 
 ## Each job's workstation (issue #184): a resident works their job only once they've claimed a finished
 ## one, one resident to each. Haul needs none.
 const JOB_STATIONS := {"lumber": "chopping_block", "mason": "mason_bench", "build": "builder_table", "craft": "bench",
-	"toolsmith": "toolsmith_bench", "farm": "composter", "cook": "fireplace", "hunt": "lodge"}
+	"toolsmith": "toolsmith_bench", "farm": "composter", "cook": "fireplace", "hunt": "lodge", "enchant": "enchanting_workshop"}
 
 ## Meals the fireplace's standing order keeps in stock.
 const MEALS := ["bread", "cooked_mutton", "cooked_beef", "cooked_porkchop"]
@@ -322,6 +322,10 @@ const TEMPLATES := {
 	# The unstaffed shelter and supply cache on the Nether landing (Slice 5, issue #152): built by a party from what it carries.
 	"shelter": {"name": "Shelter", "size": Vector2i(3, 3), "stages": [
 		{"name": "Shelter", "verb": "needs", "cost": Tuning.SHELTER_COST},
+	]},
+	# Where recipes are learned from books and gear enchanted (Slice 6, issue #165). It grows into a library.
+	"enchanting_workshop": {"name": "Enchanting workshop", "size": Vector2i(1, 1), "plot": "library", "stages": [
+		{"name": "Workshop", "verb": "needs", "cost": {"obsidian": 4, "diamond": 2, "plank": 6}},
 	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},

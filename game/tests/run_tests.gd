@@ -76,6 +76,7 @@ func _init() -> void:
 		"test_the_quartz_site",
 		"test_piglin_trading",
 		"test_enchanted_books",
+		"test_the_enchanting_workshop",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5855,3 +5856,56 @@ func test_enchanted_books() -> void:
 	s4.drop_items(Sim.rcell(s4.residents[0]) + Vector2i(1, 1), "book_protection", 1)
 	var back := Sim.from_state(s4.save_state())
 	check(back.stacks_where(func(x): return x.type == "book_protection").size() == 1 and Defs.ITEMS.book_protection.book == "protection", "a book keeps its enchantment through save and load")
+
+
+## The enchanting workshop and the Enchanter job (issue #165).
+func test_the_enchanting_workshop() -> void:
+	var tpl: Dictionary = Defs.TEMPLATES.enchanting_workshop
+	check(tpl.stages[0].cost == {"obsidian": 4, "diamond": 2, "plank": 6} and tpl.plot == "library" and tpl.stages[0].name == "Workshop", "4 obsidian, 2 diamonds and 6 planks, with a plot for a library")
+	check(Defs.JOBS.has("enchant") and Defs.JOB_NAMES.enchant == "Enchanter" and Defs.JOB_STATIONS.enchant == "enchanting_workshop" and not Defs.SKILL_POOL.has("enchant"), "Enchanter is a job with the workshop as its station, and no traveler arrives as one")
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	check(ada.jobs.enchant.xp == 0 and Sim.level(ada, "enchant") == 1, "a new resident has Enchanter at its start")
+	var ws := sim.place_site("enchanting_workshop", open_rect(sim, Vector2i(5, 3)).position + Vector2i(1, 0))
+	check(ws.known == [] and ws.orders == [] and ws.plot != null, "it starts knowing nothing, and reserves its plot")
+	# Short of materials it says how many.
+	sim.paint_zone(open_rect(sim, Vector2i(2, 2)))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 2), "obsidian", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(4, 2), "diamond", 2)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(4, 3), "plank", 6)
+	run(sim, 20)
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Workshop needs 3 more obsidian"), "short of obsidian: " + stuck_text(sim))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 3), "obsidian", 3)
+	run(sim, 200)
+	check(ws.done and sim.enchanting_workshop().id == ws.id, "the workshop builds from the delivered materials")
+	check(sim.events.any(func(ev): return ev.type == "toast" and ev.text.begins_with("The enchanting workshop is built")), "and says what's next")
+	# A book carried to it teaches its recipe once; the book is used up.
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "book_efficiency", 1)
+	run(sim, 60)
+	check(ws.known == ["efficiency"] and sim.stacks_where(func(x): return x.type == "book_efficiency").is_empty() and sim.enchant_known("efficiency") and not sim.enchant_known("unbreaking"), "a delivered book teaches its recipe, and is used up")
+	check(ada.jobs.enchant.xp > 0, "and the Enchanter gains practice")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 2), "book_efficiency", 1)
+	run(sim, 60)
+	check(ws.known == ["efficiency"] and sim.stacks_where(func(x): return x.type == "book_efficiency").size() == 1, "a second book of the same recipe isn't carried: it teaches once")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 3), "book_protection", 1)
+	run(sim, 60)
+	check(ws.known == ["efficiency", "protection"], "a different book teaches another recipe")
+	# With no one to carry it, the book says so.
+	var s2 := Sim.new_game()
+	var w2 := place_done(s2, "enchanting_workshop", Sim.rcell(s2.residents[0]) + Vector2i(0, 5))
+	s2.add_resident("Tomas", "7A5C8F", Sim.rcell(s2.residents[0]) + Vector2i(1, 1)).arriving = false  # someone's about, with no such job
+	s2.residents[0].away = true  # but not Ada
+	s2.drop_items(Sim.rcell(s2.residents[0]) + Vector2i(2, 2), "book_unbreaking", 1)
+	s2.compute_stuck()
+	check(stuck_text(s2).contains("Book: waiting to be carried to the workshop") and stuck_text(s2).contains("Enchanter: No one is an enchanter"), "with no enchanter the stuck list says so: " + stuck_text(s2))
+	check(not w2.is_empty() and w2.known == [], "(nothing learned)")
+	# Menu, page, save and old saves.
+	check(not OrderMenus.unlocked({"unlock": "enchanting"}, Sim.new_game()) and OrderMenus.unlocked({"unlock": "enchanting"}, sim), "the Build menu offers it once a book has been found or a workshop stands")
+	check(not Goals.page_for("enchanting_workshop").is_empty(), "the book has a page for it")
+	var back := Sim.from_state(sim.save_state())
+	check(back.enchanting_workshop().known == ["efficiency", "protection"], "the known recipes are saved")
+	var f52 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v52.save").data.state)
+	check(f52.enchanting_workshop().known == ["efficiency"], "the v52 fixture loads its workshop")
+	var f51 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v51.save").data.state)
+	check(f51.residents.all(func(r): return r.jobs.enchant.xp == 0), "an older save loads with Enchanter at 0")

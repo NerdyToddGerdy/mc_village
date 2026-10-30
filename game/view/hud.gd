@@ -2201,6 +2201,9 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	if s.tpl == "storehouse":  # issue #189
 		_fill_storehouse(c, sim, s)
 		return
+	if s.tpl == "enchanting_workshop" and s.done:  # issue #165
+		_fill_enchanting(c, sim, s)
+		return
 	if s.tpl == "house":
 		var owner := sim.resident(s.owner)
 		var line := "Home of %s." % owner.name if not owner.is_empty() else ("Empty. A traveler should arrive soon." if sim.arrival_at >= 0 else "Empty.")
@@ -2236,6 +2239,25 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 
 
 ## A finished storehouse (issue #189): its chests, how full they are, and what's in them.
+## A finished enchanting workshop (issues #165, #166): who works it, and each recipe, known or not, with its cost.
+func _fill_enchanting(c: Container, sim: Sim, s: Dictionary) -> void:
+	c.add_child(_label("Enchanting workshop", true, Palette.CHALK, Palette.TITLE))
+	var who := sim.resident(s.get("worker", 0))
+	c.add_child(_row("Enchanter", who.name if not who.is_empty() else "none (Ada works it, or give someone the job)", false))
+	c.add_child(_label("Recipes", true))
+	for k in Defs.ENCHANTS:
+		var e: Dictionary = Defs.ENCHANTS[k]
+		var cost: PackedStringArray = []
+		for it in e.cost:
+			cost.append(Defs.words(it, e.cost[it]))
+		var known: bool = s.known.has(k)
+		c.add_child(_row(e.name, "known" if known else "unknown: needs its book", false))
+		c.add_child(_label("Costs " + ", ".join(cost) + ". " + Sim.enchant_text(k), false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	c.add_child(_label("A book carried here teaches its recipe for good, and is used up.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
+		c.add_child(_reason(x.why))
+
+
 func _fill_storehouse(c: Container, sim: Sim, s: Dictionary) -> void:
 	c.add_child(_label("Storehouse", true, Palette.CHALK, Palette.TITLE))
 	var slots := Sim.store_slots(s)
