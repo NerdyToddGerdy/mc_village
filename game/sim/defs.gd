@@ -43,6 +43,11 @@ const ITEMS := {
 	# From the quartz site (issue #155): stockpiled for Slice 6; nothing the village needs to survive.
 	"quartz": {"one": "nether quartz", "many": "nether quartz", "label": "Quartz", "group": "ores"},
 	"glowstone": {"one": "glowstone", "many": "glowstone", "label": "Glowstone", "group": "ores"},
+	# Enchanted books (issues #164, #28): each names one enchantment, and taught to the workshop it's learned for good.
+	"book_efficiency": {"one": "enchanted book of Efficiency", "many": "enchanted books of Efficiency", "label": "Efficiency book", "book": "efficiency", "group": "tools"},
+	"book_unbreaking": {"one": "enchanted book of Unbreaking", "many": "enchanted books of Unbreaking", "label": "Unbreaking book", "book": "unbreaking", "group": "tools"},
+	"book_protection": {"one": "enchanted book of Protection", "many": "enchanted books of Protection", "label": "Protection book", "book": "protection", "group": "tools"},
+	"book_fire_protection": {"one": "enchanted book of Fire protection", "many": "enchanted books of Fire protection", "label": "Fire protection book", "book": "fire_protection", "group": "tools"},
 	# What the piglins trade (issue #156).
 	"string": {"one": "string", "many": "string", "label": "String", "group": "ores"},
 	"fire_resistance": {"one": "fire-resistance supply", "many": "fire-resistance supplies", "label": "Fire resistance", "group": "ores"},
@@ -111,11 +116,45 @@ const CREATURES := {
 ## The piglins' fixed trade table (issue #156), in the order a trading party works down it: what they take, and what they give.
 ## It's shown in the site report and the planner before a party commits, and never changes or rolls.
 const TRADES := [
+	{"give": {"gold_ingot": 8}, "get": {"book_efficiency": 1}},  # books at a fixed price (issue #164)
+	{"give": {"gold_ingot": 6}, "get": {"book_unbreaking": 1}},
 	{"give": {"gold_ingot": 2}, "get": {"obsidian": 1}},
 	{"give": {"gold_ingot": 2}, "get": {"string": 3}},
 	{"give": {"gold_ingot": 1}, "get": {"flint": 2}},
 	{"give": {"gold_ingot": 4}, "get": {"fire_resistance": 1}},
 ]
+## The four enchantments (issues #165-#167): what each costs at the workshop (lapis plus one ingredient), what it can go on
+## (a tool kind, "sword" or "armor"), and what it does. One to an item, and no rerolls.
+const ENCHANTS := {
+	"efficiency": {"name": "Efficiency", "book": "book_efficiency", "cost": {"lapis": 2, "quartz": 1}, "applies": ["axe", "pick"]},
+	"unbreaking": {"name": "Unbreaking", "book": "book_unbreaking", "cost": {"lapis": 2, "iron_ingot": 1}, "applies": ["axe", "pick", "sword", "armor"]},
+	"protection": {"name": "Protection", "book": "book_protection", "cost": {"lapis": 3, "iron_ingot": 2}, "applies": ["armor"]},
+	"fire_protection": {"name": "Fire protection", "book": "book_fire_protection", "cost": {"lapis": 3, "magma_cream": 1}, "applies": ["armor"]},
+}
+
+
+## How likely each enchantment is to turn up in each place (issue #164): fortress salvage favours the protections, the deep
+## mine's chests the tools' enchantments.
+const BOOK_WEIGHTS := {
+	"fortress": {"efficiency": 1, "unbreaking": 1, "protection": 3, "fire_protection": 3},
+	"mine": {"efficiency": 3, "unbreaking": 3, "protection": 1, "fire_protection": 1},
+}
+
+
+## The book (an item type) a place gives for a number: the same number, the same book.
+static func book_for(source: String, h: int) -> String:
+	var w: Dictionary = BOOK_WEIGHTS[source]
+	var total := 0
+	for k in w:
+		total += w[k]
+	var pick := absi(h) % total
+	for k in w:
+		pick -= w[k]
+		if pick < 0:
+			return "book_" + k
+	return "book_efficiency"
+
+
 ## What the fortress's salvage chest holds (issue #157), provisional.
 const FORTRESS_SALVAGE := {"diamond": 1, "iron_ingot": 4, "gold_ingot": 3, "blaze_rod": 1}
 ## The rule that turns the piglins hostile, shown up front (brief §8).
@@ -135,6 +174,7 @@ static func trade_text(t: Dictionary) -> String:
 
 ## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.
 const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}, "diamond": {"item": "diamond", "name": "Diamond ore"},
+	"chest": {"item": "book_efficiency", "name": "Chest"},  # a chest in the rock holds one book, named by the block (issue #164)
 	"lapis": {"item": "lapis", "name": "Lapis ore"}, "redstone": {"item": "redstone", "name": "Redstone ore"},
 	"quartz": {"item": "quartz", "name": "Nether quartz ore"}, "glowstone": {"item": "glowstone", "name": "Glowstone"},
 	"gold": {"item": "gold_ore", "name": "Gold ore"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}

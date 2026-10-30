@@ -40,7 +40,22 @@ Two more ores from the deep levels' stream of finds (`MineLevels.DEEP_ORES`), pl
 
 - **Saving:** v50.
 
-## 4. Tuning table (provisional)
+## 4. Enchanted books (#164)
+
+An **enchanted book** is an item that names one enchantment: `book_efficiency`, `book_unbreaking`, `book_protection` and `book_fire_protection` (`Defs.ENCHANTS` holds each enchantment's data). The same number always gives the same book, from the game's seed.
+
+| Source | Books | Weighted |
+|---|---|---|
+| **Fortress salvage** (#157) | One in the chest, on top of the rest | Protection and Fire protection 3, Efficiency and Unbreaking 1 |
+| **Deep mine chests** | A chest block in the rock, from level 3 (one, then one more every 4 levels, 2 at most), broken with any pickaxe, drops its book | Efficiency and Unbreaking 3, Protection and Fire protection 1 |
+| **The piglin table** (#156) | Efficiency for 8 gold ingots, Unbreaking for 6: the first two rows of the table, shown before departure | Fixed |
+
+- **A level's chests** show in its report (once seen) and the planner as cargo targets, one row for each book.
+- **Carried home** as cargo and stored in the stockpile like anything else.
+- **The discovery pause:** the first book found, from any source, stops the game once, says what it teaches ("... would teach that recipe for good"), and is carried on.
+- **Saving:** v51. Book items, chest blocks with their `book`, and `stats.book_found`.
+
+## 5. Tuning table (provisional)
 
 Each build issue adds its rows.
 

@@ -54,6 +54,10 @@ static func _draw(img: Image, type: String) -> void:
 				_ellipse(img, p, Vector2(13, 9), dark)
 			for p in [Vector2(22, 24), Vector2(42, 18)]:
 				_ellipse(img, p, Vector2(10, 6), c)
+		"book_efficiency", "book_unbreaking", "book_protection", "book_fire_protection":  # a closed book with a band across it
+			_box(img, Rect2i(12, 10, 40, 46), dark)
+			_box(img, Rect2i(15, 13, 34, 40), c)
+			_box(img, Rect2i(15, 24, 34, 8), c.lightened(0.45))
 		"coal", "obsidian", "flint":  # dark lumps, edged in chalk so they read on the slate
 			for p in [Vector2(24, 36), Vector2(40, 30), Vector2(34, 46)]:
 				_disc(img, p, 13, Palette.CHALK_DIM)

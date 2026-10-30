@@ -216,7 +216,7 @@ func _build_static() -> void:
 			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), body, BlockTextures.COBBLES if b.get("ore", "") == "gravel" else BlockTextures.ROCK)
 			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), body.lightened(0.06), BlockTextures.ROCK)
 			if b.has("ore") and b.ore != "obsidian" and b.ore != "glowstone":  # flecks of ore on its faces and top (issue #103)
-				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[Defs.ORES[b.ore].item])
+				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[b.get("book", Defs.ORES[b.ore].item)])
 			if b.get("loose", false) and sim.m.visited:  # a loose ceiling: cracks, and props holding it (issue #110)
 				for k in 2:
 					var x := c.x + 0.25 + k * 0.4

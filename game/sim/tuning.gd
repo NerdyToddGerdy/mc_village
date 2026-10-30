@@ -62,7 +62,7 @@ const BREED_COOLDOWN := 300.0           ## Seconds before a pair that bred can b
 const GROW_TIME := 240.0                ## Seconds for a young animal to grow up; till then it can't be hunted.
 
 # Site maps (Slice 3, issues #102, #103).
-const ORE_YIELD := {"coal": 3, "iron": 4, "diamond": 1, "gold": 2, "obsidian": 1, "gravel": 1, "quartz": 2, "glowstone": 2, "lapis": 3, "redstone": 3}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).
+const ORE_YIELD := {"coal": 3, "iron": 4, "diamond": 1, "gold": 2, "obsidian": 1, "gravel": 1, "quartz": 2, "glowstone": 2, "lapis": 3, "redstone": 3, "chest": 1}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).
 const TORCH_LIGHT := 3.0                ## Cells a torch lights; open cells further from every torch are dark.
 # The old mine's deeper levels (issue #132).
 const LEVEL_ORE := {"coal": 2, "iron": 1}  ## Ore blocks each level down adds to Level 1's 6 coal and 4 iron.
@@ -175,5 +175,9 @@ const RESCUE_WINDOW := 240.0          ## Seconds a stranded party shelters befor
 const STRAND_WAIT := 20.0             ## Seconds the party waits at a dark portal with no flint and steel before it's stranded.
 const NETHER_BRIDGE_PLANKS := 8       ## Planks a bridge over a Nether route's lava channel or gap takes (issue #159).
 const NETHER_BRIDGE_TIME := 10.0      ## Seconds to build it.
+const EFFICIENCY_SPEED := 1.3         ## Work speed of an Efficiency tool (issue #167).
+const UNBREAKING_WEAR := 0.5          ## Share of wear an Unbreaking item takes.
+const PROTECTION_CUT := 0.3           ## Share of creature injuries Protection armor adds to what it turns aside, as a cut in the chance.
+const FIRE_PROTECTION_CUT := 0.5      ## Cut in the chance of a burn from fire or lava for Fire protection armor.
 const FLINT_STEEL_USES := 8           ## Times a flint and steel lights something before it's spent (issues #146, #147).
 const DIAMOND_PICK_TIER := 3            ## The pickaxe tier diamond ore needs: iron (issue #186).

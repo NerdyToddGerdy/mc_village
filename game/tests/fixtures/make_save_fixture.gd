@@ -332,6 +332,8 @@ func _initialize() -> void:
 		line.laid[0] = Tuning.RAILS_PER_SEGMENT
 		line.laid[1] = Tuning.RAILS_PER_SEGMENT
 		line.stations.landing = true
+	if SaveFormat.VERSION >= 51:  # an enchanted book of Protection lying by Ada (#164)
+		sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(1, 1), "book_protection", 1)
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

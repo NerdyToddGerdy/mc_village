@@ -1676,7 +1676,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		"boulder":
 			var drops := Defs.words("cobble", Tuning.BOULDER_COBBLE)
 			if target.has("ore"):
-				drops = Defs.words(Defs.ORES[target.ore].item, Tuning.ORE_YIELD[target.ore])
+				drops = Defs.words(target.get("book", Defs.ORES[target.ore].item), Tuning.ORE_YIELD[target.ore])
 			c.add_child(_head(Sim.block_name(target), "Drops " + drops))
 			if target.des and sim.stuck.any(func(s): return s.focus_kind == "boulder"):
 				c.add_child(_reason("Needs a pickaxe"))

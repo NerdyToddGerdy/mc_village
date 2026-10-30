@@ -2456,6 +2456,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				expedition.tools.append({"type": r.carry.type, "dur": r.carry.dur})
 			else:
 				expedition.cargo[r.carry.type] = expedition.cargo.get(r.carry.type, 0) + r.carry.n
+				_note_book(r.carry.type, r)
 			r.carry = null
 			rev += 1
 			return true
@@ -2667,6 +2668,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 						expedition.supplies.erase(k)
 				for k in t.get:
 					expedition.cargo[k] = expedition.cargo.get(k, 0) + t.get[k]
+					_note_book(k, r)
 				made += 1
 			for ti in counts:
 				expedition.traded = expedition.get("traded", []) + [Defs.trade_text(Defs.TRADES[ti]) + (" ×%d" % counts[ti] if counts[ti] > 1 else "")]
@@ -2792,6 +2794,8 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				if t.ore == "gravel":  # sometimes a flint, else nothing (issue #146)
 					if rng.randf() < Tuning.GRAVEL_FLINT_CHANCE:
 						drop_items(t.cell, "flint", 1)
+				elif t.ore == "chest":  # the book inside (issue #164)
+					drop_items(t.cell, t.book, 1)
 				else:
 					drop_items(t.cell, Defs.ORES[t.ore].item, Tuning.ORE_YIELD[t.ore] + skill_bonus(r, "mason"))
 				stats.ore_mined = stats.get("ore_mined", 0) + 1
@@ -6473,6 +6477,7 @@ static func gives(b: Dictionary, item: String) -> bool:
 		"gold_ore": return b.get("ore", "") == "gold"
 		"obsidian": return b.get("ore", "") == "obsidian"
 		"flint": return b.get("ore", "") == "gravel"
+		"book_efficiency", "book_unbreaking", "book_protection", "book_fire_protection": return b.get("ore", "") == "chest" and b.get("book", "") == item
 		"lapis": return b.get("ore", "") == "lapis"
 		"redstone": return b.get("ore", "") == "redstone"
 		"quartz": return b.get("ore", "") == "quartz"
@@ -7014,20 +7019,35 @@ func _delve_job(r: Dictionary, c: Vector2i):
 	return j
 
 
+## The first enchanted book found stops the game, and says what it teaches (issue #164), like the iron discovery.
+func _note_book(item: String, r: Dictionary) -> void:
+	if not Defs.ITEMS[item].has("book") or stats.get("book_found", false):
+		return
+	stats.book_found = true
+	var what: String = Defs.ENCHANTS[Defs.ITEMS[item].book].name
+	_ask("book", "%s found an enchanted book of %s. Brought home to an enchanting workshop, it would teach that recipe for good." % [r.get("name", "Someone"), what], [
+		{"id": "ok", "label": "Carry on", "cost": "It's packed like any find, and comes home as cargo."},
+	], r.get("id", 0))
+
+
 ## The salvage goes into the packs, what doesn't fit left on the chest's cell; taken once (issue #157).
 func _take_salvage() -> void:
 	if m.salvage_taken:
 		return
 	m.salvage_taken = true
-	for k in Defs.FORTRESS_SALVAGE:
-		var n: int = Defs.FORTRESS_SALVAGE[k]
+	var contents: Dictionary = Defs.FORTRESS_SALVAGE.duplicate()
+	var book := Defs.book_for("fortress", hash([seed, "salvage"]))  # an enchanted book, favouring the protections (issue #164)
+	contents[book] = 1
+	for k in contents:
+		var n: int = contents[k]
 		var fit := mini(n, maxi(0, pack_room()))
 		if fit > 0:
 			expedition.cargo[k] = expedition.cargo.get(k, 0) + fit
 		if n - fit > 0:
 			drop_items(m.salvage, k, n - fit)
 	rev += 1
-	_toast("The party took the salvage.", expedition.party[0])
+	_toast("The party took the salvage, with an enchanted book: %s." % Defs.ITEMS[book].label, expedition.party[0])
+	_note_book(book, resident(expedition.party[0]))
 
 
 ## What a party member does at the piglin camp (issue #156): with gold in the packs, walk up to a piglin and trade, down the
@@ -7650,6 +7670,8 @@ func choose(option: String) -> void:
 			pass  # they shelter; the window runs
 		["stranded", "walk"]:
 			_abandon("the party set out on its own")
+		["book", "ok"]:
+			pass
 		["fortress", "take"]:
 			_take_salvage()
 			if expedition.get("leg", "out") == "out":
@@ -8100,6 +8122,13 @@ func site_report(id: String) -> Dictionary:
 		res.append({"item": "iron_ore", "name": "?", "reserve": -1, "known": false})
 	if mp.diamond_found:  # a known resource of this level once someone has found it (issue #186)
 		res.append({"item": "diamond", "name": "Diamond", "reserve": ore_left(id, "diamond") * Tuning.ORE_YIELD.diamond, "known": true})
+	if mp.visited:  # a chest in the rock holds a book (issue #164)
+		var books := {}
+		for b in mp.boulders:
+			if b.alive and b.get("ore", "") == "chest":
+				books[b.book] = books.get(b.book, 0) + 1
+		for k in books:
+			res.append({"item": k, "name": Defs.ITEMS[k].label, "reserve": books[k], "known": true})
 	for ore in ["gold", "obsidian", "gravel", "lapis", "redstone"]:  # what the deeper levels hold once someone has seen them (issues #146, #163)
 		if mp.visited and mp.boulders.any(func(b): return b.get("ore", "") == ore):
 			res.append({"item": Defs.ORES[ore].item, "name": {"gold": "Gold", "obsidian": "Obsidian", "gravel": "Flint", "lapis": "Lapis", "redstone": "Redstone"}[ore],

@@ -77,9 +77,10 @@ const DEEP_ORES := {"diamond": {"from": 4, "base": 1, "every": 2, "max": 3},
 	"gravel": {"from": 3, "base": 2, "every": 2, "max": 4},    # sometimes drops flint
 	"obsidian": {"from": 5, "base": 4, "every": 1, "max": 8},  # beside a lava pool; only a diamond pickaxe breaks it
 	"lapis": {"from": 3, "base": 2, "every": 2, "max": 5},     # the common cost of every enchantment (issue #163); an iron pickaxe or better
-	"redstone": {"from": 3, "base": 2, "every": 2, "max": 5}}  # for the devices (issue #170); an iron pickaxe or better
+	"redstone": {"from": 3, "base": 2, "every": 2, "max": 5},  # for the devices (issue #170); an iron pickaxe or better
+	"chest": {"from": 3, "base": 1, "every": 4, "max": 2}}     # a chest in the rock with an enchanted book (issue #164)
 ## The character each deep ore is drawn with in a level's rows ("L" is a lava pool, beside the obsidian).
-const DEEP_CHARS := {"diamond": "d", "gold": "g", "gravel": "v", "obsidian": "b", "lapis": "l", "redstone": "r"}
+const DEEP_CHARS := {"diamond": "d", "gold": "g", "gravel": "v", "obsidian": "b", "lapis": "l", "redstone": "r", "chest": "k"}
 
 
 ## How many blocks of a deep ore a level has: none above its first level.
@@ -190,6 +191,10 @@ static func build(s: Sim, n: int) -> SimMap:
 					m.boulders.append(OldMine._block(s, c, "lapis"))
 				"r":
 					m.boulders.append(OldMine._block(s, c, "redstone"))
+				"k":  # which book is fixed by the level and the cell, so the same game finds the same chest (issue #164)
+					var chest := OldMine._block(s, c, "chest")
+					chest.book = Defs.book_for("mine", hash([s.seed, n, c]))
+					m.boulders.append(chest)
 				"L":  # a lava pool: rock to walk, with a glow (issue #146)
 					m.rock[c] = true
 					m.lava[c] = true
@@ -463,7 +468,7 @@ static func _deep_ores(grid: Dictionary, seed: int, n: int) -> void:
 			continue
 		var g := _rng(seed ^ 0xD1A if ore == "diamond" else seed ^ 0xD1A ^ hash(ore), n)  # diamonds keep the stream they had
 		var spots: Array = []
-		var wide: bool = ore in ["lapis", "redstone"]  # these two may also sit in the level's edge wall (issue #163)
+		var wide: bool = ore in ["lapis", "redstone", "chest"]  # these two may also sit in the level's edge wall (issue #163)
 		for y in range(0 if wide else 1, grid.h if wide else grid.h - 1):
 			for x in range(grid.w / 2 if ore == "diamond" else 3, grid.w - 1 if wide else grid.w - 2):  # the new ores may lie anywhere past the entrance
 				if _at(grid, x, y) != "#":

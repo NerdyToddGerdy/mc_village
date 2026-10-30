@@ -75,6 +75,7 @@ func _init() -> void:
 		"test_mission_types",
 		"test_the_quartz_site",
 		"test_piglin_trading",
+		"test_enchanted_books",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5257,8 +5258,8 @@ func test_piglin_trading() -> void:
 	check(camp.pattern == "hand_laid" and camp.w == 20 and camp.creatures.size() == 3 and camp.creatures.all(func(x): return x.species == "piglin" and not x.angry), "a hand-laid camp with three piglins, at peace")
 	check(Defs.CREATURES.piglin.notice == 0 and not sim._dangerous(camp.creatures[0]), "a piglin never goes for anyone")
 	# The table is fixed, and shown.
-	check(Defs.TRADES.size() == 4 and Defs.TRADES.all(func(t): return t.give.keys() == ["gold_ingot"]), "four trades, all for gold ingots")
-	check(Defs.trade_text(Defs.TRADES[0]) == "2 gold ingots for 1 obsidian" and Defs.PIGLIN_RULE == "Piglins turn hostile if anyone in the party strikes one", "in plain words, with the rule")
+	check(Defs.TRADES.size() == 6 and Defs.TRADES.all(func(t): return t.give.keys() == ["gold_ingot"]), "six trades, all for gold ingots")
+	check(Defs.trade_text(Defs.TRADES[2]) == "2 gold ingots for 1 obsidian" and Defs.trade_text(Defs.TRADES[0]) == "8 gold ingots for 1 enchanted book of Efficiency" and Defs.PIGLIN_RULE == "Piglins turn hostile if anyone in the party strikes one", "in plain words, with the rule")
 	portal.lit = true
 	sim.get_map(NetherLanding.ID).known = true
 	sim.get_map(NetherRoute.ROUTES.piglin.id).surveyed = true
@@ -5269,7 +5270,7 @@ func test_piglin_trading() -> void:
 	plan.party = [ada.id]
 	check(plan.target.item == "trade" and plan.dest == "nether_piglin" and plan.gold == 0 and sim.plan_problems(plan).has("Take some gold to trade"), "a trade plan with no gold is refused: take some")
 	var briefing := sim.plan_briefing(plan)
-	check(briefing.filter(func(l): return l.begins_with("Trade: ")).size() == 4 and briefing.has("Rule: " + Defs.PIGLIN_RULE), "the planner's briefing shows the whole table and the rule before the party commits")
+	check(briefing.filter(func(l): return l.begins_with("Trade: ")).size() == 6 and briefing.has("Rule: " + Defs.PIGLIN_RULE), "the planner's briefing shows the whole table and the rule before the party commits")
 	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "gold_ingot", 6)
 	plan = sim.nether_plan("trade")
 	plan.party = [ada.id]
@@ -5294,8 +5295,8 @@ func test_piglin_trading() -> void:
 	var got := {}
 	for st in sim.stacks_where(func(x): return true):
 		got[st.type] = got.get(st.type, 0) + st.n
-	check(got.get("obsidian", 0) == 3 and not got.has("gold_ingot"), "6 gold buys 3 obsidian, the first row of the table, and none is left (%s)" % [got])
-	check(sim.expedition_board().get("report", []).any(func(l): return l.begins_with("Traded: ") and "2 gold ingots for 1 obsidian ×3" in l), "the report says what was traded: %s" % [sim.expedition_board().get("report", [])])
+	check(got.get("book_unbreaking", 0) == 1 and not got.has("gold_ingot") and not got.has("obsidian"), "6 gold buys the Unbreaking book, the first row it pays for, and none is left (%s)" % [got])
+	check(sim.expedition_board().get("report", []).any(func(l): return l.begins_with("Traded: ") and "6 gold ingots for 1 enchanted book of Unbreaking" in l), "the report says what was traded: %s" % [sim.expedition_board().get("report", [])])
 	check(camp.creatures.all(func(x): return x.alive and not x.angry) and not camp.hostile, "the piglins stayed at peace")
 	var f46 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v46.save").data.state)
 	check(f46.get_map("nether_piglin").hostile and f46.get_map("nether_piglin").creatures[0].hp == 7, "the v46 fixture loads its hostile camp")
@@ -5781,3 +5782,76 @@ func test_lapis_and_redstone() -> void:
 			break
 	check(sim.expedition.get("cargo", {}).get("lapis", 0) >= 3, "the party mines lapis and packs it (%s)" % [sim.expedition.get("cargo", {})])
 	sim.expedition = {}
+
+
+## Enchanted books: found in the fortress and the deep mine's chests, and traded at a fixed price (issue #164).
+func test_enchanted_books() -> void:
+	check(Defs.ENCHANTS.keys() == ["efficiency", "unbreaking", "protection", "fire_protection"] and Defs.ENCHANTS.values().all(func(e): return Defs.ITEMS.has(e.book) and Defs.ITEMS[e.book].book != ""), "four enchantments, each with a book")
+	# Where they turn up: the weights, the same number giving the same book.
+	var count := {"fortress": {}, "mine": {}}
+	for src in count:
+		for h in 800:
+			var b := Defs.book_for(src, h * 7919 + 13)
+			count[src][b] = count[src].get(b, 0) + 1
+	check(count.fortress.book_protection + count.fortress.book_fire_protection > 2 * (count.fortress.book_efficiency + count.fortress.book_unbreaking), "the fortress favours Protection and Fire protection (%s)" % [count.fortress])
+	check(count.mine.book_efficiency + count.mine.book_unbreaking > 2 * (count.mine.book_protection + count.mine.book_fire_protection), "the deep mine's chests favour Efficiency and Unbreaking (%s)" % [count.mine])
+	check(Defs.book_for("mine", 12345) == Defs.book_for("mine", 12345), "the same number gives the same book")
+	# A chest on the deep levels: a block whose book is fixed, found from level 3.
+	var sim := Sim.new_game()
+	for n in [1, 2]:
+		check(not "".join(MineLevels.layout(sim.seed, n).rows).contains("k"), "no chest on level %d" % n)
+	var found_chest := false
+	for n in range(3, 9):
+		var lvl: SimMap = MineLevels.build(sim, n)
+		var chests: Array = lvl.boulders.filter(func(b): return b.get("ore", "") == "chest")
+		var again: Array = MineLevels.build(sim, n).boulders.filter(func(b): return b.get("ore", "") == "chest")
+		if not chests.is_empty():
+			found_chest = true
+			check(chests.all(func(b): return Defs.ITEMS.has(b.book) and Defs.ITEMS[b.book].has("book")) and chests.map(func(b): return b.book) == again.map(func(b): return b.book), "level %d's chest holds a book, the same every time" % n)
+			sim.maps[lvl.id] = lvl
+			lvl.visited = true
+			var rep := sim.site_report(lvl.id)
+			check(rep.resources.any(func(x): return x.item == chests[0].book and x.known) and sim.plan_targets(lvl.id).any(func(x): return x.item == chests[0].book), "the report and the planner list the book")
+			# Mining it gives the book, once.
+			var ada: Dictionary = sim.residents[0]
+			ada.pick = {"type": "stone_pick", "tier": 2, "dur": 40}
+			sim.use_map(lvl.id)
+			sim.drop_items(chests[0].cell, "cobble", 0)
+			var st := {"what": "gather", "tool": "pick", "target": chests[0]}
+			check(sim._work_time(ada, st) > 0.0, "a chest breaks with any pickaxe")
+			chests[0].alive = true
+			sim._finish_work(ada, st)
+			check(sim.items.values().any(func(it): return it.type == chests[0].book and it.n == 1), "it drops its book")
+			sim.use_map("village")
+			break
+	check(found_chest, "some deep level has a chest")
+	# The fortress salvage holds a book too.
+	var w := nether_world()
+	var s2: Sim = w.sim
+	var fort: SimMap = s2.get_map("nether_fortress")
+	s2.expeditions.nether = {"state": "out", "leg": "out", "dest": "nether_fortress", "party": [w.ada.id], "cargo": {}, "supplies": {}, "provisions": {"bread": 3}, "tools": [], "target": {"item": "fortress", "n": 1}, "meals": 3, "picks": 0}
+	s2.on_slot("nether", func(): s2.on_map("nether_fortress", s2._take_salvage))
+	var books: Array = s2.expeditions.nether.cargo.keys().filter(func(k): return Defs.ITEMS[k].has("book"))
+	check(books.size() == 1 and books[0] == Defs.book_for("fortress", hash([s2.seed, "salvage"])), "the salvage holds one book, fixed by the game's seed (%s)" % [books])
+	# The first book found stops the game once, and says what it teaches.
+	check(not s2.pending.is_empty() and s2.pending[0].kind == "book" and s2.pending[0].text.contains("enchanted book of") and s2.pending[0].options.size() == 1, "the first book found pauses the game: %s" % [s2.pending[0].text if not s2.pending.is_empty() else ""])
+	s2.choose("ok")
+	s2.expeditions.nether.cargo.clear()
+	fort.salvage_taken = false
+	s2.on_slot("nether", func(): s2.on_map("nether_fortress", s2._take_salvage))
+	check(s2.pending.is_empty(), "later books don't pause it again")
+	# The piglin table's books are fixed, shown, and come home through a trade.
+	var table: Array = Defs.TRADES.filter(func(t): return t.get.keys().any(func(k): return Defs.ITEMS[k].has("book")))
+	check(table.size() == 2 and table.map(func(t): return t.get.keys()[0]) == ["book_efficiency", "book_unbreaking"] and table[0].give.gold_ingot == 8 and table[1].give.gold_ingot == 6, "two books on the shown table, at fixed prices")
+	var s3 := Sim.new_game()
+	s3.use_slot("nether")
+	s3.expedition = {"supplies": {"gold_ingot": 8}, "cargo": {}, "provisions": {}, "tools": [], "party": [1], "meals": 0, "picks": 0, "target": {"item": "trade", "n": 1}}
+	s3.m.creatures.clear()
+	check(Defs.TRADES[s3._next_trade()].get.has("book_efficiency"), "8 gold pays for the Efficiency book")
+	var f51 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v51.save").data.state)
+	check(f51.stacks_where(func(x): return x.type == "book_protection").size() == 1, "the v51 fixture loads its book")
+	# A book keeps its enchantment through a save.
+	var s4 := Sim.new_game()
+	s4.drop_items(Sim.rcell(s4.residents[0]) + Vector2i(1, 1), "book_protection", 1)
+	var back := Sim.from_state(s4.save_state())
+	check(back.stacks_where(func(x): return x.type == "book_protection").size() == 1 and Defs.ITEMS.book_protection.book == "protection", "a book keeps its enchantment through save and load")
