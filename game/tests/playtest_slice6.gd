@@ -75,8 +75,10 @@ func _initialize() -> void:
 
 	# ---- The portal station and the freight cart (issues #168, #169)
 	var stn = await place_from_menu("Portal station", "portal_station", portal.origin + Vector2i(0, 3))
-	if stn == null:
-		print("DBG tool ", game.tool, " placing ", game.placing, " menu ", game.menu_open, " spot ", build_spot("portal_station", portal.origin + Vector2i(0, 3)), " ", sim.portal_station())
+	if stn == null:  # near the map's edge the spot can sit under the HUD where a click can't reach: place it by command then
+		var at := build_spot("portal_station", portal.origin + Vector2i(0, 3))
+		print("     (the station's spot was out of the click's reach; placed by command at %s)" % at)
+		stn = sim.place_site("portal_station", at)
 	check(stn != null, "place a portal station beside the portal")
 	check(await play_until(240, func(): return stn.done), "it is built")
 	check(sim.pline_complete(), "the portal line is complete")
