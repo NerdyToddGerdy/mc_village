@@ -59,6 +59,7 @@ var _stuck_keys := {}           ## Blockers shown last refresh, to open the list
 var _toasts := VBoxContainer.new()
 var _sel_panel: PanelContainer
 var _sel := VBoxContainer.new()
+var _sel_scroll := ScrollContainer.new()
 var _build_menu: PanelContainer
 var _craft_panel: PanelContainer
 var _plan_panel: PanelContainer     ## The expedition planner (issues #105-#107).
@@ -206,7 +207,10 @@ func _ready() -> void:
 	_toasts.add_child(_paused_label)
 
 	var bl := _corner(Control.PRESET_BOTTOM_LEFT)
-	_sel_panel = _panel(_sel, Vector2(330, 0))
+	_sel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED  # a tall panel scrolls instead of covering the top bar (#15)
+	_sel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sel_scroll.add_child(_sel)
+	_sel_panel = _panel(_sel_scroll, Vector2(330, 0))
 	_sel.add_theme_constant_override("separation", 8)
 	bl.add_child(_sel_panel)
 
@@ -1279,6 +1283,10 @@ func _process(_delta: float) -> void:
 			if n.has_meta("disarmed_text"):
 				n.text = n.get_meta("disarmed_text")
 	_place_toasts()
+	var room: float = get_viewport().get_visible_rect().size.y - 150.0  # below the top bar, above the bottom edge
+	var want := minf(_sel.get_combined_minimum_size().y, maxf(120.0, room))
+	if not is_equal_approx(_sel_scroll.custom_minimum_size.y, want):
+		_sel_scroll.custom_minimum_size.y = want
 	if _board_panel.visible:
 		_board_panel.position = Vector2(_tally_panel.global_position.x, _tally_panel.get_global_rect().end.y + 8)
 	# The goals panel gives way to the jobs board, which sits over it, and to a selection panel tall
