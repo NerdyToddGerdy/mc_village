@@ -353,6 +353,10 @@ const TEMPLATES := {
 	"condition": {"name": "Condition", "size": Vector2i(1, 1), "device": "condition", "stages": [
 		{"name": "Condition", "verb": "needs", "cost": {"redstone": 2, "quartz": 1, "cobble": 2}},
 	]},
+	# The dispatcher (issue #173): beside the village station; raises the departure request once the cart is loaded.
+	"dispatcher": {"name": "Dispatcher", "size": Vector2i(1, 1), "device": "dispatcher", "stages": [
+		{"name": "Dispatcher", "verb": "needs", "cost": {"redstone": 2, "quartz": 1, "cobble": 2}},
+	]},
 	# The freight loader (issue #172): the loading-station upgrade, built on the plot the portal station reserves.
 	"freight_loader": {"name": "Freight loader", "size": Vector2i(1, 1), "device": "loader", "stages": [
 		{"name": "Loader", "verb": "needs", "cost": {"redstone": 3, "quartz": 1, "cobble": 4}},

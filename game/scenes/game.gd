@@ -789,7 +789,7 @@ func _key(e: InputEventKey) -> void:
 		"portal": start_placing("portal")
 		"enchanting_workshop": start_placing("enchanting_workshop")
 		"portal_station": start_placing("portal_station")
-		"cache_sensor", "condition", "freight_loader": start_placing(keys.action_for(e))
+		"cache_sensor", "condition", "freight_loader", "dispatcher": start_placing(keys.action_for(e))
 		"redstone_overlay": toggle_redstone_overlay()
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
@@ -963,7 +963,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "keep"]
+const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -1265,6 +1265,12 @@ func order_wire(from_id: int, to_id: int) -> void:
 
 func order_freight_cart() -> void:
 	var why := sim.order_freight_cart()
+	if why != "":
+		_hud.add_toast({"text": why, "res_id": 0, "site_id": 0})
+
+
+func decline_freight() -> void:
+	var why := sim.decline_freight()
 	if why != "":
 		_hud.add_toast({"text": why, "res_id": 0, "site_id": 0})
 

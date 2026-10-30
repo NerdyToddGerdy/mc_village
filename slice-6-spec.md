@@ -137,7 +137,26 @@ Each enchantment changes only its own number, by the item's type (`Defs.ITEMS[ty
 - **The condition's "the loader is idle"** is false while a powered loader still has the cart to fill.
 - **Saving:** v57 (the list is in the loader's `cfg`, the progress is the cart's `freight.load`).
 
-## 13. Tuning table (provisional)
+## 13. The dispatcher and departure approval (#173)
+
+- **Dispatcher:** a device (2 redstone dust, 1 quartz, 2 cobblestone) that stands **within `DISPATCHER_REACH` (4) cells of the portal station**; one only. Wire the loader into it: it is on while its input ("loaded") is on.
+- **The request:** with the dispatcher powered and a loaded cart at the station, it raises a **departure request** (`freight.request`): a toast, "Supply cart ready for the Nether cache. Approve?", that focuses the station, and "Freight cart: waiting for approval: the dispatcher asks you to approve" in the stuck list. **It does not pause the game** and isn't in `sim.pending`.
+- **Approve** (station panel) sends the cart as in §9; **Decline: unload it** puts the load back in the stockpile and stops the loader and the dispatcher until the chain's signal drops (the cache recovers) and rises again. Approval stays manual: nothing leaves on its own.
+- **The chain:** cache sensor (food < 10) → condition (the portal is lit) → loader → dispatcher; low cache, load, approve, deliver, unload, return. Without a dispatcher the station's Approve button still works.
+- **Saving:** `freight.request` and `freight.declined` (v58).
+
+## 14. Playtests (#174)
+
+- **Bot:** `tests/playtest_slice6.gd`, from the Slice 3 village. By command it sets the Slice 5 end state (a lit portal, the shelter, the Nether side of the portal line) and the stores (lapis, redstone, quartz, an enchanted book); the deep mine and the Nether trips are covered by the sim tests and the earlier bots. Through input it builds the workshop and sees the book learned, orders an Efficiency pickaxe (and checks it works 30% faster), places the portal station, orders the freight cart, places the sensor, condition, loader and dispatcher and wires them, drains the cache, approves the departure from the station's panel and checks the cache refills. It fails on any stuck reason a player couldn't act on.
+- **Hand checklist** (to play through in the real window before calling Slice 6 done; not yet done):
+  - [ ] A lapis, a redstone and an enchanted book come home from the deep mine and the fortress.
+  - [ ] The workshop panel reads clearly; an enchanted tool shows its name and violet spark everywhere it appears.
+  - [ ] The portal station, rails and landing station: the Build objective's text and the Nether HUD are understood.
+  - [ ] Every device says why it is on or off from its panel alone; the overlay (`O`) shows devices and dust.
+  - [ ] Every stall of the chain (cart, loader, dispatcher, portal, cache) has a reason you can act on.
+  - [ ] Approving and declining feel right; the request never stops the game.
+
+## 15. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -163,5 +182,6 @@ Each build issue adds its rows.
 | `SENSOR_BELOW` | 10 | A new sensor's threshold. |
 | `FREIGHT_LIST` | 10 bread, 2 iron ingots | A new loader's freight list. |
 | `FREIGHT_CAPACITY` | 30 | Items a freight cart carries. |
+| `DISPATCHER_REACH` | 4 | Cells from the portal station the dispatcher may stand. |
 | Loader cost | 3 redstone, 1 quartz, 4 cobble | In `Defs.TEMPLATES`. |
 | Device costs | 2 redstone, 1 quartz, 2 cobble | Sensor and condition, in `Defs.TEMPLATES`. |

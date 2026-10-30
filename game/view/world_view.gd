@@ -575,6 +575,9 @@ func _add_device(b: Batch, s: Dictionary) -> void:
 	if Defs.TEMPLATES[s.tpl].device == "sensor":
 		b.box(Vector3(o.x + 0.42, lift + 0.46, o.y + 0.42), Vector3(o.x + 0.58, lift + 0.85, o.y + 0.58), Palette.STONE)
 		b.box(Vector3(o.x + 0.38, lift + 0.85, o.y + 0.38), Vector3(o.x + 0.62, lift + 0.95, o.y + 0.62), REDSTONE_ON if on else REDSTONE_OFF)
+	if Defs.TEMPLATES[s.tpl].device == "dispatcher":  # a signal lamp on a post
+		b.box(Vector3(o.x + 0.45, lift + 0.46, o.y + 0.45), Vector3(o.x + 0.55, lift + 1.0, o.y + 0.55), Palette.PLANK)
+		b.box(Vector3(o.x + 0.3, lift + 1.0, o.y + 0.3), Vector3(o.x + 0.7, lift + 1.2, o.y + 0.7), REDSTONE_ON if on else REDSTONE_OFF)
 	if Defs.TEMPLATES[s.tpl].device == "loader":  # a chute over the cart's place
 		b.box(Vector3(o.x + 0.2, lift + 0.46, o.y + 0.2), Vector3(o.x + 0.8, lift + 0.7, o.y + 0.35), Palette.STONE)
 		b.box(Vector3(o.x + 0.2, lift + 0.46, o.y + 0.65), Vector3(o.x + 0.8, lift + 0.7, o.y + 0.8), Palette.STONE)

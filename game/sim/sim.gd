@@ -2082,7 +2082,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader"]:
+	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher"]:
 		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
@@ -4770,6 +4770,14 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 		return "The meadow signpost is in the way"
 	if foot.has_point(route_sign()):
 		return "The signpost to the old mine is in the way"
+	if tpl == "dispatcher":  # beside the village station (issue #173)
+		var pst := portal_station()
+		if not pst.get("done", false):
+			return "Build the portal station first"
+		if maps.village.sites.any(func(x): return x.tpl == "dispatcher"):
+			return "There's a dispatcher already"
+		if not Rect2i(pst.origin, pst.size).grow(Tuning.DISPATCHER_REACH).encloses(foot):
+			return "The dispatcher stands beside the station"
 	if tpl == "freight_loader":  # on the plot the portal station reserved (issue #172)
 		var ps := portal_station()
 		if not ps.get("done", false):
@@ -7178,6 +7186,8 @@ static func device_default_cfg(kind: String) -> Dictionary:
 			return {"fact": "portal_lit"}
 		"loader":
 			return {"list": Tuning.FREIGHT_LIST.duplicate()}
+		"dispatcher":
+			return {}
 	return {}
 
 
@@ -7338,6 +7348,20 @@ func _eval_device(s: Dictionary) -> Dictionary:
 			if not fact.holds:
 				return {"out": false, "why": "Off: %s" % fact.no}
 			return {"out": true, "why": "On: %s, and %s" % [live[0].why.trim_prefix("On: "), fact.yes]}
+		"dispatcher":
+			var dins := device_inputs(s)
+			if dins.is_empty():
+				return {"out": false, "why": "Off: nothing wired in"}
+			var dlive := dins.filter(func(i): return i.out)
+			if dlive.is_empty():
+				return {"out": false, "why": "Off: its input is off (%s)" % dins[0].why.trim_prefix("Off: ")}
+			if freight.get("declined", false):
+				return {"out": false, "why": "Off: the last request was declined; it waits for the signal to drop"}
+			if freight.get("request", false):
+				return {"out": true, "why": "On: asking you to approve the departure (%s)" % dlive[0].why.trim_prefix("On: ")}
+			if freight.get("state", "") != "home" or freight.get("load", {}).is_empty():
+				return {"out": false, "why": "Off: no loaded cart at the station"}
+			return {"out": true, "why": "On: %s" % dlive[0].why.trim_prefix("On: ")}
 		"loader":
 			var ins := device_inputs(s)
 			if ins.is_empty():
@@ -7409,7 +7433,7 @@ static func freight_list_text(list: Dictionary) -> String:
 
 ## Whether the loader is at work on the cart: powered, the cart at the station and not full yet.
 func freight_loader_busy() -> bool:
-	if freight.get("state", "") != "home":  # the common case, so the idle search stays cheap
+	if freight.get("state", "") != "home" or freight.get("declined", false):  # the common case, so the idle search stays cheap
 		return false
 	var ld := freight_loader()
 	return not ld.is_empty() and loader_powered(ld) and not freight_missing(ld).is_empty()
@@ -7538,6 +7562,51 @@ func approve_freight() -> String:
 	return ""
 
 
+## The dispatcher raises the departure request: powered, with a loaded cart at the station. It is only a request: the game
+## runs on, and nothing leaves until the player approves (issue #173).
+func _dispatch_request() -> void:
+	var d := dispatcher()
+	if d.is_empty():
+		return
+	var ld0 := freight_loader()
+	if not loader_powered(ld0 if not ld0.is_empty() else d):  # the signal that starts it all (the loader's power), not "loaded"
+		freight.erase("declined")
+		freight.erase("request")
+		return
+	if not loader_powered(d) or freight.get("request", false) or freight.get("declined", false) or freight.approved or freight.load.is_empty():
+		return
+	var ld := freight_loader()
+	if not ld.is_empty() and not freight_missing(ld).is_empty():
+		return
+	freight.request = true
+	_toast("Supply cart ready for the Nether cache. Approve?", 0, portal_station().get("id", 0))
+	_step_devices()
+	rev += 1
+
+
+func dispatcher() -> Dictionary:
+	for s in maps.village.sites:
+		if s.tpl == "dispatcher" and s.done:
+			return s
+	return {}
+
+
+## Turns the request down: the load goes back to the stockpile, and the dispatcher waits for its signal to drop before asking again.
+func decline_freight() -> String:
+	if freight.get("state", "") != "home" or freight.load.is_empty():
+		return "There's no loaded cart at the station"
+	var ps := portal_station()
+	for k in freight.load:
+		drop_items(ps.origin + Vector2i(0, 1), k, freight.load[k])
+	freight.load = {}
+	freight.approved = false
+	freight.erase("request")
+	freight.declined = true
+	_step_devices()
+	rev += 1
+	return ""
+
+
 func cancel_freight_approval() -> void:
 	if freight.get("state", "") == "home" and freight.approved:
 		freight.approved = false
@@ -7563,7 +7632,7 @@ func freight_block() -> String:
 	if st == "ordered":
 		return "needs a minecart from the village"
 	if st == "home" and not freight.load.is_empty() and not freight.approved:
-		return "waiting for approval"
+		return "waiting for approval" if not freight.get("request", false) else "waiting for approval: the dispatcher asks you to approve"
 	var at_portal: bool = (st == "home" and freight.approved) or (st in ["going", "returning"] and absf(freight.pos - Tuning.FREIGHT_CROSS) < 0.0001)
 	if at_portal and not portal_lit():
 		return "the portal is unlit"
@@ -7578,9 +7647,12 @@ func _step_freight() -> void:
 	var step := Tuning.DT / Tuning.FREIGHT_TRIP_TIME
 	match freight.state:
 		"home":
+			if tick % 10 == 7:
+				_dispatch_request()
 			if freight.approved and portal_lit() and not freight.load.is_empty():
 				freight.state = "going"
 				freight.approved = false
+				freight.erase("request")
 				rev += 1
 		"going":
 			if freight.pos < Tuning.FREIGHT_CROSS and freight.pos + step >= Tuning.FREIGHT_CROSS:

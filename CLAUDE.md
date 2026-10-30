@@ -34,6 +34,7 @@ $GODOT --headless --path . -s res://tests/playtest_village.gd  # Slice 2 bot: fo
 $GODOT --headless --path . -s res://tests/playtest_slice3.gd   # Slice 3 bot: an expedition from a saved Slice 2 village, then a trip down to Level 2, through input
 $GODOT --headless --path . -s res://tests/playtest_slice4.gd   # Slice 4 bot: survey, build and ride the line from a saved Slice 3 village
 $GODOT --headless --path . -s res://tests/playtest_slice35.gd  # Slice 3.5 bot: a pen, a meadow trip, cooking, a leather tunic and a mine trip, from a saved Slice 3 village
+$GODOT --headless --path . -s res://tests/playtest_slice6.gd   # Slice 6 bot: the enchanting workshop, the portal line, a freight cart and the sensor-condition-loader-dispatcher chain, from a saved Slice 3 village
 $GODOT --headless --path . --import                          # refresh the class cache after adding a class_name script
 $GODOT --headless --path . --export-release "Web" ../build/web/index.html  # browser build (needs the 4.7.2 export templates)
 $GODOT --path . --resolution 1280x720 -- --screenshot        # scripted opening, saves user://screenshot.png, quits
@@ -46,7 +47,7 @@ Screenshots and saves (`saves/slot_N.save`) live in `~/Library/Application Suppo
 
 To run some of the sim tests, put words after `--`: `run_tests.gd -- farm fireplace` runs every test whose name contains one of them, and exits with code 1 if none does. Tests are named after the behaviour they cover, so the `tests` list in `tests/run_tests.gd` is the index to pick words from.
 
-**Testing while coding.** Everything together takes about 6 minutes: the sim tests about 2½, the game test 5 s, and the five bots 20–55 s each. Match the run to the change:
+**Testing while coding.** Everything together takes about 6 minutes: the sim tests about 2½, the game test 5 s, and the six bots 20–55 s each. Match the run to the change:
 - **While coding:** only the sim tests for what you're changing, by name. Run the whole suite once the change works.
 - **Before committing a sim change:** the whole sim suite.
 - **A change to the view, the HUD, input or `game.gd`:** `game_test.gd`, and the bot that plays that part of the game.

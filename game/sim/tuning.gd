@@ -186,6 +186,7 @@ const SENSOR_ITEMS := ["food", "iron_ingot", "plank", "cobble"]   ## What a cach
 const SENSOR_BELOW := 10              ## The threshold a new cache sensor starts with.
 const FREIGHT_CAPACITY := 30          ## Items a freight cart carries (issue #172).
 const FREIGHT_LIST := {"bread": 10, "iron_ingot": 2}   ## What a new loader loads: a full load (provisional).
+const DISPATCHER_REACH := 4           ## How far from the portal station the dispatcher may stand (issue #173).
 const EFFICIENCY_SPEED := 1.3         ## Work speed of an Efficiency tool (issue #167).
 const UNBREAKING_WEAR := 0.5          ## Share of wear an Unbreaking item takes.
 const PROTECTION_CUT := 0.3           ## Share of creature injuries Protection armor adds to what it turns aside, as a cut in the chance.
