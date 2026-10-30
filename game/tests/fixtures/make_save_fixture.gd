@@ -332,6 +332,19 @@ func _initialize() -> void:
 		line.laid[0] = Tuning.RAILS_PER_SEGMENT
 		line.laid[1] = Tuning.RAILS_PER_SEGMENT
 		line.stations.landing = true
+	if SaveFormat.VERSION >= 51:  # an enchanted book of Protection lying by Ada (#164)
+		sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(1, 1), "book_protection", 1)
+	if SaveFormat.VERSION >= 52:  # an enchanting workshop that has learned Efficiency (#165)
+		for c in [at(1, 4), at(1, 8), at(6, 15), at(10, 15), at(14, 1), at(12, 16)]:
+			if sim.placement_check("enchanting_workshop", c) == "":
+				var ws := sim.place_site("enchanting_workshop", c)
+				ws.stage = 1
+				ws.done = true
+				ws.known = ["efficiency"]
+				if SaveFormat.VERSION >= 53:  # an order waiting for lapis, and an enchanted pickaxe lying by Ada (#166)
+					ws.orders = [{"ench": "efficiency", "item": "stone_pick"}]
+					sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(2, 1), "iron_pick+efficiency", 1, 33)
+				break
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

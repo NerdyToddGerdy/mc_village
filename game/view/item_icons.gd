@@ -17,6 +17,8 @@ static func icon(type: String) -> ImageTexture:
 
 static func _draw(img: Image, type: String) -> void:
 	var dark := Palette.SLATE_DEEP
+	var enchanted := "+" in type  # an enchanted item is its base item with a violet sparkle (issue #166)
+	type = type.get_slice("+", 0)
 	var c: Color = Palette.ITEM_COLORS.get(type, Palette.CHALK)
 	match type:
 		"log":  # a log end: bark ring, pale wood and a growth ring
@@ -54,13 +56,17 @@ static func _draw(img: Image, type: String) -> void:
 				_ellipse(img, p, Vector2(13, 9), dark)
 			for p in [Vector2(22, 24), Vector2(42, 18)]:
 				_ellipse(img, p, Vector2(10, 6), c)
+		"book_efficiency", "book_unbreaking", "book_protection", "book_fire_protection":  # a closed book with a band across it
+			_box(img, Rect2i(12, 10, 40, 46), dark)
+			_box(img, Rect2i(15, 13, 34, 40), c)
+			_box(img, Rect2i(15, 24, 34, 8), c.lightened(0.45))
 		"coal", "obsidian", "flint":  # dark lumps, edged in chalk so they read on the slate
 			for p in [Vector2(24, 36), Vector2(40, 30), Vector2(34, 46)]:
 				_disc(img, p, 13, Palette.CHALK_DIM)
 			for p in [Vector2(24, 36), Vector2(40, 30), Vector2(34, 46)]:
 				_disc(img, p, 10, c)
 			_disc(img, Vector2(37, 27), 3, c.lightened(0.35))
-		"iron_ore", "gold_ore":  # a chunk of stone with flecks of the metal
+		"iron_ore", "gold_ore", "lapis", "redstone":  # a chunk of stone with flecks of the metal or gem
 			_disc(img, Vector2(32, 34), 23, dark)
 			_disc(img, Vector2(32, 34), 20, Palette.STONE)
 			for p in [Vector2(24, 28), Vector2(38, 26), Vector2(30, 42), Vector2(42, 40)]:
@@ -166,6 +172,10 @@ static func _draw(img: Image, type: String) -> void:
 		_:
 			_disc(img, Vector2(32, 32), 16, dark)
 			_disc(img, Vector2(32, 32), 13, c)
+	if enchanted:
+		_disc(img, Vector2(50, 14), 9, dark)
+		_disc(img, Vector2(50, 14), 6, Color("#B58CF0"))
+		_disc(img, Vector2(48, 12), 2, Color.WHITE)
 
 
 ## A tool's stick handle, from the bottom left up to where the head sits.

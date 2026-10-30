@@ -2,7 +2,7 @@ class_name Defs
 extends RefCounted
 ## Items, recipes and building templates for Slice 1 (slice-1-spec.md §4, §6, §8).
 
-const ITEMS := {
+const BASE_ITEMS := {
 	"log": {"one": "log", "many": "logs", "label": "Logs", "group": "building"},
 	"plank": {"one": "plank", "many": "planks", "label": "Planks", "group": "building"},
 	"stick": {"one": "stick", "many": "sticks", "label": "Sticks", "group": "building"},
@@ -37,9 +37,17 @@ const ITEMS := {
 	"obsidian": {"one": "obsidian", "many": "obsidian", "label": "Obsidian", "group": "ores"},
 	"flint": {"one": "flint", "many": "flint", "label": "Flint", "group": "ores"},
 	"flint_and_steel": {"one": "flint and steel", "many": "flint and steels", "uses": Tuning.FLINT_STEEL_USES, "group": "tools"},
+	# From the deep mine (issues #163, #170): lapis is the common cost of every enchantment, redstone powers the devices.
+	"lapis": {"one": "lapis lazuli", "many": "lapis lazuli", "label": "Lapis", "group": "ores"},
+	"redstone": {"one": "redstone dust", "many": "redstone dust", "label": "Redstone", "group": "ores"},
 	# From the quartz site (issue #155): stockpiled for Slice 6; nothing the village needs to survive.
 	"quartz": {"one": "nether quartz", "many": "nether quartz", "label": "Quartz", "group": "ores"},
 	"glowstone": {"one": "glowstone", "many": "glowstone", "label": "Glowstone", "group": "ores"},
+	# Enchanted books (issues #164, #28): each names one enchantment, and taught to the workshop it's learned for good.
+	"book_efficiency": {"one": "enchanted book of Efficiency", "many": "enchanted books of Efficiency", "label": "Efficiency book", "book": "efficiency", "group": "tools"},
+	"book_unbreaking": {"one": "enchanted book of Unbreaking", "many": "enchanted books of Unbreaking", "label": "Unbreaking book", "book": "unbreaking", "group": "tools"},
+	"book_protection": {"one": "enchanted book of Protection", "many": "enchanted books of Protection", "label": "Protection book", "book": "protection", "group": "tools"},
+	"book_fire_protection": {"one": "enchanted book of Fire protection", "many": "enchanted books of Fire protection", "label": "Fire protection book", "book": "fire_protection", "group": "tools"},
 	# What the piglins trade (issue #156).
 	"string": {"one": "string", "many": "string", "label": "String", "group": "ores"},
 	"fire_resistance": {"one": "fire-resistance supply", "many": "fire-resistance supplies", "label": "Fire resistance", "group": "ores"},
@@ -73,6 +81,37 @@ const SLOT_NAMES := {"head": "Cap", "chest": "Tunic", "legs": "Trousers", "feet"
 
 ## A tool tier's name: 1 wooden, 2 stone, 3 iron (issue #104).
 const TIER_NAMES := ["Bare", "Wooden", "Stone", "Iron", "Diamond"]
+
+## Every item: the base ones, and for each tool, sword and armor an **enchanted** variant for each enchantment that can go on it
+## (issue #166), named "iron_pick+efficiency". A variant is the same item with `ench` set, so wear, carrying, dropping and saving
+## work as they always have, and an item can only ever hold one enchantment.
+static var ITEMS: Dictionary = _build_items()
+
+
+static func _build_items() -> Dictionary:
+	var out: Dictionary = BASE_ITEMS.duplicate(true)
+	for type in BASE_ITEMS:
+		var it: Dictionary = BASE_ITEMS[type]
+		var kind: String = it.get("tool", "armor" if it.has("armor") else "")
+		if kind == "":
+			continue
+		for e in ENCHANTS:
+			if kind in ENCHANTS[e].applies:
+				var v: Dictionary = it.duplicate(true)
+				v.ench = e
+				v.base = type
+				v.one = "%s of %s" % [it.one, ENCHANTS[e].name]
+				v.many = "%s of %s" % [it.many, ENCHANTS[e].name]
+				if v.has("label"):
+					v.label = "%s (%s)" % [it.label, ENCHANTS[e].name]
+				out[type + "+" + e] = v
+	return out
+
+
+## The type of an item with its enchantment taken off: "iron_pick+efficiency" is "iron_pick".
+static func base_type(type: String) -> String:
+	return type.get_slice("+", 0)
+
 
 ## The tally bar's groups (issue #141), in order. Each item names its group in ITEMS; a group's
 ## dropdown lists its items in ITEMS order.
@@ -108,11 +147,45 @@ const CREATURES := {
 ## The piglins' fixed trade table (issue #156), in the order a trading party works down it: what they take, and what they give.
 ## It's shown in the site report and the planner before a party commits, and never changes or rolls.
 const TRADES := [
+	{"give": {"gold_ingot": 8}, "get": {"book_efficiency": 1}},  # books at a fixed price (issue #164)
+	{"give": {"gold_ingot": 6}, "get": {"book_unbreaking": 1}},
 	{"give": {"gold_ingot": 2}, "get": {"obsidian": 1}},
 	{"give": {"gold_ingot": 2}, "get": {"string": 3}},
 	{"give": {"gold_ingot": 1}, "get": {"flint": 2}},
 	{"give": {"gold_ingot": 4}, "get": {"fire_resistance": 1}},
 ]
+## The four enchantments (issues #165-#167): what each costs at the workshop (lapis plus one ingredient), what it can go on
+## (a tool kind, "sword" or "armor"), and what it does. One to an item, and no rerolls.
+const ENCHANTS := {
+	"efficiency": {"name": "Efficiency", "book": "book_efficiency", "cost": {"lapis": 2, "quartz": 1}, "applies": ["axe", "pick"]},
+	"unbreaking": {"name": "Unbreaking", "book": "book_unbreaking", "cost": {"lapis": 2, "iron_ingot": 1}, "applies": ["axe", "pick", "sword", "armor"]},
+	"protection": {"name": "Protection", "book": "book_protection", "cost": {"lapis": 3, "iron_ingot": 2}, "applies": ["armor"]},
+	"fire_protection": {"name": "Fire protection", "book": "book_fire_protection", "cost": {"lapis": 3, "magma_cream": 1}, "applies": ["armor"]},
+}
+
+
+## How likely each enchantment is to turn up in each place (issue #164): fortress salvage favours the protections, the deep
+## mine's chests the tools' enchantments.
+const BOOK_WEIGHTS := {
+	"fortress": {"efficiency": 1, "unbreaking": 1, "protection": 3, "fire_protection": 3},
+	"mine": {"efficiency": 3, "unbreaking": 3, "protection": 1, "fire_protection": 1},
+}
+
+
+## The book (an item type) a place gives for a number: the same number, the same book.
+static func book_for(source: String, h: int) -> String:
+	var w: Dictionary = BOOK_WEIGHTS[source]
+	var total := 0
+	for k in w:
+		total += w[k]
+	var pick := absi(h) % total
+	for k in w:
+		pick -= w[k]
+		if pick < 0:
+			return "book_" + k
+	return "book_efficiency"
+
+
 ## What the fortress's salvage chest holds (issue #157), provisional.
 const FORTRESS_SALVAGE := {"diamond": 1, "iron_ingot": 4, "gold_ingot": 3, "blaze_rod": 1}
 ## The rule that turns the piglins hostile, shown up front (brief §8).
@@ -132,6 +205,8 @@ static func trade_text(t: Dictionary) -> String:
 
 ## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.
 const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}, "diamond": {"item": "diamond", "name": "Diamond ore"},
+	"chest": {"item": "book_efficiency", "name": "Chest"},  # a chest in the rock holds one book, named by the block (issue #164)
+	"lapis": {"item": "lapis", "name": "Lapis ore"}, "redstone": {"item": "redstone", "name": "Redstone ore"},
 	"quartz": {"item": "quartz", "name": "Nether quartz ore"}, "glowstone": {"item": "glowstone", "name": "Glowstone"},
 	"gold": {"item": "gold_ore", "name": "Gold ore"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}
 
@@ -181,19 +256,19 @@ const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
 ## Lumberjack and Stonemason replaced Mine in issue #177.
-const JOBS := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt", "guard"]
+const JOBS := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt", "guard", "enchant"]
 ## The jobs a traveler can arrive skilled in: the Guard is trained in the village, not arrived with (issue #150).
 const SKILL_POOL := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
 const JOB_NAMES := {"lumber": "Lumberjack", "mason": "Stonemason", "haul": "Haul", "build": "Build", "craft": "Craft", "toolsmith": "Toolsmith",
-	"farm": "Farm", "cook": "Cook", "hunt": "Hunt", "guard": "Guard"}
+	"farm": "Farm", "cook": "Cook", "hunt": "Hunt", "guard": "Guard", "enchant": "Enchanter"}
 ## "Tomas is a skilled farmer."
 const JOB_SKILLED := {"lumber": "lumberjack", "mason": "stonemason", "haul": "hauler", "build": "builder", "craft": "crafter", "toolsmith": "toolsmith",
-	"farm": "farmer", "cook": "cook", "hunt": "hunter", "guard": "guard"}
+	"farm": "farmer", "cook": "cook", "hunt": "hunter", "guard": "guard", "enchant": "enchanter"}
 
 ## Each job's workstation (issue #184): a resident works their job only once they've claimed a finished
 ## one, one resident to each. Haul needs none.
 const JOB_STATIONS := {"lumber": "chopping_block", "mason": "mason_bench", "build": "builder_table", "craft": "bench",
-	"toolsmith": "toolsmith_bench", "farm": "composter", "cook": "fireplace", "hunt": "lodge"}
+	"toolsmith": "toolsmith_bench", "farm": "composter", "cook": "fireplace", "hunt": "lodge", "enchant": "enchanting_workshop"}
 
 ## Meals the fireplace's standing order keeps in stock.
 const MEALS := ["bread", "cooked_mutton", "cooked_beef", "cooked_porkchop"]
@@ -278,6 +353,10 @@ const TEMPLATES := {
 	# The unstaffed shelter and supply cache on the Nether landing (Slice 5, issue #152): built by a party from what it carries.
 	"shelter": {"name": "Shelter", "size": Vector2i(3, 3), "stages": [
 		{"name": "Shelter", "verb": "needs", "cost": Tuning.SHELTER_COST},
+	]},
+	# Where recipes are learned from books and gear enchanted (Slice 6, issue #165). It grows into a library.
+	"enchanting_workshop": {"name": "Enchanting workshop", "size": Vector2i(1, 1), "plot": "library", "stages": [
+		{"name": "Workshop", "verb": "needs", "cost": {"obsidian": 4, "diamond": 2, "plank": 6}},
 	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},

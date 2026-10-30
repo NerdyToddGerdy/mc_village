@@ -216,7 +216,7 @@ func _build_static() -> void:
 			solid.box(Vector3(c.x + 0.08, 0, c.y + 0.08), Vector3(c.x + 0.92, 0.62, c.y + 0.92), body, BlockTextures.COBBLES if b.get("ore", "") == "gravel" else BlockTextures.ROCK)
 			solid.box(Vector3(c.x + 0.2, 0.62, c.y + 0.15), Vector3(c.x + 0.7, 0.95, c.y + 0.7), body.lightened(0.06), BlockTextures.ROCK)
 			if b.has("ore") and b.ore != "obsidian" and b.ore != "glowstone":  # flecks of ore on its faces and top (issue #103)
-				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[Defs.ORES[b.ore].item])
+				_add_ore_flecks(solid, c, Palette.ITEM_COLORS[b.get("book", Defs.ORES[b.ore].item)])
 			if b.get("loose", false) and sim.m.visited:  # a loose ceiling: cracks, and props holding it (issue #110)
 				for k in 2:
 					var x := c.x + 0.25 + k * 0.4
@@ -662,7 +662,7 @@ func _build_cart() -> void:
 			b.box(Vector3(x + k - 0.08, y, z - 0.34), Vector3(x + k + 0.08, y + 0.16, z + 0.34), Palette.SLATE_DEEP)
 		var n := 0
 		for k in c.load:
-			var it_col: Color = Palette.ITEM_COLORS[k]
+			var it_col: Color = Palette.item_color(k)
 			for i in mini(c.load[k], 6 - n):
 				var px := x - 0.25 + float(n % 3) * 0.25
 				var pz := z - 0.1 + float(n / 3) * 0.2
@@ -743,9 +743,18 @@ func _add_crop(b: Batch, crop: Dictionary) -> void:
 
 
 func _add_item(b: Batch, s: Dictionary) -> void:
+	_add_item_shape(b, s)
+	if "+" in s.type:  # an enchanted item shimmers: a violet spark above it (issue #166)
+		var sx: float = s.cell.x + 0.5
+		var sz: float = s.cell.y + 0.5
+		b.box(Vector3(sx - 0.07, 0.34, sz - 0.07), Vector3(sx + 0.07, 0.5, sz + 0.07), PORTAL_GLOW)
+		b.box(Vector3(sx - 0.03, 0.5, sz - 0.03), Vector3(sx + 0.03, 0.62, sz + 0.03), Color("#E8D6FF"))
+
+
+func _add_item_shape(b: Batch, s: Dictionary) -> void:
 	var cx: float = s.cell.x + 0.5
 	var cz: float = s.cell.y + 0.5
-	var color: Color = Palette.ITEM_COLORS[s.type]
+	var color: Color = Palette.item_color(s.type)
 	if Defs.is_armor(s.type):  # a folded piece of leather with a darker seam (issue #140)
 		b.box(Vector3(cx - 0.24, 0, cz - 0.2), Vector3(cx + 0.24, 0.1, cz + 0.2), color)
 		b.box(Vector3(cx - 0.25, 0.02, cz - 0.03), Vector3(cx + 0.25, 0.11, cz + 0.03), color.darkened(0.3))
@@ -889,6 +898,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "shelter":
 		_add_shelter(solid if s.done else ghost, s)
 		return
+	if s.tpl == "enchanting_workshop":
+		_add_enchanting_workshop(solid if s.done else ghost, s)
+		return
 	if s.tpl == "storehouse":
 		_add_storehouse(solid if s.stage >= 1 else ghost, s)
 		return
@@ -995,6 +1007,19 @@ func _add_storehouse(b: Batch, s: Dictionary) -> void:
 		for j in mini(kinds.size(), 3):
 			var x := p.x + 0.08 + j * 0.22
 			_box_turned(b, s, Vector3(x, 0.62, p.y + 0.15), Vector3(x + 0.16, 0.7, p.y + 0.4), Palette.ITEM_COLORS.get(kinds[j], Palette.CHALK))
+
+
+## The enchanting workshop (issue #165): an obsidian table with a lectern, an open book and a violet glow. A blueprint until it's built.
+func _add_enchanting_workshop(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var done: bool = s.done
+	var ob: Color = Palette.ITEM_COLORS.obsidian if done else Color(Palette.BLUE, 0.45)
+	b.box(Vector3(o.x + 0.1, 0, o.y + 0.1), Vector3(o.x + 0.9, 0.7, o.y + 0.9), ob, BlockTextures.ROCK)
+	if not done:
+		return
+	b.box(Vector3(o.x + 0.2, 0.7, o.y + 0.25), Vector3(o.x + 0.8, 0.78, o.y + 0.75), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(o.x + 0.28, 0.78, o.y + 0.32), Vector3(o.x + 0.72, 0.84, o.y + 0.68), Palette.ITEM_COLORS.book_efficiency)
+	b.box(Vector3(o.x + 0.42, 0.9, o.y + 0.42), Vector3(o.x + 0.58, 1.06, o.y + 0.58), PORTAL_GLOW)
 
 
 ## The landing's shelter (issue #152): a cobblestone floor inside low plank walls, a doorway on the south side, and a crate
@@ -1542,7 +1567,7 @@ func _update_people() -> void:
 		(n.get_node("Body/Bandage") as Node3D).visible = r.get("hurt", 0) > 0
 		_dress(n, r)
 		if r.carry != null:
-			carry.material_override = _person_mat(Palette.ITEM_COLORS[r.carry.type], Color("#" + r.shirt))
+			carry.material_override = _person_mat(Palette.item_color(r.carry.type), Color("#" + r.shirt))
 		(n.get_node("Ring") as Node3D).visible = selected_ids.has(r.id)
 		var bar: Sprite3D = n.get_node("Body/Bar")
 		bar.visible = r.progress >= 0.0

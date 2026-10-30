@@ -64,6 +64,7 @@ func _init() -> void:
 		"test_iron_discovery",
 		"test_slice2_fixture_loads",
 		"test_deep_mine_materials",
+		"test_lapis_and_redstone",
 		"test_the_portal",
 		"test_the_guard_and_iron_gear",
 		"test_the_nether_landing",
@@ -74,6 +75,10 @@ func _init() -> void:
 		"test_mission_types",
 		"test_the_quartz_site",
 		"test_piglin_trading",
+		"test_enchanted_books",
+		"test_the_enchanting_workshop",
+		"test_enchanting_an_item",
+		"test_the_enchantment_effects",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5256,8 +5261,8 @@ func test_piglin_trading() -> void:
 	check(camp.pattern == "hand_laid" and camp.w == 20 and camp.creatures.size() == 3 and camp.creatures.all(func(x): return x.species == "piglin" and not x.angry), "a hand-laid camp with three piglins, at peace")
 	check(Defs.CREATURES.piglin.notice == 0 and not sim._dangerous(camp.creatures[0]), "a piglin never goes for anyone")
 	# The table is fixed, and shown.
-	check(Defs.TRADES.size() == 4 and Defs.TRADES.all(func(t): return t.give.keys() == ["gold_ingot"]), "four trades, all for gold ingots")
-	check(Defs.trade_text(Defs.TRADES[0]) == "2 gold ingots for 1 obsidian" and Defs.PIGLIN_RULE == "Piglins turn hostile if anyone in the party strikes one", "in plain words, with the rule")
+	check(Defs.TRADES.size() == 6 and Defs.TRADES.all(func(t): return t.give.keys() == ["gold_ingot"]), "six trades, all for gold ingots")
+	check(Defs.trade_text(Defs.TRADES[2]) == "2 gold ingots for 1 obsidian" and Defs.trade_text(Defs.TRADES[0]) == "8 gold ingots for 1 enchanted book of Efficiency" and Defs.PIGLIN_RULE == "Piglins turn hostile if anyone in the party strikes one", "in plain words, with the rule")
 	portal.lit = true
 	sim.get_map(NetherLanding.ID).known = true
 	sim.get_map(NetherRoute.ROUTES.piglin.id).surveyed = true
@@ -5268,7 +5273,7 @@ func test_piglin_trading() -> void:
 	plan.party = [ada.id]
 	check(plan.target.item == "trade" and plan.dest == "nether_piglin" and plan.gold == 0 and sim.plan_problems(plan).has("Take some gold to trade"), "a trade plan with no gold is refused: take some")
 	var briefing := sim.plan_briefing(plan)
-	check(briefing.filter(func(l): return l.begins_with("Trade: ")).size() == 4 and briefing.has("Rule: " + Defs.PIGLIN_RULE), "the planner's briefing shows the whole table and the rule before the party commits")
+	check(briefing.filter(func(l): return l.begins_with("Trade: ")).size() == 6 and briefing.has("Rule: " + Defs.PIGLIN_RULE), "the planner's briefing shows the whole table and the rule before the party commits")
 	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "gold_ingot", 6)
 	plan = sim.nether_plan("trade")
 	plan.party = [ada.id]
@@ -5293,8 +5298,8 @@ func test_piglin_trading() -> void:
 	var got := {}
 	for st in sim.stacks_where(func(x): return true):
 		got[st.type] = got.get(st.type, 0) + st.n
-	check(got.get("obsidian", 0) == 3 and not got.has("gold_ingot"), "6 gold buys 3 obsidian, the first row of the table, and none is left (%s)" % [got])
-	check(sim.expedition_board().get("report", []).any(func(l): return l.begins_with("Traded: ") and "2 gold ingots for 1 obsidian ×3" in l), "the report says what was traded: %s" % [sim.expedition_board().get("report", [])])
+	check(got.get("book_unbreaking", 0) == 1 and not got.has("gold_ingot") and not got.has("obsidian"), "6 gold buys the Unbreaking book, the first row it pays for, and none is left (%s)" % [got])
+	check(sim.expedition_board().get("report", []).any(func(l): return l.begins_with("Traded: ") and "6 gold ingots for 1 enchanted book of Unbreaking" in l), "the report says what was traded: %s" % [sim.expedition_board().get("report", [])])
 	check(camp.creatures.all(func(x): return x.alive and not x.angry) and not camp.hostile, "the piglins stayed at peace")
 	var f46 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v46.save").data.state)
 	check(f46.get_map("nether_piglin").hostile and f46.get_map("nether_piglin").creatures[0].hp == 7, "the v46 fixture loads its hostile camp")
@@ -5729,3 +5734,322 @@ func nline_gather_ticks(w: Dictionary) -> int:
 			arrived = sim.tick - at
 			break
 	return arrived
+
+
+## Lapis and redstone on the deep levels (issue #163).
+func test_lapis_and_redstone() -> void:
+	var sim := Sim.new_game()
+	for ore in ["lapis", "redstone"]:
+		var ch: String = MineLevels.DEEP_CHARS[ore]
+		check(MineLevels.DEEP_ORES[ore].from == 3, "%s from level 3" % ore)
+		for n in range(1, 3):
+			check(not "".join(MineLevels.layout(sim.seed, n).rows).contains(ch), "no %s on level %d" % [ore, n])
+		for n in range(3, 8):
+			var rows: Array = MineLevels.layout(sim.seed, n).rows
+			var found: int = "".join(rows).count(ch)
+			check(found >= 1 and found <= MineLevels.deep_ore_count(n, ore) and rows == MineLevels.layout(sim.seed, n).rows, "level %d has %s, the same every time (%d)" % [n, ore, found])
+	# The levels' earlier ores are where they were.
+	var with_new := "".join(MineLevels.layout(sim.seed, 6).rows).replace("l", "#").replace("r", "#")
+	check(with_new.count("d") == MineLevels.deep_ore_count(6, "diamond"), "level 6 keeps its diamonds")
+	check(Defs.ITEMS.lapis.group == "ores" and Defs.ITEMS.redstone.group == "ores" and Defs.ORES.lapis.item == "lapis" and Defs.ORES.redstone.item == "redstone", "both are ores in the tally bar's group")
+	var lvl: SimMap = MineLevels.build(sim, 3)
+	sim.maps[lvl.id] = lvl
+	var lap: Array = lvl.boulders.filter(func(b): return b.get("ore", "") == "lapis")
+	var red: Array = lvl.boulders.filter(func(b): return b.get("ore", "") == "redstone")
+	check(not lap.is_empty() and not red.is_empty() and lap.all(func(b): return not b.get("hidden", false)), "level 3 has lapis and redstone, in plain sight")
+	# An iron pickaxe or better.
+	var ada: Dictionary = sim.residents[0]
+	for blk in [lap[0], red[0]]:
+		var st := {"what": "gather", "tool": "pick", "target": blk}
+		ada.pick = {"type": "stone_pick", "tier": 2, "dur": 10}
+		check(sim._work_time(ada, st) < 0.0, "a stone pickaxe can't mine %s" % blk.ore)
+		ada.pick = {"type": "iron_pick", "tier": 3, "dur": 10}
+		check(sim._work_time(ada, st) > 0.0, "an iron pickaxe can")
+	check(Sim.pick_need_text("lapis") == "Lapis ore needs an iron pickaxe" and Sim.pick_need_text("redstone") == "Redstone ore needs an iron pickaxe", "the stuck list names the pickaxe needed")
+	# Cargo targets once the level has been seen.
+	lvl.visited = true
+	var items: Array = sim.site_report(lvl.id).resources.map(func(x): return x.item)
+	check(items.has("lapis") and items.has("redstone") and sim.plan_targets(lvl.id).any(func(x): return x.item == "lapis"), "the report lists them, and the planner offers them as cargo (%s)" % [items])
+	check(Tuning.ORE_YIELD.lapis == 3 and Tuning.ORE_YIELD.redstone == 3 and Sim.block_yield("lapis") == 3, "a block drops 3")
+	# A party with an iron pickaxe brings lapis home.
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 60}
+	sim._enter_level(ada, lvl.id)
+	sim.expedition = {"state": "out", "leg": "out", "dest": lvl.id, "party": [ada.id], "target": {"item": "lapis", "n": 3}, "list": [{"item": "lapis", "on": true, "n": 3}],
+		"cargo": {}, "provisions": {"bread": 3}, "tools": [], "supplies": {}, "meals": 3, "picks": 0, "sticks": 0, "wheat": 0,
+		"policy": {"target": false, "full": false, "low": false}, "spend_return": false, "cart_cap": false, "board": 0, "clear": false}
+	for i in 300 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("keep" if sim.pending[0].options.any(func(o): return o.id == "keep") else sim.pending[0].options[0].id)
+		if sim.expedition.get("cargo", {}).get("lapis", 0) >= 3:
+			break
+	check(sim.expedition.get("cargo", {}).get("lapis", 0) >= 3, "the party mines lapis and packs it (%s)" % [sim.expedition.get("cargo", {})])
+	sim.expedition = {}
+
+
+## Enchanted books: found in the fortress and the deep mine's chests, and traded at a fixed price (issue #164).
+func test_enchanted_books() -> void:
+	check(Defs.ENCHANTS.keys() == ["efficiency", "unbreaking", "protection", "fire_protection"] and Defs.ENCHANTS.values().all(func(e): return Defs.ITEMS.has(e.book) and Defs.ITEMS[e.book].book != ""), "four enchantments, each with a book")
+	# Where they turn up: the weights, the same number giving the same book.
+	var count := {"fortress": {}, "mine": {}}
+	for src in count:
+		for h in 800:
+			var b := Defs.book_for(src, h * 7919 + 13)
+			count[src][b] = count[src].get(b, 0) + 1
+	check(count.fortress.book_protection + count.fortress.book_fire_protection > 2 * (count.fortress.book_efficiency + count.fortress.book_unbreaking), "the fortress favours Protection and Fire protection (%s)" % [count.fortress])
+	check(count.mine.book_efficiency + count.mine.book_unbreaking > 2 * (count.mine.book_protection + count.mine.book_fire_protection), "the deep mine's chests favour Efficiency and Unbreaking (%s)" % [count.mine])
+	check(Defs.book_for("mine", 12345) == Defs.book_for("mine", 12345), "the same number gives the same book")
+	# A chest on the deep levels: a block whose book is fixed, found from level 3.
+	var sim := Sim.new_game()
+	for n in [1, 2]:
+		check(not "".join(MineLevels.layout(sim.seed, n).rows).contains("k"), "no chest on level %d" % n)
+	var found_chest := false
+	for n in range(3, 9):
+		var lvl: SimMap = MineLevels.build(sim, n)
+		var chests: Array = lvl.boulders.filter(func(b): return b.get("ore", "") == "chest")
+		var again: Array = MineLevels.build(sim, n).boulders.filter(func(b): return b.get("ore", "") == "chest")
+		if not chests.is_empty():
+			found_chest = true
+			check(chests.all(func(b): return Defs.ITEMS.has(b.book) and Defs.ITEMS[b.book].has("book")) and chests.map(func(b): return b.book) == again.map(func(b): return b.book), "level %d's chest holds a book, the same every time" % n)
+			sim.maps[lvl.id] = lvl
+			lvl.visited = true
+			var rep := sim.site_report(lvl.id)
+			check(rep.resources.any(func(x): return x.item == chests[0].book and x.known) and sim.plan_targets(lvl.id).any(func(x): return x.item == chests[0].book), "the report and the planner list the book")
+			# Mining it gives the book, once.
+			var ada: Dictionary = sim.residents[0]
+			ada.pick = {"type": "stone_pick", "tier": 2, "dur": 40}
+			sim.use_map(lvl.id)
+			sim.drop_items(chests[0].cell, "cobble", 0)
+			var st := {"what": "gather", "tool": "pick", "target": chests[0]}
+			check(sim._work_time(ada, st) > 0.0, "a chest breaks with any pickaxe")
+			chests[0].alive = true
+			sim._finish_work(ada, st)
+			check(sim.items.values().any(func(it): return it.type == chests[0].book and it.n == 1), "it drops its book")
+			sim.use_map("village")
+			break
+	check(found_chest, "some deep level has a chest")
+	# The fortress salvage holds a book too.
+	var w := nether_world()
+	var s2: Sim = w.sim
+	var fort: SimMap = s2.get_map("nether_fortress")
+	s2.expeditions.nether = {"state": "out", "leg": "out", "dest": "nether_fortress", "party": [w.ada.id], "cargo": {}, "supplies": {}, "provisions": {"bread": 3}, "tools": [], "target": {"item": "fortress", "n": 1}, "meals": 3, "picks": 0}
+	s2.on_slot("nether", func(): s2.on_map("nether_fortress", s2._take_salvage))
+	var books: Array = s2.expeditions.nether.cargo.keys().filter(func(k): return Defs.ITEMS[k].has("book"))
+	check(books.size() == 1 and books[0] == Defs.book_for("fortress", hash([s2.seed, "salvage"])), "the salvage holds one book, fixed by the game's seed (%s)" % [books])
+	# The first book found stops the game once, and says what it teaches.
+	check(not s2.pending.is_empty() and s2.pending[0].kind == "book" and s2.pending[0].text.contains("enchanted book of") and s2.pending[0].options.size() == 1, "the first book found pauses the game: %s" % [s2.pending[0].text if not s2.pending.is_empty() else ""])
+	s2.choose("ok")
+	s2.expeditions.nether.cargo.clear()
+	fort.salvage_taken = false
+	s2.on_slot("nether", func(): s2.on_map("nether_fortress", s2._take_salvage))
+	check(s2.pending.is_empty(), "later books don't pause it again")
+	# The piglin table's books are fixed, shown, and come home through a trade.
+	var table: Array = Defs.TRADES.filter(func(t): return t.get.keys().any(func(k): return Defs.ITEMS[k].has("book")))
+	check(table.size() == 2 and table.map(func(t): return t.get.keys()[0]) == ["book_efficiency", "book_unbreaking"] and table[0].give.gold_ingot == 8 and table[1].give.gold_ingot == 6, "two books on the shown table, at fixed prices")
+	var s3 := Sim.new_game()
+	s3.use_slot("nether")
+	s3.expedition = {"supplies": {"gold_ingot": 8}, "cargo": {}, "provisions": {}, "tools": [], "party": [1], "meals": 0, "picks": 0, "target": {"item": "trade", "n": 1}}
+	s3.m.creatures.clear()
+	check(Defs.TRADES[s3._next_trade()].get.has("book_efficiency"), "8 gold pays for the Efficiency book")
+	var f51 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v51.save").data.state)
+	check(f51.stacks_where(func(x): return x.type == "book_protection").size() == 1, "the v51 fixture loads its book")
+	# A book keeps its enchantment through a save.
+	var s4 := Sim.new_game()
+	s4.drop_items(Sim.rcell(s4.residents[0]) + Vector2i(1, 1), "book_protection", 1)
+	var back := Sim.from_state(s4.save_state())
+	check(back.stacks_where(func(x): return x.type == "book_protection").size() == 1 and Defs.ITEMS.book_protection.book == "protection", "a book keeps its enchantment through save and load")
+
+
+## The enchanting workshop and the Enchanter job (issue #165).
+func test_the_enchanting_workshop() -> void:
+	var tpl: Dictionary = Defs.TEMPLATES.enchanting_workshop
+	check(tpl.stages[0].cost == {"obsidian": 4, "diamond": 2, "plank": 6} and tpl.plot == "library" and tpl.stages[0].name == "Workshop", "4 obsidian, 2 diamonds and 6 planks, with a plot for a library")
+	check(Defs.JOBS.has("enchant") and Defs.JOB_NAMES.enchant == "Enchanter" and Defs.JOB_STATIONS.enchant == "enchanting_workshop" and not Defs.SKILL_POOL.has("enchant"), "Enchanter is a job with the workshop as its station, and no traveler arrives as one")
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	check(ada.jobs.enchant.xp == 0 and Sim.level(ada, "enchant") == 1, "a new resident has Enchanter at its start")
+	var ws := sim.place_site("enchanting_workshop", open_rect(sim, Vector2i(5, 3)).position + Vector2i(1, 0))
+	check(ws.known == [] and ws.orders == [] and ws.plot != null, "it starts knowing nothing, and reserves its plot")
+	# Short of materials it says how many.
+	sim.paint_zone(open_rect(sim, Vector2i(2, 2)))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 2), "obsidian", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(4, 2), "diamond", 2)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(4, 3), "plank", 6)
+	run(sim, 20)
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Workshop needs 3 more obsidian"), "short of obsidian: " + stuck_text(sim))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(3, 3), "obsidian", 3)
+	run(sim, 200)
+	check(ws.done and sim.enchanting_workshop().id == ws.id, "the workshop builds from the delivered materials")
+	check(sim.events.any(func(ev): return ev.type == "toast" and ev.text.begins_with("The enchanting workshop is built")), "and says what's next")
+	# A book carried to it teaches its recipe once; the book is used up.
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "book_efficiency", 1)
+	run(sim, 60)
+	check(ws.known == ["efficiency"] and sim.stacks_where(func(x): return x.type == "book_efficiency").is_empty() and sim.enchant_known("efficiency") and not sim.enchant_known("unbreaking"), "a delivered book teaches its recipe, and is used up")
+	check(ada.jobs.enchant.xp > 0, "and the Enchanter gains practice")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 2), "book_efficiency", 1)
+	run(sim, 60)
+	check(ws.known == ["efficiency"] and sim.stacks_where(func(x): return x.type == "book_efficiency").size() == 1, "a second book of the same recipe isn't carried: it teaches once")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 3), "book_protection", 1)
+	run(sim, 60)
+	check(ws.known == ["efficiency", "protection"], "a different book teaches another recipe")
+	# With no one to carry it, the book says so.
+	var s2 := Sim.new_game()
+	var w2 := place_done(s2, "enchanting_workshop", Sim.rcell(s2.residents[0]) + Vector2i(0, 5))
+	s2.add_resident("Tomas", "7A5C8F", Sim.rcell(s2.residents[0]) + Vector2i(1, 1)).arriving = false  # someone's about, with no such job
+	s2.residents[0].away = true  # but not Ada
+	s2.drop_items(Sim.rcell(s2.residents[0]) + Vector2i(2, 2), "book_unbreaking", 1)
+	s2.compute_stuck()
+	check(stuck_text(s2).contains("Book: waiting to be carried to the workshop") and stuck_text(s2).contains("Enchanter: No one is an enchanter"), "with no enchanter the stuck list says so: " + stuck_text(s2))
+	check(not w2.is_empty() and w2.known == [], "(nothing learned)")
+	# Menu, page, save and old saves.
+	check(not OrderMenus.unlocked({"unlock": "enchanting"}, Sim.new_game()) and OrderMenus.unlocked({"unlock": "enchanting"}, sim), "the Build menu offers it once a book has been found or a workshop stands")
+	check(not Goals.page_for("enchanting_workshop").is_empty(), "the book has a page for it")
+	var back := Sim.from_state(sim.save_state())
+	check(back.enchanting_workshop().known == ["efficiency", "protection"], "the known recipes are saved")
+	var f52 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v52.save").data.state)
+	check(f52.enchanting_workshop().known == ["efficiency"], "the v52 fixture loads its workshop")
+	var f51 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v51.save").data.state)
+	check(f51.residents.all(func(r): return r.jobs.enchant.xp == 0), "an older save loads with Enchanter at 0")
+	var f53 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v53.save").data.state)
+	check(f53.enchanting_workshop().orders.size() == 1 and f53.stacks_where(func(x): return x.type == "iron_pick+efficiency" and x.dur == 33).size() == 1, "the v53 fixture loads its order and its enchanted pickaxe")
+
+
+## Enchanting an item at the workshop: known recipes, one slot (issue #166).
+func test_enchanting_an_item() -> void:
+	check(Defs.ITEMS.has("iron_pick+efficiency") and Defs.ITEMS.has("leather_tunic+protection") and Defs.ITEMS.has("iron_sword+unbreaking") and not Defs.ITEMS.has("iron_pick+protection") and not Defs.ITEMS.has("iron_sword+efficiency") and not Defs.ITEMS.has("iron_pick+efficiency+unbreaking"), "each enchantment has variants only of what it can go on, and none holds two")
+	check(Defs.ITEMS["iron_pick+efficiency"].tier == 3 and Defs.ITEMS["iron_pick+efficiency"].tool == "pick" and Defs.ITEMS["iron_pick+efficiency"].one == "iron pickaxe of Efficiency" and Defs.base_type("iron_pick+efficiency") == "iron_pick", "a variant is the same item, named for its enchantment")
+	check(Defs.ENCHANTS.efficiency.cost == {"lapis": 2, "quartz": 1} and Defs.ENCHANTS.unbreaking.cost == {"lapis": 2, "iron_ingot": 1} and Defs.ENCHANTS.protection.cost == {"lapis": 3, "iron_ingot": 2} and Defs.ENCHANTS.fire_protection.cost == {"lapis": 3, "magma_cream": 1}, "the costs: lapis and one ingredient")
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var ws := place_done(sim, "enchanting_workshop", Sim.rcell(ada) + Vector2i(0, 4))
+	ws.known = ["efficiency", "unbreaking"]
+	# An unknown recipe can't be ordered; nor can one onto the wrong thing, or onto an enchanted item.
+	check(sim.order_enchant("protection", "leather_tunic") == "Enchant: recipe unknown", "an unknown recipe can't be ordered")
+	check(sim.order_enchant("efficiency", "leather_tunic") == "Enchant: Efficiency can't go on that", "Efficiency isn't for armor")
+	check(sim.order_enchant("unbreaking", "iron_pick+efficiency") == "Enchant: item already enchanted", "a second enchantment is refused: one slot to an item")
+	check(ws.orders.is_empty(), "(nothing was queued)")
+	# The order: stone pickaxe, 2 lapis and a quartz, carried in and worked.
+	sim.paint_zone(open_rect(sim, Vector2i(3, 2)))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 0), "stone_pick", 1, 13)
+	check(sim.enchantable_types("efficiency") == ["stone_pick"] and sim.enchantable_types("unbreaking") == ["stone_pick"], "the panel offers the pickaxe for both recipes")
+	check(sim.order_enchant("efficiency", "stone_pick") == "" and ws.orders == [{"ench": "efficiency", "item": "stone_pick"}], "Efficiency on a stone pickaxe is ordered")
+	run(sim, 20)
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Enchant: needs 2 lapis"), "short of lapis it says so: " + stuck_text(sim))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 1), "lapis", 2)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 2), "quartz", 1)
+	run(sim, 90)
+	var made := sim.stacks_where(func(x): return x.type == "stone_pick+efficiency")
+	check(ws.orders.is_empty() and made.size() == 1 and made[0].dur == 13, "the pickaxe comes out enchanted, keeping its wear (%s)" % [made.map(func(x): return x.dur)])
+	check(sim.stacks_where(func(x): return x.type in ["stone_pick", "lapis", "quartz"]).is_empty() and ws.store.is_empty() and ws.tools == [], "the plain pickaxe, the lapis and the quartz are all used up")
+	check(ada.jobs.enchant.xp > 0 and sim.stats.get("enchanted", 0) == 1, "the Enchanter gains practice")
+	# It can't take another, and it keeps its enchantment through wear, a drop and a save.
+	check(sim.order_enchant("unbreaking", "stone_pick+efficiency") == "Enchant: item already enchanted", "now it can't take a second")
+	var res := sim.add_resident("Tomas", "7A5C8F", Sim.rcell(ada) + Vector2i(1, 1))
+	res.pick = {"type": "stone_pick+efficiency", "tier": 2, "dur": 5}
+	sim._wear(res, "pick")
+	check(res.pick.type == "stone_pick+efficiency" and res.pick.dur == 4, "wear leaves the enchantment on")
+	sim.drop_items(Sim.rcell(res), res.pick.type, 1, res.pick.dur)
+	check(sim.stacks_where(func(x): return x.type == "stone_pick+efficiency" and x.dur == 4).size() == 1, "dropped, it's still enchanted")
+	var back := Sim.from_state(sim.save_state())
+	check(back.stacks_where(func(x): return x.type == "stone_pick+efficiency").size() == 2 and back.residents[1].pick.type == "stone_pick+efficiency", "and through a save and load")
+	# Armor, a sword: other recipes.
+	ws.known.append("protection")
+	check(sim.order_enchant("protection", "leather_tunic") == "" and sim.order_enchant("unbreaking", "iron_sword") == "", "armor takes Protection, a sword Unbreaking")
+	ws.orders.clear()
+	# A tool-user prefers an enchanted pick of the same tier.
+	var s2 := Sim.new_game()
+	var user: Dictionary = s2.residents[0]
+	user.pick = {"type": "stone_pick", "tier": 2, "dur": 20}
+	s2.drop_items(Sim.rcell(user) + Vector2i(2, 0), "stone_pick+efficiency", 1, 22)
+	var rock: Dictionary = Sim.nearest(s2.boulders, Sim.rcell(user))
+	s2.designate_mine(Rect2i(rock.cell, Vector2i.ONE))
+	run(s2, 60)
+	check(user.pick != null and user.pick.type == "stone_pick+efficiency", "a resident takes the enchanted pickaxe over a plain one of the same tier")
+	# The tally bar groups enchanted gear with the other tools.
+	check(Defs.ITEMS["stone_pick+efficiency"].group == "tools", "enchanted gear is in the tally bar's tools")
+
+
+## Ticks a resident with a pickaxe takes to break the nearest boulder, standing beside it.
+func mining_ticks(pick_type: String, mason_xp: int) -> int:
+	var sim := Sim.new_game()
+	var r: Dictionary = sim.residents[0]
+	r.jobs.mason.xp = mason_xp
+	var rock: Dictionary = Sim.nearest(sim.boulders, Sim.rcell(r))
+	var beside: Vector2i = sim.nearest_walkable(rock.cell + Vector2i(1, 0))
+	r.pos = Vector2(beside)
+	r.path = []
+	r.pick = {"type": pick_type, "tier": Defs.ITEMS[pick_type].tier, "dur": 90}
+	sim.designate_mine(Rect2i(rock.cell, Vector2i.ONE))
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if not rock.alive:
+			return i
+	return -1
+
+
+## What each enchantment does, and only that (issue #167).
+func test_the_enchantment_effects() -> void:
+	var sim := Sim.new_game()
+	var r: Dictionary = sim.residents[0]
+	var rock: Dictionary = sim.boulders[0]
+	var st := {"what": "gather", "tool": "pick", "target": rock}
+	r.pick = {"type": "iron_pick", "tier": 3, "dur": 90}
+	var plain := sim._work_time(r, st)
+	check(absf(plain - Tuning.BREAK_TIME[3]) < 0.001, "an iron pickaxe breaks a boulder in %.1f s" % plain)
+	# Efficiency speeds the work; the other enchantments don't touch it.
+	r.pick = {"type": "iron_pick+efficiency", "tier": 3, "dur": 90}
+	check(absf(sim._work_time(r, st) - plain / Tuning.EFFICIENCY_SPEED) < 0.001 and Tuning.EFFICIENCY_SPEED == 1.3, "Efficiency: %.1f s, 30%% faster" % sim._work_time(r, st))
+	r.pick = {"type": "iron_pick+unbreaking", "tier": 3, "dur": 90}
+	check(absf(sim._work_time(r, st) - plain) < 0.001, "Unbreaking leaves the speed alone")
+	r.axe = {"type": "iron_axe+efficiency", "tier": 3, "dur": 90}
+	var tree: Dictionary = sim.trees[0]
+	check(absf(sim._work_time(r, {"what": "gather", "tool": "axe", "target": tree}) - Tuning.CHOP_TIME[3] / Tuning.EFFICIENCY_SPEED) < 0.001, "Efficiency speeds chopping too")
+	# Efficiency speeds mining as it's really done, and with skill it stacks.
+	var base := mining_ticks("stone_pick", 0)
+	var eff := mining_ticks("stone_pick+efficiency", 0)
+	check(base > 0 and eff > 0 and absf(float(base) / eff - 1.3) < 0.2, "mining with Efficiency takes %d ticks against %d (about 30%% faster)" % [eff, base])
+	var skilled := mining_ticks("stone_pick+efficiency", Tuning.SKILL_LEVELS[1])
+	var want := 1.3 * Sim.skill_speed({"jobs": {"mason": {"xp": Tuning.SKILL_LEVELS[1]}}}, "mason")
+	check(skilled > 0 and absf(float(base) / skilled - want) < 0.25 * want, "and stacks with skill: %d ticks, %.2f× as fast as bare level 1 (expected %.2f×)" % [skilled, float(base) / skilled, want])
+	# A track doesn't change what a block takes.
+	sim.use_map(OldMine.ID)
+	var nl := Sim.new_game()
+	for i in Road.segment_count():
+		nl.nline().laid[i] = Tuning.RAILS_PER_SEGMENT
+		if Sim.nline_obstacle(i):
+			nl.nline().bridged.append(i)
+	nl.nline().stations = {"landing": true, "site": true}
+	nl.nline().cart = true
+	nl.residents[0].pick = {"type": "iron_pick", "tier": 3, "dur": 90}
+	check(nl.nline_complete() and absf(nl._work_time(nl.residents[0], {"what": "gather", "tool": "pick", "target": nl.boulders[0]}) - plain) < 0.001, "a finished line doesn't change the mining time: rail stays rail")
+	sim.use_map("village")
+	# Unbreaking: half the wear, tools and armor; plain wears fully.
+	var worn := {"a": {"type": "iron_pick+unbreaking", "tier": 3, "dur": 100}, "b": {"type": "iron_pick", "tier": 3, "dur": 100}, "c": {"type": "iron_pick+efficiency", "tier": 3, "dur": 100}}
+	for i in 100:
+		for k in worn:
+			Sim._use_up(worn[k])
+	check(worn.a.dur == 50 and worn.b.dur == 0 and worn.c.dur == 0, "Unbreaking halves the wear (%d, plain %d, Efficiency %d)" % [worn.a.dur, worn.b.dur, worn.c.dur])
+	var wearer := {"id": 1, "name": "X", "armor": {"chest": {"type": "leather_tunic+unbreaking", "dur": 8}, "feet": {"type": "leather_boots", "dur": 8}}}
+	for i in 4:
+		sim._wear_armor(wearer)
+	check(wearer.armor.chest.dur == 6 and wearer.armor.feet.dur == 4, "on armor too: the Unbreaking tunic %d of 8, the plain boots %d" % [wearer.armor.chest.dur, wearer.armor.feet.dur])
+	# Protection and Fire protection each change only their own harm.
+	var hurt := {}
+	for kind in ["creature", "fire"]:
+		for armor in ["leather_tunic", "leather_tunic+protection", "leather_tunic+fire_protection"]:
+			var n := 0
+			for i in 3000:
+				var p := {"id": 90000 + i, "name": "P", "armor": {"chest": {"type": armor, "dur": 999999}}, "hurt": 0, "job": null, "heal": 0.0}
+				sim._hazard(p, 0.5, 0.0, "a test", kind)
+				n += 1 if p.hurt > 0 else 0
+			hurt[kind + armor] = n
+	var pc: int = hurt.creatureleather_tunic
+	check(absf(float(hurt["creatureleather_tunic+protection"]) / pc - 0.7) < 0.08 and absf(float(hurt["creatureleather_tunic+fire_protection"]) / pc - 1.0) < 0.08, "Protection cuts creature injuries by 30%% and Fire protection leaves them (%d, %d, %d)" % [pc, hurt["creatureleather_tunic+protection"], hurt["creatureleather_tunic+fire_protection"]])
+	var pf: int = hurt.fireleather_tunic
+	check(absf(float(hurt["fireleather_tunic+fire_protection"]) / pf - 0.5) < 0.08 and absf(float(hurt["fireleather_tunic+protection"]) / pf - 1.0) < 0.08, "Fire protection halves fire and lava harm and Protection leaves it (%d, %d, %d)" % [pf, hurt["fireleather_tunic+fire_protection"], hurt["fireleather_tunic+protection"]])
+	check(Sim.armor_ench_count(wearer, "unbreaking") == 1 and Sim.armor_ench_count(wearer, "protection") == 0, "(counting enchanted pieces)")
+	# Shown on the item's name.
+	check(Sim.item_title("iron_pick+efficiency") == "Iron pickaxe · Efficiency (mines 30% faster)" and Sim.item_title("iron_axe+efficiency") == "Iron axe · Efficiency (chops 30% faster)", "the tooltip: %s" % Sim.item_title("iron_pick+efficiency"))
+	check(Sim.item_title("leather_tunic+protection") == "Leather tunic · Protection (30% fewer creature injuries)" and Sim.item_title("iron_sword+unbreaking") == "Iron sword · Unbreaking (wears 50% slower)" and Sim.item_title("stone_pick") == "Stone pickaxe", "and the others, and a plain item as it was")

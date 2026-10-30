@@ -1205,8 +1205,7 @@ func _tool_row(type: String, dur: int) -> VBoxContainer:
 	var low := dur <= 3
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
-	var name: String = Defs.ITEMS[type].one
-	var row := _row(name.left(1).to_upper() + name.substr(1), "%d / %d uses" % [dur, most], false)
+	var row := _row(Sim.item_title(type), "%d / %d uses" % [dur, most], false)
 	if low:
 		(row.get_child(1) as Label).add_theme_color_override("font_color", Palette.YELLOW)
 	v.add_child(row)
@@ -1676,7 +1675,7 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		"boulder":
 			var drops := Defs.words("cobble", Tuning.BOULDER_COBBLE)
 			if target.has("ore"):
-				drops = Defs.words(Defs.ORES[target.ore].item, Tuning.ORE_YIELD[target.ore])
+				drops = Defs.words(target.get("book", Defs.ORES[target.ore].item), Tuning.ORE_YIELD[target.ore])
 			c.add_child(_head(Sim.block_name(target), "Drops " + drops))
 			if target.des and sim.stuck.any(func(s): return s.focus_kind == "boulder"):
 				c.add_child(_reason("Needs a pickaxe"))
@@ -2201,6 +2200,9 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	if s.tpl == "storehouse":  # issue #189
 		_fill_storehouse(c, sim, s)
 		return
+	if s.tpl == "enchanting_workshop" and s.done:  # issue #165
+		_fill_enchanting(c, sim, s)
+		return
 	if s.tpl == "house":
 		var owner := sim.resident(s.owner)
 		var line := "Home of %s." % owner.name if not owner.is_empty() else ("Empty. A traveler should arrive soon." if sim.arrival_at >= 0 else "Empty.")
@@ -2236,6 +2238,50 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 
 
 ## A finished storehouse (issue #189): its chests, how full they are, and what's in them.
+## A finished enchanting workshop (issues #165, #166): who works it, and each recipe, known or not, with its cost.
+func _fill_enchanting(c: Container, sim: Sim, s: Dictionary) -> void:
+	c.add_child(_label("Enchanting workshop", true, Palette.CHALK, Palette.TITLE))
+	var who := sim.resident(s.get("worker", 0))
+	c.add_child(_row("Enchanter", who.name if not who.is_empty() else "none (Ada works it, or give someone the job)", false))
+	c.add_child(_label("Recipes", true))
+	for k in Defs.ENCHANTS:
+		var e: Dictionary = Defs.ENCHANTS[k]
+		var cost: PackedStringArray = []
+		for it in e.cost:
+			cost.append(Defs.words(it, e.cost[it]))
+		var known: bool = s.known.has(k)
+		c.add_child(_row(e.name, "known" if known else "unknown: needs its book", false))
+		c.add_child(_label("Costs " + ", ".join(cost) + ". " + Sim.enchant_text(k), false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	var known: Array = s.known
+	if not known.is_empty():  # order an enchantment on gear in the stockpile (issue #166)
+		c.add_child(_label("Enchant", true))
+		for k in known:
+			var types: Array = sim.enchantable_types(k)
+			var row := HFlowContainer.new()
+			row.add_theme_constant_override("h_separation", 4)
+			row.add_child(_label(Defs.ENCHANTS[k].name + ":", false, Palette.CHALK_DIM, Palette.CAPTION))
+			if types.is_empty():
+				row.add_child(_label("nothing in the stockpile it can go on", false, Palette.CHALK_DIM, Palette.CAPTION))
+			for t in types:
+				var b := _button(Defs.BASE_ITEMS[t].one.substr(0, 1).to_upper() + Defs.BASE_ITEMS[t].one.substr(1), func(): game.order_enchant(k, t), "Secondary")
+				b.set_meta("label", "Enchant %s: %s" % [Defs.ENCHANTS[k].name, Defs.BASE_ITEMS[t].one])
+				row.add_child(b)
+			c.add_child(row)
+	if not s.orders.is_empty():
+		c.add_child(_label("Orders", true))
+		for i in s.orders.size():
+			var o: Dictionary = s.orders[i]
+			var line := HBoxContainer.new()
+			var l := _label("%s on a %s" % [Defs.ENCHANTS[o.ench].name, Defs.BASE_ITEMS[o.item].one], false, Palette.CHALK, Palette.BODY)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			line.add_child(l)
+			line.add_child(_button("Cancel", func(): game.cancel_enchant(i), "Secondary"))
+			c.add_child(line)
+	c.add_child(_label("A book carried here teaches its recipe for good, and is used up.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
+		c.add_child(_reason(x.why))
+
+
 func _fill_storehouse(c: Container, sim: Sim, s: Dictionary) -> void:
 	c.add_child(_label("Storehouse", true, Palette.CHALK, Palette.TITLE))
 	var slots := Sim.store_slots(s)

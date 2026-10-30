@@ -41,6 +41,11 @@ const MINE_CONTRAST := 1.35
 ## The Nether's warm, dark red look (issues #148, #206): a grade like the mine's, but red.
 static var NETHER_GRADE := Color("#E8A590")
 
+## An item's colour; an enchanted one is its base item's.
+static func item_color(type: String) -> Color:
+	return ITEM_COLORS.get(type.get_slice("+", 0), CHALK)
+
+
 static var ITEM_COLORS := {
 	"wool": Color("#ECEAE2"), "mutton": Color("#C2645A"), "berries": Color("#B23A5A"), "wheat": Color("#D8B65A"),
 	"bread": Color("#D9A35A"), "cooked_mutton": Color("#8C4A32"),
@@ -49,7 +54,7 @@ static var ITEM_COLORS := {
 	"leather_cap": Color("#9A5B33"), "leather_tunic": Color("#9A5B33"), "leather_trousers": Color("#9A5B33"), "leather_boots": Color("#9A5B33"),
 	"log": Color("#7A5634"), "plank": Color("#C49A62"), "stick": Color("#9C7A4E"), "cobble": Color("#7F827C"), "stone_brick": Color("#9A9C94"), "chest": Color("#8E6A3E"), "sapling": Color("#5E9A3C"),
 	"coal": Color("#34312F"), "iron_ore": Color("#C08A68"), "iron_ingot": Color("#C9D0D6"), "diamond": Color("#7FD8E0"),
-	"string": Color("#E8E2D0"), "fire_resistance": Color("#E27B2C"), "quartz": Color("#ECE6DA"), "glowstone": Color("#F5D470"), "magma_cream": Color("#E8742A"), "bone": Color("#E6E0CC"), "blaze_rod": Color("#F2B531"), "gold_ore": Color("#E8C547"), "gold_ingot": Color("#F0CE55"), "obsidian": Color("#2B2038"), "flint": Color("#4A4A4E"), "flint_and_steel": Color("#8A8D93"),
+	"book_efficiency": Color("#7A4FB5"), "book_unbreaking": Color("#7A4FB5"), "book_protection": Color("#7A4FB5"), "book_fire_protection": Color("#7A4FB5"), "lapis": Color("#3E5FC8"), "redstone": Color("#D6382E"), "string": Color("#E8E2D0"), "fire_resistance": Color("#E27B2C"), "quartz": Color("#ECE6DA"), "glowstone": Color("#F5D470"), "magma_cream": Color("#E8742A"), "bone": Color("#E6E0CC"), "blaze_rod": Color("#F2B531"), "gold_ore": Color("#E8C547"), "gold_ingot": Color("#F0CE55"), "obsidian": Color("#2B2038"), "flint": Color("#4A4A4E"), "flint_and_steel": Color("#8A8D93"),
 	"rail": Color("#A7AFB5"), "minecart": Color("#6E777E"),
 	"wood_axe": Color("#C49A62"), "wood_pick": Color("#C49A62"), "stone_axe": Color("#8A8D86"), "stone_pick": Color("#8A8D86"),
 	"iron_axe": Color("#C9D0D6"), "iron_pick": Color("#C9D0D6"), "diamond_axe": Color("#7FD8E0"), "diamond_pick": Color("#7FD8E0"),

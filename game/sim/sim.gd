@@ -1053,6 +1053,9 @@ func _on_site_done(s: Dictionary) -> void:
 	if s.tpl == "portal":  # issue #147
 		_toast("The portal frame is built. It needs flint and steel to light.", 0, s.id)
 		return
+	if s.tpl == "enchanting_workshop":  # issue #165
+		_toast("The enchanting workshop is built. An Enchanter carries enchanted books to it, and it learns their recipes for good.", 0, s.id)
+		return
 	if s.tpl == "board":  # it has word of the old mine and the meadow, which the map switcher now shows (issues #105, #136)
 		maps[OldMine.ID].known = true
 		road().known = true
@@ -1882,6 +1885,8 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 	j.hold({"t": "claim", "ent": target})
 	var cur: int = r[kind].tier if r[kind] != null else 0
 	var better := tool_items(kind, cur)
+	if better.is_empty() and r[kind] != null and not Defs.ITEMS[r[kind].type].has("ench"):  # an enchanted tool of the same tier is better (issue #166)
+		better = stacks_where(func(s): return Defs.ITEMS[s.type].get("tool", "") == kind and Defs.ITEMS[s.type].has("ench") and Defs.ITEMS[s.type].tier >= cur and avail(s) > 0)
 	if not better.is_empty() and not (r.kept[kind] and r[kind] != null):  # a tool you chose stays
 		_fetch_tool(j, nearest(better, rcell(r)))
 	j.step(_goto([target.cell], true))
@@ -2061,7 +2066,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal"]:
+	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop"]:
 		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
@@ -2168,11 +2173,32 @@ func fail_job(r: Dictionary, why := "") -> void:
 			j.target.unreach_until = tick + int(Tuning.UNREACHABLE_COOLDOWN * Tuning.TPS)
 
 
+## How much faster a resident works with the tool in their hand: Efficiency (issue #167).
+func tool_speed(r: Dictionary, kind: String) -> float:
+	var t = r.get(kind)
+	if t != null and Defs.ITEMS[t.type].get("ench", "") == "efficiency":
+		return Tuning.EFFICIENCY_SPEED
+	return 1.0
+
+
+## Takes a use off an item (issue #167): an Unbreaking one only loses every other use, kept in a running count so a game replays
+## the same. Returns whether a use was taken.
+static func _use_up(t: Dictionary) -> bool:
+	if Defs.ITEMS[t.type].get("ench", "") == "unbreaking":
+		t.acc = t.get("acc", 0.0) + Tuning.UNBREAKING_WEAR
+		if t.acc < 1.0:
+			return false
+		t.acc -= 1.0
+	t.dur -= 1
+	return true
+
+
 func _wear(r: Dictionary, kind: String) -> void:
 	var t = r[kind]
 	if t == null:
 		return
-	t.dur -= 1
+	if not _use_up(t):
+		return
 	if t.dur <= 0:
 		r[kind] = null
 		r.broken[kind] = true
@@ -2456,6 +2482,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				expedition.tools.append({"type": r.carry.type, "dur": r.carry.dur})
 			else:
 				expedition.cargo[r.carry.type] = expedition.cargo.get(r.carry.type, 0) + r.carry.n
+				_note_book(r.carry.type, r)
 			r.carry = null
 			rev += 1
 			return true
@@ -2580,6 +2607,18 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			var back: Dictionary = NetherRoute.ROUTES[NetherRoute.route_of(map_id)]
 			move_to_map(r, NetherLanding.ID, back.exit)
 			return true
+		"learn_book":  # the book is read into the workshop: its recipe is known for good, and the book is used up (issue #165)
+			var ws: Dictionary = st.site
+			var ench: String = Defs.ITEMS[st.book].book
+			ws.store[st.book] = ws.store.get(st.book, 0) - 1
+			if ws.store[st.book] <= 0:
+				ws.store.erase(st.book)
+			if not ws.known.has(ench):
+				ws.known.append(ench)
+				stats.enchants_learned = stats.get("enchants_learned", 0) + 1
+				_toast("The enchanting workshop learned %s." % Defs.ENCHANTS[ench].name, r.id, ws.id)
+			rev += 1
+			return true
 		"cache_stock":  # meals set down in the cache, above what the party keeps for the way home (issue #152)
 			var cache := shelter_site()
 			var moved := 0
@@ -2667,6 +2706,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 						expedition.supplies.erase(k)
 				for k in t.get:
 					expedition.cargo[k] = expedition.cargo.get(k, 0) + t.get[k]
+					_note_book(k, r)
 				made += 1
 			for ti in counts:
 				expedition.traded = expedition.get("traded", []) + [Defs.trade_text(Defs.TRADES[ti]) + (" ×%d" % counts[ti] if counts[ti] > 1 else "")]
@@ -2734,18 +2774,20 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 		"gather":
 			var tier: int = r[st.tool].tier if r[st.tool] != null else 0
 			if st.tool == "axe":
-				return Tuning.CHOP_TIME[tier]
+				return Tuning.CHOP_TIME[tier] / tool_speed(r, "axe")
 			if st.target.get("ore", "") == "glowstone":  # it breaks by hand (issue #155)
 				return Tuning.GLOWSTONE_TIME
 			if tier < Tuning.ORE_PICK_TIER.get(st.target.get("ore", ""), 0):  # diamonds want an iron pickaxe (issue #186), obsidian a diamond one (#146)
 				return -1.0
-			return Tuning.BREAK_TIME[tier] if tier > 0 else -1.0
+			return Tuning.BREAK_TIME[tier] / tool_speed(r, "pick") if tier > 0 else -1.0
 		"dig":
 			return Tuning.SHAFT_DIG if r.pick != null and r.pick.tier > 0 else -1.0
 		"build":
 			return Tuning.LAY_TIME if st.site.tpl == "track" else Tuning.STAGE_TIME
 		"light", "relight":
 			return Tuning.PORTAL_LIGHT_TIME
+		"enchant":
+			return Tuning.ENCHANT_TIME
 		"nline":
 			return {"bridge": Tuning.NETHER_BRIDGE_TIME, "rail": Tuning.LAY_TIME, "station": Tuning.STAGE_TIME, "cart": 4.0}[st.task.kind]
 		"shelter":
@@ -2792,6 +2834,8 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				if t.ore == "gravel":  # sometimes a flint, else nothing (issue #146)
 					if rng.randf() < Tuning.GRAVEL_FLINT_CHANCE:
 						drop_items(t.cell, "flint", 1)
+				elif t.ore == "chest":  # the book inside (issue #164)
+					drop_items(t.cell, t.book, 1)
 				else:
 					drop_items(t.cell, Defs.ORES[t.ore].item, Tuning.ORE_YIELD[t.ore] + skill_bonus(r, "mason"))
 				stats.ore_mined = stats.get("ore_mined", 0) + 1
@@ -2819,6 +2863,33 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				r.carry = null
 			rev += 1
 			_toast("The portal is lit.", r.id, portal.id)
+		"enchant":  # the item takes its enchantment: it keeps its wear, and the lapis and ingredient are used up (issue #166)
+			var ew: Dictionary = st.site
+			ew.crafter = 0
+			ew.crafting = ""
+			if ew.orders.is_empty() or not is_same(ew.orders[0], st.order):
+				return "gone"
+			var ord: Dictionary = st.order
+			var cost: Dictionary = Defs.ENCHANTS[ord.ench].cost
+			for k in cost:
+				if ew.store.get(k, 0) < cost[k]:
+					return "gone"
+			var held: Array = ew.get("tools", []).filter(func(t): return t.type == ord.item)
+			if held.is_empty():
+				return "gone"
+			for k in cost:
+				ew.store[k] -= cost[k]
+				if ew.store[k] <= 0:
+					ew.store.erase(k)
+			ew.tools.erase(held[0])
+			ew.store[ord.item] = ew.store.get(ord.item, 0) - 1
+			if ew.store[ord.item] <= 0:
+				ew.store.erase(ord.item)
+			ew.orders.pop_front()
+			drop_items(ew.origin, ord.item + "+" + ord.ench, 1, held[0].dur)
+			stats.enchanted = stats.get("enchanted", 0) + 1
+			rev += 1
+			_toast("%s enchanted: %s." % [r.name, Defs.ITEMS[ord.item + "+" + ord.ench].one], r.id, ew.id)
 		"nline":  # a piece of the Nether line (issue #159)
 			_finish_line_task(st.task, r)
 		"shelter":  # the party's cobblestone and planks go into the walls (issue #152)
@@ -3058,7 +3129,7 @@ func _claim(r: Dictionary) -> void:
 
 ## The kinds of work, in the order a resident looks for them. Hauling comes last, so a resident's
 ## own job always comes before it.
-const CLAIM_ORDER := ["station", "build", "farm", "gather", "haul"]
+const CLAIM_ORDER := ["station", "enchant", "build", "farm", "gather", "haul"]
 
 
 ## A job of this kind for `r`, using only the jobs in `jobs`, or null.
@@ -3077,6 +3148,10 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			var dj = _try_deliver(r, c, m.sites.filter(func(s): return s.done and is_station(s) and not s.queue.is_empty()), st_jobs)
 			if dj != null:
 				return _tagged(dj, recipe_job(Defs.recipe(dj.target.queue[bench_active(dj.target, st_jobs)])))
+		"enchant":  # the Enchanter: carry a book to the workshop, or work an order (issues #165, #166)
+			if not jobs.has("enchant"):
+				return null
+			return _enchant_claim(r, c)
 		"build":
 			if not jobs.has("build"):
 				return null
@@ -4321,12 +4396,23 @@ func _stuck_unstaffed() -> void:
 			continue
 		var at = _work_at(jb)
 		if at != null:
-			_add_stuck(Defs.JOB_NAMES[jb], "No one is a %s" % Defs.JOB_SKILLED[jb], Vector2(at) + Vector2(0.5, 0.5), 0.8, "", 0)
+			_add_stuck(Defs.JOB_NAMES[jb], "No one is %s %s" % ["an" if Defs.JOB_SKILLED[jb][0] in "aeiou" else "a", Defs.JOB_SKILLED[jb]], Vector2(at) + Vector2(0.5, 0.5), 0.8, "", 0)
 
 
 ## What holds up a chopping block or mason's bench (issue #177), and a stonemason with no pickaxe.
 ## A target reached or a full pile is waiting, not stuck: the overflow goes to the stockpile.
 func _stuck_workstations() -> void:
+	var ws := enchanting_workshop()  # a book nobody is about to carry (issue #165)
+	if not ws.is_empty() and not _staffed("enchant"):
+		for b in learnable_books():
+			_add_stuck("Book", "waiting to be carried to the workshop", Vector2(b.cell) + Vector2(0.5, 0.5), 0.6, "", 0, false, true)
+			break
+	if not ws.is_empty() and map_id == "village":  # an order short of something (issue #166)
+		var miss := enchant_missing(ws)
+		for k in miss:
+			var item: Dictionary = Defs.ITEMS[k]
+			_add_stuck("Enchant", "needs %s" % Defs.words(k, miss[k]), Vector2(ws.origin) + Vector2(0.5, 0.5), 1.4, "site", ws.id)
+			break
 	for s in m.sites:
 		var wk := work_of(s)
 		if not s.done or wk.is_empty():
@@ -4398,6 +4484,10 @@ func _work_at(jb: String):
 			for st in m.sites:
 				if not st.done or (st.tpl == "portal" and not st.lit):  # a finished frame still wants lighting (issue #147)
 					return st.origin
+		"enchant":  # a book to learn, or an order (issues #165, #166)
+			var ew := enchanting_workshop()
+			if not ew.is_empty() and (not learnable_books().is_empty() or not ew.orders.is_empty()):
+				return ew.origin
 		"haul":
 			if not m.zone.is_empty():
 				var hs = _haul_source(Vector2i.ZERO)
@@ -4411,6 +4501,8 @@ func _work_at(jb: String):
 
 
 func site_height(s: Dictionary) -> float:
+	if s.tpl == "enchanting_workshop":
+		return 1.1 if s.done else 0.2
 	if s.tpl == "bench":
 		return 0.75 if s.done else 0.2
 	if s.tpl == "fireplace":
@@ -4637,6 +4729,9 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 		s.keep_meals = true
 	if tpl == "portal":
 		s.lit = false
+	if tpl == "enchanting_workshop":
+		s.known = []   # the recipes its books have taught it (issue #165)
+		s.orders = []  # enchantments ordered, in turn (issue #166)
 	if not work_of(s).is_empty():
 		s.keep = Tuning.KEEP_STOCK
 	if Defs.TEMPLATES[tpl].has("makes"):
@@ -6457,7 +6552,7 @@ static func block_yield(item: String) -> int:
 		if Tuning.ANIMAL_DROPS[sp].has(item):
 			return Tuning.ANIMAL_DROPS[sp][item]
 	return {"cobble": Tuning.BOULDER_COBBLE, "coal": Tuning.ORE_YIELD.coal, "iron_ore": Tuning.ORE_YIELD.iron, "diamond": Tuning.ORE_YIELD.diamond,
-		"gold_ore": Tuning.ORE_YIELD.gold, "obsidian": Tuning.ORE_YIELD.obsidian, "quartz": Tuning.ORE_YIELD.quartz, "glowstone": Tuning.ORE_YIELD.glowstone}.get(item, 1)
+		"gold_ore": Tuning.ORE_YIELD.gold, "obsidian": Tuning.ORE_YIELD.obsidian, "lapis": Tuning.ORE_YIELD.lapis, "redstone": Tuning.ORE_YIELD.redstone, "quartz": Tuning.ORE_YIELD.quartz, "glowstone": Tuning.ORE_YIELD.glowstone}.get(item, 1)
 
 
 ## Whether a block gives the objective's resource (stone, coal or iron ore), or an animal does when
@@ -6473,6 +6568,9 @@ static func gives(b: Dictionary, item: String) -> bool:
 		"gold_ore": return b.get("ore", "") == "gold"
 		"obsidian": return b.get("ore", "") == "obsidian"
 		"flint": return b.get("ore", "") == "gravel"
+		"book_efficiency", "book_unbreaking", "book_protection", "book_fire_protection": return b.get("ore", "") == "chest" and b.get("book", "") == item
+		"lapis": return b.get("ore", "") == "lapis"
+		"redstone": return b.get("ore", "") == "redstone"
 		"quartz": return b.get("ore", "") == "quartz"
 		"glowstone": return b.get("ore", "") == "glowstone"
 	return false
@@ -6864,6 +6962,153 @@ static func nline_times() -> Dictionary:
 	return {"walk": walk, "ride": NetherRoute.W / Tuning.CART_SPEED, "saved": walk - NetherRoute.W / Tuning.CART_SPEED}
 
 
+# ---------------------------------------------------------------- enchanting (issues #165-#167)
+
+## An item's name for tooltips and the planner: "Iron pickaxe · Efficiency (mines 30% faster)" for an enchanted one (issue #167).
+static func item_title(type: String) -> String:
+	var it: Dictionary = Defs.ITEMS[type]
+	var base: String = Defs.BASE_ITEMS[Defs.base_type(type)].one
+	base = base.substr(0, 1).to_upper() + base.substr(1)
+	if not it.has("ench"):
+		return base
+	var e: String = it.ench
+	var effect: String = {"efficiency": "%s %d%% faster" % ["chops" if it.get("tool", "") == "axe" else "mines", roundi((Tuning.EFFICIENCY_SPEED - 1.0) * 100.0)],
+		"unbreaking": "wears %d%% slower" % roundi((1.0 - Tuning.UNBREAKING_WEAR) * 100.0),
+		"protection": "%d%% fewer creature injuries" % roundi(Tuning.PROTECTION_CUT * 100.0),
+		"fire_protection": "%d%% less fire and lava harm" % roundi(Tuning.FIRE_PROTECTION_CUT * 100.0)}[e]
+	return "%s · %s (%s)" % [base, Defs.ENCHANTS[e].name, effect]
+
+
+## What an enchantment does, in the words shown on the workshop's panel and the item's tooltip (issue #167).
+static func enchant_text(ench: String) -> String:
+	match ench:
+		"efficiency":
+			return "Tools only: work %d%% faster." % roundi((Tuning.EFFICIENCY_SPEED - 1.0) * 100.0)
+		"unbreaking":
+			return "Tools, swords and armor: wear %d%% slower." % roundi((1.0 - Tuning.UNBREAKING_WEAR) * 100.0)
+		"protection":
+			return "Armor only: %d%% fewer creature injuries." % roundi(Tuning.PROTECTION_CUT * 100.0)
+		"fire_protection":
+			return "Armor only: %d%% less harm from fire and lava." % roundi(Tuning.FIRE_PROTECTION_CUT * 100.0)
+	return ""
+
+
+## The village's finished enchanting workshop, or {}.
+func enchanting_workshop() -> Dictionary:
+	for s in maps.village.sites:
+		if s.tpl == "enchanting_workshop" and s.done:
+			return s
+	return {}
+
+
+## Whether the workshop knows an enchantment.
+func enchant_known(ench: String) -> bool:
+	var ws := enchanting_workshop()
+	return not ws.is_empty() and ws.known.has(ench)
+
+
+## Loose books lying about that would teach the workshop something it doesn't know yet, in the village.
+func learnable_books() -> Array:
+	if enchanting_workshop().is_empty() or map_id != "village":
+		return []
+	return stacks_where(func(s): return Defs.ITEMS[s.type].has("book") and avail(s) > 0 and not enchant_known(Defs.ITEMS[s.type].book))
+
+
+## What an Enchanter does: carry a new book to the workshop (issue #165), else work an order (#166).
+func _enchant_claim(r: Dictionary, c: Vector2i):
+	var ws := enchanting_workshop()
+	if ws.is_empty() or r.get("hurt", 0) > 0:
+		return null
+	var books := learnable_books()
+	if not books.is_empty():
+		var st: Dictionary = nearest(books, c)
+		var j := _deliver_job(ws, st.type, 1, st)
+		j.step({"op": "learn_book", "site": ws, "book": st.type})
+		return _tagged(j, "enchant")
+	return _enchant_order_job(r, c, ws)
+
+
+## The item types in the village that an enchantment can go on, plain and in a free stack, in the order of the items list
+## (issue #166): what the workshop's panel offers for an order.
+func enchantable_types(ench: String) -> Array:
+	var out: Array = []
+	for type in Defs.BASE_ITEMS:
+		if Defs.ITEMS.has(type + "+" + ench) and not stacks_where(func(s): return s.type == type and avail(s) > 0).is_empty():
+			out.append(type)
+	return out
+
+
+## Orders an enchantment onto an item type at the workshop (issue #166). Returns why it can't, or "". One enchantment to an item,
+## and only a known recipe.
+func order_enchant(ench: String, item: String) -> String:
+	var ws := enchanting_workshop()
+	if ws.is_empty():
+		return "Build an enchanting workshop first"
+	if not Defs.ENCHANTS.has(ench):
+		return "Enchant: no such enchantment"
+	if not ws.known.has(ench):
+		return "Enchant: recipe unknown"
+	if Defs.ITEMS.get(item, {}).has("ench"):
+		return "Enchant: item already enchanted"
+	if not Defs.ITEMS.has(item + "+" + ench):
+		return "Enchant: %s can't go on that" % Defs.ENCHANTS[ench].name
+	ws.orders.append({"ench": ench, "item": item})
+	rev += 1
+	return ""
+
+
+func cancel_enchant(i: int) -> void:
+	var ws := enchanting_workshop()
+	if not ws.is_empty() and i >= 0 and i < ws.orders.size():
+		ws.orders.remove_at(i)
+		rev += 1
+
+
+## What's missing at the workshop for its first order, as {item: how many more}, counting what's delivered and on the way.
+func enchant_missing(ws: Dictionary) -> Dictionary:
+	var out := {}
+	if ws.orders.is_empty():
+		return out
+	var o: Dictionary = ws.orders[0]
+	var need: Dictionary = Defs.ENCHANTS[o.ench].cost.duplicate()
+	need[o.item] = 1
+	for k in need:
+		var short: int = need[k] - ws.store.get(k, 0) - ws.incoming.get(k, 0) - free_count(k)
+		if short > 0:
+			out[k] = short
+	return out
+
+
+## Works the workshop's first order (issue #166): fetch what's missing, one delivery at a time, then enchant.
+func _enchant_order_job(r: Dictionary, _c: Vector2i, ws: Dictionary):
+	if ws.orders.is_empty() or ws.crafter != 0 or _cooling(ws):
+		return null
+	var o: Dictionary = ws.orders[0]
+	var need: Dictionary = Defs.ENCHANTS[o.ench].cost.duplicate()
+	need[o.item] = 1
+	for k in need:  # what's still to be carried in
+		var have: int = ws.store.get(k, 0) + ws.incoming.get(k, 0)
+		if have >= need[k]:
+			continue
+		var src := stacks_where(func(s): return s.type == k and avail(s) > 0)
+		if src.is_empty():
+			return null  # something's missing: the stuck list says what
+		var st: Dictionary = nearest(src, rcell(r))
+		return _tagged(_deliver_job(ws, k, mini(mini(need[k] - have, avail(st)), carry_cap(r)), st), "enchant")
+	for k in need:  # all of it is here: the work
+		if ws.store.get(k, 0) < need[k]:
+			return null  # (the last delivery is still on its way)
+	var j := Job.new("craft", "Going to the enchanting workshop", "the enchanting workshop")
+	j.work = "enchant"
+	j.target = ws
+	ws.crafter = r.id
+	ws.crafting = Defs.ENCHANTS[o.ench].name
+	j.hold({"t": "crafter", "site": ws})
+	j.step(_goto(site_cells(ws), true))
+	j.step({"op": "work", "what": "enchant", "site": ws, "order": o, "label": "Enchanting: %s" % Defs.ITEMS[o.item + "+" + o.ench].one})
+	return j
+
+
 # ---------------------------------------------------------------- stranding and rescue (issue #158)
 
 ## The meals a Nether party has: in its packs, and in the shelter's cache once it stands.
@@ -7012,20 +7257,35 @@ func _delve_job(r: Dictionary, c: Vector2i):
 	return j
 
 
+## The first enchanted book found stops the game, and says what it teaches (issue #164), like the iron discovery.
+func _note_book(item: String, r: Dictionary) -> void:
+	if not Defs.ITEMS[item].has("book") or stats.get("book_found", false):
+		return
+	stats.book_found = true
+	var what: String = Defs.ENCHANTS[Defs.ITEMS[item].book].name
+	_ask("book", "%s found an enchanted book of %s. Brought home to an enchanting workshop, it would teach that recipe for good." % [r.get("name", "Someone"), what], [
+		{"id": "ok", "label": "Carry on", "cost": "It's packed like any find, and comes home as cargo."},
+	], r.get("id", 0))
+
+
 ## The salvage goes into the packs, what doesn't fit left on the chest's cell; taken once (issue #157).
 func _take_salvage() -> void:
 	if m.salvage_taken:
 		return
 	m.salvage_taken = true
-	for k in Defs.FORTRESS_SALVAGE:
-		var n: int = Defs.FORTRESS_SALVAGE[k]
+	var contents: Dictionary = Defs.FORTRESS_SALVAGE.duplicate()
+	var book := Defs.book_for("fortress", hash([seed, "salvage"]))  # an enchanted book, favouring the protections (issue #164)
+	contents[book] = 1
+	for k in contents:
+		var n: int = contents[k]
 		var fit := mini(n, maxi(0, pack_room()))
 		if fit > 0:
 			expedition.cargo[k] = expedition.cargo.get(k, 0) + fit
 		if n - fit > 0:
 			drop_items(m.salvage, k, n - fit)
 	rev += 1
-	_toast("The party took the salvage.", expedition.party[0])
+	_toast("The party took the salvage, with an enchanted book: %s." % Defs.ITEMS[book].label, expedition.party[0])
+	_note_book(book, resident(expedition.party[0]))
 
 
 ## What a party member does at the piglin camp (issue #156): with gold in the packs, walk up to a piglin and trade, down the
@@ -7136,7 +7396,7 @@ func _step_creatures() -> void:
 			if x.cool <= 0.0:
 				x.cool = sp.cool
 				x.flash = tick + 6
-				_hazard(tgt, sp.hit, sp.serious, "a " + sp.name.to_lower())
+				_hazard(tgt, sp.hit, sp.serious, "a " + sp.name.to_lower(), "creature")
 			continue
 		x.acc += Tuning.CREATURE_SPEED * Tuning.DT
 		while x.acc >= 1.0:
@@ -7648,6 +7908,8 @@ func choose(option: String) -> void:
 			pass  # they shelter; the window runs
 		["stranded", "walk"]:
 			_abandon("the party set out on its own")
+		["book", "ok"]:
+			pass
 		["fortress", "take"]:
 			_take_salvage()
 			if expedition.get("leg", "out") == "out":
@@ -7704,7 +7966,11 @@ func _roll(chance: float) -> bool:
 ## A hazard strikes someone with `chance` (issues #110, #140). Armor takes the blow and wears, and
 ## turns some injuries aside; a full set makes a serious one less likely. `serious` is the chance an
 ## injury is serious, 0 for one that never is.
-func _hazard(r: Dictionary, chance: float, serious: float, cause: String) -> void:
+func _hazard(r: Dictionary, chance: float, serious: float, cause: String, kind := "") -> void:
+	if kind == "creature":  # Protection armor, a piece at a time (issue #167)
+		chance *= pow(1.0 - Tuning.PROTECTION_CUT, armor_ench_count(r, "protection"))
+	elif kind == "fire":  # Fire protection (issue #167)
+		chance *= pow(1.0 - Tuning.FIRE_PROTECTION_CUT, armor_ench_count(r, "fire_protection"))
 	if not _roll(chance):
 		return
 	var guard := protection(r)
@@ -7719,6 +7985,16 @@ func _hazard(r: Dictionary, chance: float, serious: float, cause: String) -> voi
 	if serious > 0.0 and _roll(serious * (Tuning.FULL_SET_SERIOUS if full else 1.0)):
 		level = 2
 	injure(r, level, cause)
+
+
+## How many pieces someone wears with an enchantment.
+static func armor_ench_count(r: Dictionary, ench: String) -> int:
+	var n := 0
+	var worn := armor_worn(r)
+	for slot in worn:
+		if Defs.ITEMS[worn[slot].type].get("ench", "") == ench:
+			n += 1
+	return n
 
 
 ## The armor someone has on: slot -> {type, dur}.
@@ -7743,7 +8019,8 @@ static func protection(r: Dictionary) -> float:
 func _wear_armor(r: Dictionary) -> void:
 	for slot in armor_worn(r):
 		var a: Dictionary = r.armor[slot]
-		a.dur -= 1
+		if not _use_up(a):
+			continue
 		if a.dur <= 0:
 			r.armor[slot] = null
 			stats.armor_worn_out = stats.get("armor_worn_out", 0) + 1
@@ -7828,7 +8105,7 @@ func _burn_step(r: Dictionary) -> void:
 	r.burn_acc = r.get("burn_acc", 0.0) + Tuning.DT
 	if r.burn_acc >= 1.0:
 		r.burn_acc -= 1.0
-		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning")
+		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning", "fire")
 	if r.burn <= 0.0:
 		r.burn_acc = 0.0
 
@@ -7839,10 +8116,10 @@ func _ledge_step(r: Dictionary, c: Vector2i) -> void:
 		return
 	if m.fire.has(c):  # stepping onto a fire sets someone alight (issue #149)
 		r.burn = Tuning.FIRE_BURN_TIME
-		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning")
+		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning", "fire")
 		return
 	if m.beside_lava(c):
-		_hazard(r, Tuning.LAVA_CHANCE, Tuning.LAVA_SERIOUS, "a burn beside lava")
+		_hazard(r, Tuning.LAVA_CHANCE, Tuning.LAVA_SERIOUS, "a burn beside lava", "fire")
 	if c in m.ledges and (m.is_dark(c) or realm_of(map_id) == "nether"):  # the Nether's drops need no dark (issue #149)
 		_hazard(r, fall_chance(m.level), Tuning.FALL_SERIOUS, "a fall from a ledge")
 	elif c in m.banks:  # the meadow's pond bank (issue #137): never serious
@@ -8098,9 +8375,16 @@ func site_report(id: String) -> Dictionary:
 		res.append({"item": "iron_ore", "name": "?", "reserve": -1, "known": false})
 	if mp.diamond_found:  # a known resource of this level once someone has found it (issue #186)
 		res.append({"item": "diamond", "name": "Diamond", "reserve": ore_left(id, "diamond") * Tuning.ORE_YIELD.diamond, "known": true})
-	for ore in ["gold", "obsidian", "gravel"]:  # what the deeper levels hold once someone has seen them (issue #146)
+	if mp.visited:  # a chest in the rock holds a book (issue #164)
+		var books := {}
+		for b in mp.boulders:
+			if b.alive and b.get("ore", "") == "chest":
+				books[b.book] = books.get(b.book, 0) + 1
+		for k in books:
+			res.append({"item": k, "name": Defs.ITEMS[k].label, "reserve": books[k], "known": true})
+	for ore in ["gold", "obsidian", "gravel", "lapis", "redstone"]:  # what the deeper levels hold once someone has seen them (issues #146, #163)
 		if mp.visited and mp.boulders.any(func(b): return b.get("ore", "") == ore):
-			res.append({"item": Defs.ORES[ore].item, "name": {"gold": "Gold", "obsidian": "Obsidian", "gravel": "Flint"}[ore],
+			res.append({"item": Defs.ORES[ore].item, "name": {"gold": "Gold", "obsidian": "Obsidian", "gravel": "Flint", "lapis": "Lapis", "redstone": "Redstone"}[ore],
 				"reserve": ore_left(id, ore) * Tuning.ORE_YIELD[ore], "known": true})
 	var hazards: Array = []
 	if mp.visited and not mp.lava.is_empty():  # issue #149

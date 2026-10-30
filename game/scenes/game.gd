@@ -787,6 +787,7 @@ func _key(e: InputEventKey) -> void:
 		"chopping_block": start_placing("chopping_block")
 		"storehouse": start_placing("storehouse")
 		"portal": start_placing("portal")
+		"enchanting_workshop": start_placing("enchanting_workshop")
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
 		"toolsmith_bench", "composter", "lodge", "builder_table": start_placing(keys.action_for(e))
@@ -959,7 +960,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "keep"]
+const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -1226,6 +1227,17 @@ func plan_objective(obj: String, pick := {}) -> void:
 
 ## The expedition slot the board is showing (issue #145): the one the chosen adventure belongs to, or, with none
 ## chosen, the first that has a party.
+## Orders an enchantment at the workshop (issue #166); a refusal comes up as a toast.
+func order_enchant(ench: String, item: String) -> void:
+	var why := sim.order_enchant(ench, item)
+	if why != "":
+		_hud.add_toast({"text": why, "res_id": 0, "site_id": 0})
+
+
+func cancel_enchant(i: int) -> void:
+	sim.cancel_enchant(i)
+
+
 func plan_slot() -> String:
 	if not plan.is_empty() and plan.get("rescue", false):  # a rescue has a slot of its own (issue #158)
 		return "rescue"
