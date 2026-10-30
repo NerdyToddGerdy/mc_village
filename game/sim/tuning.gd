@@ -126,6 +126,7 @@ const WORK_START_RADIUS := 8.0          ## A new chopping block or mason's bench
 const WORK_REACH := 12.0                ## The furthest from its workstation a painted work area may reach.
 const WORK_STORE := 20                  ## Logs or cobblestone a workstation's pile holds.
 const KEEP_STOCK := 20                  ## A new workstation's keep-stock target: gatherers stop once the village has this many.
+const WHEAT_KEEP := 20                  ## The farm's keep-stock target: farmers stop harvesting and planting once the village has this much wheat (issue #269).
 const KEEP_STEP := 5                    ## The keep-stock target's step in the workstation's panel.
 ## The cargo priority list a location starts with (issue #185): the items it can give, best first, each with the
 ## amount wanted (0: as much as fits). Only the items the village knows the location gives are listed.
