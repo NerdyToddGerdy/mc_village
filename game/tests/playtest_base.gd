@@ -363,7 +363,15 @@ func place_from_menu(row: String, tpl: String, near: Vector2i):
 	if spot.x < 0:
 		return null
 	await look_at(spot)
-	await click(screen(spot))
+	for attempt in 3:  # the camera may not have settled under the cursor yet
+		await frames(3)
+		await move(screen(spot + Vector2i(Defs.TEMPLATES[tpl].size.x / 2, Defs.TEMPLATES[tpl].size.y / 2)))  # a building is centered on the cursor
+		await click(screen(spot + Vector2i(Defs.TEMPLATES[tpl].size.x / 2, Defs.TEMPLATES[tpl].size.y / 2)))
+		if game.sim.site_at(spot) != null:
+			break
+		if game.tool == "":
+			await key(KEY_B)
+			await click_button(row)
 	if game.tool != "":
 		await key(KEY_ESCAPE)
 	return game.sim.site_at(spot)

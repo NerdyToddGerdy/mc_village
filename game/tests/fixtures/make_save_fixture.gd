@@ -382,6 +382,16 @@ func _initialize() -> void:
 					ld.done = true
 					ld.cfg.list = {"bread": 8, "iron_ingot": 2}
 		sim.freight = {"state": "home", "pos": 0.0, "load": {"bread": 4}, "approved": false, "acc": 0.0}
+	if SaveFormat.VERSION >= 58:  # a dispatcher beside the station, with a departure request waiting (#173)
+		var stn2 := sim.portal_station()
+		for dy in range(-4, 5):
+			for dx in range(-4, 6):
+				var dp: Vector2i = stn2.origin + Vector2i(dx, dy)
+				if not stn2.is_empty() and sim.dispatcher().is_empty() and sim.placement_check("dispatcher", dp) == "":
+					var dd := sim.place_site("dispatcher", dp)
+					dd.stage = 1
+					dd.done = true
+		sim.freight.request = true
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

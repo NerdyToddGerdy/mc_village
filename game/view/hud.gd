@@ -3390,6 +3390,8 @@ func _fill_device(c: Container, sim: Sim, s: Dictionary) -> void:
 				lrow.add_child(_button("+", func(): game.set_freight_item(s.id, k, have + 1)))
 				c.add_child(lrow)
 			c.add_child(_label("When powered, haulers carry the list from the stockpile onto the freight cart (%d items at most). It signals \"loaded\" when the cart has it all." % Tuning.FREIGHT_CAPACITY, false, Palette.CHALK_DIM, Palette.CAPTION, true))
+		"dispatcher":
+			c.add_child(_label("When powered and the cart is loaded it asks you to approve the departure. It never sends the cart itself: approve or decline from the portal station's panel.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
 		"condition":
 			var facts: Array = Sim.CONDITION_FACTS
 			var nf: String = facts[(facts.find(s.cfg.fact) + 1) % facts.size()]
@@ -3442,6 +3444,10 @@ func _fill_portal_station(c: Container, sim: Sim, s: Dictionary) -> void:
 				ab.disabled = fr.load.is_empty()
 				ab.tooltip_text = "Send the loaded cart through the portal to the cache." if not fr.load.is_empty() else "Nothing is loaded."
 				c.add_child(ab)
+				if not fr.load.is_empty():
+					var db := _button("Decline: unload it", func(): game.decline_freight())
+					db.tooltip_text = "Put the load back in the stockpile."
+					c.add_child(db)
 	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
 		c.add_child(_reason(x.why))
 
