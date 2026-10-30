@@ -2082,7 +2082,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition"]:
+	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader"]:
 		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
@@ -2420,6 +2420,13 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			cart = {"at": "village", "x": station_x("village"), "state": "parked", "load": {}, "riders": [], "acc": 0.0}
 			rev += 1
 			_toast("The minecart is parked at the village station.", r.id)
+			return true
+		"load_cart":  # goods set on the freight cart (issue #172)
+			if r.carry == null or r.carry.type != st.type or freight.get("state", "") != "home":
+				return "gone"
+			freight.load[st.type] = freight.load.get(st.type, 0) + r.carry.n
+			r.carry = null
+			rev += 1
 			return true
 		"freight_dock":  # the freight cart parked at the portal station (issue #169)
 			if r.carry == null or freight.get("state", "") != "ordered":
@@ -3256,6 +3263,9 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			var cj = _chest_job(r, c)  # a chest for a storehouse (issue #189)
 			if cj != null:
 				return _tagged(cj, "haul")
+			var ldj = _loader_job(r, c)  # the freight cart, while the loader is powered (issue #172)
+			if ldj != null:
+				return _tagged(ldj, "haul")
 			var hs = _haul_source(c, carry_cap(r))
 			if hs != null:
 				return _tagged(_haul_job(r, hs.stack, hs.dest, hs.n, hs.get("pile", {})), "haul")
@@ -4760,11 +4770,19 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 		return "The meadow signpost is in the way"
 	if foot.has_point(route_sign()):
 		return "The signpost to the old mine is in the way"
+	if tpl == "freight_loader":  # on the plot the portal station reserved (issue #172)
+		var ps := portal_station()
+		if not ps.get("done", false):
+			return "Build the portal station first"
+		if maps.village.sites.any(func(x): return x.tpl == "freight_loader"):
+			return "There's a freight loader already"
+		if not ps.plot.encloses(foot):
+			return "The loader goes on the station's plot"
 	for s in m.sites:
 		if Rect2i(s.origin, s.size).intersects(foot):
 			return "Overlaps another building"
 	for s in m.sites:
-		if s.get("plot") != null and s.plot.intersects(foot):
+		if s.get("plot") != null and s.plot.intersects(foot) and not (tpl == "freight_loader" and s.tpl == "portal_station"):
 			return "Overlaps a reserved plot"
 	if tpl == "portal_station":  # beside the portal (issue #168)
 		var pf := village_portal()
@@ -6259,6 +6277,7 @@ func _road_claim(r: Dictionary, kind: String, jobs: Array):
 				j = _dock_job(r, c)
 				if j == null:
 					j = _freight_dock_job(r, c)
+
 				if j == null:
 					j = _platform_haul(r, true)
 		"gather":
@@ -7157,6 +7176,8 @@ static func device_default_cfg(kind: String) -> Dictionary:
 			return {"item": "food", "below": Tuning.SENSOR_BELOW}
 		"condition":
 			return {"fact": "portal_lit"}
+		"loader":
+			return {"list": Tuning.FREIGHT_LIST.duplicate()}
 	return {}
 
 
@@ -7317,6 +7338,20 @@ func _eval_device(s: Dictionary) -> Dictionary:
 			if not fact.holds:
 				return {"out": false, "why": "Off: %s" % fact.no}
 			return {"out": true, "why": "On: %s, and %s" % [live[0].why.trim_prefix("On: "), fact.yes]}
+		"loader":
+			var ins := device_inputs(s)
+			if ins.is_empty():
+				return {"out": false, "why": "Off: unpowered, nothing wired in"}
+			var live := ins.filter(func(i): return i.out)
+			if live.is_empty():
+				return {"out": false, "why": "Off: unpowered, its input is off (%s)" % ins[0].why.trim_prefix("Off: ")}
+			if freight.get("state", "") != "home":
+				return {"out": false, "why": "Off: no freight cart at the station"}
+			var miss := freight_missing(s)
+			if not miss.is_empty():
+				var k: String = miss.keys()[0]
+				return {"out": false, "why": "Off: loading, %s more %s to go" % [miss[k], Defs.ITEMS[k].one if miss[k] == 1 else Defs.ITEMS[k].many]}
+			return {"out": true, "why": "On: loaded, %s; powered because %s" % [freight_list_text(s.cfg.list), live[0].why.trim_prefix("On: ")]}
 	return {"out": false, "why": "Off"}
 
 
@@ -7341,9 +7376,99 @@ func cache_count(item: String) -> int:
 	return shelter_site().get("store", {}).get(item, 0)
 
 
-## Whether the loader is at work on the cart (issue #172); there is none yet.
+## The village's finished freight loader, or {} (issue #172).
+func freight_loader() -> Dictionary:
+	for s in maps.village.sites:
+		if s.tpl == "freight_loader" and s.done:
+			return s
+	return {}
+
+
+## Whether the loader has power: some input of it is on.
+func loader_powered(s: Dictionary) -> bool:
+	return device_inputs(s).any(func(i): return i.out)
+
+
+## What the cart still lacks of the loader's freight list, as {item: n}.
+func freight_missing(s: Dictionary) -> Dictionary:
+	var out := {}
+	for k in s.cfg.list:
+		var need: int = s.cfg.list[k] - freight.get("load", {}).get(k, 0)
+		if need > 0:
+			out[k] = need
+	return out
+
+
+## "10 bread, 2 iron ingots".
+static func freight_list_text(list: Dictionary) -> String:
+	var parts: PackedStringArray = []
+	for k in list:
+		parts.append(Defs.words(k, list[k]))
+	return ", ".join(parts) if not parts.is_empty() else "nothing"
+
+
+## Whether the loader is at work on the cart: powered, the cart at the station and not full yet.
 func freight_loader_busy() -> bool:
-	return false
+	if freight.get("state", "") != "home":  # the common case, so the idle search stays cheap
+		return false
+	var ld := freight_loader()
+	return not ld.is_empty() and loader_powered(ld) and not freight_missing(ld).is_empty()
+
+
+## How many of an item are on their way to the cart in residents' hands.
+func _loading_en_route(item: String) -> int:
+	var n := 0
+	for r in residents:
+		if r.job != null:
+			for x in r.job.steps:
+				if x.op == "load_cart" and x.type == item:
+					n += x.n
+	return n
+
+
+## A hauler carries what the cart lacks from the stockpile onto the cart, when the loader is powered.
+func _loader_job(r: Dictionary, c: Vector2i):
+	if not freight_loader_busy():
+		return null
+	var ld := freight_loader()
+	var miss := freight_missing(ld)
+	for k in miss:
+		var need: int = miss[k] - _loading_en_route(k)
+		if need <= 0:
+			continue
+		var src := stacks_where(func(s): return s.type == k and avail(s) > 0)
+		if src.is_empty():
+			continue
+		var st: Dictionary = nearest(src, c)
+		var n := mini(mini(need, avail(st)), carry_cap(r))
+		var j := Job.new("haul", "Loading the freight cart", "the freight cart")
+		j.work = "haul"
+		st.res += n
+		var sh := j.hold({"t": "stack", "stack": st, "n": n})
+		j.step(_goto(reach(st.cell), false))
+		j.step({"op": "pickup", "stack": st, "n": n, "hold": sh})
+		j.step(_goto(site_cells(portal_station()), true))
+		j.step({"op": "load_cart", "type": k, "n": n})
+		return j
+	return null
+
+
+## Changes how many of an item the loader puts on the cart (the freight list); the whole list fits the cart.
+func set_freight_item(id: int, item: String, n: int) -> void:
+	var s := device_by_id(id)
+	if s.is_empty() or Defs.TEMPLATES[s.tpl].device != "loader" or not Tuning.SENSOR_ITEMS.has(item) or item == "food":
+		return
+	var total := 0
+	for k in s.cfg.list:
+		if k != item:
+			total += s.cfg.list[k]
+	n = clampi(n, 0, Tuning.FREIGHT_CAPACITY - total)
+	if n == 0:
+		s.cfg.list.erase(item)
+	else:
+		s.cfg.list[item] = n
+	_step_devices()
+	rev += 1
 
 
 ## Changes a device's setting (issues #170, #171): a sensor's item and threshold, a condition's fact.
@@ -7513,7 +7638,29 @@ func freight_place() -> Dictionary:
 	return {"map": NetherLanding.ID, "at": Vector2(path[i]).lerp(Vector2(path[i + 1]), f - i)}
 
 
+func _stuck_loader() -> void:
+	var ld := freight_loader()
+	var ps := portal_station()
+	if ld.is_empty() or ps.is_empty() or not loader_powered(ld):
+		return
+	var at := Vector2(ld.origin) + Vector2(0.5, 0.5)
+	if freight.get("state", "") != "home":
+		_add_stuck("Loader", "no freight cart at the station", at, 1.0, "site", ld.id, false, true)
+		return
+	var miss := freight_missing(ld)
+	if not miss.is_empty() and not residents.any(func(r): return r.map == "village" and not r.away and not r.arriving and r.get("hurt", 0) == 0):
+		_add_stuck("Loader", "no one with Haul on", at, 1.0, "site", ld.id)
+		return
+	for k in miss:
+		var short: int = miss[k] - free_count(k) - _loading_en_route(k)
+		if short > 0:
+			_add_stuck("Loader", "needs %d more %s" % [short, Defs.ITEMS[k].one if short == 1 else Defs.ITEMS[k].many], at, 1.0, "site", ld.id)
+			return
+
+
 func _stuck_freight() -> void:
+	if map_id == "village":
+		_stuck_loader()
 	var ps := portal_station()
 	if freight.is_empty() or ps.is_empty() or map_id != "village":
 		return

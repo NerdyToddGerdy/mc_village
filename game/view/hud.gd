@@ -3378,6 +3378,18 @@ func _fill_device(c: Container, sim: Sim, s: Dictionary) -> void:
 			c.add_child(row)
 			var have := sim.cache_count(s.cfg.item) if sim.shelter_site().get("done", false) else -1
 			c.add_child(_row("In the cache now", str(have) if have >= 0 else "no shelter yet"))
+		"loader":
+			c.add_child(_row("Freight list", Sim.freight_list_text(s.cfg.list)))
+			for k in ["bread", "iron_ingot", "plank", "cobble"]:
+				var have: int = s.cfg.list.get(k, 0)
+				var lrow := HBoxContainer.new()
+				lrow.add_theme_constant_override("separation", 8)
+				lrow.add_child(_label(Defs.ITEMS[k].label, false, Palette.CHALK_DIM))
+				lrow.add_child(_button("−", func(): game.set_freight_item(s.id, k, have - 1)))
+				lrow.add_child(_label(str(have), true))
+				lrow.add_child(_button("+", func(): game.set_freight_item(s.id, k, have + 1)))
+				c.add_child(lrow)
+			c.add_child(_label("When powered, haulers carry the list from the stockpile onto the freight cart (%d items at most). It signals \"loaded\" when the cart has it all." % Tuning.FREIGHT_CAPACITY, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 		"condition":
 			var facts: Array = Sim.CONDITION_FACTS
 			var nf: String = facts[(facts.find(s.cfg.fact) + 1) % facts.size()]

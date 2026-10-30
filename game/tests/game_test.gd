@@ -359,6 +359,23 @@ func _test_redstone_panels(game: Game) -> void:
 	await _frames()
 	var pbtns: Array = _walk(hud._sel).filter(func(n): return n is Button and not n.is_queued_for_deletion()).map(func(n): return n.text)
 	check(pbtns.has("Approve departure"), "the portal station's panel has Approve departure for a loaded cart")
+	var lo := Vector2i(-1, -1)
+	for dy in range(0, 3):
+		for dx in range(0, 3):
+			var cand: Vector2i = ps.plot.position + Vector2i(dx, dy)
+			if lo.x < 0 and sim.placement_check("freight_loader", cand) == "":
+				lo = cand
+	var ld: Dictionary = sim.place_site("freight_loader", lo)
+	ld.stage = 1
+	ld.done = true
+	sim._step_devices()
+	game.selection = {"kind": "site", "id": ld.id}
+	game.focus_on("site", ld.id)
+	hud.refresh(sim)
+	await _frames()
+	var lbtns: Array = _walk(hud._sel).filter(func(n): return n is Button and not n.is_queued_for_deletion())
+	check(lo.x >= 0 and lbtns.size() >= 8, "the loader's panel has a freight list to change")
+	sim.maps.village.sites.erase(ld)
 	sim.freight = {}
 	sim.wires.clear()
 	sim.maps.village.sites.erase(a)

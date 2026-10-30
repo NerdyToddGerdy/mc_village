@@ -371,6 +371,17 @@ func _initialize() -> void:
 			sim.order_wire(devs[0].id, devs[1].id)
 			sim.wires[0].laid = sim.wires[0].cells.size()
 			devs[0].cfg.below = 8
+	if SaveFormat.VERSION >= 57:  # a freight loader on the station's plot, part way through loading the cart (#172)
+		var stn := sim.portal_station()
+		for dy in range(0, 3):
+			for dx in range(0, 3):
+				var lo: Vector2i = stn.plot.position + Vector2i(dx, dy)
+				if not stn.is_empty() and sim.freight_loader().is_empty() and sim.placement_check("freight_loader", lo) == "":
+					var ld := sim.place_site("freight_loader", lo)
+					ld.stage = 1
+					ld.done = true
+					ld.cfg.list = {"bread": 8, "iron_ingot": 2}
+		sim.freight = {"state": "home", "pos": 0.0, "load": {"bread": 4}, "approved": false, "acc": 0.0}
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

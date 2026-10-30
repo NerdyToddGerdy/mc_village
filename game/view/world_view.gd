@@ -575,6 +575,9 @@ func _add_device(b: Batch, s: Dictionary) -> void:
 	if Defs.TEMPLATES[s.tpl].device == "sensor":
 		b.box(Vector3(o.x + 0.42, lift + 0.46, o.y + 0.42), Vector3(o.x + 0.58, lift + 0.85, o.y + 0.58), Palette.STONE)
 		b.box(Vector3(o.x + 0.38, lift + 0.85, o.y + 0.38), Vector3(o.x + 0.62, lift + 0.95, o.y + 0.62), REDSTONE_ON if on else REDSTONE_OFF)
+	if Defs.TEMPLATES[s.tpl].device == "loader":  # a chute over the cart's place
+		b.box(Vector3(o.x + 0.2, lift + 0.46, o.y + 0.2), Vector3(o.x + 0.8, lift + 0.7, o.y + 0.35), Palette.STONE)
+		b.box(Vector3(o.x + 0.2, lift + 0.46, o.y + 0.65), Vector3(o.x + 0.8, lift + 0.7, o.y + 0.8), Palette.STONE)
 	if redstone_overlay:  # a beacon so it stands out from the dimmed world
 		b.box(Vector3(o.x + 0.45, lift + 0.46, o.y + 0.45), Vector3(o.x + 0.55, lift + 1.6, o.y + 0.55), Color(REDSTONE_ON, 0.8) if on else Color(REDSTONE_OFF, 0.8))
 

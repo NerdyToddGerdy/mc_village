@@ -83,6 +83,7 @@ func _init() -> void:
 		"test_the_freight_cart",
 		"test_redstone_devices_and_dust",
 		"test_the_cache_sensor_and_condition",
+		"test_the_freight_loader",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5884,6 +5885,8 @@ func test_the_freight_cart() -> void:
 	check(sim.freight.state == "home" and shelter.store.get("bread", 0) == 3, "once there's room it unloads and returns")
 	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v54.save").data.state)
 	check(old.freight.is_empty(), "an older save has no freight cart")
+	var f57 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v57.save").data.state)
+	check(not f57.freight_loader().is_empty() and f57.freight_loader().cfg.list == {"bread": 8, "iron_ingot": 2} and f57.freight.load == {"bread": 4}, "the v57 fixture loads its loader and the part-loaded cart")
 	var f56 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v56.save").data.state)
 	check(f56.wires.size() == 1 and Sim.wire_complete(f56.wires[0]) and f56.device_by_id(f56.wires[0].from).cfg.below == 8, "the v56 fixture loads its devices and dust line")
 	var f55 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v55.save").data.state)
@@ -6007,6 +6010,81 @@ func test_the_cache_sensor_and_condition() -> void:
 	shelter.done = false
 	sim._step_devices()
 	check(not sensor.out and sensor.why == "Off: no shelter on the landing to read", "with no shelter there's nothing to read")
+
+
+## The freight loader (issue #172): built on the station's plot, it loads the cart from the stockpile while it's powered.
+func test_the_freight_loader() -> void:
+	var w := freight_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var st: Dictionary = w.station
+	var inside := Vector2i(-1, -1)
+	for dy in range(0, 3):
+		for dx in range(0, 3):
+			var o: Vector2i = st.plot.position + Vector2i(dx, dy)
+			if inside.x < 0 and sim.placement_check("freight_loader", o) == "":
+				inside = o
+	check(inside.x >= 0 and sim.placement_check("freight_loader", Vector2i(2, 2)) == "The loader goes on the station's plot", "the loader goes on the plot the station reserved, and nowhere else")
+	var ld := sim.place_site("freight_loader", inside)
+	ld.stage = 1
+	ld.done = true
+	check(sim.placement_check("freight_loader", inside + Vector2i(1, 0)) == "There's a freight loader already", "only one")
+	check(ld.cfg.list == {"bread": 10, "iron_ingot": 2}, "its freight list starts at 10 bread and 2 iron ingots")
+	var pair := device_pair(sim, w)
+	var sensor: Dictionary = pair[0]
+	var cond: Dictionary = pair[1]
+	sim.wires.append({"id": 901, "from": sensor.id, "to": cond.id, "cells": [], "laid": 0})
+	sim.wires.append({"id": 902, "from": cond.id, "to": ld.id, "cells": [], "laid": 0})
+	sim.freight = {"state": "home", "pos": 0.0, "load": {}, "approved": false, "acc": 0.0}
+	# Unpowered, it doesn't load.
+	w.portal.lit = false
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "bread", 4)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 3), "iron_ingot", 3)
+	for i in 30 * Tuning.TPS:
+		sim.step()
+	check(sim.freight.load.is_empty() and not ld.out and ld.why.begins_with("Off: unpowered"), "an unpowered loader doesn't load: %s" % ld.why)
+	# Powered, residents carry the list from the stockpile onto the cart, and the loader says what it still needs.
+	w.portal.lit = true
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.freight.load.get("bread", 0) == 4 and sim.freight.load.get("iron_ingot", 0) == 2:
+			break
+	check(sim.freight.load == {"bread": 4, "iron_ingot": 2}, "a powered loader fills the cart from the stockpile as far as it goes (%s)" % [sim.freight.load])
+	for i in 40:
+		sim.step()
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Loader: needs 6 more bread"), "short of bread it says so: 'Loader: needs 6 more bread'")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "bread", 6)
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.freight_missing(ld).is_empty():
+			break
+	for i in 40:
+		sim.step()
+	check(sim.freight.load == {"bread": 10, "iron_ingot": 2} and ld.out and ld.why.begins_with("On: loaded, 10 bread, 2 iron ingots"), "with enough bread the cart is full and the loader signals loaded: %s" % ld.why)
+	check(sim.free_count("bread") == 0 and sim.free_count("iron_ingot") == 1, "the goods left the stockpile (1 iron ingot over)")
+	# The list is the player's to change, and the whole list fits the cart.
+	sim.set_freight_item(ld.id, "plank", 50)
+	check(ld.cfg.list.plank == Tuning.FREIGHT_CAPACITY - 12, "the freight list can't outgrow the cart (%d planks)" % ld.cfg.list.plank)
+	sim.set_freight_item(ld.id, "plank", 0)
+	check(not ld.cfg.list.has("plank"), "an item at 0 leaves the list")
+	# No cart, or no one to haul.
+	sim.freight = {}
+	sim._step_devices()
+	sim.compute_stuck()
+	check(ld.why == "Off: no freight cart at the station" and stuck_text(sim).contains("Loader: no freight cart at the station"), "with no cart: 'Loader: no freight cart at the station'")
+	sim.freight = {"state": "home", "pos": 0.0, "load": {}, "approved": false, "acc": 0.0}
+	for r in sim.residents:
+		r.hurt = 1
+		if r.job != null:
+			sim.fail_job(r)
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Loader: no one with Haul on"), "with everyone hurt: 'Loader: no one with Haul on'")
+	# The loaded cart goes when approved; an empty one wouldn't.
+	for r in sim.residents:
+		r.hurt = 0
+	sim.freight.load = {"bread": 10, "iron_ingot": 2}
+	check(sim.approve_freight() == "", "a loaded cart can be approved")
 
 
 ## Ticks from setting out to reaching the quartz site on a gather trip.

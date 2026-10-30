@@ -100,7 +100,7 @@ const PAGES := [
 		"without": "Everything crosses the portal on foot."},
 	{"id": "devices", "title": "Redstone devices", "tpl": "cache_sensor", "unlock": "portal_line", "who": "Builders; a hauler lays the dust",
 		"what": "Ready-made devices built from redstone dust, quartz and stone: a cache sensor reads the Nether cache, a condition passes a signal only while a fact holds. Dust lines you order join one's output to another's input. Each device says why it's on.",
-		"grows": "A freight loader and a dispatcher join them in the chain.",
+		"grows": "A freight loader on the portal station's plot and a dispatcher join them in the chain.",
 		"without": "A low cache is something to notice yourself."},
 	{"id": "portal", "title": "Nether portal", "tpl": "portal", "unlock": "portal", "who": "Builders carry the obsidian; anyone lights it",
 		"what": "A frame of obsidian from the deep mine, lit with flint and steel. Parties bound for the Nether pack on the staging area in front of it.",

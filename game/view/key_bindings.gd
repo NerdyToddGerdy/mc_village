@@ -31,6 +31,7 @@ const ACTIONS := [
 	["portal_station", "Orders", "Place a portal station", []],
 	["cache_sensor", "Orders", "Place a cache sensor", []],
 	["condition", "Orders", "Place a condition", []],
+	["freight_loader", "Orders", "Place a freight loader", []],
 	["redstone_overlay", "Time and camera", "Show or hide the redstone overlay", [KEY_O]],
 	["claim", "Orders", "Claim land", []],
 	["mason_bench", "Orders", "Place a mason's bench", []],

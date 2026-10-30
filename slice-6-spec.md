@@ -128,7 +128,16 @@ Each enchantment changes only its own number, by the item's type (`Defs.ITEMS[ty
 - **Cache sensor:** reads the shelter's cache from the village (a remote reading, nothing moves). It watches one item (`SENSOR_ITEMS`: meals ("food"), iron ingots, planks, cobblestone) and is **on while the count is below its threshold** (starts at `SENSOR_BELOW`, 10; set with − / + in its panel). Its panel shows the cache's current value. No shelter yet: off, "no shelter on the landing to read".
 - **Condition:** passes its input only while a chosen fact holds: **the portal is lit**, **the freight cart is home**, **the loader is idle** (cycled from its panel). With nothing wired in: "Off: nothing wired in"; input off: "Off: its input is off (…)"; fact false: "Off: the portal isn't lit".
 
-## 12. Tuning table (provisional)
+## 12. The freight loader (#172)
+
+- **The upgrade:** the **freight loader** (Build menu) is built on the plot the portal station reserved (§8): anywhere on that 3×3 not under the station, one only, once the station stands. 3 redstone dust, 1 quartz, 4 cobblestone. It is a device (§10) whose output means **loaded**.
+- **Freight list:** what a full load is, `cfg.list`, starting at `FREIGHT_LIST` (10 bread, 2 iron ingots; provisional) and changed with − / + in its panel (bread, iron ingots, planks, cobblestone), up to `FREIGHT_CAPACITY` (30) items in all.
+- **When powered** (an input on) and a freight cart is **home** at the station, residents carry what the cart lacks from the stockpile and set it on the cart (visible: carried and stacked on it, up to six boxes). A load is never conjured. When the cart holds the whole list, the loader is **on**: "On: loaded, 10 bread, 2 iron ingots; powered because …". Unpowered: "Off: unpowered, nothing wired in" / "its input is off (…)". Nothing to load onto: "Off: no freight cart at the station".
+- **Stuck reasons:** "Loader: needs 6 more bread" (the stockpile and hands together fall short), "Loader: no freight cart at the station", "Loader: no one with Haul on" (no one in the village free to carry).
+- **The condition's "the loader is idle"** is false while a powered loader still has the cart to fill.
+- **Saving:** v57 (the list is in the loader's `cfg`, the progress is the cart's `freight.load`).
+
+## 13. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -152,4 +161,7 @@ Each build issue adds its rows.
 | `DUST_TIME` | 1.5 s | Laying one cell of dust. |
 | `SENSOR_ITEMS` | food, iron ingot, plank, cobble | What a cache sensor can watch. |
 | `SENSOR_BELOW` | 10 | A new sensor's threshold. |
+| `FREIGHT_LIST` | 10 bread, 2 iron ingots | A new loader's freight list. |
+| `FREIGHT_CAPACITY` | 30 | Items a freight cart carries. |
+| Loader cost | 3 redstone, 1 quartz, 4 cobble | In `Defs.TEMPLATES`. |
 | Device costs | 2 redstone, 1 quartz, 2 cobble | Sensor and condition, in `Defs.TEMPLATES`. |
