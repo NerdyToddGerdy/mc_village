@@ -157,6 +157,11 @@ Initial scope: point-to-point lines without complex signaling or timetable simul
 - **The party and its cargo ride together.** There's no unmanned freight; automation waits for Slice 6.
 - **One point-to-point line**, with no switches, branches, signals or timetables.
 
+#### Core decisions (Slice 6)
+
+- **The first unmanned freight cart**, with manual departure approval. It carries cargo only, never a party.
+- **A portal line** runs from a village station by the portal, through the portal, to a landing station by the shelter. It shares that landing station with the Nether line; two lines meet at a station, with no switch.
+
 ## 7. Dimensions and Progression
 
 These are proposed roles for our game, not exact Minecraft mechanics.
@@ -329,6 +334,13 @@ Village production competes with expeditions for the best equipment.
 
 Prefer explicit known recipes to repeated random rerolls. Begin with one enchantment slot per item; combinations can come later.
 
+#### Core decisions (Slice 6)
+
+- **Discovery (#28): enchanted books from expeditions.** Rare salvage (the fortress delve, deep mine chests) and the piglin trade table give books. Bringing one home teaches the workshop its recipe permanently.
+- **Cost (#28): lapis plus one ingredient per recipe.** Lapis comes from a deep mine level. Provisional ingredients: Efficiency takes quartz, Unbreaking iron, Protection iron, Fire protection magma cream.
+- **Four enchantments:** Efficiency, Unbreaking, Protection and Fire protection. One slot per item, and no rerolls. Fortune and Feather Falling stay proposed.
+- **A new enchanting workshop** with an **Enchanter job**, built from obsidian and diamonds. It reserves a plot for a later library upgrade.
+
 ## 10. Redstone
 
 Redstone automates responses and logistics rather than acting only as a blanket production bonus.
@@ -353,6 +365,12 @@ Examples:
 Initial implementation need not reproduce every Minecraft circuit behavior. Connections must be visible, inspectable, and explain why an output is active.
 
 Automation may prepare dangerous missions, but departure approval stays manual initially. Familiar low-risk supply runs may later support automatic departure.
+
+#### Core decisions (Slice 6)
+
+- **One chain: a low Nether cache → a supply cart.** A **sensor** on the shelter cache (§8) notices low provisions, a **condition** decides whether that counts, a **loader** at the village prepares freight, and a **dispatcher** sends the cart once the player approves.
+- **Ready-made devices only** (#29): sensor, condition, loader and dispatcher, joined by **visible dust lines** the player draws between them. Each device says why it is on. Custom circuits and wider network management stay out.
+- **Departure approval is manual.** Automatic departure waits for later.
 
 ## 11. Visual Presentation
 
@@ -487,7 +505,9 @@ One portal region, a quartz site, a trading location, and a fortress entrance. A
 
 ### Slice 6 — Specialization and automation
 
-A few explicit enchantment recipes and one redstone chain: detect a supply need, prepare freight, and deliver along a supported route.
+A few explicit enchantment recipes and one redstone chain: detect a supply need, prepare freight, and deliver along a supported route. Implementation detail: `slice-6-spec.md`.
+- **Enchantments:** books found on expeditions and traded, an enchanting workshop and Enchanter, and four recipes (Efficiency, Unbreaking, Protection, Fire protection), one slot per item.
+- **The chain:** a cache sensor, a condition, a freight loader and a dispatcher, joined by visible dust lines. A low Nether cache loads a cart at the village; the player approves; it delivers along the portal line and returns.
 
 ## 14. Open Decisions
 
@@ -503,8 +523,8 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 - How often expeditions require intervention and how many can run simultaneously. (Resolved for Slice 3, #25: one expedition at a time, and, from Slice 5 (#145), two at once: one Overworld and one Nether. The game stops for the player only at a discovery and at a serious injury, plus a door down once mines have deeper levels, #130.)
 - Outpost staffing and ongoing supply costs. (Partly resolved for Slice 5, #26: the portal landing gets an unstaffed shelter and supply cache. Staffing stays open.)
 - Detailed End and Sift systems.
-- Enchantment discovery and resource costs.
-- How far custom redstone circuits and railway management should extend. (Partly resolved for Slice 4, #29: railways start as one point-to-point line, village to old mine, with no switches, branches, signals or timetables, and no unmanned freight. Decided by the owner for the long term: custom circuits never, and the railway network stays separate point-to-point lines that meet only at shared stations, with no junctions. #29 stays open until Slice 6 has been played, in case the ready-made devices fall short.)
+- Enchantment discovery and resource costs. (Resolved for Slice 6, #28: enchanted books from expeditions teach recipes permanently; each costs lapis plus one ingredient. See §9.)
+- How far custom redstone circuits and railway management should extend. (Partly resolved for Slice 4, #29: railways start as one point-to-point line, village to old mine, with no switches, branches, signals or timetables, and no unmanned freight. Decided by the owner for the long term: custom circuits never, and the railway network stays separate point-to-point lines that meet only at shared stations, with no junctions. Slice 6's redstone is ready-made devices only, joined by visible dust lines, with the first unmanned cart under manual approval, #29. It stays open until Slice 6 has been played, in case the ready-made devices fall short.)
 - Scope of original terminology, assets, and worldbuilding versus direct Minecraft references. (Settled for now, #30: Minecraft names such as Nether, piglin, blaze and quartz are working names.)
 
 ## 15. Core Experience to Preserve
