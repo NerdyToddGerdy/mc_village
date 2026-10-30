@@ -41,6 +41,11 @@ const LAYOUT := [
 ## Where the shelter's blueprint goes: three by three, near the arch (issue #152).
 const SHELTER_AT := Vector2i(2, 5)
 
+## The landing station beside the shelter, shared by the Nether line and the portal line, and the cells the portal line's track
+## takes to it from the portal's far side (issue #168).
+const STATION_AT := Vector2i(5, 4)
+const TRACK: Array[Vector2i] = [Vector2i(1, 12), Vector2i(1, 11), Vector2i(1, 10), Vector2i(1, 9), Vector2i(1, 8), Vector2i(1, 7), Vector2i(1, 6), Vector2i(1, 5), Vector2i(1, 4), Vector2i(2, 4), Vector2i(3, 4), Vector2i(4, 4)]
+
 ## Where each route leaves the landing: gaps in its edge wall (issue #153).
 
 const TOLD := "A red, burning country on the far side of the portal. Nobody has been through."

@@ -97,7 +97,47 @@ Each enchantment changes only its own number, by the item's type (`Defs.ITEMS[ty
 - **Shown** on the item's name wherever a tool is listed: "Iron pickaxe · Efficiency (mines 30% faster)", "Leather tunic · Protection (30% fewer creature injuries)", and on the workshop's panel, with each recipe's effect.
 - **No save change:** an enchanted item is an item type, and the effects read it.
 
-## 8. Tuning table (provisional)
+## 8. The portal line (#168)
+
+- **Village side:** a **portal station** (Build menu, once the portal stands) planned **beside the portal**, within `PORTAL_STATION_REACH` (6) cells of the frame and not on its staging area. 6 planks and 4 cobblestone, built by residents like any station. It **reserves a 3×3 plot** for the freight loader (#172). One only.
+- **Nether side:** a Build objective, **The portal line from the landing**, once the station is planned. The party carries what's left: `PORTAL_LINE_RAILS` (6) rails, laid along `NetherLanding.TRACK` from the portal's far side to the landing station, and the **landing station** if there isn't one (6 planks, 4 cobblestone). Up to what three can carry past their meals.
+- **Shared station:** the landing station sits **beside the shelter** (`NetherLanding.STATION_AT`) and is the Nether line's landing station too: whichever line builds it, the other finds it built. Two lines meet there, with no switch; a cart stays on its own line.
+- **Complete** when the village station is built, all six rails are laid and the landing station stands (`pline_complete()`). A party then **rides** the rails on the landing at the cart's speed.
+- **Saving:** `portal_line: {laid}` (v54). The village station is a site; the landing station is the Nether line's flag.
+
+## 9. The freight cart (#169)
+
+- **Ordering:** once the portal line is complete (§8), the portal station's panel offers **Order a freight cart**. A hauler carries a minecart from the stockpile to the station and parks it (`freight.state` "ordered" → "home"). One cart.
+- **State:** `freight` = {state: ordered / home / going / unloading / returning, pos (0 at the village station, 1 at the landing station), load, approved, acc}. It carries goods and no riders.
+- **Approval:** the cart **never departs on its own**. **Approve departure** (the station panel) sets `approved`; it leaves once the portal is lit, and the approval is used up with the trip. Cancel approval takes it back. (The dispatcher, #173, will give the same go-ahead from a device.)
+- **The trip:** `FREIGHT_TRIP_TIME` (14 s) one way, the portal `FREIGHT_CROSS` (0.3) of the way along; drawn moving along the village side and then the landing's rails with its load stacked on it. At the landing it unloads into the **shelter's cache** at `LOAD_RATE`, up to `CACHE_CAPACITY` (60) items in all, then returns empty. Nobody needs to be in the Nether.
+- **Stuck reasons:** "Freight cart: waiting for approval" (loaded, at the station); "the portal is unlit" (at the station approved, or held at the crossing); "the cache is full" (or "there's no shelter to unload into"); "needs a minecart from the village".
+- **Saving:** `freight` (v55). Until the loader (#172) there's no way to put goods on it in play; tests load it directly.
+
+## 10. Redstone devices and dust (#170)
+
+- **Devices** are small buildings on the village map, ready-made, each costing redstone dust, quartz and stone (provisional): the **cache sensor** and **condition** (2 redstone, 1 quartz, 2 cobblestone each); the loader (§12) and the dispatcher (#173) join them. Place from the Build menu once the portal station is planned. Residents build them like any building.
+- **Dust lines** are drawn from a device's panel (**Wire to the …**, the Wire order): one device's output to another's input. A sensor has no input; a device can't feed itself; one line per pair and direction. The line takes a path of cells (along the first device's row, then down the second's column, skipping built cells). A resident with Build on fetches `ceil(cells / DUST_PER_REDSTONE)` redstone dust from the stockpile and lays the cells one at a time (`DUST_TIME` each), visibly. **Cut** in either device's panel takes the line up; so does demolishing a device.
+- **Signal:** on or off, instantly along a *fully laid* line (`wires`: `{id, from, to, cells, laid}`). A device's input is on when any line into it is on. Evaluated every half second; a few passes settle a chain (no custom circuits, no gates or timers; #29 stays open).
+- **Inspector:** a device's panel says **On** or **Off** and **why**, tracing back through its inputs: "On: Cache food 6 < 10, and the portal is lit". Powered devices and dust glow bright red, unpowered ones dark.
+- **Redstone overlay** (key `O`, rebindable): dims the village and lifts the devices and dust above it, with a beacon on each device and the unlaid cells of a planned line shown faintly.
+- **Saving:** devices are sites with `cfg`, `out` and `why`; `wires` is saved (v56).
+
+## 11. The cache sensor and the condition (#171)
+
+- **Cache sensor:** reads the shelter's cache from the village (a remote reading, nothing moves). It watches one item (`SENSOR_ITEMS`: meals ("food"), iron ingots, planks, cobblestone) and is **on while the count is below its threshold** (starts at `SENSOR_BELOW`, 10; set with − / + in its panel). Its panel shows the cache's current value. No shelter yet: off, "no shelter on the landing to read".
+- **Condition:** passes its input only while a chosen fact holds: **the portal is lit**, **the freight cart is home**, **the loader is idle** (cycled from its panel). With nothing wired in: "Off: nothing wired in"; input off: "Off: its input is off (…)"; fact false: "Off: the portal isn't lit".
+
+## 12. The freight loader (#172)
+
+- **The upgrade:** the **freight loader** (Build menu) is built on the plot the portal station reserved (§8): anywhere on that 3×3 not under the station, one only, once the station stands. 3 redstone dust, 1 quartz, 4 cobblestone. It is a device (§10) whose output means **loaded**.
+- **Freight list:** what a full load is, `cfg.list`, starting at `FREIGHT_LIST` (10 bread, 2 iron ingots; provisional) and changed with − / + in its panel (bread, iron ingots, planks, cobblestone), up to `FREIGHT_CAPACITY` (30) items in all.
+- **When powered** (an input on) and a freight cart is **home** at the station, residents carry what the cart lacks from the stockpile and set it on the cart (visible: carried and stacked on it, up to six boxes). A load is never conjured. When the cart holds the whole list, the loader is **on**: "On: loaded, 10 bread, 2 iron ingots; powered because …". Unpowered: "Off: unpowered, nothing wired in" / "its input is off (…)". Nothing to load onto: "Off: no freight cart at the station".
+- **Stuck reasons:** "Loader: needs 6 more bread" (the stockpile and hands together fall short), "Loader: no freight cart at the station", "Loader: no one with Haul on" (no one in the village free to carry).
+- **The condition's "the loader is idle"** is false while a powered loader still has the cart to fill.
+- **Saving:** v57 (the list is in the loader's `cfg`, the progress is the cart's `freight.load`).
+
+## 13. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -112,3 +152,16 @@ Each build issue adds its rows.
 | `UNBREAKING_WEAR` | ×0.5 | Wear an Unbreaking item takes. |
 | `PROTECTION_CUT` | −30% | Chance of a creature injury, per Protection piece. |
 | `FIRE_PROTECTION_CUT` | −50% | Chance of harm from fire and lava, per Fire protection piece. |
+| `PORTAL_LINE_RAILS` | 6 | Rails on the landing side of the portal line. |
+| `PORTAL_STATION_REACH` | 6 | Cells from the portal frame the village station may stand. |
+| `FREIGHT_TRIP_TIME` | 14 s | One way along the portal line. |
+| `FREIGHT_CROSS` | 0.3 | How far along the trip the portal is. |
+| `CACHE_CAPACITY` | 60 | Items the shelter's cache holds in all. |
+| `DUST_PER_REDSTONE` | 4 | Cells of dust one redstone dust lays. |
+| `DUST_TIME` | 1.5 s | Laying one cell of dust. |
+| `SENSOR_ITEMS` | food, iron ingot, plank, cobble | What a cache sensor can watch. |
+| `SENSOR_BELOW` | 10 | A new sensor's threshold. |
+| `FREIGHT_LIST` | 10 bread, 2 iron ingots | A new loader's freight list. |
+| `FREIGHT_CAPACITY` | 30 | Items a freight cart carries. |
+| Loader cost | 3 redstone, 1 quartz, 4 cobble | In `Defs.TEMPLATES`. |
+| Device costs | 2 redstone, 1 quartz, 2 cobble | Sensor and condition, in `Defs.TEMPLATES`. |

@@ -2047,7 +2047,7 @@ func _status(sim: Sim, r: Dictionary) -> String:
 	if r.map == Road.ID and not sim.on_road(r) and r.job != null:  # out working on the road (issue #122)
 		return "On the road: %s" % r.job.label.to_lower()
 	var ex := sim.expedition_of(r)
-	if Sim.realm_of(r.map) == "nether" and ex.get("target", {}).get("item", "") == "line" and r.job != null and r.job.kind == "build":  # issue #159
+	if Sim.realm_of(r.map) == "nether" and ex.get("target", {}).get("item", "") in ["line", "pline"] and r.job != null and r.job.kind == "build":  # issue #159
 		return "In the Nether: %s" % r.job.label.to_lower()
 	return r.job.label if r.job != null else "Idle"
 
@@ -2175,6 +2175,12 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		return
 	if s.tpl == "station" and s.done:  # issue #123
 		_fill_station(c, sim, s)
+		return
+	if Defs.TEMPLATES[s.tpl].has("device") and s.done:  # issues #170, #171
+		_fill_device(c, sim, s)
+		return
+	if s.tpl == "portal_station" and s.done:  # issues #168, #169
+		_fill_portal_station(c, sim, s)
 		return
 	if not s.done:
 		var st := sim.current_stage(s)
@@ -3057,7 +3063,7 @@ func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
 		if tend:
 			c.add_child(_label("Build the pens, lead marked animals in, feed pairs, and hunt only what's over %d of each kind." % plan.target.n, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	c.add_child(_stepper_row("Meals to take", plan.meals, "meals"))
-	if plan.target.item == "line":  # what the line crew carries, past its meals (issue #159)
+	if plan.target.item in ["line", "pline"]:  # what the line crew carries, past its meals (issues #159, #168)
 		for k in [["Rails", "rails"], ["Planks", "planks"], ["Cobblestone", "cobble"], ["Minecarts", "minecarts"]]:
 			c.add_child(_stepper_row(k[0], plan.get(k[1], 0), k[1]))
 	if plan.target.item == "trade":  # the gold carried, which takes room in the packs (issue #156)
@@ -3350,6 +3356,94 @@ func _fill_route(c: Container, sim: Sim) -> void:
 			b.tooltip_text = "A platform beside the line where the cart stops, loads and unloads: %s." % Defs.cost_text(Defs.TEMPLATES.station.stages[0].cost)
 			c.add_child(b)
 	_add_line(c, sim)
+
+
+## A redstone device (issues #170, #171): on or off and why, its settings, and the dust lines in and out with a way to draw one.
+func _fill_device(c: Container, sim: Sim, s: Dictionary) -> void:
+	var kind: String = Defs.TEMPLATES[s.tpl].device
+	c.add_child(_head(Defs.TEMPLATES[s.tpl].name, "On" if s.out else "Off"))
+	c.add_child(_label(s.why, false, Palette.YELLOW if s.out else Palette.CHALK_DIM, Palette.BODY, true))
+	match kind:
+		"sensor":
+			var items: Array = Tuning.SENSOR_ITEMS
+			var nxt: String = items[(items.find(s.cfg.item) + 1) % items.size()]
+			c.add_child(_row("Watching", "meals" if s.cfg.item == "food" else Defs.ITEMS[s.cfg.item].many))
+			c.add_child(_button("Watch %s instead" % ("meals" if nxt == "food" else Defs.ITEMS[nxt].many), func(): game.set_device_cfg(s.id, "item", nxt)))
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 8)
+			row.add_child(_label("On when below", false, Palette.CHALK_DIM))
+			row.add_child(_button("−", func(): game.set_device_cfg(s.id, "below", s.cfg.below - 1)))
+			row.add_child(_label(str(s.cfg.below), true))
+			row.add_child(_button("+", func(): game.set_device_cfg(s.id, "below", s.cfg.below + 1)))
+			c.add_child(row)
+			var have := sim.cache_count(s.cfg.item) if sim.shelter_site().get("done", false) else -1
+			c.add_child(_row("In the cache now", str(have) if have >= 0 else "no shelter yet"))
+		"loader":
+			c.add_child(_row("Freight list", Sim.freight_list_text(s.cfg.list)))
+			for k in ["bread", "iron_ingot", "plank", "cobble"]:
+				var have: int = s.cfg.list.get(k, 0)
+				var lrow := HBoxContainer.new()
+				lrow.add_theme_constant_override("separation", 8)
+				lrow.add_child(_label(Defs.ITEMS[k].label, false, Palette.CHALK_DIM))
+				lrow.add_child(_button("−", func(): game.set_freight_item(s.id, k, have - 1)))
+				lrow.add_child(_label(str(have), true))
+				lrow.add_child(_button("+", func(): game.set_freight_item(s.id, k, have + 1)))
+				c.add_child(lrow)
+			c.add_child(_label("When powered, haulers carry the list from the stockpile onto the freight cart (%d items at most). It signals \"loaded\" when the cart has it all." % Tuning.FREIGHT_CAPACITY, false, Palette.CHALK_DIM, Palette.CAPTION, true))
+		"condition":
+			var facts: Array = Sim.CONDITION_FACTS
+			var nf: String = facts[(facts.find(s.cfg.fact) + 1) % facts.size()]
+			c.add_child(_row("Passes while", sim.condition_fact(s.cfg.fact).yes))
+			c.add_child(_button("Check \"%s\" instead" % sim.condition_fact(nf).yes, func(): game.set_device_cfg(s.id, "fact", nf)))
+	var lines := sim.wires.filter(func(w): return w.from == s.id or w.to == s.id)
+	for w in lines:
+		var other := sim.device_by_id(w.to if w.from == s.id else w.from)
+		var verb := "Feeds" if w.from == s.id else "Fed by"
+		var state := "" if Sim.wire_complete(w) else " (%d of %d laid)" % [w.laid, w.cells.size()]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		row.add_child(_label("%s %s%s" % [verb, Defs.TEMPLATES[other.tpl].name.to_lower(), state], false, Palette.CHALK))
+		row.add_child(_button("Cut", func(): game.cut_wire(w.id)))
+		c.add_child(row)
+	if kind != "":
+		for o in sim.maps.village.sites.filter(func(x): return Sim.is_device(x) and x.done and x.id != s.id and Defs.TEMPLATES[x.tpl].device != "sensor"):
+			if not sim.wires.any(func(w): return w.from == s.id and w.to == o.id):
+				var oid: int = o.id
+				var b := _button("Wire to the %s" % Defs.TEMPLATES[o.tpl].name.to_lower(), func(): game.order_wire(s.id, oid))
+				b.tooltip_text = "A resident lays redstone dust from this device's output to that one's input."
+				c.add_child(b)
+	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
+		c.add_child(_reason(x.why))
+
+
+## The portal station (issues #168, #169): the line's state, and the freight cart with its load and the departure approval.
+func _fill_portal_station(c: Container, sim: Sim, s: Dictionary) -> void:
+	c.add_child(_head("Portal station", "Village end"))
+	var line := "complete" if sim.pline_complete() else "%d of %d rails laid%s" % [sim.portal_line.laid, Tuning.PORTAL_LINE_RAILS, "" if sim.nline().stations.landing else ", no landing station"]
+	c.add_child(_row("The portal line", line))
+	var fr: Dictionary = sim.freight
+	if fr.is_empty():
+		var why := sim.order_freight_cart_blocker()
+		var b := _button("Order a freight cart", func(): game.order_freight_cart(), "Primary")
+		b.disabled = why != ""
+		b.tooltip_text = why if why != "" else "A hauler brings a minecart from the stockpile and parks it here as the line's freight cart."
+		c.add_child(b)
+		c.add_child(_label("The freight cart carries goods through the portal to the Nether cache, never riders. It only leaves when you approve it.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	else:
+		var states := {"ordered": "Waiting for a minecart", "home": "Parked at the station", "going": "On its way to the landing", "unloading": "Unloading into the cache", "returning": "Coming home empty"}
+		c.add_child(_row("Freight cart", states[fr.state]))
+		if fr.state != "ordered":
+			c.add_child(_row("Load", ", ".join(fr.load.keys().map(func(k): return Defs.words(k, fr.load[k]))) if not fr.load.is_empty() else "empty"))
+		if fr.state == "home":
+			if fr.approved:
+				c.add_child(_button("Cancel approval", func(): game.cancel_freight_approval()))
+			else:
+				var ab := _button("Approve departure", func(): game.approve_freight(), "Primary")
+				ab.disabled = fr.load.is_empty()
+				ab.tooltip_text = "Send the loaded cart through the portal to the cache." if not fr.load.is_empty() else "Nothing is loaded."
+				c.add_child(ab)
+	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
+		c.add_child(_reason(x.why))
 
 
 ## A station (issue #123): the line's state, where the cart is, and what's on the platform.

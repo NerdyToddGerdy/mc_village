@@ -38,6 +38,10 @@ const MENUS := {
 		{"id": "claim", "name": "Claim land", "sub": "A strip of new land, 8 cells deep, along an edge. A builder plants stakes (4 sticks). One claim for every 2 residents beyond the first two", "mark": "build", "unlock": "claims"},
 		{"id": "storehouse", "name": "Storehouse", "sub": "6 cobblestone, 12 planks and 4 logs. Chests carried in store anything; stockpiles take the overflow. Reserves room to grow", "mark": "build"},
 		{"id": "enchanting_workshop", "name": "Enchanting workshop", "sub": "4 obsidian, 2 diamonds and 6 planks. An enchanter carries books to it to learn their recipes, and enchants gear. Reserves room for a library", "mark": "build", "unlock": "enchanting"},
+		{"id": "portal_station", "name": "Portal station", "sub": "6 planks and 4 cobblestone, beside the portal. The village end of the portal line; a Build party lays the rest in the Nether. Reserves room for a freight loader", "mark": "build", "unlock": "portal_line"},
+		{"id": "cache_sensor", "name": "Cache sensor", "sub": "2 redstone dust, 1 quartz and 2 cobblestone. Reads the Nether cache from here and is on when an item is below a threshold", "mark": "build", "unlock": "portal_line"},
+		{"id": "condition", "name": "Condition", "sub": "2 redstone dust, 1 quartz and 2 cobblestone. Passes a signal along only while a fact holds: the portal is lit, the cart is home, the loader is idle", "mark": "build", "unlock": "portal_line"},
+		{"id": "freight_loader", "name": "Freight loader", "sub": "3 redstone dust, 1 quartz and 4 cobblestone, on the portal station's plot. When powered, haulers load the freight list onto the cart", "mark": "build", "unlock": "portal_line"},
 		{"id": "portal", "name": "Nether portal", "sub": "10 obsidian, then flint and steel to light it. Parties bound for the Nether pack on the staging area in front. Reserves room for a portal hall", "mark": "build", "unlock": "portal"},
 		{"id": "board", "name": "Expedition board", "sub": "6 planks and 4 sticks. Plans trips off the map. Reserves room for a map room", "mark": "build", "unlock": "house"},
 	]},
@@ -77,6 +81,8 @@ static func unlocked(e: Dictionary, sim: Sim) -> bool:
 			return not sim.m.pens.is_empty()
 		"enchanting":  # once an enchanted book has been found, or a workshop stands (issue #165)
 			return sim.stats.get("book_found", false) or sim.maps.village.sites.any(func(s): return s.tpl == "enchanting_workshop")
+		"portal_line":  # once the portal stands (issue #168)
+			return not sim.village_portal().is_empty()
 		"portal":  # once obsidian has come home from the deep mine (issue #147)
 			return sim.stats.get("obsidian_home", false) or sim.maps.village.sites.any(func(s): return s.tpl == "portal")
 	return true

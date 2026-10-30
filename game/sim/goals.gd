@@ -94,6 +94,22 @@ const PAGES := [
 		"what": "Obsidian and diamonds make a workshop where an Enchanter reads enchanted books, learning their recipes for good, and enchants tools, swords and armor.",
 		"grows": "Reserves a plot, and grows into a library.",
 		"without": "Enchanted books are only things to carry, and gear stays plain."},
+	{"id": "portal_station", "title": "Portal station", "tpl": "portal_station", "unlock": "portal_line", "who": "Builders; a Build party lays the Nether side",
+		"what": "The village end of the portal line, beside the portal, with a landing station beside the shelter in the Nether. Carts and parties ride it.",
+		"grows": "Reserves a plot, and grows into a freight loader.",
+		"without": "Everything crosses the portal on foot."},
+	{"id": "devices", "title": "Redstone devices", "tpl": "cache_sensor", "unlock": "portal_line", "who": "Builders; a hauler lays the dust",
+		"what": "Ready-made devices built from redstone dust, quartz and stone: a cache sensor reads the Nether cache, a condition passes a signal only while a fact holds. Dust lines you order join one's output to another's input. Each device says why it's on.",
+		"grows": "A freight loader on the portal station's plot and a dispatcher join them in the chain.",
+		"without": "A low cache is something to notice yourself."},
+	{"id": "condition", "title": "Condition", "tpl": "condition", "unlock": "portal_line", "who": "Builders",
+		"what": "Passes a signal along only while a fact holds: the portal is lit, the freight cart is home, or the loader is idle.",
+		"grows": "Nothing; it joins the sensor to the loader.",
+		"without": "A low cache would start the freight even with the portal out."},
+	{"id": "freight_loader", "title": "Freight loader", "tpl": "freight_loader", "unlock": "portal_line", "who": "Builders; haulers load the cart",
+		"what": "The loading-station upgrade on the portal station's plot. While powered, haulers carry its freight list from the stockpile onto the freight cart.",
+		"grows": "Nothing.",
+		"without": "The freight cart leaves empty."},
 	{"id": "portal", "title": "Nether portal", "tpl": "portal", "unlock": "portal", "who": "Builders carry the obsidian; anyone lights it",
 		"what": "A frame of obsidian from the deep mine, lit with flint and steel. Parties bound for the Nether pack on the staging area in front of it.",
 		"grows": "Reserves a portal hall around it.",
@@ -120,6 +136,7 @@ static func page_known(sim: Sim, page: Dictionary) -> bool:
 		"board": return sim.stats.get("built", {}).has("board")
 		"road": return sim.get_map("old_mine").visited
 		"enchanting": return sim.stats.get("book_found", false) or sim.maps.village.sites.any(func(x): return x.tpl == "enchanting_workshop")
+		"portal_line": return not sim.village_portal().is_empty()
 		"portal": return sim.stats.get("obsidian_home", false) or sim.maps.village.sites.any(func(x): return x.tpl == "portal")
 	return true
 

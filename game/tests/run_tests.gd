@@ -79,6 +79,11 @@ func _init() -> void:
 		"test_the_enchanting_workshop",
 		"test_enchanting_an_item",
 		"test_the_enchantment_effects",
+		"test_the_portal_line",
+		"test_the_freight_cart",
+		"test_redstone_devices_and_dust",
+		"test_the_cache_sensor_and_condition",
+		"test_the_freight_loader",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5702,6 +5707,384 @@ func test_the_nether_line() -> void:
 	check(f49.nline().bridged == [2] and f49.nline().laid[1] == 2 and f49.nline().stations.landing and not f49.nline_complete(), "the v49 fixture loads its part-built line")
 	var f48 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v48.save").data.state)
 	check(f48.nline().laid == [0, 0, 0, 0, 0, 0], "an older save has an unbuilt line")
+
+
+## A spot for the portal station that placement allows, near the portal.
+func portal_station_spot(sim: Sim, portal: Dictionary) -> Vector2i:
+	for dy in range(-6, 7):
+		for dx in range(-6, 7):
+			var o: Vector2i = portal.origin + Vector2i(dx, dy)
+			if sim.placement_check("portal_station", o) == "":
+				return o
+	return Vector2i(-1, -1)
+
+
+## One Build trip on the portal line's Nether side, carrying `counts`; returns whether the party came home.
+func pline_trip(sim: Sim, w: Dictionary, store: Dictionary, counts: Dictionary) -> bool:
+	var dests := sim.objective_destinations("build").filter(func(d): return d.get("pline", false))
+	if dests.is_empty():
+		return false
+	var plan := sim.nether_plan("build", dests[0])
+	plan.party = [w.ada.id, w.tomas.id, w.mira.id]
+	plan.meals = 3
+	for k in ["rails", "planks", "cobble", "minecarts"]:
+		plan[k] = counts.get(k, 0)
+	if sim.plan_expedition(plan) != "":
+		return false
+	w.portal.store = store.duplicate()
+	sim.drop_items(Sim.rcell(w.ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	sim.depart("nether")
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		for r in [w.ada, w.tomas, w.mira]:
+			r.hurt = 0
+		if sim.expeditions.nether.is_empty():
+			return true
+	return false
+
+
+## The portal line (issue #168): a village station beside the portal, rails and a shared landing station laid by a Build party.
+func test_the_portal_line() -> void:
+	var w := nline_world()
+	var sim: Sim = w.sim
+	check(not sim.pline_complete() and sim.portal_line.laid == 0 and sim.portal_station().is_empty(), "a new game has no portal line")
+	check(not sim.objective_destinations("build").any(func(d): return d.get("pline", false)), "the Build objective offers no portal line before the village station is planned")
+	check(sim.placement_check("portal_station", Vector2i(2, 2)) == "The station stands beside the portal", "the village station has to stand beside the portal")
+	var spot := portal_station_spot(sim, w.portal)
+	check(spot.x >= 0, "there's room for it beside the portal")
+	var st := sim.place_site("portal_station", spot)
+	check(st.plot != null and sim.placement_check("portal_station", spot + Vector2i(0, 3)) != "", "it reserves the loading-station plot, and only one is planned")
+	var dests := sim.objective_destinations("build").filter(func(d): return d.get("pline", false))
+	check(dests.size() == 1 and dests[0].dest == NetherLanding.ID, "the Build objective offers the portal line from the landing")
+	var plan := sim.nether_plan("build", dests[0])
+	check(plan.target.item == "pline" and plan.rails == 6 and plan.planks == 6 and plan.cobble == 4, "the plan carries 6 rails, 6 planks and 4 cobblestone (%d, %d, %d)" % [plan.rails, plan.planks, plan.cobble])
+	plan.party = [w.ada.id, w.tomas.id, w.mira.id]
+	check(sim.plan_briefing(plan).any(func(l): return l.begins_with("Still to lay on the Nether side:")), "the briefing says what's left to lay")
+	# A trip with only rails lays them and comes home; the station still wants its materials.
+	check(pline_trip(sim, w, {"bread": 3, "rail": 6}, {"rails": 6}) and sim.portal_line.laid == 6, "a party lays all six rails")
+	check(not sim.nline().stations.landing and not sim.pline_nether_done(), "the landing station is still to build")
+	check(pline_trip(sim, w, {"bread": 3, "plank": 6, "cobble": 4}, {"planks": 6, "cobble": 4}) and sim.nline().stations.landing, "a second trip builds the landing station")
+	check(sim.pline_nether_done() and not sim.pline_complete(), "the Nether side is done, and the line waits on the village station")
+	check(not sim.objective_destinations("build").any(func(d): return d.get("pline", false)), "the Build objective stops offering it once the Nether side is done")
+	# Shared station: the Nether line no longer needs one at the landing.
+	var need := sim.nline_remaining()
+	check(need.planks == 28 - 6 - 0 and need.cobble == 8 - 4, "the Nether line shares the landing station, so it needs one station less (%d planks, %d cobblestone)" % [need.planks, need.cobble])
+	st.stage = 1
+	st.done = true
+	check(sim.pline_complete(), "the village station finishes the line")
+	sim.use_map(NetherLanding.ID)
+	check(absf(sim.ground_speed(NetherLanding.TRACK[3]) - Tuning.CART_SPEED / Tuning.WALK) < 0.01 and absf(sim.ground_speed(Vector2i(10, 1)) - 1.0) < 0.01, "a party rides the rails on the landing, and walks off them")
+	sim.use_map("village")
+	var back := Sim.from_state(sim.save_state())
+	check(back.portal_line.laid == 6 and back.pline_complete(), "the portal line is saved")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v53.save").data.state)
+	check(old.portal_line.laid == 0 and old.portal_station().is_empty(), "an older save has no portal line")
+	var f54 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v54.save").data.state)
+	check(f54.portal_line.laid == 3 and f54.portal_station().get("done", false) and not f54.pline_complete(), "the v54 fixture loads its station and half-laid rails")
+
+
+## A world with the portal line complete (station, rails, landing station) and the shelter built, for the freight cart.
+func freight_world() -> Dictionary:
+	var w := nline_world()
+	var sim: Sim = w.sim
+	var st := sim.place_site("portal_station", portal_station_spot(sim, w.portal))
+	st.stage = 1
+	st.done = true
+	sim.portal_line.laid = Tuning.PORTAL_LINE_RAILS
+	sim.nline().stations.landing = true
+	var sh: Dictionary = sim.on_map(NetherLanding.ID, func(): return sim.place_site("shelter", NetherLanding.SHELTER_AT))
+	sh.stage = 1
+	sh.done = true
+	w.station = st
+	w.shelter = sh
+	return w
+
+
+## The freight cart (issue #169): a minecart hauled to the portal station, a load, the player's approval, and the trip to the cache.
+func test_the_freight_cart() -> void:
+	var w := freight_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	check(sim.freight.is_empty() and sim.freight_place().is_empty(), "a new game has no freight cart")
+	var fresh := nline_world()
+	check(fresh.sim.order_freight_cart() == "Finish the portal line first", "the cart waits for a finished line")
+	check(sim.order_freight_cart() == "" and sim.freight.state == "ordered" and sim.order_freight_cart() != "", "ordering one starts it, once")
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Freight cart: needs a minecart from the village"), "with no minecart it says so")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "minecart", 1)
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.freight.state == "home":
+			break
+	check(sim.freight.state == "home" and sim.freight.pos == 0.0, "a hauler brings a minecart to the portal station and parks it")
+	var minecarts: Array = sim.maps.village.items.values().filter(func(x): return x.type == "minecart")
+	check(minecarts.is_empty(), "the minecart left the stockpile")
+	var shelter: Dictionary = w.shelter
+	sim.freight.load = {"bread": 10, "iron_ingot": 2}
+	# Nothing goes without the player's approval.
+	for i in 40 * Tuning.TPS:
+		sim.step()
+	sim.compute_stuck()
+	check(sim.freight.state == "home" and sim.freight.pos == 0.0 and stuck_text(sim).contains("Freight cart: waiting for approval"), "an unapproved cart never departs, and says it's waiting")
+	check(sim.approve_freight() == "" and sim.freight.approved, "the player approves")
+	w.portal.lit = false
+	for i in 5 * Tuning.TPS:
+		sim.step()
+	sim.compute_stuck()
+	check(sim.freight.state == "home" and stuck_text(sim).contains("Freight cart: the portal is unlit"), "an unlit portal holds an approved cart: 'the portal is unlit'")
+	w.portal.lit = true
+	var mid := false
+	var saw_place := ""
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.freight.state == "going" and sim.freight.pos > 0.5 and not mid:
+			mid = true
+			var place := sim.freight_place()
+			saw_place = place.get("map", "")
+			var back := Sim.from_state(sim.save_state())
+			check(back.freight.state == "going" and absf(back.freight.pos - sim.freight.pos) < 0.0001 and back.freight.load == {"bread": 10, "iron_ingot": 2}, "a cart mid-trip is saved with its load and position")
+		if sim.freight.state == "home" and sim.freight.pos == 0.0 and mid:
+			break
+	check(mid and saw_place == NetherLanding.ID, "it ran through the portal onto the landing")
+	check(shelter.store.get("bread", 0) == 10 and shelter.store.get("iron_ingot", 0) == 2 and sim.freight.load.is_empty(), "the load went into the cache")
+	check(sim.freight.state == "home" and sim.freight.pos == 0.0 and not sim.freight.approved, "the cart came home empty, and wants approval again")
+	# The portal going out stops a cart at the crossing.
+	sim.freight.load = {"bread": 4}
+	sim.approve_freight()
+	for i in 400:
+		sim.step()
+		if sim.freight.state == "going" and sim.freight.pos > 0.1:
+			break
+	w.portal.lit = false
+	for i in 20 * Tuning.TPS:
+		sim.step()
+	sim.compute_stuck()
+	check(sim.freight.state == "going" and absf(sim.freight.pos - Tuning.FREIGHT_CROSS) < 0.001 and stuck_text(sim).contains("Freight cart: the portal is unlit"), "an unlit portal stops it at the crossing")
+	w.portal.lit = true
+	# A full cache holds the unloading.
+	shelter.store = {"bread": Tuning.CACHE_CAPACITY - 1}
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if sim.freight.state == "unloading":
+			break
+	for i in 5 * Tuning.TPS:
+		sim.step()
+	sim.compute_stuck()
+	check(sim.freight.state == "unloading" and sim.cache_items() == Tuning.CACHE_CAPACITY and stuck_text(sim).contains("Freight cart: the cache is full"), "a full cache stops the unloading: 'the cache is full'")
+	shelter.store = {}
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if sim.freight.state == "home":
+			break
+	check(sim.freight.state == "home" and shelter.store.get("bread", 0) == 3, "once there's room it unloads and returns")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v54.save").data.state)
+	check(old.freight.is_empty(), "an older save has no freight cart")
+	var f57 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v57.save").data.state)
+	check(not f57.freight_loader().is_empty() and f57.freight_loader().cfg.list == {"bread": 8, "iron_ingot": 2} and f57.freight.load == {"bread": 4}, "the v57 fixture loads its loader and the part-loaded cart")
+	var f56 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v56.save").data.state)
+	check(f56.wires.size() == 1 and Sim.wire_complete(f56.wires[0]) and f56.device_by_id(f56.wires[0].from).cfg.below == 8, "the v56 fixture loads its devices and dust line")
+	var f55 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v55.save").data.state)
+	check(f55.freight.state == "going" and f55.freight.load == {"bread": 5} and f55.freight_place().get("map", "") == NetherLanding.ID, "the v55 fixture loads its cart mid-trip")
+
+
+## Two built devices in the open near Ada: a cache sensor and a condition, a few cells apart.
+func device_pair(sim: Sim, w: Dictionary) -> Array:
+	var spots: Array = []
+	var base: Vector2i = Sim.rcell(w.ada) + Vector2i(0, 4)
+	for dy in range(0, 10):
+		for dx in range(-8, 9):
+			var o: Vector2i = base + Vector2i(dx, dy)
+			if sim.placement_check("cache_sensor", o) == "" and sim.site_at(o) == null:
+				spots.append(o)
+	var a: Dictionary = {}
+	var b: Dictionary = {}
+	for o in spots:
+		if a.is_empty():
+			a = sim.place_site("cache_sensor", o)
+		elif absi(o.x - a.origin.x) + absi(o.y - a.origin.y) >= 5 and sim.placement_check("condition", o) == "":
+			b = sim.place_site("condition", o)
+			break
+	for d in [a, b]:
+		d.stage = 1
+		d.done = true
+	return [a, b]
+
+
+## Redstone devices and dust lines (issue #170): drawn between built devices, laid by residents, and carrying a signal that says why.
+func test_redstone_devices_and_dust() -> void:
+	var w := freight_world()
+	var sim: Sim = w.sim
+	var pair := device_pair(sim, w)
+	var sensor: Dictionary = pair[0]
+	var cond: Dictionary = pair[1]
+	check(Defs.TEMPLATES.cache_sensor.stages[0].cost.has("redstone") and Defs.TEMPLATES.condition.device == "condition", "devices cost redstone dust and are ready-made")
+	check(sensor.cfg == {"item": "food", "below": 10} and cond.cfg == {"fact": "portal_lit"}, "each starts with its settings")
+	check(sim.order_wire(sensor.id, sensor.id) != "" and sim.order_wire(cond.id, sensor.id) == "Wire: a sensor has no input", "a device can't feed itself, and a sensor has no input")
+	var cells := sim.wire_cells(sensor, cond)
+	check(sim.order_wire(sensor.id, cond.id) == "" and sim.order_wire(sensor.id, cond.id) != "" and sim.wires.size() == 1 and sim.wires[0].cells == cells, "a line is ordered once, along a path of cells")
+	sim._step_devices()
+	check(not cond.out and cond.why == "Off: nothing wired in", "an unfinished line carries no signal: %s" % cond.why)
+	# Residents lay it from the stockpile's redstone, cell by cell.
+	var need := ceili(float(cells.size()) / Tuning.DUST_PER_REDSTONE)
+	sim.drop_items(Sim.rcell(w.ada) + Vector2i(2, 2), "redstone", need + 2)
+	for i in 240 * Tuning.TPS:
+		sim.step()
+		if Sim.wire_complete(sim.wires[0]):
+			break
+	check(Sim.wire_complete(sim.wires[0]), "residents lay all %d cells of dust (%s, ada %s %s)" % [cells.size(), sim.wires[0], w.ada.job.label if w.ada.job != null else "idle", sim.maps.village.items.values().filter(func(x): return x.type == "redstone")])
+	var left := 0
+	for st in sim.maps.village.items.values():
+		if st.type == "redstone":
+			left += st.n
+	check(left == 2, "the line used %d redstone dust from the stockpile (%d left)" % [need, left])
+	for i in 20:
+		sim.step()
+	check(cond.out and cond.why.begins_with("On: Cache food 0 < 10") and cond.why.ends_with("the portal is lit"), "the signal passes along the dust: %s" % cond.why)
+	# Breaking a line cuts the signal.
+	var wid: int = sim.wires[0].id
+	var back := Sim.from_state(sim.save_state())
+	check(back.wires.size() == 1 and Sim.wire_complete(back.wires[0]), "a laid line is saved")
+	sim.cut_wire(wid)
+	check(sim.wires.is_empty() and not cond.out and cond.why == "Off: nothing wired in", "breaking the line cuts the signal")
+	# Taking a device down takes its dust with it.
+	sim.order_wire(sensor.id, cond.id)
+	sim.cancel_site(sensor)
+	check(sim.wires.is_empty(), "a line goes when its device does")
+
+
+## The cache sensor and the condition (issue #171): a remote reading of the shelter's cache, and a gate on a fact.
+func test_the_cache_sensor_and_condition() -> void:
+	var w := freight_world()
+	var sim: Sim = w.sim
+	var pair := device_pair(sim, w)
+	var sensor: Dictionary = pair[0]
+	var cond: Dictionary = pair[1]
+	var shelter: Dictionary = w.shelter
+	sim.wires.append({"id": 900, "from": sensor.id, "to": cond.id, "cells": [], "laid": 0})
+	sim._step_devices()
+	check(sensor.out and sensor.why == "On: Cache food 0 < 10", "an empty cache is below the threshold: %s" % sensor.why)
+	shelter.store = {"bread": 12}
+	sim._step_devices()
+	check(not sensor.out and sensor.why == "Off: Cache food 12 is not below 10" and not cond.out and cond.why.begins_with("Off: its input is off"), "above it the sensor is off, and so is the condition: %s" % cond.why)
+	shelter.store = {"bread": 6, "cooked_beef": 1}
+	sim._step_devices()
+	check(sensor.out and sensor.why == "On: Cache food 7 < 10" and sim.cache_meals() == 7, "the readout is the cache's meals: %s" % sensor.why)
+	sim.set_device_cfg(sensor.id, "below", 7)
+	sim._step_devices()
+	check(not sensor.out and sensor.why == "Off: Cache food 7 is not below 7", "the threshold is set on the sensor (%s)" % sensor.why)
+	sim.set_device_cfg(sensor.id, "below", 10)
+	sim.set_device_cfg(sensor.id, "item", "iron_ingot")
+	shelter.store = {"iron_ingot": 3}
+	sim._step_devices()
+	check(sensor.out and sensor.why == "On: Cache iron ingots 3 < 10", "it can watch another item: %s" % sensor.why)
+	sim.set_device_cfg(sensor.id, "item", "food")
+	sim.set_device_cfg(sensor.id, "item", "diamond")
+	check(sensor.cfg.item == "food", "only the listed items can be watched")
+	# The condition passes its input only when its fact holds.
+	shelter.store = {}
+	sim._step_devices()
+	check(cond.out and cond.why == "On: Cache food 0 < 10, and the portal is lit", "the portal is lit, so it passes: %s" % cond.why)
+	w.portal.lit = false
+	sim._step_devices()
+	check(not cond.out and cond.why == "Off: the portal isn't lit", "an unlit portal blocks the signal: %s" % cond.why)
+	w.portal.lit = true
+	sim.set_device_cfg(cond.id, "fact", "cart_home")
+	sim._step_devices()
+	check(not cond.out and cond.why == "Off: the freight cart isn't home", "with no cart it isn't home")
+	sim.freight = {"state": "home", "pos": 0.0, "load": {}, "approved": false, "acc": 0.0}
+	sim._step_devices()
+	check(cond.out and cond.why.ends_with("the freight cart is home"), "a cart at the station passes it: %s" % cond.why)
+	sim.freight.state = "going"
+	sim._step_devices()
+	check(not cond.out, "a cart on the line blocks it")
+	sim.set_device_cfg(cond.id, "fact", "loader_idle")
+	sim._step_devices()
+	check(cond.out and cond.why.ends_with("the loader is idle"), "an idle loader passes it")
+	# Unbuilt or without a shelter, a sensor reads nothing.
+	shelter.done = false
+	sim._step_devices()
+	check(not sensor.out and sensor.why == "Off: no shelter on the landing to read", "with no shelter there's nothing to read")
+
+
+## The freight loader (issue #172): built on the station's plot, it loads the cart from the stockpile while it's powered.
+func test_the_freight_loader() -> void:
+	var w := freight_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var st: Dictionary = w.station
+	var inside := Vector2i(-1, -1)
+	for dy in range(0, 3):
+		for dx in range(0, 3):
+			var o: Vector2i = st.plot.position + Vector2i(dx, dy)
+			if inside.x < 0 and sim.placement_check("freight_loader", o) == "":
+				inside = o
+	check(inside.x >= 0 and sim.placement_check("freight_loader", Vector2i(2, 2)) == "The loader goes on the station's plot", "the loader goes on the plot the station reserved, and nowhere else")
+	var ld := sim.place_site("freight_loader", inside)
+	ld.stage = 1
+	ld.done = true
+	check(sim.placement_check("freight_loader", inside + Vector2i(1, 0)) == "There's a freight loader already", "only one")
+	check(ld.cfg.list == {"bread": 10, "iron_ingot": 2}, "its freight list starts at 10 bread and 2 iron ingots")
+	var pair := device_pair(sim, w)
+	var sensor: Dictionary = pair[0]
+	var cond: Dictionary = pair[1]
+	sim.wires.append({"id": 901, "from": sensor.id, "to": cond.id, "cells": [], "laid": 0})
+	sim.wires.append({"id": 902, "from": cond.id, "to": ld.id, "cells": [], "laid": 0})
+	sim.freight = {"state": "home", "pos": 0.0, "load": {}, "approved": false, "acc": 0.0}
+	# Unpowered, it doesn't load.
+	w.portal.lit = false
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "bread", 4)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 3), "iron_ingot", 3)
+	for i in 30 * Tuning.TPS:
+		sim.step()
+	check(sim.freight.load.is_empty() and not ld.out and ld.why.begins_with("Off: unpowered"), "an unpowered loader doesn't load: %s" % ld.why)
+	# Powered, residents carry the list from the stockpile onto the cart, and the loader says what it still needs.
+	w.portal.lit = true
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.freight.load.get("bread", 0) == 4 and sim.freight.load.get("iron_ingot", 0) == 2:
+			break
+	check(sim.freight.load == {"bread": 4, "iron_ingot": 2}, "a powered loader fills the cart from the stockpile as far as it goes (%s)" % [sim.freight.load])
+	for i in 40:
+		sim.step()
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Loader: needs 6 more bread"), "short of bread it says so: 'Loader: needs 6 more bread'")
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "bread", 6)
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.freight_missing(ld).is_empty():
+			break
+	for i in 40:
+		sim.step()
+	check(sim.freight.load == {"bread": 10, "iron_ingot": 2} and ld.out and ld.why.begins_with("On: loaded, 10 bread, 2 iron ingots"), "with enough bread the cart is full and the loader signals loaded: %s" % ld.why)
+	check(sim.free_count("bread") == 0 and sim.free_count("iron_ingot") == 1, "the goods left the stockpile (1 iron ingot over)")
+	# The list is the player's to change, and the whole list fits the cart.
+	sim.set_freight_item(ld.id, "plank", 50)
+	check(ld.cfg.list.plank == Tuning.FREIGHT_CAPACITY - 12, "the freight list can't outgrow the cart (%d planks)" % ld.cfg.list.plank)
+	sim.set_freight_item(ld.id, "plank", 0)
+	check(not ld.cfg.list.has("plank"), "an item at 0 leaves the list")
+	# No cart, or no one to haul.
+	sim.freight = {}
+	sim._step_devices()
+	sim.compute_stuck()
+	check(ld.why == "Off: no freight cart at the station" and stuck_text(sim).contains("Loader: no freight cart at the station"), "with no cart: 'Loader: no freight cart at the station'")
+	sim.freight = {"state": "home", "pos": 0.0, "load": {}, "approved": false, "acc": 0.0}
+	for r in sim.residents:
+		r.hurt = 1
+		if r.job != null:
+			sim.fail_job(r)
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Loader: no one with Haul on"), "with everyone hurt: 'Loader: no one with Haul on'")
+	# The loaded cart goes when approved; an empty one wouldn't.
+	for r in sim.residents:
+		r.hurt = 0
+	sim.freight.load = {"bread": 10, "iron_ingot": 2}
+	check(sim.approve_freight() == "", "a loaded cart can be approved")
 
 
 ## Ticks from setting out to reaching the quartz site on a gather trip.

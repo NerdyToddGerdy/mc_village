@@ -9,6 +9,8 @@ var sim: Sim
 ## back to the village.
 var map_id := "village"
 
+var redstone_overlay := false            ## Dims the world and shows the devices and dust (issue #170).
+var _built_overlay := false
 var _built_rev := -1
 var _built_map := ""
 var _stuck_sig := ""
@@ -159,10 +161,11 @@ func _process(delta: float) -> void:
 
 
 func _draw_map() -> void:
-	if sim.rev != _built_rev or map_id != _built_map:
+	if sim.rev != _built_rev or map_id != _built_map or redstone_overlay != _built_overlay:
 		_build_static()
 		_built_rev = sim.rev
 		_built_map = map_id
+		_built_overlay = redstone_overlay
 	var sig := map_id
 	for s in sim.stuck:
 		sig += "%s%s%s%s%s;" % [s.map, s.cell, s.height, s.why, s.waiting]
@@ -238,6 +241,8 @@ func _build_static() -> void:
 			_outline(dark, col, Rect2i(s.origin, s.size), 0.52 if s.stage >= 1 else 0.02, Palette.BLUE, true)
 		if s.get("plot") != null:  # the reserved plot it will grow into, faint
 			_outline(dark, col, s.plot, 0.02, Color(Palette.CHALK, 0.35), true)
+	if sim.m.kind == "village":
+		_add_dust(solid, ghost)
 	for p in sim.m.pens:
 		_add_pen_plan(ghost, dark, col, p)
 	solid.apply(_solid)
@@ -553,15 +558,68 @@ func _add_nether_line(b: Batch) -> void:
 		b.box(Vector3(1.3, 0.3, NetherRoute.LINE_ROW + 1.2), Vector3(2.1, 0.7, NetherRoute.LINE_ROW + 1.8), Palette.ITEM_COLORS.minecart)
 
 
+static var REDSTONE_ON := Color("#FF5A4A")
+static var REDSTONE_OFF := Color("#6B2A26")
+
+
+## A redstone device (issues #170, #171): a small stone block with a redstone top that glows when it's on, and a post for the sensor.
+func _add_device(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var done: bool = s.done
+	var lift := 0.3 if redstone_overlay else 0.0  # above the dimming
+	var on: bool = done and s.out
+	b.box(Vector3(o.x + 0.12, lift, o.y + 0.12), Vector3(o.x + 0.88, lift + 0.4, o.y + 0.88), Palette.STONE if done else Color(Palette.BLUE, 0.45), BlockTextures.ROCK)
+	if not done:
+		return
+	b.box(Vector3(o.x + 0.25, lift + 0.4, o.y + 0.25), Vector3(o.x + 0.75, lift + 0.46, o.y + 0.75), REDSTONE_ON if on else REDSTONE_OFF)
+	if Defs.TEMPLATES[s.tpl].device == "sensor":
+		b.box(Vector3(o.x + 0.42, lift + 0.46, o.y + 0.42), Vector3(o.x + 0.58, lift + 0.85, o.y + 0.58), Palette.STONE)
+		b.box(Vector3(o.x + 0.38, lift + 0.85, o.y + 0.38), Vector3(o.x + 0.62, lift + 0.95, o.y + 0.62), REDSTONE_ON if on else REDSTONE_OFF)
+	if Defs.TEMPLATES[s.tpl].device == "loader":  # a chute over the cart's place
+		b.box(Vector3(o.x + 0.2, lift + 0.46, o.y + 0.2), Vector3(o.x + 0.8, lift + 0.7, o.y + 0.35), Palette.STONE)
+		b.box(Vector3(o.x + 0.2, lift + 0.46, o.y + 0.65), Vector3(o.x + 0.8, lift + 0.7, o.y + 0.8), Palette.STONE)
+	if redstone_overlay:  # a beacon so it stands out from the dimmed world
+		b.box(Vector3(o.x + 0.45, lift + 0.46, o.y + 0.45), Vector3(o.x + 0.55, lift + 1.6, o.y + 0.55), Color(REDSTONE_ON, 0.8) if on else Color(REDSTONE_OFF, 0.8))
+
+
+## Dust lines (issue #170): a red trail over the cells laid, bright while the signal runs; and the redstone overlay's dimming.
+func _add_dust(solid: Batch, ghost: Batch) -> void:
+	if redstone_overlay:
+		ghost.box(Vector3(0, 0.2, 0), Vector3(sim.w, 0.24, sim.h), Color(0.05, 0.04, 0.07, 0.5))
+	var lift := 0.3 if redstone_overlay else 0.0
+	for w in sim.wires:
+		var src := sim.device_by_id(w.from)
+		var live: bool = Sim.wire_complete(w) and not src.is_empty() and src.out
+		for i in w.laid:
+			var c: Vector2i = w.cells[i]
+			solid.box(Vector3(c.x + 0.3, lift, c.y + 0.3), Vector3(c.x + 0.7, lift + (0.07 if live else 0.04), c.y + 0.7), REDSTONE_ON if live else REDSTONE_OFF)
+		if redstone_overlay:  # the unlaid cells, as a faint plan
+			for i in range(w.laid, w.cells.size()):
+				var c: Vector2i = w.cells[i]
+				ghost.box(Vector3(c.x + 0.35, lift, c.y + 0.35), Vector3(c.x + 0.65, lift + 0.03, c.y + 0.65), Color(REDSTONE_ON, 0.4))
+
+
+## The portal line's rails on the landing, from the portal's far side as far as they're laid (issue #168).
+func _add_portal_track(b: Batch) -> void:
+	var n: int = ceili(float(NetherLanding.TRACK.size()) * sim.portal_line.laid / Tuning.PORTAL_LINE_RAILS)
+	for k in n:
+		var c: Vector2i = NetherLanding.TRACK[k]
+		b.box(Vector3(c.x + 0.1, 0.0, c.y + 0.35), Vector3(c.x + 0.9, 0.05, c.y + 0.65), Palette.LOG, BlockTextures.LOG)
+		for z in [0.3, 0.62]:
+			b.box(Vector3(c.x, 0.05, c.y + z), Vector3(c.x + 1, 0.1, c.y + z + 0.08), Palette.ITEM_COLORS.rail)
+
+
 ## The stations on the landing's edge and the quartz site (issue #159).
 func _add_nether_stations(b: Batch, mp: SimMap) -> void:
 	var l: Dictionary = sim.maps[NetherRoute.ROUTES.quartz.id].line
 	if l.is_empty():
 		return
-	if mp.id == NetherLanding.ID and l.stations.landing:
-		var ex: Vector2i = NetherRoute.ROUTES.quartz.exit
-		b.box(Vector3(ex.x - 3, 0, ex.y + 1), Vector3(ex.x, 0.3, ex.y + 2), Palette.COBBLE, BlockTextures.COBBLES)
-		b.box(Vector3(ex.x - 3, 0.3, ex.y + 1), Vector3(ex.x - 2.9, 1.0, ex.y + 2), Palette.PLANK, BlockTextures.BOARD)
+	if mp.id == NetherLanding.ID:
+		_add_portal_track(b)
+	if mp.id == NetherLanding.ID and l.stations.landing:  # one station for both lines, beside the shelter (issue #168)
+		var at: Vector2i = NetherLanding.STATION_AT
+		b.box(Vector3(at.x, 0, at.y), Vector3(at.x + 3, 0.3, at.y + 1), Palette.COBBLE, BlockTextures.COBBLES)
+		b.box(Vector3(at.x + 2.9, 0.3, at.y), Vector3(at.x + 3, 1.0, at.y + 1), Palette.PLANK, BlockTextures.BOARD)
 	if mp.id == NetherRoute.ROUTES.quartz.site and l.stations.site:
 		var p: Rect2i = NetherRoute.QUARTZ_STATION_PLOT
 		b.box(Vector3(p.position.x, 0, p.position.y), Vector3(p.position.x + 3, 0.3, p.position.y + 1), Palette.COBBLE, BlockTextures.COBBLES)
@@ -646,12 +704,28 @@ static var CART_DARK := Color("#3E4448")
 ## people at the cart's place.
 func _build_cart() -> void:
 	var c: Dictionary = sim.cart
-	var sig := "" if c.is_empty() or map_id != Road.ID else "%.2f%s" % [c.x, c.load]
+	var fp := sim.freight_place()
+	var fsig: String = "" if fp.is_empty() or fp.map != map_id else "f%s%.2f%s" % [fp.map, sim.freight.pos, sim.freight.load]
+	var msig := "" if c.is_empty() or map_id != Road.ID else "%.2f%s" % [c.x, c.load]
+	var sig := msig + fsig
 	if sig == _cart_sig:
 		return
 	_cart_sig = sig
 	var b := Batch.new()
-	if sig != "":
+	if fsig != "":  # the portal line's freight cart, with its load stacked on it (issue #169)
+		var fx: float = fp.at.x + 0.5
+		var fz: float = fp.at.y + 0.5
+		b.box(Vector3(fx - 0.42, 0.12, fz - 0.3), Vector3(fx + 0.42, 0.5, fz + 0.3), Palette.ITEM_COLORS.minecart)
+		b.box(Vector3(fx - 0.36, 0.42, fz - 0.24), Vector3(fx + 0.36, 0.51, fz + 0.24), CART_DARK)
+		for k in [-0.26, 0.26]:
+			b.box(Vector3(fx + k - 0.08, 0.0, fz - 0.34), Vector3(fx + k + 0.08, 0.16, fz + 0.34), Palette.SLATE_DEEP)
+		var fn := 0
+		for k in sim.freight.load:
+			var col: Color = Palette.item_color(k)
+			for i in mini(sim.freight.load[k], 6 - fn):
+				b.box(Vector3(fx - 0.35 + float(fn % 3) * 0.25, 0.5, fz - 0.18 + float(fn / 3) * 0.2), Vector3(fx - 0.15 + float(fn % 3) * 0.25, 0.64, fz - 0.02 + float(fn / 3) * 0.2), col)
+				fn += 1
+	if msig != "":
 		var x: float = c.x + 0.5
 		var z := Road.LINE_ROW + 0.5
 		var y: float = 0.14 if Road.bridge_rect().has_point(Vector2i(roundi(c.x), Road.LINE_ROW)) and sim.bridge().get("done", false) else 0.0
@@ -913,7 +987,10 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "track":
 		_add_track(solid, ghost, s)
 		return
-	if s.tpl == "station":
+	if Defs.TEMPLATES[s.tpl].has("device"):
+		_add_device(solid if s.done else ghost, s)
+		return
+	if s.tpl == "station" or s.tpl == "portal_station":
 		_add_station(solid if s.done else ghost, s)
 		return
 	var stage: int = s.stage
