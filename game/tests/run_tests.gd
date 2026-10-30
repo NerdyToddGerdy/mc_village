@@ -84,6 +84,7 @@ func _init() -> void:
 		"test_redstone_devices_and_dust",
 		"test_the_cache_sensor_and_condition",
 		"test_the_freight_loader",
+		"test_the_dispatcher_and_the_whole_chain",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5885,6 +5886,8 @@ func test_the_freight_cart() -> void:
 	check(sim.freight.state == "home" and shelter.store.get("bread", 0) == 3, "once there's room it unloads and returns")
 	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v54.save").data.state)
 	check(old.freight.is_empty(), "an older save has no freight cart")
+	var f58 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v58.save").data.state)
+	check(not f58.dispatcher().is_empty() and f58.freight.get("request", false), "the v58 fixture loads its dispatcher and the waiting request")
 	var f57 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v57.save").data.state)
 	check(not f57.freight_loader().is_empty() and f57.freight_loader().cfg.list == {"bread": 8, "iron_ingot": 2} and f57.freight.load == {"bread": 4}, "the v57 fixture loads its loader and the part-loaded cart")
 	var f56 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v56.save").data.state)
@@ -6085,6 +6088,71 @@ func test_the_freight_loader() -> void:
 		r.hurt = 0
 	sim.freight.load = {"bread": 10, "iron_ingot": 2}
 	check(sim.approve_freight() == "", "a loaded cart can be approved")
+
+
+## The whole chain (issue #173): a low cache loads the cart, the dispatcher asks, one approval delivers it; declining unloads it.
+func test_the_dispatcher_and_the_whole_chain() -> void:
+	var w := freight_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var st: Dictionary = w.station
+	var ld := sim.place_site("freight_loader", st.plot.position + Vector2i(0, 1))
+	ld.stage = 1
+	ld.done = true
+	check(sim.placement_check("dispatcher", Vector2i(1, 1)) == "The dispatcher stands beside the station", "the dispatcher stands beside the station")
+	var dpos := Vector2i(-1, -1)
+	for dy in range(-4, 5):
+		for dx in range(-4, 6):
+			var o: Vector2i = st.origin + Vector2i(dx, dy)
+			if dpos.x < 0 and sim.placement_check("dispatcher", o) == "":
+				dpos = o
+	var dp := sim.place_site("dispatcher", dpos)
+	dp.stage = 1
+	dp.done = true
+	var pair := device_pair(sim, w)
+	var sensor: Dictionary = pair[0]
+	var cond: Dictionary = pair[1]
+	var n := 0
+	for pr in [[sensor, cond], [cond, ld], [ld, dp]]:
+		n += 1
+		sim.wires.append({"id": 910 + n, "from": pr[0].id, "to": pr[1].id, "cells": [], "laid": 0})
+	sim.freight = {"state": "home", "pos": 0.0, "load": {}, "approved": false, "acc": 0.0}
+	var shelter: Dictionary = w.shelter
+	shelter.store = {}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 2), "bread", 10)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 3), "iron_ingot", 2)
+	for i in 200 * Tuning.TPS:
+		sim.step()
+		if sim.freight.get("request", false):
+			break
+	check(sim.freight.get("request", false) and sim.freight.load == {"bread": 10, "iron_ingot": 2}, "a low cache loads the cart and the dispatcher raises a request")
+	check(sim.pending.is_empty(), "the request is not a pending choice: the game doesn't pause")
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Freight cart: waiting for approval: the dispatcher asks you to approve") and dp.out, "it waits in the stuck list, and the dispatcher says why: %s" % dp.why)
+	var t := sim.tick
+	for i in 100:
+		sim.step()
+	check(sim.tick == t + 100 and sim.freight.state == "home", "the game keeps running while it waits, and the cart stays put")
+	check(sim.decline_freight() == "" and sim.freight.load.is_empty() and sim.free_count("bread") == 10, "declining puts the load back in the stockpile")
+	for i in 60 * Tuning.TPS:
+		sim.step()
+	check(sim.freight.load.is_empty() and not sim.freight.get("request", false), "and nothing loads or asks again while declined")
+	shelter.store = {"bread": 30}
+	for i in 40:
+		sim.step()
+	check(not sim.freight.get("declined", false), "once the signal drops the decline is forgotten")
+	shelter.store = {}
+	for i in 200 * Tuning.TPS:
+		sim.step()
+		if sim.freight.get("request", false):
+			break
+	check(sim.freight.get("request", false), "the drained cache asks again")
+	check(sim.approve_freight() == "", "one approval")
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.stats.get("freight_trips", 0) >= 1 and sim.freight.state == "home":
+			break
+	check(shelter.store.get("bread", 0) >= 10 and sim.stats.get("freight_trips", 0) >= 1, "the cart delivered into the cache and came home (%s)" % [shelter.store])
 
 
 ## Ticks from setting out to reaching the quartz site on a gather trip.

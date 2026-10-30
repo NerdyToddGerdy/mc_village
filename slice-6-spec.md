@@ -137,7 +137,15 @@ Each enchantment changes only its own number, by the item's type (`Defs.ITEMS[ty
 - **The condition's "the loader is idle"** is false while a powered loader still has the cart to fill.
 - **Saving:** v57 (the list is in the loader's `cfg`, the progress is the cart's `freight.load`).
 
-## 13. Tuning table (provisional)
+## 13. The dispatcher and departure approval (#173)
+
+- **Dispatcher:** a device (2 redstone dust, 1 quartz, 2 cobblestone) that stands **within `DISPATCHER_REACH` (4) cells of the portal station**; one only. Wire the loader into it: it is on while its input ("loaded") is on.
+- **The request:** with the dispatcher powered and a loaded cart at the station, it raises a **departure request** (`freight.request`): a toast, "Supply cart ready for the Nether cache. Approve?", that focuses the station, and "Freight cart: waiting for approval: the dispatcher asks you to approve" in the stuck list. **It does not pause the game** and isn't in `sim.pending`.
+- **Approve** (station panel) sends the cart as in §9; **Decline: unload it** puts the load back in the stockpile and stops the loader and the dispatcher until the chain's signal drops (the cache recovers) and rises again. Approval stays manual: nothing leaves on its own.
+- **The chain:** cache sensor (food < 10) → condition (the portal is lit) → loader → dispatcher; low cache, load, approve, deliver, unload, return. Without a dispatcher the station's Approve button still works.
+- **Saving:** `freight.request` and `freight.declined` (v58).
+
+## 14. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -163,5 +171,6 @@ Each build issue adds its rows.
 | `SENSOR_BELOW` | 10 | A new sensor's threshold. |
 | `FREIGHT_LIST` | 10 bread, 2 iron ingots | A new loader's freight list. |
 | `FREIGHT_CAPACITY` | 30 | Items a freight cart carries. |
+| `DISPATCHER_REACH` | 4 | Cells from the portal station the dispatcher may stand. |
 | Loader cost | 3 redstone, 1 quartz, 4 cobble | In `Defs.TEMPLATES`. |
 | Device costs | 2 redstone, 1 quartz, 2 cobble | Sensor and condition, in `Defs.TEMPLATES`. |
