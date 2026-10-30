@@ -64,7 +64,24 @@ A village building, 1×1, of an **obsidian table with a lectern**: `4 obsidian, 
 - **Stuck reasons:** "Workshop needs 4 more obsidian" while it's being built; "Enchanter: No one is an enchanter" when a book or an order waits and no one has the job; "Book: waiting to be carried to the workshop" beside the book itself.
 - **Saving:** v52. Every resident gets `enchant` at no experience; the workshop site keeps `known` and `orders`.
 
-## 6. Tuning table (provisional)
+## 6. Enchanting an item (#166)
+
+At the workshop an **Enchanter** puts a **known** enchantment on a tool, a sword or a piece of armor lying in the stockpile. Select the workshop: each known recipe lists the item types in the stockpile it can go on, and a click orders it. Unknown recipes are listed with "unknown: needs its book".
+
+| Enchantment | Cost | Goes on |
+|---|---|---|
+| Efficiency | 2 lapis, 1 quartz | Axes and pickaxes |
+| Unbreaking | 2 lapis, 1 iron ingot | Tools, swords and armor |
+| Protection | 3 lapis, 2 iron ingots | Armor |
+| Fire protection | 3 lapis, 1 magma cream | Armor |
+
+- **An enchanted item is an item type of its own** (`Defs.ITEMS`, built from `BASE_ITEMS`): "iron_pick+efficiency" is the iron pickaxe with `ench` set, named "iron pickaxe of Efficiency". So wear, carrying, dropping, packing for a party and saving all work as they always have, and **an item can hold only one enchantment**: a variant can't be enchanted again, and no variant has two. It's drawn with a violet spark, and the tally bar groups it with the other tools and armor.
+- **The work:** the Enchanter fetches what the first order needs (the item, the lapis, the ingredient), one delivery at a time, then works it (`ENCHANT_TIME`, quicker at higher Enchanter levels). The item comes out where the workshop stands, keeping its wear, and haulers take it to the stockpile. A queue of orders is worked in turn, and each can be cancelled.
+- **Stuck reasons:** "Enchant: needs 2 lapis" (or whatever's missing), the workshop's "No one is an enchanter", and a refusal at the order: "Enchant: recipe unknown", "Enchant: item already enchanted", "Enchant: Efficiency can't go on that".
+- **Competition for the best gear** (brief §9): enchanted gear is ordinary gear in the stockpile, so a resident takes an enchanted tool over a plain one of the same tier, a party's packs take enchanted spare pickaxes, and the planner and the Equip lists show its name. What a party carries leaves the village.
+- **Saving:** v53. An enchanted item saves as its type; the workshop keeps its `orders` and what it holds.
+
+## 7. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -73,3 +90,5 @@ Each build issue adds its rows.
 | `ORE_YIELD` lapis / redstone | 3 / 3 | Items a block drops. |
 | `ORE_PICK_TIER` lapis / redstone | 3 / 3 | An iron pickaxe or better. |
 | Lapis and redstone | from level 3 | 2 blocks each, more the deeper, 5 at most. |
+| `ENCHANT_TIME` | 12 s | Working one enchantment at Enchanter level 1. |
+| Costs | see §6 | In `Defs.ENCHANTS`: lapis plus one ingredient. |

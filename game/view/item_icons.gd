@@ -17,6 +17,8 @@ static func icon(type: String) -> ImageTexture:
 
 static func _draw(img: Image, type: String) -> void:
 	var dark := Palette.SLATE_DEEP
+	var enchanted := "+" in type  # an enchanted item is its base item with a violet sparkle (issue #166)
+	type = type.get_slice("+", 0)
 	var c: Color = Palette.ITEM_COLORS.get(type, Palette.CHALK)
 	match type:
 		"log":  # a log end: bark ring, pale wood and a growth ring
@@ -170,6 +172,10 @@ static func _draw(img: Image, type: String) -> void:
 		_:
 			_disc(img, Vector2(32, 32), 16, dark)
 			_disc(img, Vector2(32, 32), 13, c)
+	if enchanted:
+		_disc(img, Vector2(50, 14), 9, dark)
+		_disc(img, Vector2(50, 14), 6, Color("#B58CF0"))
+		_disc(img, Vector2(48, 12), 2, Color.WHITE)
 
 
 ## A tool's stick handle, from the bottom left up to where the head sits.

@@ -2253,6 +2253,31 @@ func _fill_enchanting(c: Container, sim: Sim, s: Dictionary) -> void:
 		var known: bool = s.known.has(k)
 		c.add_child(_row(e.name, "known" if known else "unknown: needs its book", false))
 		c.add_child(_label("Costs " + ", ".join(cost) + ". " + Sim.enchant_text(k), false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	var known: Array = s.known
+	if not known.is_empty():  # order an enchantment on gear in the stockpile (issue #166)
+		c.add_child(_label("Enchant", true))
+		for k in known:
+			var types: Array = sim.enchantable_types(k)
+			var row := HFlowContainer.new()
+			row.add_theme_constant_override("h_separation", 4)
+			row.add_child(_label(Defs.ENCHANTS[k].name + ":", false, Palette.CHALK_DIM, Palette.CAPTION))
+			if types.is_empty():
+				row.add_child(_label("nothing in the stockpile it can go on", false, Palette.CHALK_DIM, Palette.CAPTION))
+			for t in types:
+				var b := _button(Defs.BASE_ITEMS[t].one.substr(0, 1).to_upper() + Defs.BASE_ITEMS[t].one.substr(1), func(): game.order_enchant(k, t), "Secondary")
+				b.set_meta("label", "Enchant %s: %s" % [Defs.ENCHANTS[k].name, Defs.BASE_ITEMS[t].one])
+				row.add_child(b)
+			c.add_child(row)
+	if not s.orders.is_empty():
+		c.add_child(_label("Orders", true))
+		for i in s.orders.size():
+			var o: Dictionary = s.orders[i]
+			var line := HBoxContainer.new()
+			var l := _label("%s on a %s" % [Defs.ENCHANTS[o.ench].name, Defs.BASE_ITEMS[o.item].one], false, Palette.CHALK, Palette.BODY)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			line.add_child(l)
+			line.add_child(_button("Cancel", func(): game.cancel_enchant(i), "Secondary"))
+			c.add_child(line)
 	c.add_child(_label("A book carried here teaches its recipe for good, and is used up.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
 		c.add_child(_reason(x.why))

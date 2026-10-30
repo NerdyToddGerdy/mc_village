@@ -179,5 +179,6 @@ const EFFICIENCY_SPEED := 1.3         ## Work speed of an Efficiency tool (issue
 const UNBREAKING_WEAR := 0.5          ## Share of wear an Unbreaking item takes.
 const PROTECTION_CUT := 0.3           ## Share of creature injuries Protection armor adds to what it turns aside, as a cut in the chance.
 const FIRE_PROTECTION_CUT := 0.5      ## Cut in the chance of a burn from fire or lava for Fire protection armor.
+const ENCHANT_TIME := 12.0            ## Seconds an Enchanter works an enchantment, at level 1 (issue #166).
 const FLINT_STEEL_USES := 8           ## Times a flint and steel lights something before it's spent (issues #146, #147).
 const DIAMOND_PICK_TIER := 3            ## The pickaxe tier diamond ore needs: iron (issue #186).

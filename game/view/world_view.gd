@@ -662,7 +662,7 @@ func _build_cart() -> void:
 			b.box(Vector3(x + k - 0.08, y, z - 0.34), Vector3(x + k + 0.08, y + 0.16, z + 0.34), Palette.SLATE_DEEP)
 		var n := 0
 		for k in c.load:
-			var it_col: Color = Palette.ITEM_COLORS[k]
+			var it_col: Color = Palette.item_color(k)
 			for i in mini(c.load[k], 6 - n):
 				var px := x - 0.25 + float(n % 3) * 0.25
 				var pz := z - 0.1 + float(n / 3) * 0.2
@@ -743,9 +743,18 @@ func _add_crop(b: Batch, crop: Dictionary) -> void:
 
 
 func _add_item(b: Batch, s: Dictionary) -> void:
+	_add_item_shape(b, s)
+	if "+" in s.type:  # an enchanted item shimmers: a violet spark above it (issue #166)
+		var sx: float = s.cell.x + 0.5
+		var sz: float = s.cell.y + 0.5
+		b.box(Vector3(sx - 0.07, 0.34, sz - 0.07), Vector3(sx + 0.07, 0.5, sz + 0.07), PORTAL_GLOW)
+		b.box(Vector3(sx - 0.03, 0.5, sz - 0.03), Vector3(sx + 0.03, 0.62, sz + 0.03), Color("#E8D6FF"))
+
+
+func _add_item_shape(b: Batch, s: Dictionary) -> void:
 	var cx: float = s.cell.x + 0.5
 	var cz: float = s.cell.y + 0.5
-	var color: Color = Palette.ITEM_COLORS[s.type]
+	var color: Color = Palette.item_color(s.type)
 	if Defs.is_armor(s.type):  # a folded piece of leather with a darker seam (issue #140)
 		b.box(Vector3(cx - 0.24, 0, cz - 0.2), Vector3(cx + 0.24, 0.1, cz + 0.2), color)
 		b.box(Vector3(cx - 0.25, 0.02, cz - 0.03), Vector3(cx + 0.25, 0.11, cz + 0.03), color.darkened(0.3))
@@ -1558,7 +1567,7 @@ func _update_people() -> void:
 		(n.get_node("Body/Bandage") as Node3D).visible = r.get("hurt", 0) > 0
 		_dress(n, r)
 		if r.carry != null:
-			carry.material_override = _person_mat(Palette.ITEM_COLORS[r.carry.type], Color("#" + r.shirt))
+			carry.material_override = _person_mat(Palette.item_color(r.carry.type), Color("#" + r.shirt))
 		(n.get_node("Ring") as Node3D).visible = selected_ids.has(r.id)
 		var bar: Sprite3D = n.get_node("Body/Bar")
 		bar.visible = r.progress >= 0.0

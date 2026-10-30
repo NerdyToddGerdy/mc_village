@@ -77,6 +77,7 @@ func _init() -> void:
 		"test_piglin_trading",
 		"test_enchanted_books",
 		"test_the_enchanting_workshop",
+		"test_enchanting_an_item",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5909,3 +5910,61 @@ func test_the_enchanting_workshop() -> void:
 	check(f52.enchanting_workshop().known == ["efficiency"], "the v52 fixture loads its workshop")
 	var f51 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v51.save").data.state)
 	check(f51.residents.all(func(r): return r.jobs.enchant.xp == 0), "an older save loads with Enchanter at 0")
+	var f53 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v53.save").data.state)
+	check(f53.enchanting_workshop().orders.size() == 1 and f53.stacks_where(func(x): return x.type == "iron_pick+efficiency" and x.dur == 33).size() == 1, "the v53 fixture loads its order and its enchanted pickaxe")
+
+
+## Enchanting an item at the workshop: known recipes, one slot (issue #166).
+func test_enchanting_an_item() -> void:
+	check(Defs.ITEMS.has("iron_pick+efficiency") and Defs.ITEMS.has("leather_tunic+protection") and Defs.ITEMS.has("iron_sword+unbreaking") and not Defs.ITEMS.has("iron_pick+protection") and not Defs.ITEMS.has("iron_sword+efficiency") and not Defs.ITEMS.has("iron_pick+efficiency+unbreaking"), "each enchantment has variants only of what it can go on, and none holds two")
+	check(Defs.ITEMS["iron_pick+efficiency"].tier == 3 and Defs.ITEMS["iron_pick+efficiency"].tool == "pick" and Defs.ITEMS["iron_pick+efficiency"].one == "iron pickaxe of Efficiency" and Defs.base_type("iron_pick+efficiency") == "iron_pick", "a variant is the same item, named for its enchantment")
+	check(Defs.ENCHANTS.efficiency.cost == {"lapis": 2, "quartz": 1} and Defs.ENCHANTS.unbreaking.cost == {"lapis": 2, "iron_ingot": 1} and Defs.ENCHANTS.protection.cost == {"lapis": 3, "iron_ingot": 2} and Defs.ENCHANTS.fire_protection.cost == {"lapis": 3, "magma_cream": 1}, "the costs: lapis and one ingredient")
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var ws := place_done(sim, "enchanting_workshop", Sim.rcell(ada) + Vector2i(0, 4))
+	ws.known = ["efficiency", "unbreaking"]
+	# An unknown recipe can't be ordered; nor can one onto the wrong thing, or onto an enchanted item.
+	check(sim.order_enchant("protection", "leather_tunic") == "Enchant: recipe unknown", "an unknown recipe can't be ordered")
+	check(sim.order_enchant("efficiency", "leather_tunic") == "Enchant: Efficiency can't go on that", "Efficiency isn't for armor")
+	check(sim.order_enchant("unbreaking", "iron_pick+efficiency") == "Enchant: item already enchanted", "a second enchantment is refused: one slot to an item")
+	check(ws.orders.is_empty(), "(nothing was queued)")
+	# The order: stone pickaxe, 2 lapis and a quartz, carried in and worked.
+	sim.paint_zone(open_rect(sim, Vector2i(3, 2)))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 0), "stone_pick", 1, 13)
+	check(sim.enchantable_types("efficiency") == ["stone_pick"] and sim.enchantable_types("unbreaking") == ["stone_pick"], "the panel offers the pickaxe for both recipes")
+	check(sim.order_enchant("efficiency", "stone_pick") == "" and ws.orders == [{"ench": "efficiency", "item": "stone_pick"}], "Efficiency on a stone pickaxe is ordered")
+	run(sim, 20)
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Enchant: needs 2 lapis"), "short of lapis it says so: " + stuck_text(sim))
+	sim.drop_items(Sim.rcell(ada) + Vector2i(2, 1), "lapis", 2)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 2), "quartz", 1)
+	run(sim, 90)
+	var made := sim.stacks_where(func(x): return x.type == "stone_pick+efficiency")
+	check(ws.orders.is_empty() and made.size() == 1 and made[0].dur == 13, "the pickaxe comes out enchanted, keeping its wear (%s)" % [made.map(func(x): return x.dur)])
+	check(sim.stacks_where(func(x): return x.type in ["stone_pick", "lapis", "quartz"]).is_empty() and ws.store.is_empty() and ws.tools == [], "the plain pickaxe, the lapis and the quartz are all used up")
+	check(ada.jobs.enchant.xp > 0 and sim.stats.get("enchanted", 0) == 1, "the Enchanter gains practice")
+	# It can't take another, and it keeps its enchantment through wear, a drop and a save.
+	check(sim.order_enchant("unbreaking", "stone_pick+efficiency") == "Enchant: item already enchanted", "now it can't take a second")
+	var res := sim.add_resident("Tomas", "7A5C8F", Sim.rcell(ada) + Vector2i(1, 1))
+	res.pick = {"type": "stone_pick+efficiency", "tier": 2, "dur": 5}
+	sim._wear(res, "pick")
+	check(res.pick.type == "stone_pick+efficiency" and res.pick.dur == 4, "wear leaves the enchantment on")
+	sim.drop_items(Sim.rcell(res), res.pick.type, 1, res.pick.dur)
+	check(sim.stacks_where(func(x): return x.type == "stone_pick+efficiency" and x.dur == 4).size() == 1, "dropped, it's still enchanted")
+	var back := Sim.from_state(sim.save_state())
+	check(back.stacks_where(func(x): return x.type == "stone_pick+efficiency").size() == 2 and back.residents[1].pick.type == "stone_pick+efficiency", "and through a save and load")
+	# Armor, a sword: other recipes.
+	ws.known.append("protection")
+	check(sim.order_enchant("protection", "leather_tunic") == "" and sim.order_enchant("unbreaking", "iron_sword") == "", "armor takes Protection, a sword Unbreaking")
+	ws.orders.clear()
+	# A tool-user prefers an enchanted pick of the same tier.
+	var s2 := Sim.new_game()
+	var user: Dictionary = s2.residents[0]
+	user.pick = {"type": "stone_pick", "tier": 2, "dur": 20}
+	s2.drop_items(Sim.rcell(user) + Vector2i(2, 0), "stone_pick+efficiency", 1, 22)
+	var rock: Dictionary = Sim.nearest(s2.boulders, Sim.rcell(user))
+	s2.designate_mine(Rect2i(rock.cell, Vector2i.ONE))
+	run(s2, 60)
+	check(user.pick != null and user.pick.type == "stone_pick+efficiency", "a resident takes the enchanted pickaxe over a plain one of the same tier")
+	# The tally bar groups enchanted gear with the other tools.
+	check(Defs.ITEMS["stone_pick+efficiency"].group == "tools", "enchanted gear is in the tally bar's tools")

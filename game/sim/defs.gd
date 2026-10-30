@@ -2,7 +2,7 @@ class_name Defs
 extends RefCounted
 ## Items, recipes and building templates for Slice 1 (slice-1-spec.md §4, §6, §8).
 
-const ITEMS := {
+const BASE_ITEMS := {
 	"log": {"one": "log", "many": "logs", "label": "Logs", "group": "building"},
 	"plank": {"one": "plank", "many": "planks", "label": "Planks", "group": "building"},
 	"stick": {"one": "stick", "many": "sticks", "label": "Sticks", "group": "building"},
@@ -81,6 +81,37 @@ const SLOT_NAMES := {"head": "Cap", "chest": "Tunic", "legs": "Trousers", "feet"
 
 ## A tool tier's name: 1 wooden, 2 stone, 3 iron (issue #104).
 const TIER_NAMES := ["Bare", "Wooden", "Stone", "Iron", "Diamond"]
+
+## Every item: the base ones, and for each tool, sword and armor an **enchanted** variant for each enchantment that can go on it
+## (issue #166), named "iron_pick+efficiency". A variant is the same item with `ench` set, so wear, carrying, dropping and saving
+## work as they always have, and an item can only ever hold one enchantment.
+static var ITEMS: Dictionary = _build_items()
+
+
+static func _build_items() -> Dictionary:
+	var out: Dictionary = BASE_ITEMS.duplicate(true)
+	for type in BASE_ITEMS:
+		var it: Dictionary = BASE_ITEMS[type]
+		var kind: String = it.get("tool", "armor" if it.has("armor") else "")
+		if kind == "":
+			continue
+		for e in ENCHANTS:
+			if kind in ENCHANTS[e].applies:
+				var v: Dictionary = it.duplicate(true)
+				v.ench = e
+				v.base = type
+				v.one = "%s of %s" % [it.one, ENCHANTS[e].name]
+				v.many = "%s of %s" % [it.many, ENCHANTS[e].name]
+				if v.has("label"):
+					v.label = "%s (%s)" % [it.label, ENCHANTS[e].name]
+				out[type + "+" + e] = v
+	return out
+
+
+## The type of an item with its enchantment taken off: "iron_pick+efficiency" is "iron_pick".
+static func base_type(type: String) -> String:
+	return type.get_slice("+", 0)
+
 
 ## The tally bar's groups (issue #141), in order. Each item names its group in ITEMS; a group's
 ## dropdown lists its items in ITEMS order.

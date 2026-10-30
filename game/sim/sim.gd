@@ -1885,6 +1885,8 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 	j.hold({"t": "claim", "ent": target})
 	var cur: int = r[kind].tier if r[kind] != null else 0
 	var better := tool_items(kind, cur)
+	if better.is_empty() and r[kind] != null and not Defs.ITEMS[r[kind].type].has("ench"):  # an enchanted tool of the same tier is better (issue #166)
+		better = stacks_where(func(s): return Defs.ITEMS[s.type].get("tool", "") == kind and Defs.ITEMS[s.type].has("ench") and Defs.ITEMS[s.type].tier >= cur and avail(s) > 0)
 	if not better.is_empty() and not (r.kept[kind] and r[kind] != null):  # a tool you chose stays
 		_fetch_tool(j, nearest(better, rcell(r)))
 	j.step(_goto([target.cell], true))
@@ -2763,6 +2765,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.LAY_TIME if st.site.tpl == "track" else Tuning.STAGE_TIME
 		"light", "relight":
 			return Tuning.PORTAL_LIGHT_TIME
+		"enchant":
+			return Tuning.ENCHANT_TIME
 		"nline":
 			return {"bridge": Tuning.NETHER_BRIDGE_TIME, "rail": Tuning.LAY_TIME, "station": Tuning.STAGE_TIME, "cart": 4.0}[st.task.kind]
 		"shelter":
@@ -2838,6 +2842,33 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				r.carry = null
 			rev += 1
 			_toast("The portal is lit.", r.id, portal.id)
+		"enchant":  # the item takes its enchantment: it keeps its wear, and the lapis and ingredient are used up (issue #166)
+			var ew: Dictionary = st.site
+			ew.crafter = 0
+			ew.crafting = ""
+			if ew.orders.is_empty() or not is_same(ew.orders[0], st.order):
+				return "gone"
+			var ord: Dictionary = st.order
+			var cost: Dictionary = Defs.ENCHANTS[ord.ench].cost
+			for k in cost:
+				if ew.store.get(k, 0) < cost[k]:
+					return "gone"
+			var held: Array = ew.get("tools", []).filter(func(t): return t.type == ord.item)
+			if held.is_empty():
+				return "gone"
+			for k in cost:
+				ew.store[k] -= cost[k]
+				if ew.store[k] <= 0:
+					ew.store.erase(k)
+			ew.tools.erase(held[0])
+			ew.store[ord.item] = ew.store.get(ord.item, 0) - 1
+			if ew.store[ord.item] <= 0:
+				ew.store.erase(ord.item)
+			ew.orders.pop_front()
+			drop_items(ew.origin, ord.item + "+" + ord.ench, 1, held[0].dur)
+			stats.enchanted = stats.get("enchanted", 0) + 1
+			rev += 1
+			_toast("%s enchanted: %s." % [r.name, Defs.ITEMS[ord.item + "+" + ord.ench].one], r.id, ew.id)
 		"nline":  # a piece of the Nether line (issue #159)
 			_finish_line_task(st.task, r)
 		"shelter":  # the party's cobblestone and planks go into the walls (issue #152)
@@ -4354,6 +4385,12 @@ func _stuck_workstations() -> void:
 	if not ws.is_empty() and not _staffed("enchant"):
 		for b in learnable_books():
 			_add_stuck("Book", "waiting to be carried to the workshop", Vector2(b.cell) + Vector2(0.5, 0.5), 0.6, "", 0, false, true)
+			break
+	if not ws.is_empty() and map_id == "village":  # an order short of something (issue #166)
+		var miss := enchant_missing(ws)
+		for k in miss:
+			var item: Dictionary = Defs.ITEMS[k]
+			_add_stuck("Enchant", "needs %s" % Defs.words(k, miss[k]), Vector2(ws.origin) + Vector2(0.5, 0.5), 1.4, "site", ws.id)
 			break
 	for s in m.sites:
 		var wk := work_of(s)
@@ -6955,9 +6992,85 @@ func _enchant_claim(r: Dictionary, c: Vector2i):
 	return _enchant_order_job(r, c, ws)
 
 
-## Works an enchantment order (issue #166): filled in when enchanting is built.
-func _enchant_order_job(_r: Dictionary, _c: Vector2i, _ws: Dictionary):
-	return null
+## The item types in the village that an enchantment can go on, plain and in a free stack, in the order of the items list
+## (issue #166): what the workshop's panel offers for an order.
+func enchantable_types(ench: String) -> Array:
+	var out: Array = []
+	for type in Defs.BASE_ITEMS:
+		if Defs.ITEMS.has(type + "+" + ench) and not stacks_where(func(s): return s.type == type and avail(s) > 0).is_empty():
+			out.append(type)
+	return out
+
+
+## Orders an enchantment onto an item type at the workshop (issue #166). Returns why it can't, or "". One enchantment to an item,
+## and only a known recipe.
+func order_enchant(ench: String, item: String) -> String:
+	var ws := enchanting_workshop()
+	if ws.is_empty():
+		return "Build an enchanting workshop first"
+	if not Defs.ENCHANTS.has(ench):
+		return "Enchant: no such enchantment"
+	if not ws.known.has(ench):
+		return "Enchant: recipe unknown"
+	if Defs.ITEMS.get(item, {}).has("ench"):
+		return "Enchant: item already enchanted"
+	if not Defs.ITEMS.has(item + "+" + ench):
+		return "Enchant: %s can't go on that" % Defs.ENCHANTS[ench].name
+	ws.orders.append({"ench": ench, "item": item})
+	rev += 1
+	return ""
+
+
+func cancel_enchant(i: int) -> void:
+	var ws := enchanting_workshop()
+	if not ws.is_empty() and i >= 0 and i < ws.orders.size():
+		ws.orders.remove_at(i)
+		rev += 1
+
+
+## What's missing at the workshop for its first order, as {item: how many more}, counting what's delivered and on the way.
+func enchant_missing(ws: Dictionary) -> Dictionary:
+	var out := {}
+	if ws.orders.is_empty():
+		return out
+	var o: Dictionary = ws.orders[0]
+	var need: Dictionary = Defs.ENCHANTS[o.ench].cost.duplicate()
+	need[o.item] = 1
+	for k in need:
+		var short: int = need[k] - ws.store.get(k, 0) - ws.incoming.get(k, 0) - free_count(k)
+		if short > 0:
+			out[k] = short
+	return out
+
+
+## Works the workshop's first order (issue #166): fetch what's missing, one delivery at a time, then enchant.
+func _enchant_order_job(r: Dictionary, _c: Vector2i, ws: Dictionary):
+	if ws.orders.is_empty() or ws.crafter != 0 or _cooling(ws):
+		return null
+	var o: Dictionary = ws.orders[0]
+	var need: Dictionary = Defs.ENCHANTS[o.ench].cost.duplicate()
+	need[o.item] = 1
+	for k in need:  # what's still to be carried in
+		var have: int = ws.store.get(k, 0) + ws.incoming.get(k, 0)
+		if have >= need[k]:
+			continue
+		var src := stacks_where(func(s): return s.type == k and avail(s) > 0)
+		if src.is_empty():
+			return null  # something's missing: the stuck list says what
+		var st: Dictionary = nearest(src, rcell(r))
+		return _tagged(_deliver_job(ws, k, mini(mini(need[k] - have, avail(st)), carry_cap(r)), st), "enchant")
+	for k in need:  # all of it is here: the work
+		if ws.store.get(k, 0) < need[k]:
+			return null  # (the last delivery is still on its way)
+	var j := Job.new("craft", "Going to the enchanting workshop", "the enchanting workshop")
+	j.work = "enchant"
+	j.target = ws
+	ws.crafter = r.id
+	ws.crafting = Defs.ENCHANTS[o.ench].name
+	j.hold({"t": "crafter", "site": ws})
+	j.step(_goto(site_cells(ws), true))
+	j.step({"op": "work", "what": "enchant", "site": ws, "order": o, "label": "Enchanting: %s" % Defs.ITEMS[o.item + "+" + o.ench].one})
+	return j
 
 
 # ---------------------------------------------------------------- stranding and rescue (issue #158)

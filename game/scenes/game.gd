@@ -1227,6 +1227,17 @@ func plan_objective(obj: String, pick := {}) -> void:
 
 ## The expedition slot the board is showing (issue #145): the one the chosen adventure belongs to, or, with none
 ## chosen, the first that has a party.
+## Orders an enchantment at the workshop (issue #166); a refusal comes up as a toast.
+func order_enchant(ench: String, item: String) -> void:
+	var why := sim.order_enchant(ench, item)
+	if why != "":
+		_hud.add_toast({"text": why, "res_id": 0, "site_id": 0})
+
+
+func cancel_enchant(i: int) -> void:
+	sim.cancel_enchant(i)
+
+
 func plan_slot() -> String:
 	if not plan.is_empty() and plan.get("rescue", false):  # a rescue has a slot of its own (issue #158)
 		return "rescue"

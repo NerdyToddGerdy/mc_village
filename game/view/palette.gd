@@ -41,6 +41,11 @@ const MINE_CONTRAST := 1.35
 ## The Nether's warm, dark red look (issues #148, #206): a grade like the mine's, but red.
 static var NETHER_GRADE := Color("#E8A590")
 
+## An item's colour; an enchanted one is its base item's.
+static func item_color(type: String) -> Color:
+	return ITEM_COLORS.get(type.get_slice("+", 0), CHALK)
+
+
 static var ITEM_COLORS := {
 	"wool": Color("#ECEAE2"), "mutton": Color("#C2645A"), "berries": Color("#B23A5A"), "wheat": Color("#D8B65A"),
 	"bread": Color("#D9A35A"), "cooked_mutton": Color("#8C4A32"),
