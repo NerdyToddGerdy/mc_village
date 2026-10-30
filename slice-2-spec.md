@@ -122,6 +122,7 @@ The book (`Game.open_book`, shown over the goals panel's place) has a **Goals** 
 - Wheat **grows** for 2 minutes, drawn as rising stages.
 - When ripe, a farmer **harvests** it (2 seconds) for 2 wheat, and the cell goes back to empty.
 - Ripe wheat that isn't harvested waits; it doesn't spoil.
+- **A keep-stock target (#269):** farmers stop planting and harvesting once the village has `Tuning.WHEAT_KEEP` (20) collected wheat, and go on when it falls below. A harvest under way finishes. Set it with − and + on the composter's panel or on the jobs board (`wheat_keep`, saved from v59; an older save gets 20). The waiting reason is "Farm: enough wheat (20)".
 - Harvested wheat drops on the cell and is hauled to a stockpile like anything else. The stock bar counts it.
 - **A plot is replanted only once its harvest has been collected** (decided with the owner). With no stockpile to take it to, the wheat waits on the plot and the stuck list says "Harvested wheat needs a stockpile before replanting".
 - **Where plots go:** only open grass. Trees, boulders, berry bushes, buildings and stockpile cells are skipped when painting. A stockpile can't be painted over a farm either. Placing a building over plots clears them, as it does stockpile cells. Plots can't go on a reserved plot (§8).

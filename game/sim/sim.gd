@@ -63,6 +63,7 @@ var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafte
 var arrival_at := -1
 var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
+var wheat_keep := Tuning.WHEAT_KEEP  ## How much wheat the village keeps before farmers stop (issue #269).
 var herd_floor := {}         ## Species -> how many wild animals hunters leave in the village (issue #183); unset is Tuning.HERD_FLOOR.
 ## The planned expedition (issues #106, #107), or {} when there's none. Two at once (#145): one Overworld and one Nether,
 ## in `expeditions`. `expedition` is the current slot's, like `m` is the current map's: it's the Overworld's at rest, and
@@ -1982,6 +1983,16 @@ func _eat_job(r: Dictionary):
 	return j
 
 
+## Whether the village has all the wheat it wants, so farmers leave the plots be (issue #269). Counts collected wheat.
+func wheat_enough() -> bool:
+	return free_count("wheat") >= wheat_keep
+
+
+func set_wheat_keep(n: int) -> void:
+	wheat_keep = maxi(0, n)
+	rev += 1
+
+
 ## Plant an empty farm cell or harvest a ripe one (issue #45). Farmers stand on the cell.
 func _farm_job(r: Dictionary, crop: Dictionary) -> Job:
 	var ripe := crop_ripe(crop)
@@ -1998,6 +2009,8 @@ func _farm_job(r: Dictionary, crop: Dictionary) -> Job:
 
 ## The nearest farm cell that needs planting or harvesting, ripe ones first, or null.
 func _farm_work(c: Vector2i):
+	if m.farm.is_empty() or wheat_enough():  # enough wheat: the plots keep their crop (issue #269)
+		return null
 	var ripe: Array = []
 	var empty: Array = []
 	for k in m.farm:
@@ -4407,6 +4420,7 @@ func _stuck_on_map() -> void:
 	_stuck_unstaffed()
 	_stuck_workstations()
 	_stuck_freight()
+	_stuck_farm()
 	for sl in SLOTS:
 		on_slot(sl, _stuck_expedition)
 	for sl in SLOTS:
@@ -4489,6 +4503,15 @@ func _stuck_unstaffed() -> void:
 
 ## What holds up a chopping block or mason's bench (issue #177), and a stonemason with no pickaxe.
 ## A target reached or a full pile is waiting, not stuck: the overflow goes to the stockpile.
+## Farmers resting because the village has enough wheat: a waiting reason, not a stall (issue #269).
+func _stuck_farm() -> void:
+	if map_id != "village" or m.farm.is_empty() or not wheat_enough():
+		return
+	var plot: Dictionary = m.farm.values()[0]
+	if m.farm.values().any(func(k): return k.claim == 0 and (crop_ripe(k) or k.grow < 0.0)):
+		_add_stuck("Farm", "enough wheat (%d)" % wheat_keep, Vector2(plot.cell) + Vector2(0.5, 0.5), 0.8, "", 0, false, true)
+
+
 func _stuck_workstations() -> void:
 	var ws := enchanting_workshop()  # a book nobody is about to carry (issue #165)
 	if not ws.is_empty() and not _staffed("enchant"):
@@ -9426,7 +9449,7 @@ func save_state() -> Dictionary:
 		maps_out[id] = maps[id].save()
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
 		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made, "cargo_lists": cargo_lists.duplicate(true),
-		"herd_floor": herd_floor.duplicate(), "rng_state": rng.state, "seed": seed,
+		"herd_floor": herd_floor.duplicate(), "wheat_keep": wheat_keep, "rng_state": rng.state, "seed": seed,
 		"expeditions": expeditions.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true),
 		"portal_line": portal_line.duplicate(true), "freight": freight.duplicate(true), "wires": wires.duplicate(true)}
 
@@ -9451,6 +9474,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.claims_made = d.get("claims_made", 0)
 	s.cargo_lists = d.get("cargo_lists", {}).duplicate(true)
 	s.herd_floor = d.herd_floor.duplicate()
+	s.wheat_keep = d.get("wheat_keep", Tuning.WHEAT_KEEP)
 	# Bushes added to older saves (v7) may sit where something now stands; drop those.
 	s.bushes = s.bushes.filter(func(b):
 		for o in s.trees + s.boulders:

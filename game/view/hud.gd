@@ -1860,7 +1860,7 @@ func _refresh_board(sim: Sim) -> void:
 	for r in sim.residents:
 		sig += "%d%s%s%s%s%s;" % [r.id, r.name, r.role, r.jobs, r.away, r.map]
 	var herds := _wild_herds(sim)
-	sig += "|%s|%s" % [herds, sim.herd_floor]
+	sig += "|%s|%s|%s|%s" % [herds, sim.herd_floor, sim.wheat_keep, sim.m.farm.size()]
 	_rebuild(_board, sig, func(c: Container) -> void:
 		var head := HBoxContainer.new()
 		var title := _label("Village jobs", true, Palette.CHALK, Palette.HEADING)
@@ -1915,7 +1915,8 @@ func _refresh_board(sim: Sim) -> void:
 			for jb in Defs.JOBS:
 				grid.add_child(_board_cell(r, jb))
 		c.add_child(grid)
-		_add_herd_floors(c, sim, herds))
+		_add_herd_floors(c, sim, herds)
+		_add_wheat_keep(c, sim))
 
 
 ## Wild animals in the village by species, penned ones aside (issue #139).
@@ -1950,6 +1951,24 @@ func _add_herd_floors(c: Container, sim: Sim, herds: Dictionary) -> void:
 		var more := _button("+", func(): game.set_herd_floor(sp, n + 1), "Secondary")
 		more.tooltip_text = "Leave one more %s" % sd.one
 		row.add_child(more)
+	c.add_child(row)
+
+
+## The jobs board's wheat target (issue #269): farmers stop once the village has this much, with a stepper.
+func _add_wheat_keep(c: Container, sim: Sim) -> void:
+	if sim.m.farm.is_empty():
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.add_child(_label("Farmers keep", true, Palette.CHALK, Palette.BODY))
+	var less := _button("−", func(): game.set_wheat_keep(sim.wheat_keep - Tuning.KEEP_STEP), "Secondary")
+	less.disabled = sim.wheat_keep <= 0
+	row.add_child(less)
+	var lbl := _label("%d wheat" % sim.wheat_keep, false, Palette.CHALK, Palette.BODY)
+	lbl.tooltip_text = "Farmers plant and harvest until the village has %d wheat (%d now)." % [sim.wheat_keep, sim.free_count("wheat")]
+	lbl.mouse_filter = Control.MOUSE_FILTER_STOP
+	row.add_child(lbl)
+	row.add_child(_button("+", func(): game.set_wheat_keep(sim.wheat_keep + Tuning.KEEP_STEP), "Secondary"))
 	c.add_child(row)
 
 
@@ -2206,6 +2225,9 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	if s.tpl == "storehouse":  # issue #189
 		_fill_storehouse(c, sim, s)
 		return
+	if s.tpl == "composter" and s.done:  # issue #269
+		_fill_farm(c, sim, s)
+		return
 	if s.tpl == "enchanting_workshop" and s.done:  # issue #165
 		_fill_enchanting(c, sim, s)
 		return
@@ -2311,6 +2333,31 @@ func _fill_storehouse(c: Container, sim: Sim, s: Dictionary) -> void:
 	if chests > 0 and chests < Tuning.CHESTS:
 		more += " Each chest crafted at the bench adds %d stacks, up to %d chests." % [Tuning.CHEST_STACKS, Tuning.CHESTS]
 	c.add_child(_label(more, false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
+		c.add_child(_reason(x.why))
+
+
+## A finished composter (issue #269): who farms, the wheat the village has against its target, and the target with a stepper.
+func _fill_farm(c: Container, sim: Sim, s: Dictionary) -> void:
+	c.add_child(_label(sim.station_title(s), true, Palette.CHALK, Palette.TITLE))
+	var have := sim.free_count("wheat")
+	c.add_child(_row("Wheat", "%d of %d kept" % [have, sim.wheat_keep], false))
+	c.add_child(_bar(minf(1.0, float(have) / maxf(1.0, sim.wheat_keep))))
+	var keep := HBoxContainer.new()
+	keep.add_theme_constant_override("separation", 6)
+	var less := _button("−", func(): game.set_wheat_keep(sim.wheat_keep - Tuning.KEEP_STEP), "Secondary")
+	less.disabled = sim.wheat_keep <= 0
+	less.tooltip_text = "Keep %d fewer" % Tuning.KEEP_STEP
+	keep.add_child(less)
+	var lbl := _label("Keep %d wheat" % sim.wheat_keep, false, Palette.CHALK, Palette.BODY)
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	keep.add_child(lbl)
+	var more := _button("+", func(): game.set_wheat_keep(sim.wheat_keep + Tuning.KEEP_STEP), "Secondary")
+	more.tooltip_text = "Keep %d more" % Tuning.KEEP_STEP
+	keep.add_child(more)
+	c.add_child(keep)
+	c.add_child(_label("Farmers plant and harvest the painted plots until the village has this much wheat. The crop waits on the plot and is picked again once it falls below.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
 		c.add_child(_reason(x.why))
 

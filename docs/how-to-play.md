@@ -60,7 +60,7 @@ Each step shows a line under its hint saying **why** it matters.
 
 When the founding is done, a second chapter of goals follows in the same panel, each with a hint and a why:
 
-1. **Paint a farm plot.** **Paint → Farm plot**, on open grass. A farmer plants and harvests it: the village's steady food.
+1. **Paint a farm plot.** **Paint → Farm plot**, on open grass. A farmer plants and harvests it: the village's steady food. Farmers stop once the village has 20 wheat, so it doesn't crowd the stockpiles: change that with − and + on the composter's panel or the jobs board. The stuck list shows "Farm: enough wheat" as a waiting reason, and the crop waits ripe on its plot.
 2. **Cook a meal.** Queue bread or cooked mutton at the fireplace. Cooked food fills a resident for much longer.
 3. **Give a second resident a workstation.** Build another workstation (a mason's bench, composter and so on) and give someone that job from the Jobs board. Tomas's chopping block was the first.
 4. **Bring iron ore home from the old mine.** Plan a trip at the expedition board. Smelted with coal at the fireplace's furnace, iron makes tools that last more than twice as long as stone.

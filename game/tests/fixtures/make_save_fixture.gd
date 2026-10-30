@@ -392,6 +392,8 @@ func _initialize() -> void:
 					dd.stage = 1
 					dd.done = true
 		sim.freight.request = true
+	if SaveFormat.VERSION >= 59:  # a farm target of 12 wheat (#269)
+		sim.wheat_keep = 12
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

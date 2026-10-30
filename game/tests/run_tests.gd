@@ -27,6 +27,7 @@ func _init() -> void:
 		"test_hunger_and_eating",
 		"test_farm_plant_grow_harvest",
 		"test_farm_plots_need_open_grass",
+		"test_the_farm_stops_at_its_target",
 		"test_fireplace_reserves_a_kitchen_plot",
 		"test_fireplace_cooks_and_keeps_meals_stocked",
 		"test_one_job_each",
@@ -1025,6 +1026,41 @@ func test_farm_plant_grow_harvest() -> void:
 	var loaded: Array = sim.farm.keys().map(func(k): return saved.farm[k].grow)
 	check(grows == loaded, "and so does each cell's growth")
 	check(saved.farm.values().all(func(c): return c.claim == 0), "claims are cleared on load")
+
+
+## The farm's keep-stock target (issue #269): farmers stop once the village has enough wheat, and go on when it falls.
+func test_the_farm_stops_at_its_target() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	ada.hunger = 100.0
+	check(sim.wheat_keep == 20 and not sim.wheat_enough(), "a new game keeps 20 wheat")
+	sim.paint_zone(open_rect(sim, Vector2i(3, 2)))
+	sim.paint_farm(open_rect(sim, Vector2i(3, 2)))
+	sim.set_wheat_keep(4)
+	for i in 400 * Tuning.TPS:
+		sim.step()
+		ada.hunger = 100.0
+	var harvested: int = sim.stats.get("harvested", 0)
+	check(sim.free_count("wheat") >= 4 and harvested >= 2, "farmers harvest up to the target (%d wheat)" % sim.free_count("wheat"))
+	for i in 300 * Tuning.TPS:
+		sim.step()
+		ada.hunger = 100.0
+	check(sim.stats.get("harvested", 0) <= harvested + 1 and sim.free_count("wheat") <= 4 + Tuning.WHEAT_YIELD, "and stop there: wheat stays near the target (%d)" % sim.free_count("wheat"))
+	sim.compute_stuck()
+	check(stuck_text(sim).contains("Farm: enough wheat (4)"), "the reason is a waiting one: %s" % stuck_text(sim))
+	check(sim.stuck.any(func(x): return x.who == "Farm" and x.waiting), "it is marked waiting, not stuck")
+	var ripe := sim.farm.values().filter(func(c): return Sim.crop_ripe(c)).size()
+	check(ripe > 0, "ripe plots keep their crop (%d ripe)" % ripe)
+	sim.set_wheat_keep(40)
+	run(sim, 120)
+	check(sim.stats.get("harvested", 0) > harvested + 1, "raising the target sends them back to the plots")
+	# Saved, and an older save gets the default.
+	var back := Sim.from_state(sim.save_state())
+	check(back.wheat_keep == 40, "the target is saved")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v58.save").data.state)
+	check(old.wheat_keep == 20, "an older save has the default target")
+	var f59 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v59.save").data.state)
+	check(f59.wheat_keep == 12, "the v59 fixture loads its target")
 
 
 func test_farm_plots_need_open_grass() -> void:
