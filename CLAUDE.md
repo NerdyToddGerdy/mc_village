@@ -38,6 +38,7 @@ $GODOT --headless --path . -s res://tests/playtest_slice6.gd   # Slice 6 bot: th
 $GODOT --headless --path . --import                          # refresh the class cache after adding a class_name script
 $GODOT --headless --path . --export-release "Web" ../build/web/index.html  # browser build (needs the 4.7.2 export templates)
 $GODOT --path . --resolution 1280x720 -- --screenshot        # scripted opening, saves user://screenshot.png, quits
+$GODOT --path . --resolution 1280x720 -- --screenshot --s6-station   # Slice 6 view with the chain built: --s6-workshop, -station, -sensor, -loader, -dispatcher, -overlay or -landing
 $GODOT --path . --resolution 1280x720 -- --screenshot-menu   # Save game menu (--main or --keys for those pages), saves user://screenshot_menu.png
 ```
 

@@ -11,6 +11,8 @@ var map_id := "village"
 
 var redstone_overlay := false            ## Dims the world and shows the devices and dust (issue #170).
 var _built_overlay := false
+var _ov_dark: Batch                      ## The batches drawn over everything while the redstone overlay is on: its dimming, and the devices and dust above it.
+var _ov_col: Batch
 var _built_rev := -1
 var _built_map := ""
 var _stuck_sig := ""
@@ -235,6 +237,8 @@ func _build_static() -> void:
 	for k in sim.items:
 		if not Sim.in_store(k):  # what's in a storehouse's chests shows on their lids
 			_add_item(solid, sim.items[k])
+	_ov_dark = dark
+	_ov_col = col
 	for s in sim.sites:
 		_add_site(solid, ghost, s)
 		if not s.done:
@@ -563,10 +567,11 @@ static var REDSTONE_OFF := Color("#6B2A26")
 
 
 ## A redstone device (issues #170, #171): a small stone block with a redstone top that glows when it's on, and a post for the sensor.
-func _add_device(b: Batch, s: Dictionary) -> void:
+func _add_device(b_in: Batch, s: Dictionary) -> void:
 	var o: Vector2i = s.origin
 	var done: bool = s.done
-	var lift := 0.3 if redstone_overlay else 0.0  # above the dimming
+	var b := _ov_col if redstone_overlay and done else b_in  # over the dimming, seen through whatever stands in front
+	var lift := 0.0
 	var on: bool = done and s.out
 	b.box(Vector3(o.x + 0.12, lift, o.y + 0.12), Vector3(o.x + 0.88, lift + 0.4, o.y + 0.88), Palette.STONE if done else Color(Palette.BLUE, 0.45), BlockTextures.ROCK)
 	if not done:
@@ -587,15 +592,16 @@ func _add_device(b: Batch, s: Dictionary) -> void:
 
 ## Dust lines (issue #170): a red trail over the cells laid, bright while the signal runs; and the redstone overlay's dimming.
 func _add_dust(solid: Batch, ghost: Batch) -> void:
-	if redstone_overlay:
-		ghost.box(Vector3(0, 0.2, 0), Vector3(sim.w, 0.24, sim.h), Color(0.05, 0.04, 0.07, 0.5))
-	var lift := 0.3 if redstone_overlay else 0.0
+	if redstone_overlay:  # the world dims; devices and dust are drawn over it
+		_ov_dark.box(Vector3(0, 0, 0), Vector3(sim.w, 0.1, sim.h), Color(0.03, 0.02, 0.06, 0.62))
+	var lift := 0.0
+	var dust: Batch = _ov_col if redstone_overlay else solid
 	for w in sim.wires:
 		var src := sim.device_by_id(w.from)
 		var live: bool = Sim.wire_complete(w) and not src.is_empty() and src.out
 		for i in w.laid:
 			var c: Vector2i = w.cells[i]
-			solid.box(Vector3(c.x + 0.3, lift, c.y + 0.3), Vector3(c.x + 0.7, lift + (0.07 if live else 0.04), c.y + 0.7), REDSTONE_ON if live else REDSTONE_OFF)
+			dust.box(Vector3(c.x + 0.3, lift, c.y + 0.3), Vector3(c.x + 0.7, lift + (0.07 if live else 0.04), c.y + 0.7), REDSTONE_ON if live else REDSTONE_OFF)
 		if redstone_overlay:  # the unlaid cells, as a faint plan
 			for i in range(w.laid, w.cells.size()):
 				var c: Vector2i = w.cells[i]

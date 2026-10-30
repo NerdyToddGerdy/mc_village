@@ -1637,6 +1637,63 @@ func _screenshot_menu() -> void:
 	get_tree().quit()
 
 
+## The Slice 6 scene (issue #15): a lit portal, the shelter, the portal line, a workshop and the chain's four devices wired and
+## built, then one panel or view picked by `--s6-<which>`. Used to look at the new panels without clicking through the game.
+func _screenshot_slice6(which: String) -> void:
+	var ada: Dictionary = sim.residents[0]
+	var near: Vector2i = Sim.rcell(ada)
+	var spot := func(tpl: String, from: Vector2i) -> Vector2i:
+		for d in range(0, 14):
+			for dx in range(-d, d + 1):
+				for dy in range(-d, d + 1):
+					var o: Vector2i = from + Vector2i(dx, dy)
+					if sim.placement_check(tpl, o) == "":
+						return o
+		return Vector2i(-1, -1)
+	var done := func(st: Dictionary) -> Dictionary:
+		st.stage = 1
+		st.done = true
+		return st
+	var portal: Dictionary = done.call(sim.place_site("portal", spot.call("portal", near + Vector2i(4, 4))))
+	portal.lit = true
+	var shelter: Dictionary = sim.on_map(NetherLanding.ID, func(): return sim.place_site("shelter", NetherLanding.SHELTER_AT))
+	done.call(shelter)
+	shelter.store = {"bread": 3}
+	sim.get_map(NetherLanding.ID).known = true
+	sim.portal_line.laid = Tuning.PORTAL_LINE_RAILS
+	sim.nline().stations.landing = true
+	var station: Dictionary = done.call(sim.place_site("portal_station", spot.call("portal_station", portal.origin + Vector2i(0, 3))))
+	var ld: Dictionary = done.call(sim.place_site("freight_loader", spot.call("freight_loader", station.plot.position)))
+	var sens: Dictionary = done.call(sim.place_site("cache_sensor", spot.call("cache_sensor", station.origin + Vector2i(-4, 4))))
+	var cond: Dictionary = done.call(sim.place_site("condition", spot.call("condition", station.origin + Vector2i(0, 5))))
+	var disp: Dictionary = done.call(sim.place_site("dispatcher", spot.call("dispatcher", station.origin + Vector2i(3, 2))))
+	var ws: Dictionary = done.call(sim.place_site("enchanting_workshop", spot.call("enchanting_workshop", near + Vector2i(-5, 2))))
+	ws.known = ["efficiency", "unbreaking"]
+	ws.orders = [{"ench": "efficiency", "item": "iron_pick"}]
+	sim.drop_items(near + Vector2i(1, 1), "iron_pick", 1)
+	var n := 0
+	for pr in [[sens, cond], [cond, ld], [ld, disp]]:
+		n += 1
+		sim.order_wire(pr[0].id, pr[1].id)
+		var w = sim.wires[n - 1]
+		w.laid = w.cells.size()
+	sim.freight = {"state": "home", "pos": 0.0, "load": {"bread": 10, "iron_ingot": 2}, "approved": false, "acc": 0.0, "request": true}
+	sim._step_devices()
+	sim.compute_stuck()
+	var focus: Dictionary = {"workshop": ws, "station": station, "sensor": sens, "loader": ld, "dispatcher": disp, "overlay": cond, "landing": station}[which]
+	selection = {"kind": "site", "id": focus.id}
+	_target = Vector3(focus.origin.x + 0.5, 0, focus.origin.y + 0.5)
+	_cam.size = 9.0
+	if which == "overlay":
+		_world.redstone_overlay = true
+	if which == "landing":
+		switch_map(NetherLanding.ID)
+		_target = Vector3(NetherLanding.STATION_AT.x + 1.5, 0, NetherLanding.STATION_AT.y + 4.0)
+		selection = {}
+	_place_camera()
+	sim.rev += 1
+
+
 ## `godot --path . -- --screenshot` plays a short scripted opening, saves a frame to
 ## user://screenshot.png and quits. Used to check the view without clicking through it.
 func _screenshot_scene() -> void:
@@ -2100,6 +2157,9 @@ func _screenshot_scene() -> void:
 		_cam.size = 8.0
 		_place_camera()
 		_hud._drop_pinned = "food"
+	for which in ["workshop", "station", "sensor", "loader", "dispatcher", "overlay", "landing"]:  # Slice 6's panels and models, for the hand check (#15)
+		if "--s6-" + which in OS.get_cmdline_user_args():
+			_screenshot_slice6(which)
 	if "--toast" in OS.get_cmdline_user_args():  # a short toast and one long enough to wrap (issue #71)
 		_hud.add_toast({"text": "Tomas is now level 2 at Mine.", "res_id": 0, "site_id": 0})
 		_hud.add_toast({"text": "A traveler, Mira, has arrived. She claims the new house and needs tools from the bench before she can mine.", "res_id": sim.residents[0].id, "site_id": 0})
