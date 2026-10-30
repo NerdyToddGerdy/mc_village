@@ -318,6 +318,57 @@ func _test_mineshaft_button(game: Game) -> void:
 	game.selection = {}
 
 
+## Issues #168-#171: the portal station's freight panel, a device's panel with its Wire and settings buttons, and the redstone overlay.
+func _test_redstone_panels(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	game.set_tool("")
+	if game._menu.visible:
+		game.close_menu()
+	var base: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(0, 5))
+	var a: Dictionary = sim.place_site("cache_sensor", base)
+	var b: Dictionary = sim.place_site("condition", sim.nearest_walkable(base + Vector2i(4, 0)))
+	for d in [a, b]:
+		d.stage = 1
+		d.done = true
+	sim._step_devices()
+	game.selection = {"kind": "site", "id": a.id}
+	game.focus_on("site", a.id)
+	hud.refresh(sim)
+	await _frames()
+	var texts: Array = _walk(hud._sel).filter(func(n): return n is Button and not n.is_queued_for_deletion()).map(func(n): return n.text)
+	check(texts.has("Wire to the condition") and texts.has("+"), "a sensor's panel offers Wire and a threshold")
+	var wire_btn: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text == "Wire to the condition" and not n.is_queued_for_deletion())
+	wire_btn[0].pressed.emit()
+	check(sim.wires.size() == 1 and sim.wires[0].from == a.id, "pressing it orders the dust line")
+	game.set_device_cfg(a.id, "below", 4)
+	check(a.cfg.below == 4, "the threshold changes")
+	game.toggle_redstone_overlay()
+	hud.refresh(sim)
+	await _frames()
+	check(game._world.redstone_overlay, "the redstone overlay turns on")
+	game.toggle_redstone_overlay()
+	sim.cut_wire(sim.wires[0].id)
+	sim.freight = {"state": "home", "pos": 0.0, "load": {"bread": 3}, "approved": false, "acc": 0.0}
+	var ps: Dictionary = sim.place_site("portal_station", sim.nearest_walkable(base + Vector2i(0, 4)))
+	ps.stage = 1
+	ps.done = true
+	game.selection = {"kind": "site", "id": ps.id}
+	game.focus_on("site", ps.id)
+	hud.refresh(sim)
+	await _frames()
+	var pbtns: Array = _walk(hud._sel).filter(func(n): return n is Button and not n.is_queued_for_deletion()).map(func(n): return n.text)
+	check(pbtns.has("Approve departure"), "the portal station's panel has Approve departure for a loaded cart")
+	sim.freight = {}
+	sim.wires.clear()
+	sim.maps.village.sites.erase(a)
+	sim.maps.village.sites.erase(b)
+	sim.maps.village.sites.erase(ps)
+	sim._occ_dirty = true
+	game.selection = {}
+	hud.refresh(sim)
+
+
 ## Issue #203: select a workstation, Paint area, then drag to add cells and drag from a painted one to erase.
 func _test_work_area_painting(game: Game) -> void:
 	var sim := game.sim
@@ -1554,6 +1605,7 @@ func _initialize() -> void:
 	_test_order_menus(game)
 	_test_menu_button(game)
 	await _test_work_area_painting(game)
+	await _test_redstone_panels(game)
 	await _test_panel_keys(game)
 	await _test_mineshaft_button(game)
 	_test_key_migration()

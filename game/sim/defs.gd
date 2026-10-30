@@ -345,6 +345,14 @@ const TEMPLATES := {
 	"station": {"name": "Station", "size": Vector2i(3, 1), "walk": true, "plot": "loading station", "stages": [
 		{"name": "Station", "verb": "needs", "cost": {"plank": 6, "cobble": 4}},
 	]},
+	# The redstone devices (Slice 6, issues #170-#173): ready-made, built from redstone dust, quartz and stone (provisional). `device`
+	# names the kind; dust lines join one's output to another's input.
+	"cache_sensor": {"name": "Cache sensor", "size": Vector2i(1, 1), "device": "sensor", "stages": [
+		{"name": "Sensor", "verb": "needs", "cost": {"redstone": 2, "quartz": 1, "cobble": 2}},
+	]},
+	"condition": {"name": "Condition", "size": Vector2i(1, 1), "device": "condition", "stages": [
+		{"name": "Condition", "verb": "needs", "cost": {"redstone": 2, "quartz": 1, "cobble": 2}},
+	]},
 	# The portal line's village station, beside the portal (Slice 6, issue #168). It reserves the plot the freight loader grows into.
 	"portal_station": {"name": "Portal station", "size": Vector2i(3, 1), "walk": true, "plot": "loading station", "stages": [
 		{"name": "Station", "verb": "needs", "cost": {"plank": 6, "cobble": 4}},

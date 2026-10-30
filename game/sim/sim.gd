@@ -98,6 +98,9 @@ var portal_line := {"laid": 0}
 ##   {state: "ordered" (a hauler is bringing a minecart), "home", "going", "unloading" or "returning", pos (0 at the village station, 1 at
 ##    the landing station), load: {item: n}, approved, acc}
 var freight := {}
+## Dust lines between redstone devices (issue #170): {id, from, to (site ids), cells: [Vector2i], laid (cells so far)}. A line carries a
+## signal once every cell is laid.
+var wires: Array = []
 var stuck: Array = []        ## {who, why, map, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
 var _fence_claims := {}      ## Vector2i -> the resident putting up that pen fence (issue #139). Not saved.
 var _plant_claims := {}      ## Vector2i -> the lumberjack going to plant a sapling there (issue #177). Not saved.
@@ -1047,6 +1050,9 @@ func _on_site_done(s: Dictionary) -> void:
 		return
 	if s.tpl == "station":
 		_toast("The station at the %s end of the line is built." % s.end, 0, s.id)
+		return
+	if is_device(s):  # issue #170
+		_toast("The %s is built. Wire it to another device from its panel." % Defs.TEMPLATES[s.tpl].name.to_lower(), 0, s.id)
 		return
 	if s.tpl == "portal_station":  # issue #168
 		_toast("The portal station is built. A Build party lays the Nether side of the line.", 0, s.id)
@@ -2076,7 +2082,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop", "portal_station"]:
+	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition"]:
 		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
@@ -2806,6 +2812,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.PORTAL_LIGHT_TIME
 		"enchant":
 			return Tuning.ENCHANT_TIME
+		"lay_dust":
+			return Tuning.DUST_TIME
 		"pline":
 			return Tuning.LAY_TIME if st.task.kind == "rail" else Tuning.STAGE_TIME
 		"nline":
@@ -2912,6 +2920,18 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			_toast("%s enchanted: %s." % [r.name, Defs.ITEMS[ord.item + "+" + ord.ench].one], r.id, ew.id)
 		"nline":  # a piece of the Nether line (issue #159)
 			_finish_line_task(st.task, r)
+		"lay_dust":  # one cell of a dust line (issue #170)
+			var w = wire_by_id(st.wire)
+			if w == null or w.laid >= w.cells.size() or r.carry == null or r.carry.type != "redstone":
+				return "gone"
+			w.laid += 1
+			if w.laid >= w.cells.size() or w.laid % Tuning.DUST_PER_REDSTONE == 0:
+				r.carry.n -= 1
+				if r.carry.n <= 0:
+					r.carry = null
+			rev += 1
+			if w.laid >= w.cells.size():
+				_toast("A dust line is laid.", r.id, w.to)
 		"pline":  # a piece of the portal line (issue #168)
 			_finish_pline_task(st.task, r)
 		"shelter":  # the party's cobblestone and planks go into the walls (issue #152)
@@ -3186,6 +3206,9 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			var lj = _light_job(r)
 			if lj != null:
 				return _tagged(lj, "build")
+			var wj = _wire_job(r, c)
+			if wj != null:
+				return _tagged(wj, "build")
 			return _road_claim(r, "build", jobs)
 		"farm":
 			if not jobs.has("farm"):
@@ -3395,6 +3418,8 @@ func step() -> void:
 	if working >= 2 and kinds.size() >= 2:
 		stats.division = true
 	_step_freight()
+	if tick % 10 == 5:
+		_step_devices()
 	if tick % 10 == 0 and not expeditions.nether.is_empty():  # a party in trouble in the Nether (issue #158)
 		on_slot("nether", _check_stranded)
 	if tick % 5 == 0:
@@ -4549,6 +4574,8 @@ func site_height(s: Dictionary) -> float:
 		return 0.8 if s.done else 0.2
 	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
 		return 0.9 if s.done else 0.2
+	if is_device(s):
+		return 0.5 if s.done else 0.2
 	if s.tpl in ["bridge", "track", "station", "portal_station"]:
 		return 0.2 if not s.tpl.ends_with("station") or not s.done else 0.9
 	return [0.2, 0.5, 2.5, 4.0, 4.0][mini(s.stage, 4)]
@@ -4770,6 +4797,10 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 		s.keep_meals = true
 	if tpl == "portal":
 		s.lit = false
+	if Defs.TEMPLATES[tpl].has("device"):  # a redstone device (issue #170)
+		s.cfg = device_default_cfg(Defs.TEMPLATES[tpl].device)
+		s.out = false  # whether it's on, and why
+		s.why = "Off: not built yet"
 	if tpl == "enchanting_workshop":
 		s.known = []   # the recipes its books have taught it (issue #165)
 		s.orders = []  # enchantments ordered, in turn (issue #166)
@@ -4837,6 +4868,7 @@ func cancel_site(s: Dictionary) -> void:
 		if s.store[k] > 0:
 			drop_items(s.origin + Vector2i(0, s.size.y), k, s.store[k])
 	m.sites.erase(s)
+	wires = wires.filter(func(w): return w.from != s.id and w.to != s.id)  # dust to a device that's gone (issue #170)
 	_occ_dirty = true
 	assign_workstations()  # its resident claims another free one, or hauls (issue #184)
 	rev += 1
@@ -7116,6 +7148,220 @@ func pline_text() -> String:
 	return "Still to lay on the Nether side: %s. The landing station is shared with the Nether line." % (", ".join(parts) if not parts.is_empty() else "nothing")
 
 
+# ---------------------------------------------------------------- redstone devices and dust (issues #170, #171)
+
+## The settings a new device starts with, by kind.
+static func device_default_cfg(kind: String) -> Dictionary:
+	match kind:
+		"sensor":
+			return {"item": "food", "below": Tuning.SENSOR_BELOW}
+		"condition":
+			return {"fact": "portal_lit"}
+	return {}
+
+
+## The facts a condition can check, in the order the panel offers them.
+const CONDITION_FACTS := ["portal_lit", "cart_home", "loader_idle"]
+
+
+static func is_device(s: Dictionary) -> bool:
+	return Defs.TEMPLATES[s.tpl].has("device")
+
+
+func device_by_id(id: int) -> Dictionary:
+	for s in maps.village.sites:
+		if s.id == id and is_device(s):
+			return s
+	return {}
+
+
+func wire_by_id(id: int):
+	for w in wires:
+		if w.id == id:
+			return w
+	return null
+
+
+static func wire_complete(w: Dictionary) -> bool:
+	return w.laid >= w.cells.size()
+
+
+## The finished devices that feed `s`: the other ends of its fully laid dust lines.
+func device_inputs(s: Dictionary) -> Array:
+	var out: Array = []
+	for w in wires:
+		if w.to == s.id and wire_complete(w):
+			var src := device_by_id(w.from)
+			if not src.is_empty() and src.done:
+				out.append(src)
+	return out
+
+
+## The cells a dust line takes between two devices: along the first one's row, then down the second one's column, leaving out
+## the devices' own cells and anything built.
+func wire_cells(a: Dictionary, b: Dictionary) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var at: Vector2i = a.origin
+	var to: Vector2i = b.origin
+	while at != to:
+		if at.x != to.x:
+			at.x += signi(to.x - at.x)
+		else:
+			at.y += signi(to.y - at.y)
+		if at != to and site_at(at) == null:
+			out.append(at)
+	return out
+
+
+## Draws a dust line from one device's output to another's input (the Wire order). Returns why it can't, or "".
+func order_wire(from_id: int, to_id: int) -> String:
+	var a := device_by_id(from_id)
+	var b := device_by_id(to_id)
+	if a.is_empty() or b.is_empty():
+		return "Wire: pick two devices"
+	if from_id == to_id:
+		return "Wire: a device can't feed itself"
+	if not a.done or not b.done:
+		return "Wire: both devices have to be built"
+	if Defs.TEMPLATES[b.tpl].device == "sensor":
+		return "Wire: a sensor has no input"
+	if wires.any(func(w): return w.from == from_id and w.to == to_id):
+		return "Wire: they're joined already"
+	wires.append({"id": _id(), "from": from_id, "to": to_id, "cells": wire_cells(a, b), "laid": 0})
+	rev += 1
+	return ""
+
+
+## Takes a dust line up (the redstone is lost); the signal stops.
+func cut_wire(id: int) -> void:
+	for r in residents:
+		if r.job != null and r.job.target != null and r.job.target.has("from") and r.job.target.get("id", 0) == id:
+			fail_job(r)
+	wires = wires.filter(func(w): return w.id != id)
+	_step_devices()
+	rev += 1
+
+
+## Whether someone is already laying this line.
+func _wire_busy(w: Dictionary) -> bool:
+	return residents.any(func(r): return r.job != null and r.job.target != null and r.job.target is Dictionary and r.job.target.get("id", -1) == w.id and r.job.target.has("cells"))
+
+
+func _wire_dust_needed(w: Dictionary) -> int:
+	return ceili(float(w.cells.size() - w.laid) / Tuning.DUST_PER_REDSTONE)
+
+
+## A resident lays the first unfinished dust line: fetch the redstone it takes, then walk the cells and lay each.
+func _wire_job(r: Dictionary, c: Vector2i):
+	for w in wires:
+		if wire_complete(w) or _wire_busy(w):
+			continue
+		var need := _wire_dust_needed(w)
+		var src := stacks_where(func(s): return s.type == "redstone" and avail(s) >= need)
+		if src.is_empty():
+			continue
+		var stack: Dictionary = nearest(src, c)
+		var j := Job.new("build", "Laying redstone dust", "the dust line")
+		j.work = "build"
+		j.target = w
+		stack.res += need
+		var sh := j.hold({"t": "stack", "stack": stack, "n": need})
+		j.step(_goto(reach(stack.cell), false))
+		j.step({"op": "pickup", "stack": stack, "n": need, "hold": sh})
+		for i in range(w.laid, w.cells.size()):
+			j.step(_goto([w.cells[i]], true))
+			j.step({"op": "work", "what": "lay_dust", "wire": w.id, "label": "Laying redstone dust"})
+		return j
+	return null
+
+
+## The signal of every device, a few passes so a chain settles (issue #170). Redraws when anything flips.
+func _step_devices() -> void:
+	var devs: Array = maps.village.sites.filter(func(s): return is_device(s))
+	if devs.is_empty():
+		return
+	var changed := false
+	for pass_i in mini(devs.size(), 4):
+		for s in devs:
+			var res := _eval_device(s)
+			if s.out != res.out or s.why != res.why:
+				s.out = res.out
+				s.why = res.why
+				changed = true
+	if changed:
+		rev += 1
+
+
+## One device's output and the reason for it, from its settings and its inputs.
+func _eval_device(s: Dictionary) -> Dictionary:
+	if not s.done:
+		return {"out": false, "why": "Off: not built yet"}
+	match Defs.TEMPLATES[s.tpl].device:
+		"sensor":
+			var cache := shelter_site()
+			if not cache.get("done", false):
+				return {"out": false, "why": "Off: no shelter on the landing to read"}
+			var n := cache_count(s.cfg.item)
+			var label: String = "Cache " + ("food" if s.cfg.item == "food" else Defs.ITEMS[s.cfg.item].many)
+			if n < s.cfg.below:
+				return {"out": true, "why": "On: %s %d < %d" % [label, n, s.cfg.below]}
+			return {"out": false, "why": "Off: %s %d is not below %d" % [label, n, s.cfg.below]}
+		"condition":
+			var ins := device_inputs(s)
+			if ins.is_empty():
+				return {"out": false, "why": "Off: nothing wired in"}
+			var live := ins.filter(func(i): return i.out)
+			var fact := condition_fact(s.cfg.fact)
+			if live.is_empty():
+				return {"out": false, "why": "Off: its input is off (%s)" % ins[0].why.trim_prefix("Off: ")}
+			if not fact.holds:
+				return {"out": false, "why": "Off: %s" % fact.no}
+			return {"out": true, "why": "On: %s, and %s" % [live[0].why.trim_prefix("On: "), fact.yes]}
+	return {"out": false, "why": "Off"}
+
+
+## What a condition checks: {holds, yes, no}, the phrases for either answer.
+func condition_fact(fact: String) -> Dictionary:
+	match fact:
+		"portal_lit":
+			return {"holds": portal_lit(), "yes": "the portal is lit", "no": "the portal isn't lit"}
+		"cart_home":
+			var home: bool = freight.get("state", "") == "home"
+			return {"holds": home, "yes": "the freight cart is home", "no": "the freight cart isn't home"}
+		"loader_idle":
+			var idle := not freight_loader_busy()
+			return {"holds": idle, "yes": "the loader is idle", "no": "the loader is busy"}
+	return {"holds": false, "yes": "", "no": ""}
+
+
+## Items of one kind in the shelter's cache; "food" is every meal.
+func cache_count(item: String) -> int:
+	if item == "food":
+		return cache_meals()
+	return shelter_site().get("store", {}).get(item, 0)
+
+
+## Whether the loader is at work on the cart (issue #172); there is none yet.
+func freight_loader_busy() -> bool:
+	return false
+
+
+## Changes a device's setting (issues #170, #171): a sensor's item and threshold, a condition's fact.
+func set_device_cfg(id: int, key: String, value) -> void:
+	var s := device_by_id(id)
+	if s.is_empty() or not s.cfg.has(key):
+		return
+	if key == "item" and not Tuning.SENSOR_ITEMS.has(value):
+		return
+	if key == "fact" and not CONDITION_FACTS.has(value):
+		return
+	if key == "below":
+		value = clampi(int(value), 1, Tuning.CACHE_CAPACITY)
+	s.cfg[key] = value
+	_step_devices()
+	rev += 1
+
+
 # ---------------------------------------------------------------- the freight cart (issue #169)
 
 ## Why a freight cart can't be ordered, or "".
@@ -7252,7 +7498,7 @@ func _step_freight() -> void:
 ## Where the freight cart is, as {map, at: Vector2 (a cell's corner)}, or {} when there's none or no station to put it at.
 func freight_place() -> Dictionary:
 	var ps := portal_station()
-	if freight.is_empty() or freight.state == "ordered" or ps.is_empty():
+	if freight.is_empty() or freight.state == "ordered" or ps.is_empty() or village_portal().is_empty():
 		return {}
 	var p: float = freight.pos
 	if p <= Tuning.FREIGHT_CROSS:
@@ -8942,7 +9188,7 @@ func save_state() -> Dictionary:
 		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made, "cargo_lists": cargo_lists.duplicate(true),
 		"herd_floor": herd_floor.duplicate(), "rng_state": rng.state, "seed": seed,
 		"expeditions": expeditions.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true),
-		"portal_line": portal_line.duplicate(true), "freight": freight.duplicate(true)}
+		"portal_line": portal_line.duplicate(true), "freight": freight.duplicate(true), "wires": wires.duplicate(true)}
 
 
 static func from_state(d: Dictionary) -> Sim:
@@ -8986,6 +9232,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.cart = d.get("cart", {}).duplicate(true)
 	s.portal_line = d.get("portal_line", {"laid": 0}).duplicate(true)
 	s.freight = d.get("freight", {}).duplicate(true)
+	s.wires = d.get("wires", []).duplicate(true)
 	var new_meadow := not s.maps.has(Meadow.ID)
 	s._add_site_maps()
 	if new_meadow and d.has("meadow_sheep"):  # an older save's off-map meadow: its sheep count carries over (issue #137)

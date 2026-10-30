@@ -356,6 +356,21 @@ func _initialize() -> void:
 		sim.portal_line.laid = 3
 	if SaveFormat.VERSION >= 55:  # a freight cart on its way through the portal with five loaves (#169)
 		sim.freight = {"state": "going", "pos": 0.4, "load": {"bread": 5}, "approved": false, "acc": 0.0}
+	if SaveFormat.VERSION >= 56:  # a cache sensor wired to a condition by a laid dust line (#170)
+		var devs: Array = []
+		var o0: Vector2i = Sim.rcell(sim.residents[0]) + Vector2i(0, 5)
+		for dy in range(0, 8):
+			for dx in range(-8, 9):
+				var o: Vector2i = o0 + Vector2i(dx, dy)
+				if devs.size() < 2 and sim.placement_check("cache_sensor", o) == "" and (devs.is_empty() or absi(o.x - devs[0].origin.x) >= 4):
+					var dv := sim.place_site("cache_sensor" if devs.is_empty() else "condition", o)
+					dv.stage = 1
+					dv.done = true
+					devs.append(dv)
+		if devs.size() == 2:
+			sim.order_wire(devs[0].id, devs[1].id)
+			sim.wires[0].laid = sim.wires[0].cells.size()
+			devs[0].cfg.below = 8
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

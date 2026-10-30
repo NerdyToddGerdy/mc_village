@@ -114,7 +114,21 @@ Each enchantment changes only its own number, by the item's type (`Defs.ITEMS[ty
 - **Stuck reasons:** "Freight cart: waiting for approval" (loaded, at the station); "the portal is unlit" (at the station approved, or held at the crossing); "the cache is full" (or "there's no shelter to unload into"); "needs a minecart from the village".
 - **Saving:** `freight` (v55). Until the loader (#172) there's no way to put goods on it in play; tests load it directly.
 
-## 10. Tuning table (provisional)
+## 10. Redstone devices and dust (#170)
+
+- **Devices** are small buildings on the village map, ready-made, each costing redstone dust, quartz and stone (provisional): the **cache sensor** and **condition** (2 redstone, 1 quartz, 2 cobblestone each); the loader (§12) and the dispatcher (#173) join them. Place from the Build menu once the portal station is planned. Residents build them like any building.
+- **Dust lines** are drawn from a device's panel (**Wire to the …**, the Wire order): one device's output to another's input. A sensor has no input; a device can't feed itself; one line per pair and direction. The line takes a path of cells (along the first device's row, then down the second's column, skipping built cells). A resident with Build on fetches `ceil(cells / DUST_PER_REDSTONE)` redstone dust from the stockpile and lays the cells one at a time (`DUST_TIME` each), visibly. **Cut** in either device's panel takes the line up; so does demolishing a device.
+- **Signal:** on or off, instantly along a *fully laid* line (`wires`: `{id, from, to, cells, laid}`). A device's input is on when any line into it is on. Evaluated every half second; a few passes settle a chain (no custom circuits, no gates or timers; #29 stays open).
+- **Inspector:** a device's panel says **On** or **Off** and **why**, tracing back through its inputs: "On: Cache food 6 < 10, and the portal is lit". Powered devices and dust glow bright red, unpowered ones dark.
+- **Redstone overlay** (key `O`, rebindable): dims the village and lifts the devices and dust above it, with a beacon on each device and the unlaid cells of a planned line shown faintly.
+- **Saving:** devices are sites with `cfg`, `out` and `why`; `wires` is saved (v56).
+
+## 11. The cache sensor and the condition (#171)
+
+- **Cache sensor:** reads the shelter's cache from the village (a remote reading, nothing moves). It watches one item (`SENSOR_ITEMS`: meals ("food"), iron ingots, planks, cobblestone) and is **on while the count is below its threshold** (starts at `SENSOR_BELOW`, 10; set with − / + in its panel). Its panel shows the cache's current value. No shelter yet: off, "no shelter on the landing to read".
+- **Condition:** passes its input only while a chosen fact holds: **the portal is lit**, **the freight cart is home**, **the loader is idle** (cycled from its panel). With nothing wired in: "Off: nothing wired in"; input off: "Off: its input is off (…)"; fact false: "Off: the portal isn't lit".
+
+## 12. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -134,3 +148,8 @@ Each build issue adds its rows.
 | `FREIGHT_TRIP_TIME` | 14 s | One way along the portal line. |
 | `FREIGHT_CROSS` | 0.3 | How far along the trip the portal is. |
 | `CACHE_CAPACITY` | 60 | Items the shelter's cache holds in all. |
+| `DUST_PER_REDSTONE` | 4 | Cells of dust one redstone dust lays. |
+| `DUST_TIME` | 1.5 s | Laying one cell of dust. |
+| `SENSOR_ITEMS` | food, iron ingot, plank, cobble | What a cache sensor can watch. |
+| `SENSOR_BELOW` | 10 | A new sensor's threshold. |
+| Device costs | 2 redstone, 1 quartz, 2 cobble | Sensor and condition, in `Defs.TEMPLATES`. |

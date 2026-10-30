@@ -81,6 +81,8 @@ func _init() -> void:
 		"test_the_enchantment_effects",
 		"test_the_portal_line",
 		"test_the_freight_cart",
+		"test_redstone_devices_and_dust",
+		"test_the_cache_sensor_and_condition",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5882,8 +5884,129 @@ func test_the_freight_cart() -> void:
 	check(sim.freight.state == "home" and shelter.store.get("bread", 0) == 3, "once there's room it unloads and returns")
 	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v54.save").data.state)
 	check(old.freight.is_empty(), "an older save has no freight cart")
+	var f56 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v56.save").data.state)
+	check(f56.wires.size() == 1 and Sim.wire_complete(f56.wires[0]) and f56.device_by_id(f56.wires[0].from).cfg.below == 8, "the v56 fixture loads its devices and dust line")
 	var f55 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v55.save").data.state)
 	check(f55.freight.state == "going" and f55.freight.load == {"bread": 5} and f55.freight_place().get("map", "") == NetherLanding.ID, "the v55 fixture loads its cart mid-trip")
+
+
+## Two built devices in the open near Ada: a cache sensor and a condition, a few cells apart.
+func device_pair(sim: Sim, w: Dictionary) -> Array:
+	var spots: Array = []
+	var base: Vector2i = Sim.rcell(w.ada) + Vector2i(0, 4)
+	for dy in range(0, 10):
+		for dx in range(-8, 9):
+			var o: Vector2i = base + Vector2i(dx, dy)
+			if sim.placement_check("cache_sensor", o) == "" and sim.site_at(o) == null:
+				spots.append(o)
+	var a: Dictionary = {}
+	var b: Dictionary = {}
+	for o in spots:
+		if a.is_empty():
+			a = sim.place_site("cache_sensor", o)
+		elif absi(o.x - a.origin.x) + absi(o.y - a.origin.y) >= 5 and sim.placement_check("condition", o) == "":
+			b = sim.place_site("condition", o)
+			break
+	for d in [a, b]:
+		d.stage = 1
+		d.done = true
+	return [a, b]
+
+
+## Redstone devices and dust lines (issue #170): drawn between built devices, laid by residents, and carrying a signal that says why.
+func test_redstone_devices_and_dust() -> void:
+	var w := freight_world()
+	var sim: Sim = w.sim
+	var pair := device_pair(sim, w)
+	var sensor: Dictionary = pair[0]
+	var cond: Dictionary = pair[1]
+	check(Defs.TEMPLATES.cache_sensor.stages[0].cost.has("redstone") and Defs.TEMPLATES.condition.device == "condition", "devices cost redstone dust and are ready-made")
+	check(sensor.cfg == {"item": "food", "below": 10} and cond.cfg == {"fact": "portal_lit"}, "each starts with its settings")
+	check(sim.order_wire(sensor.id, sensor.id) != "" and sim.order_wire(cond.id, sensor.id) == "Wire: a sensor has no input", "a device can't feed itself, and a sensor has no input")
+	var cells := sim.wire_cells(sensor, cond)
+	check(sim.order_wire(sensor.id, cond.id) == "" and sim.order_wire(sensor.id, cond.id) != "" and sim.wires.size() == 1 and sim.wires[0].cells == cells, "a line is ordered once, along a path of cells")
+	sim._step_devices()
+	check(not cond.out and cond.why == "Off: nothing wired in", "an unfinished line carries no signal: %s" % cond.why)
+	# Residents lay it from the stockpile's redstone, cell by cell.
+	var need := ceili(float(cells.size()) / Tuning.DUST_PER_REDSTONE)
+	sim.drop_items(Sim.rcell(w.ada) + Vector2i(2, 2), "redstone", need + 2)
+	for i in 240 * Tuning.TPS:
+		sim.step()
+		if Sim.wire_complete(sim.wires[0]):
+			break
+	check(Sim.wire_complete(sim.wires[0]), "residents lay all %d cells of dust (%s, ada %s %s)" % [cells.size(), sim.wires[0], w.ada.job.label if w.ada.job != null else "idle", sim.maps.village.items.values().filter(func(x): return x.type == "redstone")])
+	var left := 0
+	for st in sim.maps.village.items.values():
+		if st.type == "redstone":
+			left += st.n
+	check(left == 2, "the line used %d redstone dust from the stockpile (%d left)" % [need, left])
+	for i in 20:
+		sim.step()
+	check(cond.out and cond.why.begins_with("On: Cache food 0 < 10") and cond.why.ends_with("the portal is lit"), "the signal passes along the dust: %s" % cond.why)
+	# Breaking a line cuts the signal.
+	var wid: int = sim.wires[0].id
+	var back := Sim.from_state(sim.save_state())
+	check(back.wires.size() == 1 and Sim.wire_complete(back.wires[0]), "a laid line is saved")
+	sim.cut_wire(wid)
+	check(sim.wires.is_empty() and not cond.out and cond.why == "Off: nothing wired in", "breaking the line cuts the signal")
+	# Taking a device down takes its dust with it.
+	sim.order_wire(sensor.id, cond.id)
+	sim.cancel_site(sensor)
+	check(sim.wires.is_empty(), "a line goes when its device does")
+
+
+## The cache sensor and the condition (issue #171): a remote reading of the shelter's cache, and a gate on a fact.
+func test_the_cache_sensor_and_condition() -> void:
+	var w := freight_world()
+	var sim: Sim = w.sim
+	var pair := device_pair(sim, w)
+	var sensor: Dictionary = pair[0]
+	var cond: Dictionary = pair[1]
+	var shelter: Dictionary = w.shelter
+	sim.wires.append({"id": 900, "from": sensor.id, "to": cond.id, "cells": [], "laid": 0})
+	sim._step_devices()
+	check(sensor.out and sensor.why == "On: Cache food 0 < 10", "an empty cache is below the threshold: %s" % sensor.why)
+	shelter.store = {"bread": 12}
+	sim._step_devices()
+	check(not sensor.out and sensor.why == "Off: Cache food 12 is not below 10" and not cond.out and cond.why.begins_with("Off: its input is off"), "above it the sensor is off, and so is the condition: %s" % cond.why)
+	shelter.store = {"bread": 6, "cooked_beef": 1}
+	sim._step_devices()
+	check(sensor.out and sensor.why == "On: Cache food 7 < 10" and sim.cache_meals() == 7, "the readout is the cache's meals: %s" % sensor.why)
+	sim.set_device_cfg(sensor.id, "below", 7)
+	sim._step_devices()
+	check(not sensor.out and sensor.why == "Off: Cache food 7 is not below 7", "the threshold is set on the sensor (%s)" % sensor.why)
+	sim.set_device_cfg(sensor.id, "below", 10)
+	sim.set_device_cfg(sensor.id, "item", "iron_ingot")
+	shelter.store = {"iron_ingot": 3}
+	sim._step_devices()
+	check(sensor.out and sensor.why == "On: Cache iron ingots 3 < 10", "it can watch another item: %s" % sensor.why)
+	sim.set_device_cfg(sensor.id, "item", "food")
+	sim.set_device_cfg(sensor.id, "item", "diamond")
+	check(sensor.cfg.item == "food", "only the listed items can be watched")
+	# The condition passes its input only when its fact holds.
+	shelter.store = {}
+	sim._step_devices()
+	check(cond.out and cond.why == "On: Cache food 0 < 10, and the portal is lit", "the portal is lit, so it passes: %s" % cond.why)
+	w.portal.lit = false
+	sim._step_devices()
+	check(not cond.out and cond.why == "Off: the portal isn't lit", "an unlit portal blocks the signal: %s" % cond.why)
+	w.portal.lit = true
+	sim.set_device_cfg(cond.id, "fact", "cart_home")
+	sim._step_devices()
+	check(not cond.out and cond.why == "Off: the freight cart isn't home", "with no cart it isn't home")
+	sim.freight = {"state": "home", "pos": 0.0, "load": {}, "approved": false, "acc": 0.0}
+	sim._step_devices()
+	check(cond.out and cond.why.ends_with("the freight cart is home"), "a cart at the station passes it: %s" % cond.why)
+	sim.freight.state = "going"
+	sim._step_devices()
+	check(not cond.out, "a cart on the line blocks it")
+	sim.set_device_cfg(cond.id, "fact", "loader_idle")
+	sim._step_devices()
+	check(cond.out and cond.why.ends_with("the loader is idle"), "an idle loader passes it")
+	# Unbuilt or without a shelter, a sensor reads nothing.
+	shelter.done = false
+	sim._step_devices()
+	check(not sensor.out and sensor.why == "Off: no shelter on the landing to read", "with no shelter there's nothing to read")
 
 
 ## Ticks from setting out to reaching the quartz site on a gather trip.

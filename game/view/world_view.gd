@@ -9,6 +9,8 @@ var sim: Sim
 ## back to the village.
 var map_id := "village"
 
+var redstone_overlay := false            ## Dims the world and shows the devices and dust (issue #170).
+var _built_overlay := false
 var _built_rev := -1
 var _built_map := ""
 var _stuck_sig := ""
@@ -159,10 +161,11 @@ func _process(delta: float) -> void:
 
 
 func _draw_map() -> void:
-	if sim.rev != _built_rev or map_id != _built_map:
+	if sim.rev != _built_rev or map_id != _built_map or redstone_overlay != _built_overlay:
 		_build_static()
 		_built_rev = sim.rev
 		_built_map = map_id
+		_built_overlay = redstone_overlay
 	var sig := map_id
 	for s in sim.stuck:
 		sig += "%s%s%s%s%s;" % [s.map, s.cell, s.height, s.why, s.waiting]
@@ -238,6 +241,8 @@ func _build_static() -> void:
 			_outline(dark, col, Rect2i(s.origin, s.size), 0.52 if s.stage >= 1 else 0.02, Palette.BLUE, true)
 		if s.get("plot") != null:  # the reserved plot it will grow into, faint
 			_outline(dark, col, s.plot, 0.02, Color(Palette.CHALK, 0.35), true)
+	if sim.m.kind == "village":
+		_add_dust(solid, ghost)
 	for p in sim.m.pens:
 		_add_pen_plan(ghost, dark, col, p)
 	solid.apply(_solid)
@@ -551,6 +556,44 @@ func _add_nether_line(b: Batch) -> void:
 		b.box(Vector3(1, 0, NetherRoute.LINE_ROW + 1), Vector3(4, 0.3, NetherRoute.LINE_ROW + 2), Palette.COBBLE, BlockTextures.COBBLES)
 	if l.cart and mp.line.stations.site:
 		b.box(Vector3(1.3, 0.3, NetherRoute.LINE_ROW + 1.2), Vector3(2.1, 0.7, NetherRoute.LINE_ROW + 1.8), Palette.ITEM_COLORS.minecart)
+
+
+static var REDSTONE_ON := Color("#FF5A4A")
+static var REDSTONE_OFF := Color("#6B2A26")
+
+
+## A redstone device (issues #170, #171): a small stone block with a redstone top that glows when it's on, and a post for the sensor.
+func _add_device(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var done: bool = s.done
+	var lift := 0.3 if redstone_overlay else 0.0  # above the dimming
+	var on: bool = done and s.out
+	b.box(Vector3(o.x + 0.12, lift, o.y + 0.12), Vector3(o.x + 0.88, lift + 0.4, o.y + 0.88), Palette.STONE if done else Color(Palette.BLUE, 0.45), BlockTextures.ROCK)
+	if not done:
+		return
+	b.box(Vector3(o.x + 0.25, lift + 0.4, o.y + 0.25), Vector3(o.x + 0.75, lift + 0.46, o.y + 0.75), REDSTONE_ON if on else REDSTONE_OFF)
+	if Defs.TEMPLATES[s.tpl].device == "sensor":
+		b.box(Vector3(o.x + 0.42, lift + 0.46, o.y + 0.42), Vector3(o.x + 0.58, lift + 0.85, o.y + 0.58), Palette.STONE)
+		b.box(Vector3(o.x + 0.38, lift + 0.85, o.y + 0.38), Vector3(o.x + 0.62, lift + 0.95, o.y + 0.62), REDSTONE_ON if on else REDSTONE_OFF)
+	if redstone_overlay:  # a beacon so it stands out from the dimmed world
+		b.box(Vector3(o.x + 0.45, lift + 0.46, o.y + 0.45), Vector3(o.x + 0.55, lift + 1.6, o.y + 0.55), Color(REDSTONE_ON, 0.8) if on else Color(REDSTONE_OFF, 0.8))
+
+
+## Dust lines (issue #170): a red trail over the cells laid, bright while the signal runs; and the redstone overlay's dimming.
+func _add_dust(solid: Batch, ghost: Batch) -> void:
+	if redstone_overlay:
+		ghost.box(Vector3(0, 0.2, 0), Vector3(sim.w, 0.24, sim.h), Color(0.05, 0.04, 0.07, 0.5))
+	var lift := 0.3 if redstone_overlay else 0.0
+	for w in sim.wires:
+		var src := sim.device_by_id(w.from)
+		var live: bool = Sim.wire_complete(w) and not src.is_empty() and src.out
+		for i in w.laid:
+			var c: Vector2i = w.cells[i]
+			solid.box(Vector3(c.x + 0.3, lift, c.y + 0.3), Vector3(c.x + 0.7, lift + (0.07 if live else 0.04), c.y + 0.7), REDSTONE_ON if live else REDSTONE_OFF)
+		if redstone_overlay:  # the unlaid cells, as a faint plan
+			for i in range(w.laid, w.cells.size()):
+				var c: Vector2i = w.cells[i]
+				ghost.box(Vector3(c.x + 0.35, lift, c.y + 0.35), Vector3(c.x + 0.65, lift + 0.03, c.y + 0.65), Color(REDSTONE_ON, 0.4))
 
 
 ## The portal line's rails on the landing, from the portal's far side as far as they're laid (issue #168).
@@ -940,6 +983,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 		return
 	if s.tpl == "track":
 		_add_track(solid, ghost, s)
+		return
+	if Defs.TEMPLATES[s.tpl].has("device"):
+		_add_device(solid if s.done else ghost, s)
 		return
 	if s.tpl == "station" or s.tpl == "portal_station":
 		_add_station(solid if s.done else ghost, s)

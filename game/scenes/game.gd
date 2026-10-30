@@ -789,6 +789,8 @@ func _key(e: InputEventKey) -> void:
 		"portal": start_placing("portal")
 		"enchanting_workshop": start_placing("enchanting_workshop")
 		"portal_station": start_placing("portal_station")
+		"cache_sensor", "condition": start_placing(keys.action_for(e))
+		"redstone_overlay": toggle_redstone_overlay()
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
 		"toolsmith_bench", "composter", "lodge", "builder_table": start_placing(keys.action_for(e))
@@ -961,7 +963,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "keep"]
+const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -1237,6 +1239,24 @@ func order_enchant(ench: String, item: String) -> void:
 
 func cancel_enchant(i: int) -> void:
 	sim.cancel_enchant(i)
+
+
+func set_device_cfg(id: int, key: String, value) -> void:
+	sim.set_device_cfg(id, key, value)
+
+
+func cut_wire(id: int) -> void:
+	sim.cut_wire(id)
+
+
+func toggle_redstone_overlay() -> void:
+	_world.redstone_overlay = not _world.redstone_overlay
+
+
+func order_wire(from_id: int, to_id: int) -> void:
+	var why := sim.order_wire(from_id, to_id)
+	if why != "":
+		_hud.add_toast({"text": why, "res_id": 0, "site_id": 0})
 
 
 func order_freight_cart() -> void:

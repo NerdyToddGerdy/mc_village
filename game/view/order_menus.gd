@@ -39,6 +39,8 @@ const MENUS := {
 		{"id": "storehouse", "name": "Storehouse", "sub": "6 cobblestone, 12 planks and 4 logs. Chests carried in store anything; stockpiles take the overflow. Reserves room to grow", "mark": "build"},
 		{"id": "enchanting_workshop", "name": "Enchanting workshop", "sub": "4 obsidian, 2 diamonds and 6 planks. An enchanter carries books to it to learn their recipes, and enchants gear. Reserves room for a library", "mark": "build", "unlock": "enchanting"},
 		{"id": "portal_station", "name": "Portal station", "sub": "6 planks and 4 cobblestone, beside the portal. The village end of the portal line; a Build party lays the rest in the Nether. Reserves room for a freight loader", "mark": "build", "unlock": "portal_line"},
+		{"id": "cache_sensor", "name": "Cache sensor", "sub": "2 redstone dust, 1 quartz and 2 cobblestone. Reads the Nether cache from here and is on when an item is below a threshold", "mark": "build", "unlock": "portal_line"},
+		{"id": "condition", "name": "Condition", "sub": "2 redstone dust, 1 quartz and 2 cobblestone. Passes a signal along only while a fact holds: the portal is lit, the cart is home, the loader is idle", "mark": "build", "unlock": "portal_line"},
 		{"id": "portal", "name": "Nether portal", "sub": "10 obsidian, then flint and steel to light it. Parties bound for the Nether pack on the staging area in front. Reserves room for a portal hall", "mark": "build", "unlock": "portal"},
 		{"id": "board", "name": "Expedition board", "sub": "6 planks and 4 sticks. Plans trips off the map. Reserves room for a map room", "mark": "build", "unlock": "house"},
 	]},
