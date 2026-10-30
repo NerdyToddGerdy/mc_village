@@ -2173,11 +2173,32 @@ func fail_job(r: Dictionary, why := "") -> void:
 			j.target.unreach_until = tick + int(Tuning.UNREACHABLE_COOLDOWN * Tuning.TPS)
 
 
+## How much faster a resident works with the tool in their hand: Efficiency (issue #167).
+func tool_speed(r: Dictionary, kind: String) -> float:
+	var t = r.get(kind)
+	if t != null and Defs.ITEMS[t.type].get("ench", "") == "efficiency":
+		return Tuning.EFFICIENCY_SPEED
+	return 1.0
+
+
+## Takes a use off an item (issue #167): an Unbreaking one only loses every other use, kept in a running count so a game replays
+## the same. Returns whether a use was taken.
+static func _use_up(t: Dictionary) -> bool:
+	if Defs.ITEMS[t.type].get("ench", "") == "unbreaking":
+		t.acc = t.get("acc", 0.0) + Tuning.UNBREAKING_WEAR
+		if t.acc < 1.0:
+			return false
+		t.acc -= 1.0
+	t.dur -= 1
+	return true
+
+
 func _wear(r: Dictionary, kind: String) -> void:
 	var t = r[kind]
 	if t == null:
 		return
-	t.dur -= 1
+	if not _use_up(t):
+		return
 	if t.dur <= 0:
 		r[kind] = null
 		r.broken[kind] = true
@@ -2753,12 +2774,12 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 		"gather":
 			var tier: int = r[st.tool].tier if r[st.tool] != null else 0
 			if st.tool == "axe":
-				return Tuning.CHOP_TIME[tier]
+				return Tuning.CHOP_TIME[tier] / tool_speed(r, "axe")
 			if st.target.get("ore", "") == "glowstone":  # it breaks by hand (issue #155)
 				return Tuning.GLOWSTONE_TIME
 			if tier < Tuning.ORE_PICK_TIER.get(st.target.get("ore", ""), 0):  # diamonds want an iron pickaxe (issue #186), obsidian a diamond one (#146)
 				return -1.0
-			return Tuning.BREAK_TIME[tier] if tier > 0 else -1.0
+			return Tuning.BREAK_TIME[tier] / tool_speed(r, "pick") if tier > 0 else -1.0
 		"dig":
 			return Tuning.SHAFT_DIG if r.pick != null and r.pick.tier > 0 else -1.0
 		"build":
@@ -6943,6 +6964,21 @@ static func nline_times() -> Dictionary:
 
 # ---------------------------------------------------------------- enchanting (issues #165-#167)
 
+## An item's name for tooltips and the planner: "Iron pickaxe · Efficiency (mines 30% faster)" for an enchanted one (issue #167).
+static func item_title(type: String) -> String:
+	var it: Dictionary = Defs.ITEMS[type]
+	var base: String = Defs.BASE_ITEMS[Defs.base_type(type)].one
+	base = base.substr(0, 1).to_upper() + base.substr(1)
+	if not it.has("ench"):
+		return base
+	var e: String = it.ench
+	var effect: String = {"efficiency": "%s %d%% faster" % ["chops" if it.get("tool", "") == "axe" else "mines", roundi((Tuning.EFFICIENCY_SPEED - 1.0) * 100.0)],
+		"unbreaking": "wears %d%% slower" % roundi((1.0 - Tuning.UNBREAKING_WEAR) * 100.0),
+		"protection": "%d%% fewer creature injuries" % roundi(Tuning.PROTECTION_CUT * 100.0),
+		"fire_protection": "%d%% less fire and lava harm" % roundi(Tuning.FIRE_PROTECTION_CUT * 100.0)}[e]
+	return "%s · %s (%s)" % [base, Defs.ENCHANTS[e].name, effect]
+
+
 ## What an enchantment does, in the words shown on the workshop's panel and the item's tooltip (issue #167).
 static func enchant_text(ench: String) -> String:
 	match ench:
@@ -7360,7 +7396,7 @@ func _step_creatures() -> void:
 			if x.cool <= 0.0:
 				x.cool = sp.cool
 				x.flash = tick + 6
-				_hazard(tgt, sp.hit, sp.serious, "a " + sp.name.to_lower())
+				_hazard(tgt, sp.hit, sp.serious, "a " + sp.name.to_lower(), "creature")
 			continue
 		x.acc += Tuning.CREATURE_SPEED * Tuning.DT
 		while x.acc >= 1.0:
@@ -7930,7 +7966,11 @@ func _roll(chance: float) -> bool:
 ## A hazard strikes someone with `chance` (issues #110, #140). Armor takes the blow and wears, and
 ## turns some injuries aside; a full set makes a serious one less likely. `serious` is the chance an
 ## injury is serious, 0 for one that never is.
-func _hazard(r: Dictionary, chance: float, serious: float, cause: String) -> void:
+func _hazard(r: Dictionary, chance: float, serious: float, cause: String, kind := "") -> void:
+	if kind == "creature":  # Protection armor, a piece at a time (issue #167)
+		chance *= pow(1.0 - Tuning.PROTECTION_CUT, armor_ench_count(r, "protection"))
+	elif kind == "fire":  # Fire protection (issue #167)
+		chance *= pow(1.0 - Tuning.FIRE_PROTECTION_CUT, armor_ench_count(r, "fire_protection"))
 	if not _roll(chance):
 		return
 	var guard := protection(r)
@@ -7945,6 +7985,16 @@ func _hazard(r: Dictionary, chance: float, serious: float, cause: String) -> voi
 	if serious > 0.0 and _roll(serious * (Tuning.FULL_SET_SERIOUS if full else 1.0)):
 		level = 2
 	injure(r, level, cause)
+
+
+## How many pieces someone wears with an enchantment.
+static func armor_ench_count(r: Dictionary, ench: String) -> int:
+	var n := 0
+	var worn := armor_worn(r)
+	for slot in worn:
+		if Defs.ITEMS[worn[slot].type].get("ench", "") == ench:
+			n += 1
+	return n
 
 
 ## The armor someone has on: slot -> {type, dur}.
@@ -7969,7 +8019,8 @@ static func protection(r: Dictionary) -> float:
 func _wear_armor(r: Dictionary) -> void:
 	for slot in armor_worn(r):
 		var a: Dictionary = r.armor[slot]
-		a.dur -= 1
+		if not _use_up(a):
+			continue
 		if a.dur <= 0:
 			r.armor[slot] = null
 			stats.armor_worn_out = stats.get("armor_worn_out", 0) + 1
@@ -8054,7 +8105,7 @@ func _burn_step(r: Dictionary) -> void:
 	r.burn_acc = r.get("burn_acc", 0.0) + Tuning.DT
 	if r.burn_acc >= 1.0:
 		r.burn_acc -= 1.0
-		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning")
+		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning", "fire")
 	if r.burn <= 0.0:
 		r.burn_acc = 0.0
 
@@ -8065,10 +8116,10 @@ func _ledge_step(r: Dictionary, c: Vector2i) -> void:
 		return
 	if m.fire.has(c):  # stepping onto a fire sets someone alight (issue #149)
 		r.burn = Tuning.FIRE_BURN_TIME
-		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning")
+		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning", "fire")
 		return
 	if m.beside_lava(c):
-		_hazard(r, Tuning.LAVA_CHANCE, Tuning.LAVA_SERIOUS, "a burn beside lava")
+		_hazard(r, Tuning.LAVA_CHANCE, Tuning.LAVA_SERIOUS, "a burn beside lava", "fire")
 	if c in m.ledges and (m.is_dark(c) or realm_of(map_id) == "nether"):  # the Nether's drops need no dark (issue #149)
 		_hazard(r, fall_chance(m.level), Tuning.FALL_SERIOUS, "a fall from a ledge")
 	elif c in m.banks:  # the meadow's pond bank (issue #137): never serious

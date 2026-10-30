@@ -81,7 +81,23 @@ At the workshop an **Enchanter** puts a **known** enchantment on a tool, a sword
 - **Competition for the best gear** (brief §9): enchanted gear is ordinary gear in the stockpile, so a resident takes an enchanted tool over a plain one of the same tier, a party's packs take enchanted spare pickaxes, and the planner and the Equip lists show its name. What a party carries leaves the village.
 - **Saving:** v53. An enchanted item saves as its type; the workshop keeps its `orders` and what it holds.
 
-## 7. Tuning table (provisional)
+## 7. The four enchantments (#167)
+
+Each enchantment changes only its own number, by the item's type (`Defs.ITEMS[type].ench`):
+
+| Enchantment | Effect | Where |
+|---|---|---|
+| **Efficiency** | Work **×1.3** (`EFFICIENCY_SPEED`): chopping, breaking and extraction at sites. | The tool in the worker's hand (axes, pickaxes) |
+| **Unbreaking** | Wear **×0.5** (`UNBREAKING_WEAR`): the item loses a use every other time, counted in the item's own running tally so a game replays the same. | Tools, swords and armor |
+| **Protection** | **−30%** chance of a creature injury (`PROTECTION_CUT`), for each piece worn (they multiply). | Armor, on creature blows (#151) |
+| **Fire protection** | **−50%** chance of harm from fire and lava (`FIRE_PROTECTION_CUT`), for each piece worn. | Armor, on burns and lava (#149) |
+
+- They **stack with everything else** as the numbers say: Efficiency divides the work time before the resident's skill does (so a level 3 Mason with an Efficiency pickaxe is 1.3× the speed of the same Mason with a plain one); armor's own guard share, and a full set's lower chance of a serious injury, apply as before after a hazard lands.
+- **Rail stays rail:** a finished line changes only travel; Efficiency is the item's effect, not the route's, and a test guards both.
+- **Shown** on the item's name wherever a tool is listed: "Iron pickaxe · Efficiency (mines 30% faster)", "Leather tunic · Protection (30% fewer creature injuries)", and on the workshop's panel, with each recipe's effect.
+- **No save change:** an enchanted item is an item type, and the effects read it.
+
+## 8. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -92,3 +108,7 @@ Each build issue adds its rows.
 | Lapis and redstone | from level 3 | 2 blocks each, more the deeper, 5 at most. |
 | `ENCHANT_TIME` | 12 s | Working one enchantment at Enchanter level 1. |
 | Costs | see §6 | In `Defs.ENCHANTS`: lapis plus one ingredient. |
+| `EFFICIENCY_SPEED` | ×1.3 | Work speed with an Efficiency tool. |
+| `UNBREAKING_WEAR` | ×0.5 | Wear an Unbreaking item takes. |
+| `PROTECTION_CUT` | −30% | Chance of a creature injury, per Protection piece. |
+| `FIRE_PROTECTION_CUT` | −50% | Chance of harm from fire and lava, per Fire protection piece. |

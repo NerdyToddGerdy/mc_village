@@ -1205,8 +1205,7 @@ func _tool_row(type: String, dur: int) -> VBoxContainer:
 	var low := dur <= 3
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
-	var name: String = Defs.ITEMS[type].one
-	var row := _row(name.left(1).to_upper() + name.substr(1), "%d / %d uses" % [dur, most], false)
+	var row := _row(Sim.item_title(type), "%d / %d uses" % [dur, most], false)
 	if low:
 		(row.get_child(1) as Label).add_theme_color_override("font_color", Palette.YELLOW)
 	v.add_child(row)

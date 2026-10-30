@@ -78,6 +78,7 @@ func _init() -> void:
 		"test_enchanted_books",
 		"test_the_enchanting_workshop",
 		"test_enchanting_an_item",
+		"test_the_enchantment_effects",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5968,3 +5969,87 @@ func test_enchanting_an_item() -> void:
 	check(user.pick != null and user.pick.type == "stone_pick+efficiency", "a resident takes the enchanted pickaxe over a plain one of the same tier")
 	# The tally bar groups enchanted gear with the other tools.
 	check(Defs.ITEMS["stone_pick+efficiency"].group == "tools", "enchanted gear is in the tally bar's tools")
+
+
+## Ticks a resident with a pickaxe takes to break the nearest boulder, standing beside it.
+func mining_ticks(pick_type: String, mason_xp: int) -> int:
+	var sim := Sim.new_game()
+	var r: Dictionary = sim.residents[0]
+	r.jobs.mason.xp = mason_xp
+	var rock: Dictionary = Sim.nearest(sim.boulders, Sim.rcell(r))
+	var beside: Vector2i = sim.nearest_walkable(rock.cell + Vector2i(1, 0))
+	r.pos = Vector2(beside)
+	r.path = []
+	r.pick = {"type": pick_type, "tier": Defs.ITEMS[pick_type].tier, "dur": 90}
+	sim.designate_mine(Rect2i(rock.cell, Vector2i.ONE))
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if not rock.alive:
+			return i
+	return -1
+
+
+## What each enchantment does, and only that (issue #167).
+func test_the_enchantment_effects() -> void:
+	var sim := Sim.new_game()
+	var r: Dictionary = sim.residents[0]
+	var rock: Dictionary = sim.boulders[0]
+	var st := {"what": "gather", "tool": "pick", "target": rock}
+	r.pick = {"type": "iron_pick", "tier": 3, "dur": 90}
+	var plain := sim._work_time(r, st)
+	check(absf(plain - Tuning.BREAK_TIME[3]) < 0.001, "an iron pickaxe breaks a boulder in %.1f s" % plain)
+	# Efficiency speeds the work; the other enchantments don't touch it.
+	r.pick = {"type": "iron_pick+efficiency", "tier": 3, "dur": 90}
+	check(absf(sim._work_time(r, st) - plain / Tuning.EFFICIENCY_SPEED) < 0.001 and Tuning.EFFICIENCY_SPEED == 1.3, "Efficiency: %.1f s, 30%% faster" % sim._work_time(r, st))
+	r.pick = {"type": "iron_pick+unbreaking", "tier": 3, "dur": 90}
+	check(absf(sim._work_time(r, st) - plain) < 0.001, "Unbreaking leaves the speed alone")
+	r.axe = {"type": "iron_axe+efficiency", "tier": 3, "dur": 90}
+	var tree: Dictionary = sim.trees[0]
+	check(absf(sim._work_time(r, {"what": "gather", "tool": "axe", "target": tree}) - Tuning.CHOP_TIME[3] / Tuning.EFFICIENCY_SPEED) < 0.001, "Efficiency speeds chopping too")
+	# Efficiency speeds mining as it's really done, and with skill it stacks.
+	var base := mining_ticks("stone_pick", 0)
+	var eff := mining_ticks("stone_pick+efficiency", 0)
+	check(base > 0 and eff > 0 and absf(float(base) / eff - 1.3) < 0.2, "mining with Efficiency takes %d ticks against %d (about 30%% faster)" % [eff, base])
+	var skilled := mining_ticks("stone_pick+efficiency", Tuning.SKILL_LEVELS[1])
+	var want := 1.3 * Sim.skill_speed({"jobs": {"mason": {"xp": Tuning.SKILL_LEVELS[1]}}}, "mason")
+	check(skilled > 0 and absf(float(base) / skilled - want) < 0.25 * want, "and stacks with skill: %d ticks, %.2f× as fast as bare level 1 (expected %.2f×)" % [skilled, float(base) / skilled, want])
+	# A track doesn't change what a block takes.
+	sim.use_map(OldMine.ID)
+	var nl := Sim.new_game()
+	for i in Road.segment_count():
+		nl.nline().laid[i] = Tuning.RAILS_PER_SEGMENT
+		if Sim.nline_obstacle(i):
+			nl.nline().bridged.append(i)
+	nl.nline().stations = {"landing": true, "site": true}
+	nl.nline().cart = true
+	nl.residents[0].pick = {"type": "iron_pick", "tier": 3, "dur": 90}
+	check(nl.nline_complete() and absf(nl._work_time(nl.residents[0], {"what": "gather", "tool": "pick", "target": nl.boulders[0]}) - plain) < 0.001, "a finished line doesn't change the mining time: rail stays rail")
+	sim.use_map("village")
+	# Unbreaking: half the wear, tools and armor; plain wears fully.
+	var worn := {"a": {"type": "iron_pick+unbreaking", "tier": 3, "dur": 100}, "b": {"type": "iron_pick", "tier": 3, "dur": 100}, "c": {"type": "iron_pick+efficiency", "tier": 3, "dur": 100}}
+	for i in 100:
+		for k in worn:
+			Sim._use_up(worn[k])
+	check(worn.a.dur == 50 and worn.b.dur == 0 and worn.c.dur == 0, "Unbreaking halves the wear (%d, plain %d, Efficiency %d)" % [worn.a.dur, worn.b.dur, worn.c.dur])
+	var wearer := {"id": 1, "name": "X", "armor": {"chest": {"type": "leather_tunic+unbreaking", "dur": 8}, "feet": {"type": "leather_boots", "dur": 8}}}
+	for i in 4:
+		sim._wear_armor(wearer)
+	check(wearer.armor.chest.dur == 6 and wearer.armor.feet.dur == 4, "on armor too: the Unbreaking tunic %d of 8, the plain boots %d" % [wearer.armor.chest.dur, wearer.armor.feet.dur])
+	# Protection and Fire protection each change only their own harm.
+	var hurt := {}
+	for kind in ["creature", "fire"]:
+		for armor in ["leather_tunic", "leather_tunic+protection", "leather_tunic+fire_protection"]:
+			var n := 0
+			for i in 3000:
+				var p := {"id": 90000 + i, "name": "P", "armor": {"chest": {"type": armor, "dur": 999999}}, "hurt": 0, "job": null, "heal": 0.0}
+				sim._hazard(p, 0.5, 0.0, "a test", kind)
+				n += 1 if p.hurt > 0 else 0
+			hurt[kind + armor] = n
+	var pc: int = hurt.creatureleather_tunic
+	check(absf(float(hurt["creatureleather_tunic+protection"]) / pc - 0.7) < 0.08 and absf(float(hurt["creatureleather_tunic+fire_protection"]) / pc - 1.0) < 0.08, "Protection cuts creature injuries by 30%% and Fire protection leaves them (%d, %d, %d)" % [pc, hurt["creatureleather_tunic+protection"], hurt["creatureleather_tunic+fire_protection"]])
+	var pf: int = hurt.fireleather_tunic
+	check(absf(float(hurt["fireleather_tunic+fire_protection"]) / pf - 0.5) < 0.08 and absf(float(hurt["fireleather_tunic+protection"]) / pf - 1.0) < 0.08, "Fire protection halves fire and lava harm and Protection leaves it (%d, %d, %d)" % [pf, hurt["fireleather_tunic+fire_protection"], hurt["fireleather_tunic+protection"]])
+	check(Sim.armor_ench_count(wearer, "unbreaking") == 1 and Sim.armor_ench_count(wearer, "protection") == 0, "(counting enchanted pieces)")
+	# Shown on the item's name.
+	check(Sim.item_title("iron_pick+efficiency") == "Iron pickaxe · Efficiency (mines 30% faster)" and Sim.item_title("iron_axe+efficiency") == "Iron axe · Efficiency (chops 30% faster)", "the tooltip: %s" % Sim.item_title("iron_pick+efficiency"))
+	check(Sim.item_title("leather_tunic+protection") == "Leather tunic · Protection (30% fewer creature injuries)" and Sim.item_title("iron_sword+unbreaking") == "Iron sword · Unbreaking (wears 50% slower)" and Sim.item_title("stone_pick") == "Stone pickaxe", "and the others, and a plain item as it was")
