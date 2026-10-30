@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Block Village** (working title) is an isometric settlement simulation inspired by Minecraft. The repo holds:
 - `block-village-design-brief.md`: the vision and decisions document.
-- `slice-6-spec.md`: the Slice 6 spec, the current slice (#15), specialization and automation: enchantments and one redstone chain. It only describes what's new or changed since Slice 5. Issues not built yet carry their own rules; each adds its section to the spec when it's built.
+- `slice-6-spec.md`: the Slice 6 spec (done, #15), specialization and automation: enchantments and one redstone chain. It only describes what's new or changed since Slice 5.
 - `slice-5-spec.md`: the Slice 5 spec (done), the Nether foothold. It only describes what's new or changed since Slice 4.
 - `slice-4-spec.md`: the Slice 4 spec (done): the road, rails, the line, stations and the cart. It only describes what's new or changed since Slice 3.
 - `slice-3.5-spec.md`: the Slice 3.5 spec, the meadow adventure (#144), built after Slice 4: adventures, the meadow, cows and pigs, pens and breeding, leather armor and the grouped tally bar. It only describes what's new or changed since Slice 3.
@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - It's opened directly in a browser, with no build step or dependencies beyond Google Fonts.
   - It covers **Slice 1 only** and stays frozen there. From Slice 2 on, rules live in the specs and the Godot game, which have their own tests and bot playtest. Update the prototype only for Slice 1 rule changes.
   - Its live copy is published as a claude.ai artifact.
-- `game/`: the Godot 4.7 project, through Slice 5 (and Slice 3.5), and into Slice 6.
+- `game/`: the Godot 4.7 project, through Slice 6 (and Slice 3.5). Slice 7 (structures as adventures) is next.
 - `docs/how-to-play.md`: the player's guide. Update it when a change alters what the player sees or does.
 
 ## Commands
