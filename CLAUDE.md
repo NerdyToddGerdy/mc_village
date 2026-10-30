@@ -87,7 +87,7 @@ To run some of the sim tests, put words after `--`: `run_tests.gd -- farm firepl
 ## The design docs are the source of truth
 
 - The brief separates **core decisions** from **proposed** details. Treat core decisions as fixed. Treat proposed mechanics and all numbers as provisional, not final balance.
-- Section 14 ("Open Decisions") lists questions that are deliberately still open, including platforms beyond desktop, combat, needs depth, and party sizes. Don't quietly settle any of them in code or docs. Raise the choice with the user.
+- Section 14 ("Open Decisions") lists questions that are deliberately still open, including the final title, the End and the Sift (#27), village combat (#19) and difficulty/permanent death (#20). Don't quietly settle any of them in code or docs. Raise the choice with the user.
 - Minecraft-derived content (Nether, End, the Sift, enchantments, redstone, minecarts) is an adaptation and doesn't have to match Minecraft's exact rules. How much original versus directly referenced terminology to use is still an open decision.
 
 ## Core loop and principles

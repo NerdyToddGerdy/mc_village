@@ -83,6 +83,15 @@ Sending a worker on an expedition temporarily removes their labor from the villa
 
 The two-house opening does not require all these systems. Additional buildings should appear as their associated mechanics become useful.
 
+### Decided for later building
+
+Owner decisions, recorded here and not yet built. Each becomes its own issue.
+
+- **Houses grow in three tiers (#270, #272):** a 2×3 tent, a 3×3 house, then the 5×5 building (today's house, so every old house is already the top tier). A building **reserves only the plot its next upgrade needs**, one tier ahead. Workstations keep one 3×3 upgrade; only the storehouse and the house have several. **One bed per home at every tier**: a finished tent already brings an arrival, and upgrades add room and looks, not residents.
+- **Wheat stops at a target (#269):** the farm has a keep-stock target like the workstations (default 20, set in its panel with − and +). It counts collected wheat; a harvest under way finishes, and no new one starts. The waiting reason is "enough wheat", not a stall.
+- **The hunter's lodge restocks the village herd (#275):** a hunter leads animals (sheep, cows, pigs) home from the meadow along its road, up to three on a lead, into **pens painted in the village**. The herd floor then means what it says, and the tannery stays the leather step.
+- **Skill levels have an open tail (#236):** levels 1 to 5 stay as they are. Past 5 the same curve continues, with a small, soft-capped speed gain per level (about 4%, so the multiplier tends to a ceiling) and a named reward every five levels.
+
 ### Materials and work
 
 - Resources are gathered, hauled, stored, processed, and consumed.
@@ -511,20 +520,19 @@ A few explicit enchantment recipes and one redstone chain: detect a supply need,
 
 ## 14. Open Decisions
 
-- Final title, and target platforms beyond desktop. (Resolved: Godot 4 engine; 3D blocks with an orthographic isometric camera.)
+- Final title. (The working title is Block Village. Engine and rendering are settled: Godot 4, 3D blocks, an orthographic isometric camera. Platforms are decided, #16: desktop, the web build and the Steam Deck. Consoles are out.)
 - Whether PC incapacitation or death has special consequences. (Resolved for Slice 3, #17: the PC can be hurt but never seriously, and the party always gets them home. Death stays open under "Death, rescue, and difficulty settings".)
 - Rest, happiness, and other needs beyond food: depth and pacing. (Resolved for Slice 2, #18: food only.)
 - Combat presentation and degree of player control. (Partly resolved for Slice 5, #19: Nether expeditions have visible auto-combat. Residents fight on their own, guards engage, and the player controls the return policy and retreat. Village combat stays open.)
 - Death, rescue, and difficulty settings. (Partly resolved for Slice 5, #20: no death. A stranded party shelters through a rescue window, and a rescue mission brings it home. Difficulty settings and permanent death stay open.)
-- Terrain modification, building customization beyond fixed templates, verticality, and camera rotation.
 - Resource regeneration and deposit depletion rules. (Resolved for the village, #22: trees regrow from saplings, and hunting grounds such as the meadow regain their animals over time, each species on its own, with pens and breeding restocking them faster from Slice 3.5. Boulders don't come back, and a mine level's ore doesn't come back once mined, while deeper levels keep the old mine useful (#130). Once every boulder on the village map is gone, a mason's bench can be upgraded into a mineshaft (#204). Depletion at the Nether and later sites is decided with their slices.)
 - Exact party sizes, costs, durations, capacities, and balance values. (Resolved for Slice 3, #23: parties of 1–3, PC eligible. Every number stays provisional.)
 - Recruitment beyond free beds, such as requests or an inn. (Resolved for Slice 2, #24: a traveler arrives for each free bed.)
 - How often expeditions require intervention and how many can run simultaneously. (Resolved for Slice 3, #25: one expedition at a time, and, from Slice 5 (#145), two at once: one Overworld and one Nether. The game stops for the player only at a discovery and at a serious injury, plus a door down once mines have deeper levels, #130.)
-- Outpost staffing and ongoing supply costs. (Partly resolved for Slice 5, #26: the portal landing gets an unstaffed shelter and supply cache. Staffing stays open.)
+- Outpost costs beyond supply runs. (Decided, #26: outposts, camps and depots are **unstaffed**. A one-off build plus supplies delivered by cart or party, as the shelter cache and the freight chain do; they go dark if left unsupplied. Terrain modification, building customization beyond fixed templates, verticality and camera rotation are decided too, #21: a flat map with discrete height layers only where a site needs them, and a fixed camera, revisited only if a slice needs it.)
 - Detailed End and Sift systems.
 - Enchantment discovery and resource costs. (Resolved for Slice 6, #28: enchanted books from expeditions teach recipes permanently; each costs lapis plus one ingredient. See §9.)
-- How far custom redstone circuits and railway management should extend. (Partly resolved for Slice 4, #29: railways start as one point-to-point line, village to old mine, with no switches, branches, signals or timetables, and no unmanned freight. Decided by the owner for the long term: custom circuits never, and the railway network stays separate point-to-point lines that meet only at shared stations, with no junctions. Slice 6's redstone is ready-made devices only, joined by visible dust lines, with the first unmanned cart under manual approval, #29. It stays open until Slice 6 has been played, in case the ready-made devices fall short.)
+- Railway management beyond point-to-point lines. (Decided, #29: custom circuits never; redstone stays ready-made devices joined by dust lines, and the railway network stays separate point-to-point lines that meet only at shared stations, with no junctions. Slice 6 built the first of it. Revisit only if the ready-made devices prove to fall short in play.)
 - Scope of original terminology, assets, and worldbuilding versus direct Minecraft references. (Settled for now, #30: Minecraft names such as Nether, piglin, blaze and quartz are working names.)
 
 ## 15. Core Experience to Preserve

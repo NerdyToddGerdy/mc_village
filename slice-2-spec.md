@@ -538,3 +538,11 @@ Rest and sleep, happiness, shears, the inn, travelers' requests, food variety ef
 - **Fireplace → kitchen:** a bigger queue, two cooks at once, and new recipes.
 - **Bench → workshop:** two crafters at once, and later tool repair.
 - **Farm plot → barn-backed farm:** seed storage, and later fences.
+
+## Decided, not built
+
+Owner decisions that change this slice's systems later (see the brief, "Decided for later building"):
+- **Skills past level 5 (#236):** an open tail with a soft-capped speed gain and a reward every five levels. Levels 1 to 5 and `Tuning.SKILL_LEVELS` stay as they are.
+- **Wheat (#269):** a keep-stock target on the farm, default 20, counting collected wheat.
+- **Houses and upgrades (#270, #272):** a 2×3 tent, a 3×3 house and the 5×5 building, reserving one tier ahead; one bed per home.
+- **The hunter's lodge (#275):** leads animals home from the meadow into village pens.
