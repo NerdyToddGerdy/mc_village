@@ -194,7 +194,7 @@ The fireplace gets the same queue rules as the bench (skipping blocked recipes, 
 - The board sits where the goals panel is, and the goals panel hides while it's open.
 
 **Skills.**
-- **Experience:** each finished task in a job gives 1 point in that job. Levels 2, 3, 4 and 5 need 8, 25, 50 and 90 points.
+- **Experience:** each finished task in a job gives 1 point in that job. Levels 2, 3, 4 and 5 need 8, 25, 50 and 90 points. *Past level 5 the levels carry on (#236, below).*
 - **No fading:** skills don't drop when unused.
 - **Speed:** each level above 1 makes that job's work 15% faster.
 - **Better results:**
@@ -510,7 +510,8 @@ All are rebindable (Slice 1, §10), except 1–9 inside an open menu. Chop trees
 | `bake_time` / `cook_time` | 3 s / 3 s |
 | `meal_stock` | 6 |
 | `skill_levels` | 8, 25, 50, 90 points |
-| `skill_speed` | +15% per level above 1 |
+| `skill_speed` | +15% per level above 1, up to level 5 |
+| `skill_tail_*` | Past level 5 (#236): total points for level L are 8 × (L − 1)^1.7; speed adds 0.04 for level 6 and 0.85 times the last for each next, tending to about 1.87×; +1 yield and +20% tool uses at every fifth level from 10 |
 | `arrival_delay` | 45 s per free bed |
 | `SHAFT_COST` / `SHAFT_DIG` / `SHAFT_WEAR_EVERY` | 8 planks and 6 stone bricks / 12 s per cobblestone / 6 cobblestone per pickaxe use (#204) |
 | `work_start_radius` / `work_reach` | 8 cells: the area a new chopping block or mason's bench starts with / 12 cells: the furthest a painted area may reach (#177, #203) |

@@ -1247,13 +1247,13 @@ func test_spares_need_a_resident_toolsmith() -> void:
 
 ## Experience that puts a resident at `lv` in a job.
 func set_level(r: Dictionary, job: String, lv: int) -> void:
-	r.jobs[job].xp = 0 if lv <= 1 else Tuning.SKILL_LEVELS[lv - 2]
+	r.jobs[job].xp = Sim.xp_for(lv)
 
 
 func test_skills_rise_and_pay_off() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
-	# Levels rise at 8, 25, 50 and 90 points and stop at 5.
+	# Levels rise at 8, 25, 50 and 90 points, and carry on past 5 (issue #236).
 	check(Sim.level(ada, "lumber") == 1, "everyone starts at level 1")
 	for i in 7:
 		sim.gain_xp(ada, "lumber")
@@ -1262,7 +1262,7 @@ func test_skills_rise_and_pay_off() -> void:
 	sim.gain_xp(ada, "lumber")
 	check(Sim.level(ada, "lumber") == 2, "8 points: level 2")
 	check(sim.events.any(func(e): return e.text == "Ada is now level 2 at Lumberjack."), "a new level gets a toast")
-	for pair in [[24, 2], [25, 3], [49, 3], [50, 4], [89, 4], [90, 5], [500, 5]]:
+	for pair in [[24, 2], [25, 3], [49, 3], [50, 4], [89, 4], [90, 5], [122, 5], [123, 6]]:
 		ada.jobs.lumber.xp = pair[0]
 		check(Sim.level(ada, "lumber") == pair[1], "%d points is level %d" % pair)
 	# Each finished task gives a point in its job.
@@ -1290,6 +1290,25 @@ func test_skills_rise_and_pay_off() -> void:
 	check(count(sim3, "log") == logs + 1, "and gets 1 extra log (%d)" % count(sim3, "log"))
 	set_level(a3, "lumber", 5)
 	check(Sim.skill_bonus(a3, "lumber") == 2, "level 5 gets 2 extra")
+	# Past level 5 (issue #236): the curve carries on, speed tends to a ceiling, yield steps every 5 levels.
+	var prev := Sim.xp_for(5)
+	for lv in range(6, 31):
+		check(Sim.xp_for(lv) > prev, "level %d costs more in all than level %d" % [lv, lv - 1])
+		prev = Sim.xp_for(lv)
+	for lv in [6, 9, 10, 15, 30]:
+		set_level(a3, "lumber", lv)
+		check(Sim.level(a3, "lumber") == lv, "%d points is level %d" % [Sim.xp_for(lv), lv])
+	set_level(a3, "lumber", 6)
+	check(is_equal_approx(Sim.skill_speed(a3, "lumber"), 1.0 + 4 * Tuning.SKILL_SPEED + Tuning.SKILL_TAIL_SPEED), "level 6 adds only the first small step")
+	var top := 1.0 + 4 * Tuning.SKILL_SPEED + Tuning.SKILL_TAIL_SPEED / (1.0 - Tuning.SKILL_TAIL_DECAY)
+	set_level(a3, "lumber", 60)
+	check(Sim.skill_speed(a3, "lumber") < top and Sim.skill_speed(a3, "lumber") > top - 0.01, "speed tends to a ceiling (%.3f of %.3f)" % [Sim.skill_speed(a3, "lumber"), top])
+	for pair in [[9, 2], [10, 3], [14, 3], [15, 4], [20, 5]]:
+		set_level(a3, "lumber", pair[0])
+		check(Sim.skill_bonus(a3, "lumber") == pair[1], "level %d gets %d extra" % pair)
+	set_level(a3, "lumber", 7)
+	sim3.gain_xp(a3, "lumber")
+	check(Sim.level_progress(a3, "lumber") > 0.0 and Sim.level_progress(a3, "lumber") < 1.0, "past level 5 the bar still fills")
 	# Farm: extra wheat at level 3.
 	var sim4 := Sim.new_game()
 	var a4: Dictionary = sim4.residents[0]

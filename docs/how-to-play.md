@@ -143,11 +143,11 @@ A workstation's panel names who works from it ("Tomas's composter"). Giving some
 
 New residents arrive in the job they're skilled at, and haul until its workstation is built.
 
-**Skills** grow with practice. Every finished task earns a point in its job, and levels 2 to 5 come at 8, 25, 50 and 90 points. Each level works 15% faster, and some jobs also get better results:
+**Skills** grow with practice. Every finished task earns a point in its job, and levels 2 to 5 come at 8, 25, 50 and 90 points. There is no top level: the curve goes on (level 6 at 123 points, level 10 at 335), and each level costs more than the last. Each level up to 5 works 15% faster; after that each adds a little less, so speed levels off at about 1.9 times. Some jobs also get better results:
 
 | Job | Better result |
 |---|---|
-| Lumberjack | An extra log per tree, at levels 3 and 5 |
+| Lumberjack | An extra log per tree, at levels 3 and 5, and one more at every fifth level from 10 |
 | Stonemason | An extra cobblestone or ore per boulder or ore block, at levels 3 and 5 |
 | Farm | An extra wheat per harvest, at levels 3 and 5 |
 | Haul | Carries one more, at levels 3 and 5 |
