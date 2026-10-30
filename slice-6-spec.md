@@ -15,20 +15,20 @@ Tracking issue: #15. Decisions settled with the owner (2026-10-21), and recorded
 | Route | **A portal line:** village station by the portal → through the portal → a landing station by the shelter, shared with the Nether line (#159). Two lines meet at a station; no switch. |
 | Redstone (#29) | **Ready-made devices only:** sensor, condition, loader and dispatcher, joined by visible dust lines the player draws. Each device says why it's on. Custom circuits and wider network management stay out. |
 
-Still open: #29 (until Slice 6 has been played), #30 (terminology), #19, #20, #26, #22, #66.
+Still open: #30 (terminology), #19, #20, #22, #66. Settled since (2026-10): #29 (ready-made devices only), #26 (outposts are unstaffed), #21 (fixed camera, no terrain edit).
 
 ## 1. Scope and done criteria
 
 Slice 6 is done when, from a Slice 5 village, a player can:
 
-- [ ] Bring back lapis, redstone and an enchanted book.
-- [ ] Build the enchanting workshop and learn the book's recipe.
-- [ ] Enchant a pickaxe with Efficiency and see it mine faster, while rail still doesn't speed mining.
-- [ ] Enchant armor and send it with a Nether party, leaving the village without it.
-- [ ] Build the portal line and a freight cart.
-- [ ] Place a cache sensor, a condition, a loader and a dispatcher, and wire them with dust.
-- [ ] See a low cache start the loading, approve the departure, and watch the unmanned cart deliver and return.
-- [ ] Understand every stall and every powered device from its on-screen reason alone.
+- [x] Bring back lapis, redstone and an enchanted book.
+- [x] Build the enchanting workshop and learn the book's recipe.
+- [x] Enchant a pickaxe with Efficiency and see it mine faster, while rail still doesn't speed mining.
+- [x] Enchant armor and send it with a Nether party, leaving the village without it.
+- [x] Build the portal line and a freight cart.
+- [x] Place a cache sensor, a condition, a loader and a dispatcher, and wire them with dust.
+- [x] See a low cache start the loading, approve the departure, and watch the unmanned cart deliver and return.
+- [ ] (needs the hand playthrough, §14) Understand every stall and every powered device from its on-screen reason alone.
 
 ## 2. Build order
 
