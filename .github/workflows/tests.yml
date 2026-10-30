@@ -86,3 +86,9 @@ jobs:
           set -o pipefail
           timeout 900 ~/godot/godot --headless --path . -s res://tests/playtest_slice35.gd 2>&1 | tee /tmp/slice35.log
           grep -q '^PLAYTEST PASSED$' /tmp/slice35.log
+
+      - name: Automation bot playtest (Slice 6)
+        run: |
+          set -o pipefail
+          timeout 900 ~/godot/godot --headless --path . -s res://tests/playtest_slice6.gd 2>&1 | tee /tmp/slice6.log
+          grep -q '^PLAYTEST PASSED$' /tmp/slice6.log

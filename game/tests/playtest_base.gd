@@ -363,7 +363,7 @@ func place_from_menu(row: String, tpl: String, near: Vector2i):
 	if spot.x < 0:
 		return null
 	await look_at(spot)
-	await click(screen(spot))
+	await click(screen(spot + Vector2i(Defs.TEMPLATES[tpl].size.x / 2, Defs.TEMPLATES[tpl].size.y / 2)))  # a building is centered on the cursor
 	if game.tool != "":
 		await key(KEY_ESCAPE)
 	return game.sim.site_at(spot)
