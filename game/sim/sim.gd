@@ -6457,7 +6457,7 @@ static func block_yield(item: String) -> int:
 		if Tuning.ANIMAL_DROPS[sp].has(item):
 			return Tuning.ANIMAL_DROPS[sp][item]
 	return {"cobble": Tuning.BOULDER_COBBLE, "coal": Tuning.ORE_YIELD.coal, "iron_ore": Tuning.ORE_YIELD.iron, "diamond": Tuning.ORE_YIELD.diamond,
-		"gold_ore": Tuning.ORE_YIELD.gold, "obsidian": Tuning.ORE_YIELD.obsidian, "quartz": Tuning.ORE_YIELD.quartz, "glowstone": Tuning.ORE_YIELD.glowstone}.get(item, 1)
+		"gold_ore": Tuning.ORE_YIELD.gold, "obsidian": Tuning.ORE_YIELD.obsidian, "lapis": Tuning.ORE_YIELD.lapis, "redstone": Tuning.ORE_YIELD.redstone, "quartz": Tuning.ORE_YIELD.quartz, "glowstone": Tuning.ORE_YIELD.glowstone}.get(item, 1)
 
 
 ## Whether a block gives the objective's resource (stone, coal or iron ore), or an animal does when
@@ -6473,6 +6473,8 @@ static func gives(b: Dictionary, item: String) -> bool:
 		"gold_ore": return b.get("ore", "") == "gold"
 		"obsidian": return b.get("ore", "") == "obsidian"
 		"flint": return b.get("ore", "") == "gravel"
+		"lapis": return b.get("ore", "") == "lapis"
+		"redstone": return b.get("ore", "") == "redstone"
 		"quartz": return b.get("ore", "") == "quartz"
 		"glowstone": return b.get("ore", "") == "glowstone"
 	return false
@@ -8098,9 +8100,9 @@ func site_report(id: String) -> Dictionary:
 		res.append({"item": "iron_ore", "name": "?", "reserve": -1, "known": false})
 	if mp.diamond_found:  # a known resource of this level once someone has found it (issue #186)
 		res.append({"item": "diamond", "name": "Diamond", "reserve": ore_left(id, "diamond") * Tuning.ORE_YIELD.diamond, "known": true})
-	for ore in ["gold", "obsidian", "gravel"]:  # what the deeper levels hold once someone has seen them (issue #146)
+	for ore in ["gold", "obsidian", "gravel", "lapis", "redstone"]:  # what the deeper levels hold once someone has seen them (issues #146, #163)
 		if mp.visited and mp.boulders.any(func(b): return b.get("ore", "") == ore):
-			res.append({"item": Defs.ORES[ore].item, "name": {"gold": "Gold", "obsidian": "Obsidian", "gravel": "Flint"}[ore],
+			res.append({"item": Defs.ORES[ore].item, "name": {"gold": "Gold", "obsidian": "Obsidian", "gravel": "Flint", "lapis": "Lapis", "redstone": "Redstone"}[ore],
 				"reserve": ore_left(id, ore) * Tuning.ORE_YIELD[ore], "known": true})
 	var hazards: Array = []
 	if mp.visited and not mp.lava.is_empty():  # issue #149

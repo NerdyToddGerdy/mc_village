@@ -64,6 +64,7 @@ func _init() -> void:
 		"test_iron_discovery",
 		"test_slice2_fixture_loads",
 		"test_deep_mine_materials",
+		"test_lapis_and_redstone",
 		"test_the_portal",
 		"test_the_guard_and_iron_gear",
 		"test_the_nether_landing",
@@ -5729,3 +5730,54 @@ func nline_gather_ticks(w: Dictionary) -> int:
 			arrived = sim.tick - at
 			break
 	return arrived
+
+
+## Lapis and redstone on the deep levels (issue #163).
+func test_lapis_and_redstone() -> void:
+	var sim := Sim.new_game()
+	for ore in ["lapis", "redstone"]:
+		var ch: String = MineLevels.DEEP_CHARS[ore]
+		check(MineLevels.DEEP_ORES[ore].from == 3, "%s from level 3" % ore)
+		for n in range(1, 3):
+			check(not "".join(MineLevels.layout(sim.seed, n).rows).contains(ch), "no %s on level %d" % [ore, n])
+		for n in range(3, 8):
+			var rows: Array = MineLevels.layout(sim.seed, n).rows
+			var found: int = "".join(rows).count(ch)
+			check(found >= 1 and found <= MineLevels.deep_ore_count(n, ore) and rows == MineLevels.layout(sim.seed, n).rows, "level %d has %s, the same every time (%d)" % [n, ore, found])
+	# The levels' earlier ores are where they were.
+	var with_new := "".join(MineLevels.layout(sim.seed, 6).rows).replace("l", "#").replace("r", "#")
+	check(with_new.count("d") == MineLevels.deep_ore_count(6, "diamond"), "level 6 keeps its diamonds")
+	check(Defs.ITEMS.lapis.group == "ores" and Defs.ITEMS.redstone.group == "ores" and Defs.ORES.lapis.item == "lapis" and Defs.ORES.redstone.item == "redstone", "both are ores in the tally bar's group")
+	var lvl: SimMap = MineLevels.build(sim, 3)
+	sim.maps[lvl.id] = lvl
+	var lap: Array = lvl.boulders.filter(func(b): return b.get("ore", "") == "lapis")
+	var red: Array = lvl.boulders.filter(func(b): return b.get("ore", "") == "redstone")
+	check(not lap.is_empty() and not red.is_empty() and lap.all(func(b): return not b.get("hidden", false)), "level 3 has lapis and redstone, in plain sight")
+	# An iron pickaxe or better.
+	var ada: Dictionary = sim.residents[0]
+	for blk in [lap[0], red[0]]:
+		var st := {"what": "gather", "tool": "pick", "target": blk}
+		ada.pick = {"type": "stone_pick", "tier": 2, "dur": 10}
+		check(sim._work_time(ada, st) < 0.0, "a stone pickaxe can't mine %s" % blk.ore)
+		ada.pick = {"type": "iron_pick", "tier": 3, "dur": 10}
+		check(sim._work_time(ada, st) > 0.0, "an iron pickaxe can")
+	check(Sim.pick_need_text("lapis") == "Lapis ore needs an iron pickaxe" and Sim.pick_need_text("redstone") == "Redstone ore needs an iron pickaxe", "the stuck list names the pickaxe needed")
+	# Cargo targets once the level has been seen.
+	lvl.visited = true
+	var items: Array = sim.site_report(lvl.id).resources.map(func(x): return x.item)
+	check(items.has("lapis") and items.has("redstone") and sim.plan_targets(lvl.id).any(func(x): return x.item == "lapis"), "the report lists them, and the planner offers them as cargo (%s)" % [items])
+	check(Tuning.ORE_YIELD.lapis == 3 and Tuning.ORE_YIELD.redstone == 3 and Sim.block_yield("lapis") == 3, "a block drops 3")
+	# A party with an iron pickaxe brings lapis home.
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 60}
+	sim._enter_level(ada, lvl.id)
+	sim.expedition = {"state": "out", "leg": "out", "dest": lvl.id, "party": [ada.id], "target": {"item": "lapis", "n": 3}, "list": [{"item": "lapis", "on": true, "n": 3}],
+		"cargo": {}, "provisions": {"bread": 3}, "tools": [], "supplies": {}, "meals": 3, "picks": 0, "sticks": 0, "wheat": 0,
+		"policy": {"target": false, "full": false, "low": false}, "spend_return": false, "cart_cap": false, "board": 0, "clear": false}
+	for i in 300 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("keep" if sim.pending[0].options.any(func(o): return o.id == "keep") else sim.pending[0].options[0].id)
+		if sim.expedition.get("cargo", {}).get("lapis", 0) >= 3:
+			break
+	check(sim.expedition.get("cargo", {}).get("lapis", 0) >= 3, "the party mines lapis and packs it (%s)" % [sim.expedition.get("cargo", {})])
+	sim.expedition = {}

@@ -37,6 +37,9 @@ const ITEMS := {
 	"obsidian": {"one": "obsidian", "many": "obsidian", "label": "Obsidian", "group": "ores"},
 	"flint": {"one": "flint", "many": "flint", "label": "Flint", "group": "ores"},
 	"flint_and_steel": {"one": "flint and steel", "many": "flint and steels", "uses": Tuning.FLINT_STEEL_USES, "group": "tools"},
+	# From the deep mine (issues #163, #170): lapis is the common cost of every enchantment, redstone powers the devices.
+	"lapis": {"one": "lapis lazuli", "many": "lapis lazuli", "label": "Lapis", "group": "ores"},
+	"redstone": {"one": "redstone dust", "many": "redstone dust", "label": "Redstone", "group": "ores"},
 	# From the quartz site (issue #155): stockpiled for Slice 6; nothing the village needs to survive.
 	"quartz": {"one": "nether quartz", "many": "nether quartz", "label": "Quartz", "group": "ores"},
 	"glowstone": {"one": "glowstone", "many": "glowstone", "label": "Glowstone", "group": "ores"},
@@ -132,6 +135,7 @@ static func trade_text(t: Dictionary) -> String:
 
 ## Ore blocks on a site map (issue #103): the item each drops when mined, and its name.
 const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}, "diamond": {"item": "diamond", "name": "Diamond ore"},
+	"lapis": {"item": "lapis", "name": "Lapis ore"}, "redstone": {"item": "redstone", "name": "Redstone ore"},
 	"quartz": {"item": "quartz", "name": "Nether quartz ore"}, "glowstone": {"item": "glowstone", "name": "Glowstone"},
 	"gold": {"item": "gold_ore", "name": "Gold ore"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}
 

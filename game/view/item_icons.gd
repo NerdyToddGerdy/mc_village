@@ -60,7 +60,7 @@ static func _draw(img: Image, type: String) -> void:
 			for p in [Vector2(24, 36), Vector2(40, 30), Vector2(34, 46)]:
 				_disc(img, p, 10, c)
 			_disc(img, Vector2(37, 27), 3, c.lightened(0.35))
-		"iron_ore", "gold_ore":  # a chunk of stone with flecks of the metal
+		"iron_ore", "gold_ore", "lapis", "redstone":  # a chunk of stone with flecks of the metal or gem
 			_disc(img, Vector2(32, 34), 23, dark)
 			_disc(img, Vector2(32, 34), 20, Palette.STONE)
 			for p in [Vector2(24, 28), Vector2(38, 26), Vector2(30, 42), Vector2(42, 40)]:

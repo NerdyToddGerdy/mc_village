@@ -34,9 +34,18 @@ Slice 6 is done when, from a Slice 5 village, a player can:
 
 #163 lapis and redstone in the deep mine; #164 enchanted books; #165 the enchanting workshop and the Enchanter; #166 enchant an item; #167 the four enchantments; #168 the portal line; #169 unmanned freight carts; #170 redstone devices and dust; #171 the cache sensor and condition; #172 the freight loader; #173 the dispatcher and departure approval; #174 the bot and hand playtest.
 
-## 3. Tuning table (provisional)
+## 3. Lapis and redstone in the deep mine (#163)
+
+Two more ores from the deep levels' stream of finds (`MineLevels.DEEP_ORES`), placed last so every other level is as it was: **lapis ore** and **redstone ore**, from level 3 (2 blocks, more the deeper, 5 at most each), in plain sight in the rock beside the floor, or in the level's edge wall where a wide level has no other. Each takes an **iron pickaxe or better** (`ORE_PICK_TIER` 3): with less, the stuck list says "Lapis ore needs an iron pickaxe". A block drops **3** `lapis` (lapis lazuli, the common cost of every enchantment) or **3** `redstone` (dust, for the devices, #170). Both are cargo targets once a level has been seen, and the tally bar groups them with the other ores. As with the other finds, a level already made in an older save keeps its layout.
+
+- **Saving:** v50.
+
+## 4. Tuning table (provisional)
 
 Each build issue adds its rows.
 
 | Name | Value | Meaning |
 |---|---|---|
+| `ORE_YIELD` lapis / redstone | 3 / 3 | Items a block drops. |
+| `ORE_PICK_TIER` lapis / redstone | 3 / 3 | An iron pickaxe or better. |
+| Lapis and redstone | from level 3 | 2 blocks each, more the deeper, 5 at most. |
