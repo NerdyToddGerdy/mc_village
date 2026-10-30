@@ -79,6 +79,7 @@ func _init() -> void:
 		"test_the_enchanting_workshop",
 		"test_enchanting_an_item",
 		"test_the_enchantment_effects",
+		"test_the_portal_line",
 		"test_the_fortress_delve",
 		"test_stranding_and_rescue",
 		"test_the_nether_line",
@@ -5702,6 +5703,86 @@ func test_the_nether_line() -> void:
 	check(f49.nline().bridged == [2] and f49.nline().laid[1] == 2 and f49.nline().stations.landing and not f49.nline_complete(), "the v49 fixture loads its part-built line")
 	var f48 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v48.save").data.state)
 	check(f48.nline().laid == [0, 0, 0, 0, 0, 0], "an older save has an unbuilt line")
+
+
+## A spot for the portal station that placement allows, near the portal.
+func portal_station_spot(sim: Sim, portal: Dictionary) -> Vector2i:
+	for dy in range(-6, 7):
+		for dx in range(-6, 7):
+			var o: Vector2i = portal.origin + Vector2i(dx, dy)
+			if sim.placement_check("portal_station", o) == "":
+				return o
+	return Vector2i(-1, -1)
+
+
+## One Build trip on the portal line's Nether side, carrying `counts`; returns whether the party came home.
+func pline_trip(sim: Sim, w: Dictionary, store: Dictionary, counts: Dictionary) -> bool:
+	var dests := sim.objective_destinations("build").filter(func(d): return d.get("pline", false))
+	if dests.is_empty():
+		return false
+	var plan := sim.nether_plan("build", dests[0])
+	plan.party = [w.ada.id, w.tomas.id, w.mira.id]
+	plan.meals = 3
+	for k in ["rails", "planks", "cobble", "minecarts"]:
+		plan[k] = counts.get(k, 0)
+	if sim.plan_expedition(plan) != "":
+		return false
+	w.portal.store = store.duplicate()
+	sim.drop_items(Sim.rcell(w.ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	sim.depart("nether")
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		for r in [w.ada, w.tomas, w.mira]:
+			r.hurt = 0
+		if sim.expeditions.nether.is_empty():
+			return true
+	return false
+
+
+## The portal line (issue #168): a village station beside the portal, rails and a shared landing station laid by a Build party.
+func test_the_portal_line() -> void:
+	var w := nline_world()
+	var sim: Sim = w.sim
+	check(not sim.pline_complete() and sim.portal_line.laid == 0 and sim.portal_station().is_empty(), "a new game has no portal line")
+	check(not sim.objective_destinations("build").any(func(d): return d.get("pline", false)), "the Build objective offers no portal line before the village station is planned")
+	check(sim.placement_check("portal_station", Vector2i(2, 2)) == "The station stands beside the portal", "the village station has to stand beside the portal")
+	var spot := portal_station_spot(sim, w.portal)
+	check(spot.x >= 0, "there's room for it beside the portal")
+	var st := sim.place_site("portal_station", spot)
+	check(st.plot != null and sim.placement_check("portal_station", spot + Vector2i(0, 3)) != "", "it reserves the loading-station plot, and only one is planned")
+	var dests := sim.objective_destinations("build").filter(func(d): return d.get("pline", false))
+	check(dests.size() == 1 and dests[0].dest == NetherLanding.ID, "the Build objective offers the portal line from the landing")
+	var plan := sim.nether_plan("build", dests[0])
+	check(plan.target.item == "pline" and plan.rails == 6 and plan.planks == 6 and plan.cobble == 4, "the plan carries 6 rails, 6 planks and 4 cobblestone (%d, %d, %d)" % [plan.rails, plan.planks, plan.cobble])
+	plan.party = [w.ada.id, w.tomas.id, w.mira.id]
+	check(sim.plan_briefing(plan).any(func(l): return l.begins_with("Still to lay on the Nether side:")), "the briefing says what's left to lay")
+	# A trip with only rails lays them and comes home; the station still wants its materials.
+	check(pline_trip(sim, w, {"bread": 3, "rail": 6}, {"rails": 6}) and sim.portal_line.laid == 6, "a party lays all six rails")
+	check(not sim.nline().stations.landing and not sim.pline_nether_done(), "the landing station is still to build")
+	check(pline_trip(sim, w, {"bread": 3, "plank": 6, "cobble": 4}, {"planks": 6, "cobble": 4}) and sim.nline().stations.landing, "a second trip builds the landing station")
+	check(sim.pline_nether_done() and not sim.pline_complete(), "the Nether side is done, and the line waits on the village station")
+	check(not sim.objective_destinations("build").any(func(d): return d.get("pline", false)), "the Build objective stops offering it once the Nether side is done")
+	# Shared station: the Nether line no longer needs one at the landing.
+	var need := sim.nline_remaining()
+	check(need.planks == 28 - 6 - 0 and need.cobble == 8 - 4, "the Nether line shares the landing station, so it needs one station less (%d planks, %d cobblestone)" % [need.planks, need.cobble])
+	st.stage = 1
+	st.done = true
+	check(sim.pline_complete(), "the village station finishes the line")
+	sim.use_map(NetherLanding.ID)
+	check(absf(sim.ground_speed(NetherLanding.TRACK[3]) - Tuning.CART_SPEED / Tuning.WALK) < 0.01 and absf(sim.ground_speed(Vector2i(10, 1)) - 1.0) < 0.01, "a party rides the rails on the landing, and walks off them")
+	sim.use_map("village")
+	var back := Sim.from_state(sim.save_state())
+	check(back.portal_line.laid == 6 and back.pline_complete(), "the portal line is saved")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v53.save").data.state)
+	check(old.portal_line.laid == 0 and old.portal_station().is_empty(), "an older save has no portal line")
+	var f54 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v54.save").data.state)
+	check(f54.portal_line.laid == 3 and f54.portal_station().get("done", false) and not f54.pline_complete(), "the v54 fixture loads its station and half-laid rails")
 
 
 ## Ticks from setting out to reaching the quartz site on a gather trip.

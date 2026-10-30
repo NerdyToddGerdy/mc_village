@@ -788,6 +788,7 @@ func _key(e: InputEventKey) -> void:
 		"storehouse": start_placing("storehouse")
 		"portal": start_placing("portal")
 		"enchanting_workshop": start_placing("enchanting_workshop")
+		"portal_station": start_placing("portal_station")
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
 		"toolsmith_bench", "composter", "lodge", "builder_table": start_placing(keys.action_for(e))
@@ -960,7 +961,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "keep"]
+const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 

@@ -553,15 +553,27 @@ func _add_nether_line(b: Batch) -> void:
 		b.box(Vector3(1.3, 0.3, NetherRoute.LINE_ROW + 1.2), Vector3(2.1, 0.7, NetherRoute.LINE_ROW + 1.8), Palette.ITEM_COLORS.minecart)
 
 
+## The portal line's rails on the landing, from the portal's far side as far as they're laid (issue #168).
+func _add_portal_track(b: Batch) -> void:
+	var n: int = ceili(float(NetherLanding.TRACK.size()) * sim.portal_line.laid / Tuning.PORTAL_LINE_RAILS)
+	for k in n:
+		var c: Vector2i = NetherLanding.TRACK[k]
+		b.box(Vector3(c.x + 0.1, 0.0, c.y + 0.35), Vector3(c.x + 0.9, 0.05, c.y + 0.65), Palette.LOG, BlockTextures.LOG)
+		for z in [0.3, 0.62]:
+			b.box(Vector3(c.x, 0.05, c.y + z), Vector3(c.x + 1, 0.1, c.y + z + 0.08), Palette.ITEM_COLORS.rail)
+
+
 ## The stations on the landing's edge and the quartz site (issue #159).
 func _add_nether_stations(b: Batch, mp: SimMap) -> void:
 	var l: Dictionary = sim.maps[NetherRoute.ROUTES.quartz.id].line
 	if l.is_empty():
 		return
-	if mp.id == NetherLanding.ID and l.stations.landing:
-		var ex: Vector2i = NetherRoute.ROUTES.quartz.exit
-		b.box(Vector3(ex.x - 3, 0, ex.y + 1), Vector3(ex.x, 0.3, ex.y + 2), Palette.COBBLE, BlockTextures.COBBLES)
-		b.box(Vector3(ex.x - 3, 0.3, ex.y + 1), Vector3(ex.x - 2.9, 1.0, ex.y + 2), Palette.PLANK, BlockTextures.BOARD)
+	if mp.id == NetherLanding.ID:
+		_add_portal_track(b)
+	if mp.id == NetherLanding.ID and l.stations.landing:  # one station for both lines, beside the shelter (issue #168)
+		var at: Vector2i = NetherLanding.STATION_AT
+		b.box(Vector3(at.x, 0, at.y), Vector3(at.x + 3, 0.3, at.y + 1), Palette.COBBLE, BlockTextures.COBBLES)
+		b.box(Vector3(at.x + 2.9, 0.3, at.y), Vector3(at.x + 3, 1.0, at.y + 1), Palette.PLANK, BlockTextures.BOARD)
 	if mp.id == NetherRoute.ROUTES.quartz.site and l.stations.site:
 		var p: Rect2i = NetherRoute.QUARTZ_STATION_PLOT
 		b.box(Vector3(p.position.x, 0, p.position.y), Vector3(p.position.x + 3, 0.3, p.position.y + 1), Palette.COBBLE, BlockTextures.COBBLES)
@@ -913,7 +925,7 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "track":
 		_add_track(solid, ghost, s)
 		return
-	if s.tpl == "station":
+	if s.tpl == "station" or s.tpl == "portal_station":
 		_add_station(solid if s.done else ghost, s)
 		return
 	var stage: int = s.stage

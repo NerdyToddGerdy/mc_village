@@ -97,7 +97,15 @@ Each enchantment changes only its own number, by the item's type (`Defs.ITEMS[ty
 - **Shown** on the item's name wherever a tool is listed: "Iron pickaxe · Efficiency (mines 30% faster)", "Leather tunic · Protection (30% fewer creature injuries)", and on the workshop's panel, with each recipe's effect.
 - **No save change:** an enchanted item is an item type, and the effects read it.
 
-## 8. Tuning table (provisional)
+## 8. The portal line (#168)
+
+- **Village side:** a **portal station** (Build menu, once the portal stands) planned **beside the portal**, within `PORTAL_STATION_REACH` (6) cells of the frame and not on its staging area. 6 planks and 4 cobblestone, built by residents like any station. It **reserves a 3×3 plot** for the freight loader (#172). One only.
+- **Nether side:** a Build objective, **The portal line from the landing**, once the station is planned. The party carries what's left: `PORTAL_LINE_RAILS` (6) rails, laid along `NetherLanding.TRACK` from the portal's far side to the landing station, and the **landing station** if there isn't one (6 planks, 4 cobblestone). Up to what three can carry past their meals.
+- **Shared station:** the landing station sits **beside the shelter** (`NetherLanding.STATION_AT`) and is the Nether line's landing station too: whichever line builds it, the other finds it built. Two lines meet there, with no switch; a cart stays on its own line.
+- **Complete** when the village station is built, all six rails are laid and the landing station stands (`pline_complete()`). A party then **rides** the rails on the landing at the cart's speed.
+- **Saving:** `portal_line: {laid}` (v54). The village station is a site; the landing station is the Nether line's flag.
+
+## 9. Tuning table (provisional)
 
 Each build issue adds its rows.
 
@@ -112,3 +120,5 @@ Each build issue adds its rows.
 | `UNBREAKING_WEAR` | ×0.5 | Wear an Unbreaking item takes. |
 | `PROTECTION_CUT` | −30% | Chance of a creature injury, per Protection piece. |
 | `FIRE_PROTECTION_CUT` | −50% | Chance of harm from fire and lava, per Fire protection piece. |
+| `PORTAL_LINE_RAILS` | 6 | Rails on the landing side of the portal line. |
+| `PORTAL_STATION_REACH` | 6 | Cells from the portal frame the village station may stand. |

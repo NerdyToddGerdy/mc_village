@@ -94,6 +94,10 @@ const PAGES := [
 		"what": "Obsidian and diamonds make a workshop where an Enchanter reads enchanted books, learning their recipes for good, and enchants tools, swords and armor.",
 		"grows": "Reserves a plot, and grows into a library.",
 		"without": "Enchanted books are only things to carry, and gear stays plain."},
+	{"id": "portal_station", "title": "Portal station", "tpl": "portal_station", "unlock": "portal_line", "who": "Builders; a Build party lays the Nether side",
+		"what": "The village end of the portal line, beside the portal, with a landing station beside the shelter in the Nether. Carts and parties ride it.",
+		"grows": "Reserves a plot, and grows into a freight loader.",
+		"without": "Everything crosses the portal on foot."},
 	{"id": "portal", "title": "Nether portal", "tpl": "portal", "unlock": "portal", "who": "Builders carry the obsidian; anyone lights it",
 		"what": "A frame of obsidian from the deep mine, lit with flint and steel. Parties bound for the Nether pack on the staging area in front of it.",
 		"grows": "Reserves a portal hall around it.",
@@ -120,6 +124,7 @@ static func page_known(sim: Sim, page: Dictionary) -> bool:
 		"board": return sim.stats.get("built", {}).has("board")
 		"road": return sim.get_map("old_mine").visited
 		"enchanting": return sim.stats.get("book_found", false) or sim.maps.village.sites.any(func(x): return x.tpl == "enchanting_workshop")
+		"portal_line": return not sim.village_portal().is_empty()
 		"portal": return sim.stats.get("obsidian_home", false) or sim.maps.village.sites.any(func(x): return x.tpl == "portal")
 	return true
 

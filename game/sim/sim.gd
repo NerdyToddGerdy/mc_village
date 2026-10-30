@@ -91,6 +91,9 @@ var pending: Array = []
 ##   {at: "village" or "mine", x (along the line), state: "parked", "loading", "moving" or "unloading",
 ##    load: {item: n} (cargo in it), riders: [resident ids], acc (items toward the next one loaded)}
 var cart := {}
+## The portal line's Nether side (issue #168): `laid` rails of NetherLanding.TRACK, laid by a Build party. The village station is a
+## site beside the portal; the landing station is the Nether line's, so the two lines share it.
+var portal_line := {"laid": 0}
 var stuck: Array = []        ## {who, why, map, cell (Vector2), height, focus_kind, focus_id, hidden, waiting, since}
 var _fence_claims := {}      ## Vector2i -> the resident putting up that pen fence (issue #139). Not saved.
 var _plant_claims := {}      ## Vector2i -> the lumberjack going to plant a sapling there (issue #177). Not saved.
@@ -1040,6 +1043,9 @@ func _on_site_done(s: Dictionary) -> void:
 		return
 	if s.tpl == "station":
 		_toast("The station at the %s end of the line is built." % s.end, 0, s.id)
+		return
+	if s.tpl == "portal_station":  # issue #168
+		_toast("The portal station is built. A Build party lays the Nether side of the line.", 0, s.id)
 		return
 	if s.tpl == "track":
 		if line_complete():
@@ -2066,7 +2072,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop"]:
+	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop", "portal_station"]:
 		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
@@ -2788,6 +2794,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.PORTAL_LIGHT_TIME
 		"enchant":
 			return Tuning.ENCHANT_TIME
+		"pline":
+			return Tuning.LAY_TIME if st.task.kind == "rail" else Tuning.STAGE_TIME
 		"nline":
 			return {"bridge": Tuning.NETHER_BRIDGE_TIME, "rail": Tuning.LAY_TIME, "station": Tuning.STAGE_TIME, "cart": 4.0}[st.task.kind]
 		"shelter":
@@ -2892,6 +2900,8 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			_toast("%s enchanted: %s." % [r.name, Defs.ITEMS[ord.item + "+" + ord.ench].one], r.id, ew.id)
 		"nline":  # a piece of the Nether line (issue #159)
 			_finish_line_task(st.task, r)
+		"pline":  # a piece of the portal line (issue #168)
+			_finish_pline_task(st.task, r)
 		"shelter":  # the party's cobblestone and planks go into the walls (issue #152)
 			var shelter: Dictionary = st.site
 			shelter.builder = 0
@@ -3820,6 +3830,8 @@ func objective_destinations(obj: String) -> Array:
 				out.append({"dest": NetherLanding.ID, "label": "A shelter on the landing", "route": ""})
 			if maps[NetherRoute.ROUTES.quartz.id].surveyed and maps[NetherRoute.ROUTES.quartz.site].known and not nline_complete():  # issue #159
 				out.append({"dest": NetherRoute.ROUTES.quartz.site, "label": "The Nether line to the quartz site", "route": "", "line": true})
+			if maps[NetherLanding.ID].known and not portal_station().is_empty() and not pline_nether_done():  # issue #168
+				out.append({"dest": NetherLanding.ID, "label": "The portal line from the landing", "route": "", "pline": true})
 		"rescue":  # a stranded party, if no rescue is already out (issue #158)
 			var lost: Dictionary = expeditions.nether
 			if lost.has("stranded") and expeditions.rescue.is_empty():
@@ -3879,6 +3891,10 @@ func nether_plan(obj: String, pick := {}) -> Dictionary:
 				plan.target = {"item": "line", "n": 1}
 				plan.shelter = false
 				_line_supplies(plan)
+			if pick.get("pline", false):  # the portal line's Nether side (issue #168)
+				plan.target = {"item": "pline", "n": 1}
+				plan.shelter = false
+				_pline_supplies(plan)
 		"gather":  # the first thing the site gives, as much as 8, with a spare pickaxe (issue #155)
 			plan.picks = 1
 			var first: Array = plan_targets(plan.dest)
@@ -3916,6 +3932,8 @@ func plan_briefing(plan: Dictionary) -> Array:
 		out.append("Risk: no flint and steel to carry, so if the portal goes out the party waits for the village to light it")
 	if plan.target.item == "line":  # issue #159
 		out.append(nline_text())
+	if plan.target.item == "pline":  # issue #168
+		out.append(pline_text())
 	if obj == "trade":  # the fixed table and the rule, before the party commits (issue #156)
 		for t in Defs.TRADES:
 			out.append("Trade: " + Defs.trade_text(t))
@@ -4517,8 +4535,8 @@ func site_height(s: Dictionary) -> float:
 		return 0.8 if s.done else 0.2
 	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
 		return 0.9 if s.done else 0.2
-	if s.tpl in ["bridge", "track", "station"]:
-		return 0.2 if s.tpl != "station" or not s.done else 0.9
+	if s.tpl in ["bridge", "track", "station", "portal_station"]:
+		return 0.2 if not s.tpl.ends_with("station") or not s.done else 0.9
 	return [0.2, 0.5, 2.5, 4.0, 4.0][mini(s.stage, 4)]
 
 
@@ -4707,6 +4725,15 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 	for s in m.sites:
 		if s.get("plot") != null and s.plot.intersects(foot):
 			return "Overlaps a reserved plot"
+	if tpl == "portal_station":  # beside the portal (issue #168)
+		var pf := village_portal()
+		if pf.is_empty():
+			return "Build the portal first"
+		if not portal_station().is_empty():
+			return "The portal station is already planned"
+		var gap := Rect2i(pf.origin, pf.size).grow(Tuning.PORTAL_STATION_REACH)
+		if not gap.encloses(foot):
+			return "The station stands beside the portal"
 	var plot = plot_rect(tpl, origin, rot)
 	if plot != null:
 		var no_room := "Not enough room to grow into a %s" % Defs.TEMPLATES[tpl].plot
@@ -5015,7 +5042,7 @@ static func cargo_rows(plan: Dictionary) -> Array:
 ## Keeps `target` in step with the list: its first row that's on, preferring one with an amount. Tending the
 ## pens isn't a list, so it's left alone.
 static func sync_target(plan: Dictionary) -> void:
-	if plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line"]:
+	if plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line", "pline"]:
 		return
 	var rows := cargo_rows(plan)
 	var pick: Dictionary = {}
@@ -5256,7 +5283,7 @@ func plan_problems(plan: Dictionary) -> Array:
 		var room := cargo_room(plan)
 		if room < 1:
 			out.append("The supplies fill the packs. Take fewer, or more people")
-		elif not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line"]:
+		elif not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line", "pline"]:
 			var wanted := 0
 			for r in cargo_rows(plan):
 				wanted += r.n
@@ -5277,7 +5304,7 @@ func plan_expedition(plan: Dictionary) -> String:
 	var problems := plan_problems(plan)
 	if not problems.is_empty():
 		return problems[0]
-	if not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line"]:  # each place keeps its last list (issue #185)
+	if not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line", "pline"]:  # each place keeps its last list (issue #185)
 		cargo_lists[plan.dest] = plan.get("list", []).map(func(r): return {"item": r.item, "on": r.on, "n": r.n})
 	use_slot("rescue" if plan.get("rescue", false) else slot_of_dest(plan.dest))
 	expedition = plan.duplicate(true)
@@ -5836,6 +5863,8 @@ func road_eta(r: Dictionary) -> float:
 ## worn path is quicker (issue #196).
 func ground_speed(c: Vector2i) -> float:
 	var ride := Tuning.CART_SPEED / Tuning.WALK if m.id == NetherRoute.ROUTES.quartz.id and nline_complete() else 1.0  # the Nether line (issue #159)
+	if m.id == NetherLanding.ID and pline_complete() and NetherLanding.TRACK.has(c):  # the portal line (issue #168)
+		ride = Tuning.CART_SPEED / Tuning.WALK
 	return (Tuning.FORD_SPEED if m.water.has(c) and not bridged(c) else 1.0) * path_speed(c) * ride
 
 
@@ -6899,7 +6928,7 @@ func _line_job(task: Dictionary, who := 0) -> Job:
 			cells = [Vector2i(Road.SEGMENTS[task.seg].x + mini(Road.seg_len(task.seg) - 1, expedition.get("supplies", {}).get("rail", 0) % 4), NetherRoute.LINE_ROW)]
 			label = "Laying track"
 		"station":
-			cells = [NetherRoute.ROUTES.quartz.exit + Vector2i(-1, 1)] if task.end == "landing" else [NetherRoute.QUARTZ_STATION_PLOT.position + Vector2i(1, 0)]
+			cells = [NetherLanding.STATION_AT] if task.end == "landing" else [NetherRoute.QUARTZ_STATION_PLOT.position + Vector2i(1, 0)]
 			label = "Building the %s station" % ("landing" if task.end == "landing" else "quartz site")
 		_:
 			cells = [NetherRoute.QUARTZ_STATION_PLOT.position + Vector2i(2, 0)]
@@ -6960,6 +6989,115 @@ func _riding(r: Dictionary) -> bool:
 static func nline_times() -> Dictionary:
 	var walk: float = NetherRoute.W / Tuning.WALK
 	return {"walk": walk, "ride": NetherRoute.W / Tuning.CART_SPEED, "saved": walk - NetherRoute.W / Tuning.CART_SPEED}
+
+
+# ---------------------------------------------------------------- the portal line (issue #168)
+
+## The village's portal station, planned or built, or {}.
+func portal_station() -> Dictionary:
+	for s in maps.village.sites:
+		if s.tpl == "portal_station":
+			return s
+	return {}
+
+
+## Whether the Nether side is done: all its rails, and the landing station (which the Nether line shares).
+func pline_nether_done() -> bool:
+	return portal_line.laid >= Tuning.PORTAL_LINE_RAILS and nline().stations.landing
+
+
+## Whether carts can run the whole line: the village station, the rails and the landing station.
+func pline_complete() -> bool:
+	return portal_station().get("done", false) and pline_nether_done()
+
+
+## Whether the party is out to lay the portal line's Nether side.
+func building_pline() -> bool:
+	return expedition.get("target", {}).get("item", "") == "pline"
+
+
+## What's left to carry for the Nether side: {rails, planks, cobble}.
+func pline_remaining() -> Dictionary:
+	var out := {"rails": maxi(0, Tuning.PORTAL_LINE_RAILS - portal_line.laid), "planks": 0, "cobble": 0}
+	if not nline().stations.landing:
+		var st: Dictionary = Defs.TEMPLATES.portal_station.stages[0].cost
+		out.planks = st.plank
+		out.cobble = st.cobble
+	return out
+
+
+## The next piece the party's supplies allow on the landing: a rail, then the station. {} when there's none.
+func pline_task(who := 0) -> Dictionary:
+	var sup: Dictionary = expedition.get("supplies", {})
+	var claims: Dictionary = expedition.get("line_claims", {})
+	if portal_line.laid < Tuning.PORTAL_LINE_RAILS and sup.get("rail", 0) > 0:
+		return {"kind": "rail", "at": portal_line.laid}
+	var st: Dictionary = Defs.TEMPLATES.portal_station.stages[0].cost
+	if not nline().stations.landing and sup.get("plank", 0) >= st.plank and sup.get("cobble", 0) >= st.cobble:
+		var c: int = claims.get("pline_station", 0)
+		if c == 0 or c == who or who == -1 or resident(c).is_empty() or resident(c).job == null or resident(c).job.kind != "build":
+			return {"kind": "station", "key": "pline_station"}
+	return {}
+
+
+func _pline_job(task: Dictionary, who := 0) -> Job:
+	if task.has("key") and who != 0:
+		if not expedition.has("line_claims"):
+			expedition.line_claims = {}
+		expedition.line_claims[task.key] = who
+	var cell: Vector2i = NetherLanding.TRACK[mini(task.at, NetherLanding.TRACK.size() - 1)] if task.kind == "rail" else NetherLanding.STATION_AT
+	var label: String = "Laying track from the portal" if task.kind == "rail" else "Building the landing station"
+	var j := Job.new("build", label, "the portal line")
+	j.work = "build"
+	j.step(_goto([cell], true))
+	j.step({"op": "work", "what": "pline", "task": task, "label": label})
+	return j
+
+
+func _finish_pline_task(task: Dictionary, r: Dictionary) -> void:
+	var sup: Dictionary = expedition.supplies
+	var st: Dictionary = Defs.TEMPLATES.portal_station.stages[0].cost
+	match task.kind:  # two of the party can reach for the same piece: the second finds it done, or the supplies gone
+		"rail":
+			if sup.get("rail", 0) <= 0 or portal_line.laid >= Tuning.PORTAL_LINE_RAILS:
+				return
+			sup.rail -= 1
+			portal_line.laid += 1
+		"station":
+			if nline().stations.landing or sup.get("plank", 0) < st.plank or sup.get("cobble", 0) < st.cobble:
+				return
+			sup.plank -= st.plank
+			sup.cobble -= st.cobble
+			nline().stations.landing = true
+			_toast("The landing station is built, beside the shelter. The Nether line shares it.", r.id)
+	for k in sup.keys():
+		if sup[k] <= 0:
+			sup.erase(k)
+	if pline_nether_done():
+		_toast("The portal line's Nether side is laid." + (" The line is complete." if pline_complete() else " It needs the village station."), r.id)
+	rev += 1
+
+
+## Fills a portal line plan's supplies with what's left to lay, up to what a full party can carry past its meals.
+func _pline_supplies(plan: Dictionary) -> void:
+	var need := pline_remaining()
+	var room: int = Tuning.PARTY_MAX * Tuning.PACK_CAPACITY - plan.meals
+	var take := {}
+	for k in ["rails", "planks", "cobble"]:
+		take[k] = mini(need[k], maxi(0, room))
+		room -= take[k]
+	plan.rails = take.rails
+	plan.planks = take.planks
+	plan.cobble = take.cobble
+
+
+func pline_text() -> String:
+	var need := pline_remaining()
+	var parts: PackedStringArray = []
+	for k in [["rails", "rail"], ["planks", "plank"], ["cobble", "cobble"]]:
+		if need[k[0]] > 0:
+			parts.append(Defs.words(k[1], need[k[0]]))
+	return "Still to lay on the Nether side: %s. The landing station is shared with the Nether line." % (", ".join(parts) if not parts.is_empty() else "nothing")
 
 
 # ---------------------------------------------------------------- enchanting (issues #165-#167)
@@ -7321,6 +7459,10 @@ func _next_trade() -> int:
 
 ## What a party member does on the portal landing (issue #148): walk to the landmarks not yet seen, then wait.
 func _landing_job(r: Dictionary, c: Vector2i):
+	if building_pline():  # the portal line's rails and the landing station (issue #168)
+		var pt := pline_task(r.id)
+		if not pt.is_empty():
+			return _pline_job(pt, r.id)
 	var sh := shelter_site()
 	if not sh.is_empty() and not sh.done and expedition.get("shelter", false) and sh.builder == 0 and _supplies_cover(Tuning.SHELTER_COST):
 		var bj := Job.new("build", "Going to build the shelter", "the shelter")
@@ -7721,6 +7863,8 @@ func policy_met() -> String:
 		return ""
 	if ex.get("rescue", false):  # a rescue party comes home once it has reached them, which sends it (issue #158)
 		return ""
+	if building_pline():  # home once the rails and the station are down, or the supplies are used (issue #168)
+		return "the portal line work is done" if pline_task(-1).is_empty() else ""
 	if building_line():  # home once the line work at the far end is done (issue #159)
 		return "the line work is done" if nline_task("site", -1).is_empty() else ""
 	if delving():  # home once the salvage is taken and the halls are clear, if they pressed on (issue #157)
@@ -8621,7 +8765,8 @@ func save_state() -> Dictionary:
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
 		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made, "cargo_lists": cargo_lists.duplicate(true),
 		"herd_floor": herd_floor.duplicate(), "rng_state": rng.state, "seed": seed,
-		"expeditions": expeditions.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true)}
+		"expeditions": expeditions.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true),
+		"portal_line": portal_line.duplicate(true)}
 
 
 static func from_state(d: Dictionary) -> Sim:
@@ -8663,6 +8808,7 @@ static func from_state(d: Dictionary) -> Sim:
 		s.expeditions.rescue = {}
 	s.pending = d.get("pending", []).duplicate(true)
 	s.cart = d.get("cart", {}).duplicate(true)
+	s.portal_line = d.get("portal_line", {"laid": 0}).duplicate(true)
 	var new_meadow := not s.maps.has(Meadow.ID)
 	s._add_site_maps()
 	if new_meadow and d.has("meadow_sheep"):  # an older save's off-map meadow: its sheep count carries over (issue #137)

@@ -345,6 +345,15 @@ func _initialize() -> void:
 					ws.orders = [{"ench": "efficiency", "item": "stone_pick"}]
 					sim.drop_items(Sim.rcell(sim.residents[0]) + Vector2i(2, 1), "iron_pick+efficiency", 1, 33)
 				break
+	if SaveFormat.VERSION >= 54:  # a station beside the portal, and half the portal line's rails laid (#168)
+		for dy in range(-6, 7):
+			for dx in range(-6, 7):
+				var pf := sim.village_portal()
+				if not pf.is_empty() and sim.portal_station().is_empty() and sim.placement_check("portal_station", pf.origin + Vector2i(dx, dy)) == "":
+					var ps := sim.place_site("portal_station", pf.origin + Vector2i(dx, dy))
+					ps.stage = 1
+					ps.done = true
+		sim.portal_line.laid = 3
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}
