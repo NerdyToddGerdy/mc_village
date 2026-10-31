@@ -117,7 +117,9 @@ func _initialize() -> void:
 	check(await play_until(120, func(): return cows.all(func(a): return a.get("fed_at", -1) >= 0 or a.get("cool_until", 0) > 0)), "and feed them wheat")
 	check(await play_until(200, func(): return not pig.alive), "they hunt the marked pig")
 	check(await play_until(400, func(): return sim.expedition.get("leg", "") == "home"), "and hunt cows for beef until they head home (%s)" % sim.expedition.get("home_why", ""))
-	check(await play_until(120, func(): return mead.sheep.any(func(a): return a.alive and a.get("young", false) and a.pen == pen.id)), "a calf is born in the pen")
+	# Counted, not looked for while young: the game also ticks in real time between the bot's steps, so on a
+	# loaded machine the calf can grow up (4 minutes) before this runs.
+	check(await play_until(120, func(): return mead.sheep.filter(func(a): return a.alive and a.species == "cow" and a.get("pen", 0) == pen.id).size() > cows.size()), "a calf is born in the pen")
 	check(seen("A calf was born in the pen"), "a toast says so")
 
 	# ---- Home: unloading, and cooking beef
