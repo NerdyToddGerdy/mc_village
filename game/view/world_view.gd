@@ -204,6 +204,8 @@ func _build_static() -> void:
 		_add_site_ground(solid)
 	elif sim.m.kind == "route":
 		_add_route_ground(solid)
+	elif sim.m.kind == "walk":
+		_add_walk_ground(solid)
 	else:
 		for x in sim.w:
 			for y in sim.h:
@@ -506,6 +508,19 @@ func _add_route_ground(b: Batch) -> void:
 			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (TRODDEN if on_line else Palette.GRASS) * Color(v, v, v), BlockTextures.EARTH if on_line else BlockTextures.GROUND)
 	_add_end_sign(b, Road.VILLAGE_END + Vector2i(0, -1), -1.0, Palette.GRASS)
 	_add_end_sign(b, Road.MINE_END + Vector2i(0, -1), 1.0, Palette.STONE)
+
+
+## The road to the meadow (issue #210): grass, with the trodden line a party walks.
+func _add_walk_ground(b: Batch) -> void:
+	var mp := sim.m
+	for x in mp.w:
+		for y in mp.h:
+			var v := 0.96 + _hash(x, y) * 0.08
+			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT, BlockTextures.EARTH)
+			var on_line := y == MeadowRoad.LINE_ROW
+			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (TRODDEN if on_line else Palette.GRASS) * Color(v, v, v), BlockTextures.EARTH if on_line else BlockTextures.GROUND)
+	_add_end_sign(b, MeadowRoad.VILLAGE_END + Vector2i(0, -1), -1.0, Palette.GRASS)
+	_add_end_sign(b, MeadowRoad.far_end() + Vector2i(0, -1), 1.0, Palette.GRASS)
 
 
 ## A Nether route strip: netherrack, rock and lava as laid out, fire, and the dark where nobody has scouted yet.
