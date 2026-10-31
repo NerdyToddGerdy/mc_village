@@ -194,6 +194,7 @@ func _test_toasts(game: Game) -> void:
 		await process_frame
 	var clear := true
 	var inside := true
+	var overlaps := []  # what overlapped, so a failure says where (issue #309)
 	var view := Rect2(Vector2.ZERO, hud._root.size)
 	for p in hud._toasts.get_children():
 		if not (p as Control).visible or p.is_queued_for_deletion():
@@ -203,7 +204,8 @@ func _test_toasts(game: Game) -> void:
 		for other in [hud._tally_panel, hud._goals_panel, hud._stuck_panel]:
 			if (other as Control).visible and r.intersects((other as Control).get_global_rect()):
 				clear = false
-	check(clear, "toasts don't cover the tally bar, the goals panel or the stuck list")
+				overlaps.append("%s %s over %s %s" % [p.name, r, (other as Control).name, (other as Control).get_global_rect()])
+	check(clear, "toasts don't cover the tally bar, the goals panel or the stuck list (%s; toasts at %s %s)" % [overlaps, hud._toasts.position, hud._toasts.size])
 	check(inside, "toasts fit on screen, wrapping when long")
 
 

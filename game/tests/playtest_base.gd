@@ -52,6 +52,26 @@ func click(pos: Vector2, button := MOUSE_BUTTON_LEFT, shift := false) -> void:
 	await frames(2)
 
 
+## Clicks until `done` holds, up to `tries` times. A pushed click is now and then lost on a busy machine
+## (issue #313: no handler sees it, and nothing is under the pointer), so a lost one is said so, not failed
+## silently. A game that never does it still fails the check that follows.
+func click_until(pos: Vector2, done: Callable, tries := 3) -> void:
+	for i in tries:
+		await click(pos)
+		if done.call():
+			return
+		printerr("     (click %d of %d at %s had no effect; trying again)" % [i + 1, tries, pos])
+
+
+## The same for a drag.
+func drag_until(a: Vector2, b: Vector2, done: Callable, tries := 3, shift := false, alt := false) -> void:
+	for i in tries:
+		await drag(a, b, shift, alt)
+		if done.call():
+			return
+		printerr("     (drag %d of %d had no effect; trying again)" % [i + 1, tries])
+
+
 func drag(a: Vector2, b: Vector2, shift := false, alt := false) -> void:
 	await move(a)
 	await press(a, true, MOUSE_BUTTON_LEFT, shift, alt)
