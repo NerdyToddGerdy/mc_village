@@ -23,6 +23,8 @@ var _confirm := {}         ## {text, yes, action, slot}
 var _msg := ""
 var _msg_err := false
 var _slots: Array = []
+var _auto = null            ## The autosave's label, or null (issue #295).
+
 var _box := VBoxContainer.new()
 var listening := ""       ## Action waiting for its new key on the Controls page.
 
@@ -53,6 +55,8 @@ func show_view(v: String) -> void:
 	_msg = ""
 	if v == "save" or v == "load":
 		_slots = game.read_slots()
+	if v != "keys":  # read once here, not on each draw: it's a whole save
+		_auto = game.read_autosave()
 	visible = true
 	_render()
 
@@ -118,7 +122,11 @@ func _render_main() -> void:
 	if not OS.has_feature("web"):  # a browser tab can't be quit from inside the game
 		_box.add_child(_big_button("Quit", func(): _ask("Quit Block Village? Anything you haven’t saved will be lost.", "Quit", "quit")))
 	_add_confirm()
-	_box.add_child(hud.label("Saves are kept on this computer. Esc or M opens this menu.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	var auto = _auto
+	var note := "Saves are kept on this computer. Esc or M opens this menu."
+	if auto != null and not auto.has("error"):
+		note += " The game saves itself now and then, on its own autosave (last: %s); Load game lists it." % _when(auto.saved_at)
+	_box.add_child(hud.label(note, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 
 
 func _render_keys() -> void:
@@ -220,23 +228,27 @@ func _reset_keys() -> void:
 func _render_slots() -> void:
 	var saving := view == "save"
 	_title("Save game" if saving else "Load game", "Choose a slot. Saving over a slot replaces it." if saving else "Choose a save to continue from.")
+	if not saving and _auto != null:  # the autosave (issue #295): loadable, never saved over by hand
+		var arow := HBoxContainer.new()
+		arow.add_theme_constant_override("separation", 12)
+		arow.add_child(_slot_info("Autosave", _auto))
+		var ab := hud.button("Load", func(): _ask("Load the autosave? Anything you haven’t saved will be lost.", "Load the autosave", "load_auto"))
+		ab.disabled = _auto.has("error")
+		ab.set_meta("label", "Autosave: Load")
+		ab.custom_minimum_size = Vector2(110, 40)
+		ab.theme_type_variation = "Primary"
+		arow.add_child(ab)
+		var apanel := PanelContainer.new()
+		apanel.add_theme_stylebox_override("panel", hud.box(Color(Palette.SLATE_DEEP, 0.5), 6, 10, Palette.SLATE_DEEP))
+		apanel.add_child(arow)
+		_box.add_child(apanel)
 	for i in _slots.size():
 		var n := i + 1
 		var meta = _slots[i]
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 12)
-		var info := VBoxContainer.new()
-		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_theme_constant_override("separation", 0)
-		info.add_child(hud.label("Slot %d" % n, true))
+		var info := _slot_info("Slot %d" % n, meta)
 		var unreadable: bool = meta != null and meta.has("error")
-		if meta == null:
-			info.add_child(hud.label("Empty", false, Palette.CHALK_DIM, Palette.BODY))
-		elif unreadable:
-			info.add_child(hud.label(meta.error, false, Palette.YELLOW, Palette.BODY, true))
-		else:
-			info.add_child(hud.label(meta.summary, false, Palette.CHALK, Palette.BODY))
-			info.add_child(hud.label("%s. Saved %s" % [_played(meta.tick), _when(meta.saved_at)], false, Palette.CHALK_DIM, Palette.CAPTION))
 		row.add_child(info)
 		var b: Button
 		if saving:
@@ -247,6 +259,7 @@ func _render_slots() -> void:
 		else:
 			b = hud.button("Load", func(): _ask("Load slot %d? Anything you haven’t saved will be lost." % n, "Load slot %d" % n, "load", n))
 			b.disabled = meta == null or unreadable
+			b.set_meta("label", "Slot %d: Load" % n)
 		b.custom_minimum_size = Vector2(110, 40)
 		b.theme_type_variation = "Primary"
 		row.add_child(b)
@@ -258,6 +271,22 @@ func _render_slots() -> void:
 	if _msg != "":
 		_box.add_child(hud.label(_msg, _msg_err, Palette.YELLOW if _msg_err else Palette.CHALK_DIM, Palette.BODY, true))
 	_box.add_child(_back_button())
+
+
+## A slot's left side: its name, and what's in it, or why it can't be read.
+func _slot_info(title: String, meta) -> VBoxContainer:
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 0)
+	info.add_child(hud.label(title, true))
+	if meta == null:
+		info.add_child(hud.label("Empty", false, Palette.CHALK_DIM, Palette.BODY))
+	elif meta.has("error"):
+		info.add_child(hud.label(meta.error, false, Palette.YELLOW, Palette.BODY, true))
+	else:
+		info.add_child(hud.label(meta.summary, false, Palette.CHALK, Palette.BODY))
+		info.add_child(hud.label("%s. Saved %s" % [_played(meta.tick), _when(meta.saved_at)], false, Palette.CHALK_DIM, Palette.CAPTION))
+	return info
 
 
 func _back_button() -> Button:
@@ -299,6 +328,12 @@ func _do_confirmed() -> void:
 		"quit": game.quit_game()
 		"rebind": _rebind(c.target, c.code)
 		"save": _save(c.slot)
+		"load_auto":
+			var aerr: String = game.load_autosave()
+			if aerr != "":
+				_msg = aerr
+				_msg_err = true
+				_render()
 		"load":
 			var err: String = game.load_slot(c.slot)
 			if err != "":

@@ -221,6 +221,63 @@ func _test_needs_you(game: Game) -> void:
 	await game.get_tree().process_frame
 
 
+## The game saves itself now and then, to a file of its own (issue #295).
+func _test_autosave(game: Game) -> void:
+	var sim := game.sim
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(game._autosave_path()))
+	var menu: GameMenu = game._menu
+	while sim.tick < int(Tuning.AUTOSAVE_MIN_SECS * Tuning.TPS) + 10:  # old enough to be worth saving
+		sim.step()
+	var was_tick := sim.tick
+	check(game.read_autosave() == null, "there's no autosave to begin with")
+	# A game younger than two minutes isn't autosaved: it would replace a village's.
+	var young := Sim.new_game()
+	var old_sim := game.sim
+	game.sim = young
+	check(not game.autosave() and game.read_autosave() == null, "a new game isn't autosaved")
+	game.sim = old_sim
+	game.speed = 1
+	menu.visible = false
+	game._autosave_tick = sim.tick
+	game._autosave_sig = game._party_sig()
+	check(not game._autosave_due(), "nothing is due just after one")
+	game._autosave_tick = sim.tick - int(Tuning.AUTOSAVE_SECS * Tuning.TPS)
+	check(game._autosave_due(), "after five minutes of play it's due")
+	game.speed = 0
+	check(not game._autosave_due(), "not while paused: nothing's changing")
+	game.speed = 1
+	check(game.autosave() and not game._autosave_due(), "saving clears it")
+	var meta = game.read_autosave()
+	check(meta != null and meta.tick == was_tick and meta.summary == Goals.progress_text(sim), "the autosave carries a label like a slot's (%s)" % [meta])
+	var ex: Dictionary = sim.expeditions.overworld
+	ex.state = "staging"
+	check(game._autosave_due(), "a party packing, setting out or coming home makes one due")
+	ex.erase("state")
+	game._autosave_sig = game._party_sig()
+	# The Load page lists it, above the slots; the Save page doesn't.
+	menu.show_view("load")
+	await game.get_tree().process_frame
+	var rows := _walk(menu._box).filter(func(n): return n is Label and n.text == "Autosave" and not n.is_queued_for_deletion())
+	check(rows.size() == 1, "the Load page has an Autosave row")
+	menu.show_view("save")
+	await game.get_tree().process_frame
+	check(_walk(menu._box).filter(func(n): return n is Label and n.text == "Autosave" and not n.is_queued_for_deletion()).is_empty(), "the Save page doesn't")
+	menu.show_view("main")
+	await game.get_tree().process_frame
+	check(_walk(menu._box).any(func(n): return n is Label and "autosave" in n.text and not n.is_queued_for_deletion()), "the main menu says there's one")
+	menu.visible = false
+	# Loading it brings the game back as it was.
+	for i in 100:
+		sim.step()
+	check(game.load_autosave() == "" and game.sim.tick == was_tick, "loading it returns to the moment it was made")
+	# Starting over keeps the village that was left.
+	game.restart()
+	check(game.sim.tick < 100 and game.read_autosave().tick == was_tick, "Start over leaves the old game as the autosave")
+	check(not game.autosave() and game.read_autosave().tick == was_tick, "and the new, empty game doesn't replace it")
+	menu.visible = false
+	game.speed = 1
+
+
 ## Toasts sit in the gap below the tally bar, clear of the goals panel and the stuck list (issue #71).
 func _test_toasts(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -1699,6 +1756,7 @@ func _initialize() -> void:
 	await _test_toasts(game)
 	_test_headers(game)
 	await _test_needs_you(game)
+	await _test_autosave(game)
 	_test_glyphs()
 	_test_tallies(game)
 	await _test_meadow(game)

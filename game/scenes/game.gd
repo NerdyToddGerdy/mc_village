@@ -49,6 +49,8 @@ var keys: KeyBindings
 var keys_path := ""  ## Tests set this before the game starts, so they always use default keys.
 var _menu_prev_speed := 1
 
+var _autosave_tick := 0  ## The sim tick of the last autosave, or of the load.
+var _autosave_sig := ""
 var save_dir := "user://saves"  ## Tests point this elsewhere so they never touch real saves.
 const SLOTS := 5
 
@@ -164,6 +166,8 @@ func _process(delta: float) -> void:
 		n += 1
 		if not sim.pending.is_empty():
 			break
+	if _autosave_due():
+		autosave()
 	# A choice for the player stops the game until it's answered (issues #110, #111).
 	if not sim.pending.is_empty() and speed != 0:
 		set_speed(0)
@@ -834,11 +838,19 @@ func close_menu() -> void:
 
 
 ## Quits the game (the menu's Quit, after it confirms).
+## Closing the window, by its button or the system's quit, autosaves too.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		autosave()
+
+
 func quit_game() -> void:
+	autosave()
 	get_tree().quit()
 
 
 func restart() -> void:
+	autosave()  # the village that's being left stays loadable (issue #295)
 	_use_sim(Sim.new_game())
 	_cams = {}
 	view_map = "village"
@@ -853,6 +865,8 @@ func restart() -> void:
 
 func _use_sim(s: Sim) -> void:
 	sim = s
+	_autosave_tick = s.tick
+	_autosave_sig = _party_sig()
 	craft_menu_open = false
 	planner_open = false
 	plan = {}
@@ -887,22 +901,72 @@ func read_slots() -> Array:
 	return out
 
 
+func _save_data() -> Dictionary:
+	return {"summary": Goals.progress_text(sim), "tick": sim.tick,
+		"saved_at": int(Time.get_unix_time_from_system()), "state": sim.save_state(),
+		"camera": _camera_state(), "speed": _menu_prev_speed}
+
+
 ## Saves to slot `n`. Returns "" on success, else a message for the player.
 func save_slot(n: int) -> String:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(save_dir))
-	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick,
-		"saved_at": int(Time.get_unix_time_from_system()), "state": sim.save_state(),
-		"camera": _camera_state(), "speed": _menu_prev_speed}
-	if not SaveFormat.write(_slot_path(n), data):
+	if not SaveFormat.write(_slot_path(n), _save_data()):
 		return "Couldn’t save to slot %d. Check that the disk isn’t full, then try again." % n
 	return ""
 
 
+# ---------------------------------------------------------------- autosave (issue #295)
+
+func _autosave_path() -> String:
+	return "%s/autosave.save" % save_dir
+
+
+## The parties' states, so a departure or a return can be told from the rest of the game.
+func _party_sig() -> String:
+	return str(sim.expeditions.values().map(func(e): return [e.get("state", ""), e.get("leg", "")]))
+
+
+## Saves the game to its own file, quietly, apart from the five slots. It isn't done for a game younger than
+## `AUTOSAVE_MIN_SECS`, so a new game never takes the place of a village's autosave. Returns whether it saved.
+func autosave() -> bool:
+	if sim == null or sim.tick < int(Tuning.AUTOSAVE_MIN_SECS * Tuning.TPS):
+		return false
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(save_dir))
+	_autosave_tick = sim.tick
+	_autosave_sig = _party_sig()
+	return SaveFormat.write(_autosave_path(), _save_data())
+
+
+## Whether it's time: `AUTOSAVE_SECS` of play since the last one, or a party has set out or come home.
+func _autosave_due() -> bool:
+	if _menu.visible or speed == 0:
+		return false
+	return sim.tick - _autosave_tick >= int(Tuning.AUTOSAVE_SECS * Tuning.TPS) or _party_sig() != _autosave_sig
+
+
+## The autosave's label, like a slot's: null when there isn't one, {error} when it can't be read.
+func read_autosave():
+	if not FileAccess.file_exists(_autosave_path()):
+		return null
+	var r := SaveFormat.read(_autosave_path())
+	if r.has("error"):
+		return {"error": r.error}
+	return {"summary": r.data.summary, "tick": r.data.tick, "saved_at": r.data.saved_at}
+
+
+func load_autosave() -> String:
+	return _load_path(_autosave_path(), "The autosave", "The autosave")
+
+
 ## Loads slot `n` and returns to the game. Returns "" on success, else a message for the player.
 func load_slot(n: int) -> String:
-	var r := SaveFormat.read(_slot_path(n))
+	return _load_path(_slot_path(n), "Slot %d" % n, "Loaded slot %d." % n)
+
+
+func _load_path(path: String, what: String, toast: String) -> String:
+	var r := SaveFormat.read(path)
 	if r.has("error"):
-		return "Slot %d couldn’t be loaded. %s" % [n, r.error]
+		return "%s couldn’t be loaded. %s" % [what, r.error]
 	var data: Dictionary = r.data
 	_use_sim(Sim.from_state(data.state))
 	var cam: Dictionary = data.get("camera", {})
@@ -917,7 +981,7 @@ func load_slot(n: int) -> String:
 	_place_camera()
 	_menu_prev_speed = maxi(1, data.get("speed", 1))
 	close_menu()
-	_hud.add_toast({"text": "Loaded slot %d." % n, "res_id": 0, "site_id": 0})
+	_hud.add_toast({"text": toast, "res_id": 0, "site_id": 0})
 	return ""
 
 
@@ -1569,6 +1633,10 @@ func known_maps() -> Array:
 			return 0.0
 		if sim.maps[id].level > 0:
 			return 1.0 + sim.maps[id].level / 100.0
+		if id == Road.ID:  # each road after the place it leads to's neighbour: mine, its road, meadow, its road
+			return 2.05
+		if id == MeadowRoad.ID:
+			return 2.15
 		return 2.0 + Sim.ADVENTURES.find(id) / 10.0 if id in Sim.ADVENTURES else 2.0
 	out.sort_custom(func(a, b2): return rank.call(a) < rank.call(b2))
 	return out

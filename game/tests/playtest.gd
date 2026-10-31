@@ -258,7 +258,7 @@ func _initialize() -> void:
 	check(await click_button("Start packing"), "click Start packing")
 	check(await play_until(240, func(): return sim.depart_blocker() == ""), "the cooked mutton is packed (%s)" % sim.depart_blocker())
 	check(await click_button("Depart"), "click Depart")
-	check(await play_until(Tuning.MEADOW_WALK * 2 + 300, func(): return sim.expedition.is_empty()), "she hunts sheep at the meadow and comes home")
+	check(await play_until(MeadowRoad.walk_time() * 2 + 300, func(): return sim.expedition.is_empty()), "she hunts sheep at the meadow and comes home")
 	check(sim.stats.meadow_wool and sim.free_count("wool") >= 3, "with the wool for the second bed (%d)" % sim.free_count("wool"))
 	if game.planner_open:
 		await click_button("Close")
@@ -661,7 +661,7 @@ func _initialize() -> void:
 	await key(KEY_M)
 	check(game._menu.visible, "M opens the menu")
 	check(await click_button("Load game"), "click Load game")
-	check(await click_button("Load"), "click Load on slot 1")
+	check(await click_button("Slot 1: Load"), "click Load on slot 1")
 	check(await click_button("Load slot 1"), "confirm Load slot 1")
 	var slot_tick: int = game.read_slots()[0].tick
 	check(not game._menu.visible, "loading closes the menu")

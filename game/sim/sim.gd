@@ -267,6 +267,9 @@ func _add_site_maps() -> void:
 	if not maps.has(Meadow.ID):  # so does the meadow, an adventure from the same board (issue #137)
 		maps[Meadow.ID] = Meadow.build(self)
 		maps[Meadow.ID].known = maps[OldMine.ID].known
+	if not maps.has(MeadowRoad.ID):  # and the strip of road that leads to it (issue #210)
+		maps[MeadowRoad.ID] = MeadowRoad.build(self)
+		maps[MeadowRoad.ID].known = maps[Meadow.ID].known
 	if not maps.has(NetherLanding.ID):  # the first Nether map: known once the portal is lit (issue #148)
 		maps[NetherLanding.ID] = NetherLanding.build(self)
 	for key in NetherRoute.ROUTES:  # the routes out of the landing, and the sites at their ends: known once scouted (issue #153)
@@ -1098,6 +1101,7 @@ func _on_site_done(s: Dictionary) -> void:
 		maps[OldMine.ID].known = true
 		road().known = true
 		maps[Meadow.ID].known = true
+		maps[MeadowRoad.ID].known = true
 		_toast("The expedition board is up, with word of an old mine to the east and a meadow to the west. Select it to plan an adventure.", 0, s.id)
 		return
 	if s.tpl != "house":  # only a house is a home: anything else without its own case above does nothing more
@@ -2417,15 +2421,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 					return false
 				_cross_portal(r, to)
 				return true
-			if expedition.get("dest", "") != Meadow.ID:
-				_onto_road(r, to)
-				return true
-			r.away = true
-			r.trip = to
-			r.back_at = tick + int(trip_time(to) * Tuning.TPS)
-			r.path = []
-			r.progress = -1.0
-			rev += 1
+			_onto_road(r, to)
 			return true
 		"descend":  # through the door to the level below (issue #132)
 			if m.door_state != "open":
@@ -4429,7 +4425,7 @@ func _stuck_on_map() -> void:
 			use_slot(sl)
 			_stuck_site()
 	use_slot("overworld")
-	var has_food: bool = food_available() if m.kind != "route" else on_map("village", food_available)  # the road eats from home
+	var has_food: bool = food_available() if m.kind != "route" and m.kind != "walk" else on_map("village", food_available)  # the road eats from home
 	for r in on_here:
 		var at: Vector2 = r.pos + Vector2(0.5, 0.5)
 		if r.hunger <= 0.0 and not has_food:
@@ -5717,9 +5713,9 @@ func route_sign() -> Vector2i:
 	return Vector2i(v.w - 1, v.h / 2)
 
 
-## Seconds on the way to `to`, or home from it: the walk to the meadow, or the road to the mine.
+## Seconds on the way to `to`, or home from it: the road to the meadow, or the road to the mine.
 func trip_time(to: String) -> float:
-	return Tuning.MEADOW_WALK if to == Meadow.ID or (to == "village" and expedition.get("dest", "") == Meadow.ID) else route_walk_time()
+	return MeadowRoad.walk_time() if to == Meadow.ID or (to == "village" and expedition.get("dest", "") == Meadow.ID) else route_walk_time()
 
 
 ## Whether a party member is on their way: walking to the signpost to leave the village, or to the
@@ -5937,13 +5933,28 @@ func road() -> SimMap:
 ## Whether a party member is walking the road map (issue #118), out or home. One who's already home
 ## and out there for other work isn't.
 func on_road(r: Dictionary) -> bool:
-	return expedition.get("state", "") == "out" and expedition.party.has(r.id) and r.map == Road.ID and r.trip != ""
+	return expedition.get("state", "") == "out" and expedition.party.has(r.id) and (r.map == Road.ID or r.map == MeadowRoad.ID) and r.trip != ""
+
+
+## The road map a trip to `dest` walks: the meadow's strip, or the road to the mine.
+static func road_map_for(dest: String) -> String:
+	return MeadowRoad.ID if dest == Meadow.ID else Road.ID
+
+
+## The two ends of the road map `id`: the village's and the site's.
+static func road_ends(id: String) -> Array:
+	return [MeadowRoad.VILLAGE_END, MeadowRoad.far_end()] if id == MeadowRoad.ID else [Road.VILLAGE_END, Road.MINE_END]
 
 
 ## Onto the road map at the end they're leaving from, heading for `to` (a site, or "village").
 func _onto_road(r: Dictionary, to: String) -> void:
-	move_to_map(r, Road.ID, Road.VILLAGE_END if to != "village" else Road.MINE_END)
+	var id := road_map_for(expedition.get("dest", ""))
+	var ends := road_ends(id)
+	move_to_map(r, id, ends[0] if to != "village" else ends[1])
 	r.trip = to
+	maps[id].known = true
+	if id == MeadowRoad.ID:
+		return
 	if expedition.get("state", "") == "out":  # when the leg started, for the report (issue #124)
 		var leg: String = "road_" + expedition.get("leg", "out")
 		if not expedition.has(leg):
@@ -5958,21 +5969,23 @@ func _road_walk_job(r: Dictionary) -> Job:
 	var j := Job.new("road", "On the road home" if home else "On the road to the %s" % maps[expedition.dest].name.to_lower(), "the end of the road")
 	var from := "mine" if home else "village"
 	var to := "village" if home else "mine"
-	if expedition.get("cart", false) and not cart.is_empty() and (cart.riders.has(r.id) or (cart.state == "parked" and cart.at == from)):
+	var ends := road_ends(r.map)
+	if r.map == Road.ID and expedition.get("cart", false) and not cart.is_empty() and (cart.riders.has(r.id) or (cart.state == "parked" and cart.at == from)):
 		j.label = ("Riding home" if home else "Riding to the %s" % maps[expedition.dest].name.to_lower()) + " by cart"
 		if not cart.riders.has(r.id):  # walk to the cart and get in
 			j.step(_goto([Vector2i(roundi(cart.x), Road.LINE_ROW)], true))
 			j.step({"op": "board", "riding": j.label})
 			j.label = "Getting into the cart"
 		j.step({"op": "ride", "to": to})
-	j.step(_goto([Road.VILLAGE_END if home else Road.MINE_END], false))
+	j.step(_goto([ends[0] if home else ends[1]], false))
 	j.step({"op": "road_end"})
 	return j
 
 
 ## About how many seconds a party member has left on the road.
 func road_eta(r: Dictionary) -> float:
-	var end := Road.VILLAGE_END if r.trip == "village" else Road.MINE_END
+	var ends := road_ends(r.map)
+	var end: Vector2i = ends[0] if r.trip == "village" else ends[1]
 	return absf(r.pos.x - end.x) / (Tuning.WALK * hurt_speed(r))
 
 
@@ -9269,7 +9282,7 @@ func _meadow_report() -> Dictionary:
 	var hazards: Array = []
 	if mp.visited:
 		hazards = ["An angry bull: hunting a cow can get someone hurt", "A slippery pond bank: someone can slip and get hurt"]
-	return {"name": mp.name, "told": Meadow.TOLD, "visited": mp.visited, "travel": Tuning.MEADOW_WALK, "level": 0, "pattern": "",
+	return {"name": mp.name, "told": Meadow.TOLD, "visited": mp.visited, "travel": MeadowRoad.walk_time(), "level": 0, "pattern": "",
 		"resources": res, "hazards": hazards, "access": Meadow.ACCESS.duplicate() if mp.visited else [], "finds": [], "levels": [],
 		"door": "", "herds": herds() if mp.visited else {}}
 
@@ -9463,7 +9476,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.maps = {}
 	# Maps tick in the order a game makes them, so a loaded game replays as the saved one would have:
 	# the village, the old mine, the road, the meadow, then the levels below the mine as they opened.
-	var order := ["village", OldMine.ID, Road.ID, Meadow.ID, NetherLanding.ID] + NetherRoute.map_ids()
+	var order := ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID, NetherLanding.ID] + NetherRoute.map_ids()
 	var ids: Array = d.maps.keys()
 	ids.sort_custom(func(a, b): return [order.find(a) if a in order else 9, MineLevels.level_of(a)] < [order.find(b) if b in order else 9, MineLevels.level_of(b)])
 	for id in ids:

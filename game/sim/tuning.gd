@@ -41,8 +41,11 @@ const PLANT_TIME := 2.0                 ## Seconds to plant one farm cell (no se
 const HARVEST_TIME := 2.0               ## Seconds to harvest one ripe cell.
 const WHEAT_GROW := 120.0               ## Seconds from planting to ripe.
 const WHEAT_YIELD := 2                  ## Wheat per harvested cell.
+# Autosave (issue #295).
+const AUTOSAVE_SECS := 300.0            ## Seconds of play between autosaves.
+const AUTOSAVE_MIN_SECS := 120.0        ## A game younger than this isn't autosaved, so a fresh one never replaces a real village's.
 # The meadow (Slice 3.5, issues #137, #138). Its herds are laid out in game/sim/meadow.gd.
-const MEADOW_WALK := 30.0               ## Seconds walking between the west signpost and the meadow, each way.
+const MEADOW_ROAD_LEN := 85             ## Cells in the road to the meadow, which sets the walk: 84 cells at WALK is 28 s each way (issue #210).
 const MEADOW_REGROW := {"sheep": 240.0, "cow": 300.0, "pig": 180.0}  ## Seconds for a species to regain one animal.
 const BULL_CHANCE := 0.15               ## Chance hunting a cow gets the hunter hurt by an angry bull (never seriously).
 const SLIP_CHANCE := 0.03               ## Chance of a slip each time someone steps onto the pond's bank (never serious).

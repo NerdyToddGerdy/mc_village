@@ -254,7 +254,7 @@ Residents get hungry. A full resident empties in about 6 minutes of game time.
 
 The **expedition board** is where expeditions are planned. Once it's built, the village has word of an **old mine** a short walk east, with stone and coal, and a **meadow** a short walk west, with sheep, cows and pigs.
 
-**The Location dropdown.** Select the board and it opens on the place you last planned for (the first one the first time), with a **Location** dropdown in its header showing it and its walk, such as "Meadow · ~30 s each way". Open the dropdown to see everywhere the village knows of, one line each with its walk and whether anyone has been, and a flag where hazards are known; choose one to see its site report and planner. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open the board on it, or the old mine's for **Plan a trip to the old mine**. Only one expedition goes at a time, so while one is packing or out, the dropdown shows where the party is and the other places are listed but can't be chosen.
+**The Location dropdown.** Select the board and it opens on the place you last planned for (the first one the first time), with a **Location** dropdown in its header showing it and its walk, such as "Meadow · ~28 s each way". Open the dropdown to see everywhere the village knows of, one line each with its walk and whether anyone has been, and a flag where hazards are known; choose one to see its site report and planner. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open the board on it, or the old mine's for **Plan a trip to the old mine**. Only one expedition goes at a time, so while one is packing or out, the dropdown shows where the party is and the other places are listed but can't be chosen.
 
 **The site report** (left) says what the village knows about the place: what it has been told, the walk there, and what can be gathered. Until someone has been, there are no estimates and no known hazards.
 
@@ -314,7 +314,7 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 
 The **meadow** is a short walk west, past the signpost on the village's left edge: open grass around a pond, with trees, a few old fences, and herds of sheep, cows and pigs. Plan a trip there from the board's Location dropdown, for wool, leather or meat. No spare pickaxes are needed.
 
-The party carries the packs to the west signpost and walks off the map, about 30 seconds each way. At the meadow they hunt the animals that give what they were sent for, nearest first, follow them as they wander, and pack the drops. Once they have enough, they pack anything else lying about, such as the leather from the cows they hunted for beef. A full party brings back as much as its packs hold. You can mark more animals with Hunt while you're looking at the meadow.
+The party carries the packs to the west signpost and walks the **road to the meadow**, a plain strip of its own map, about 28 seconds each way. It shows in the map switcher once the board is up, and you can switch to it to watch them go and come back. It has no obstacles and nothing to build on it. At the meadow they hunt the animals that give what they were sent for, nearest first, follow them as they wander, and pack the drops. Once they have enough, they pack anything else lying about, such as the leather from the cows they hunted for beef. A full party brings back as much as its packs hold. You can mark more animals with Hunt while you're looking at the meadow.
 
 **Hazards** there are mild: an **angry bull** can hurt someone hunting a cow, and the **pond bank** is slippery. Neither injury is ever serious.
 
@@ -399,5 +399,7 @@ You can still give orders while the game is paused.
 ## Saving and settings
 
 The menu (the **Menu** button at the top right, or Esc) has five save slots. A save made during the founding is labelled with the next step. After the founding, it's labelled with facts about the village, such as "4 residents, 3 houses, 18 meals".
+
+**Autosave.** The game also saves itself, to a file of its own that never takes one of the five slots: every 5 minutes of play, when a party sets out or comes home, when you choose **Start over** or **Quit**, and when you close the window. **Load game** lists it as **Autosave** above the slots, with when it was made. A game younger than 2 minutes isn't autosaved, so a new game never replaces your village's autosave. Pausing stops the clock, since nothing changes. (In the browser the window closing can't be caught, so the 5-minute and party saves are what you have there.)
 
 **Interface size**, on the menu, sets how big the panels and their text are drawn: 90, 100, 115 or 130%. It's saved along with your key bindings. Older saves keep loading as the game changes.
