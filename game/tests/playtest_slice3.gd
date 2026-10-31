@@ -158,7 +158,8 @@ func _initialize() -> void:
 	await key(KEY_TAB)
 	await key(KEY_TAB)
 	await key(KEY_TAB)
-	check(game.view_map == "village", "Tab, past the road and the meadow, back to the village")
+	await key(KEY_TAB)
+	check(game.view_map == "village", "Tab, past the road, the meadow and its road, back to the village")
 
 	# ---- Return and unloading (issue #112)
 	check(await play_until(120, func(): return sim.expedition.is_empty()), "the party gets home")

@@ -203,8 +203,8 @@ func _initialize() -> void:
 	check(await play_until(240, func(): return sim.depart_blocker() == ""), "the meals are packed and the party waits at the board (%s)" % sim.depart_blocker())
 	check(await click_button("Depart"), "click Depart")
 	var party: Array = sim.expedition.get("party", []).map(func(id): return sim.resident(id))
-	check(await play_until(90, func(): return party.all(func(r): return r.away)), "they carry the packs off the west edge")
-	check(await play_until(Tuning.MEADOW_WALK + 10, func(): return party.all(func(r): return sim.at_site(r))), "they reach the meadow")
+	check(await play_until(90, func(): return party.any(func(r): return sim.on_road(r) and r.map == MeadowRoad.ID)), "they carry the packs off the west edge, onto the road to the meadow")
+	check(await play_until(MeadowRoad.walk_time() + 10, func(): return party.all(func(r): return sim.at_site(r))), "they reach the meadow")
 	check(await click_button("Close") and not game.planner_open, "close the board")
 	for i in 5:
 		if game.view_map == Meadow.ID:
@@ -297,7 +297,8 @@ func _initialize() -> void:
 	await key(KEY_TAB)
 	await key(KEY_TAB)
 	await key(KEY_TAB)
-	check(game.view_map == "village", "Tab, past the road and the meadow, back to the village")
+	await key(KEY_TAB)
+	check(game.view_map == "village", "Tab, past the road, the meadow and its road, back to the village")
 
 	# ---- Return and unloading (issue #112): the cargo is set down at the signpost and hauled away
 	var coal_before := count("coal")

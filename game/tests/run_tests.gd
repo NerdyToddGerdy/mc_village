@@ -105,6 +105,7 @@ func _init() -> void:
 		"test_cows_and_pigs",
 		"test_adventures_list",
 		"test_meadow_expedition",
+		"test_the_road_to_the_meadow",
 		"test_old_meadow_trips_come_home",
 		"test_pens_and_breeding",
 		"test_leather_armor",
@@ -1538,7 +1539,7 @@ func send_to_mine(sim: Sim, r: Dictionary) -> void:
 ## tallies leave out what lies on another map.
 func test_residents_only_work_on_their_own_map() -> void:
 	var sim := Sim.new_game()
-	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old mine, the road between them, the meadow and the Nether landing, with the village current")
+	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID, NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old mine, the road between them, the meadow and its road, and the Nether landing, with the village current")
 	var ada: Dictionary = sim.residents[0]
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
 	check(ada.map == "village" and tomas.map == "village", "residents start on the village map")
@@ -2777,7 +2778,7 @@ func test_adventures_list() -> void:
 	var rows := sim.adventures()
 	check(rows.map(func(a): return a.id) == [OldMine.ID, Meadow.ID] and sim.get_map(Meadow.ID).known, "the board lists the old mine and the meadow")
 	check(rows.all(func(a): return a.status == "Not yet visited" and not a.locked and a.hazards.is_empty()), "neither visited yet, no hazards known")
-	check(rows[1].travel == Tuning.MEADOW_WALK and rows[0].travel == -1.0 and rows[1].what == "Sheep, cows and pigs, they say", "the meadow's walk and what's said of it; the road isn't walked yet")
+	check(absf(rows[1].travel - MeadowRoad.walk_time()) < 0.01 and rows[0].travel == -1.0 and rows[1].what == "Sheep, cows and pigs, they say", "the meadow's walk and what's said of it; the road isn't walked yet")
 	var plan := sim.new_plan(Meadow.ID)
 	check(plan.dest == Meadow.ID and plan.target.item == "wool" and plan.picks == 0, "a plan for the meadow brings back wool and packs no pickaxes")
 	check(sim.plan_targets(Meadow.ID).map(func(x): return x.item) == ["wool", "mutton", "leather", "beef", "porkchop"], "it can bring back wool, leather or meat")
@@ -2795,14 +2796,96 @@ func test_adventures_list() -> void:
 			break
 	check(sim.depart() == "", "the party departs for the meadow")
 	var ada: Dictionary = sim.residents[0]
-	until_away(sim, ada, 60)
-	check(ada.away and ada.trip == Meadow.ID and Sim.manhattan(Sim.rcell(ada), sim.meadow_sign()) <= 1, "Ada leaves by the meadow's signpost, off the west edge")
+	var sign_seen := false
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		sign_seen = sign_seen or (ada.map == "village" and Sim.manhattan(Sim.rcell(ada), sim.meadow_sign()) <= 1)
+		if sim.on_road(ada):
+			break
+	check(sign_seen and sim.on_road(ada) and ada.map == MeadowRoad.ID and ada.trip == Meadow.ID, "Ada walks to the meadow's signpost and onto the road to the meadow")
 	check(sim.adventures()[1].status == "Party on the way" and sim.adventures()[0].status == "Locked: the party is at the meadow", "every row says where the party is")
-	run(sim, Tuning.MEADOW_WALK + 2)
+	run(sim, MeadowRoad.walk_time() + 2)
 	check(ada.map == Meadow.ID and sim.adventures()[1].status == "Party there now", "and once she's there, the meadow's row says so")
 	var loaded := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
 	check(loaded.get_map(Meadow.ID).known and loaded.get_map(Meadow.ID).visited and not loaded.get_map(OldMine.ID).visited, "known destinations and visited flags are saved")
 	check(loaded.adventures()[1].what.begins_with("Cows, pigs, sheep · "), "a visited meadow's row counts its animals: %s" % loaded.adventures()[1].what)
+
+
+## Issue #210: the meadow has a road of its own, a plain strip a party walks where it can be seen, each way:
+## no timer, no obstacles, and nothing to build on it. A save from when the walk was timed carries an
+## `away` party over to the strip at the matching share of the way.
+func test_the_road_to_the_meadow() -> void:
+	var sim := Sim.new_game()
+	var rd := sim.get_map(MeadowRoad.ID)
+	check(rd.kind == "walk" and rd.w == Tuning.MEADOW_ROAD_LEN and rd.name == "Road to the meadow", "the road is a plain strip of its own map")
+	check(rd.water.is_empty() and rd.rock.is_empty() and rd.boulders.is_empty(), "no stream, no cut and no boulders: nothing to clear or bridge")
+	check(absf(MeadowRoad.walk_time() - 28.0) < 1.0, "its length sets the walk: %.1f s, close to the old 30 s" % MeadowRoad.walk_time())
+	check(not rd.known, "it's not known before the board is built")
+	var p := send_party_to(sim, Meadow.ID, {"item": "wool", "n": 4}, 2, true)
+	var ada: Dictionary = p.ada
+	check(rd.known and sim.get_map(Meadow.ID).known, "it is known once there's a board")
+	var xs: Array = []
+	var seen_on := false
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		if sim.on_road(ada):
+			seen_on = true
+			if i % (5 * Tuning.TPS) == 0:
+				xs.append(ada.pos.x)
+		if sim.at_site(ada):
+			break
+	check(seen_on and not ada.away, "she is visible on the road, never 'away'")
+	var rising := true
+	for i in range(1, xs.size()):
+		rising = rising and xs[i] > xs[i - 1]
+	check(xs.size() >= 4 and rising and not sim.on_road(ada) and sim.at_site(ada), "she walks east along it, then arrives at the meadow (%s)" % [xs])
+	# Home again: the same strip the other way, then the signpost.
+	var back_seen := false
+	var xs2: Array = []
+	sim.expedition.leg = "home"
+	for i in 120 * Tuning.TPS:
+		sim.step()
+		if sim.on_road(ada) and ada.trip == "village":
+			back_seen = true
+			xs2.append(ada.pos.x)
+		if sim.expedition.is_empty() or (ada.map == "village" and back_seen):
+			break
+	check(back_seen and xs2.size() > 10 and xs2[0] > xs2[-1], "she walks it back, west (%d steps)" % xs2.size())
+	run(sim, 10)
+	check(ada.map == "village" and not ada.away, "and is home at the signpost")
+	# An older save: a party half-way there on the old timer.
+	var raw: Dictionary = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v59.save"))
+	var st: Dictionary = raw.state
+	var who: Dictionary = st.residents[0]
+	who.away = true
+	who.trip = "meadow"
+	who.back_at = st.tick + 300  # half of the old 30 s walk still ahead
+	st.expeditions.overworld = {"state": "out", "dest": "meadow", "party": [who.id], "leg": "out", "board": 0, "provisions": {}, "packed": {}, "cargo": {}, "supplies": {}, "tools": [], "meals": 0, "picks": 0, "policy": {"target": true, "full": true, "low": false}, "target": {"item": "wool", "n": 2}}
+	var up := SaveFormat.upgrade(raw)
+	check(up.has("data") and up.data.v == SaveFormat.VERSION, "the old save upgrades")
+	var old := Sim.from_state(up.data.state)
+	var o: Dictionary = old.residents[0]
+	check(not o.away and o.map == MeadowRoad.ID and absf(o.pos.x - float(Tuning.MEADOW_ROAD_LEN - 1) * 0.5) < 1.0, "the party is on the strip half-way along (x %.1f)" % o.pos.x)
+	for i in 40 * Tuning.TPS:
+		old.step()
+		if old.at_site(o):
+			break
+	check(old.at_site(o) and o.map == Meadow.ID, "and finishes the walk to the meadow")
+	var home_raw: Dictionary = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v59.save"))
+	var hs: Dictionary = home_raw.state
+	var hw: Dictionary = hs.residents[0]
+	hw.away = true
+	hw.trip = "village"
+	hw.back_at = hs.tick + 100
+	hs.expeditions.overworld = {"state": "out", "dest": "meadow", "party": [hw.id], "leg": "home", "board": 0, "provisions": {}, "packed": {}, "cargo": {}, "supplies": {}, "tools": [], "meals": 0, "picks": 0, "policy": {"target": true, "full": true, "low": false}, "target": {"item": "wool", "n": 2}}
+	var back := Sim.from_state(SaveFormat.upgrade(home_raw).data.state)
+	var h: Dictionary = back.residents[0]
+	check(h.map == MeadowRoad.ID and h.pos.x < float(Tuning.MEADOW_ROAD_LEN - 1) * 0.25, "a party on the way home is near the village end of the strip (x %.1f)" % h.pos.x)
+	for i in 30 * Tuning.TPS:
+		back.step()
+		if h.map == "village":
+			break
+	check(h.map == "village" and not h.away, "and comes home")
 
 
 ## Issue #137: the meadow is an expedition site with its own map: herds of sheep, cows and pigs, a pond,
@@ -2820,9 +2903,16 @@ func test_meadow_expedition() -> void:
 	var ada: Dictionary = p.ada
 	check(p.err == "", "Ada is packed and sent off for 12 beef: %s" % p.err)
 	sim.expedition.policy = {"target": true, "full": true, "low": false}
-	until_away(sim, ada, 60)
-	check(ada.away and absf(sim.back_in(ada) - Tuning.MEADOW_WALK) < 0.5, "the walk to the meadow takes %d s" % int(Tuning.MEADOW_WALK))
-	until_at_site(sim, [ada], Tuning.MEADOW_WALK + 5)
+	var on_road_at := -1
+	for i in 60 * Tuning.TPS:
+		sim.step()
+		if sim.on_road(ada):
+			on_road_at = sim.tick
+			break
+	check(on_road_at >= 0 and ada.map == MeadowRoad.ID, "she steps onto the road to the meadow, where she can be seen")
+	until_at_site(sim, [ada], MeadowRoad.walk_time() + 5)
+	var walked := float(sim.tick - on_road_at) / Tuning.TPS
+	check(absf(walked - MeadowRoad.walk_time()) < 2.5 and walked > 20.0, "the walk to the meadow takes %.1f s, about 28 s" % walked)
 	check(sim.at_site(ada) and ada.map == Meadow.ID and Sim.rcell(ada) == mp.entrance, "she arrives at the meadow's entrance")
 	var hunted_cows := false
 	var hurt := 0
@@ -2929,7 +3019,7 @@ func test_pens_and_breeding() -> void:
 	check(sim.packed().sticks == 18 and sim.packed().wheat == 4, "the sticks and wheat are packed at the board (%s)" % [sim.packed()])
 	check(sim.depart() == "", "the party departs")
 	check(sim.expedition.provisions == {"bread": 4} and sim.expedition.supplies == {"stick": 18, "wheat": 4}, "meals are provisions; sticks and wheat are supplies (%s)" % [sim.expedition.supplies])
-	until_at_site(sim, [ada, tomas], Tuning.MEADOW_WALK + 40)
+	until_at_site(sim, [ada, tomas], MeadowRoad.walk_time() + 40)
 	var fed_at := -1
 	var why := ""
 	var saved := {}
@@ -4680,10 +4770,10 @@ func test_nether_and_overworld_together() -> void:
 	var both := false
 	for i in 150 * Tuning.TPS:
 		sim.step()
-		if tomas.map == NetherLanding.ID and ada.away:
+		if tomas.map == NetherLanding.ID and ada.map == MeadowRoad.ID:
 			both = true
 			break
-	check(both, "Tomas is on the Nether landing while Ada is away at the meadow")
+	check(both, "Tomas is on the Nether landing while Ada is on the road to the meadow")
 	check(sim.slot == "overworld" and sim.expeditions.nether.dest == NetherLanding.ID and sim.expeditions.overworld.dest == Meadow.ID, "each keeps its own destination")
 	for i in 400 * Tuning.TPS:
 		sim.step()
