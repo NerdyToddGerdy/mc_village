@@ -1569,6 +1569,10 @@ func known_maps() -> Array:
 			return 0.0
 		if sim.maps[id].level > 0:
 			return 1.0 + sim.maps[id].level / 100.0
+		if id == Road.ID:  # each road after the place it leads to's neighbour: mine, its road, meadow, its road
+			return 2.05
+		if id == MeadowRoad.ID:
+			return 2.15
 		return 2.0 + Sim.ADVENTURES.find(id) / 10.0 if id in Sim.ADVENTURES else 2.0
 	out.sort_custom(func(a, b2): return rank.call(a) < rank.call(b2))
 	return out

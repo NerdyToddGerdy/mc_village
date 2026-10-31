@@ -52,7 +52,7 @@ From a Slice 3 village, a player can:
 
 **Herds.** Sheep, cows and pigs wander it (§4): 9 sheep, 6 cows and 6 pigs at the start, the most it holds of each in the wild. Pens (§5) can hold more.
 
-**Going there.** An expedition like the old mine's: plan the party, provisions and objective at the board; pack, stage and depart. The party carries the packs to the **meadow signpost** on the village's west edge and walks off the map for `MEADOW_WALK`. They're away: not drawn, not working and not getting hungry, and their panels say "On the way to the meadow, N s". The way home is the same walk back, to the same signpost, where they unpack.
+**Going there.** An expedition like the old mine's: plan the party, provisions and objective at the board; pack, stage and depart. The party carries the packs to the **meadow signpost** on the village's west edge and walks the **road to the meadow** (#210): a plain strip map of its own (`meadow_road.gd`, kind "walk"), as the mine's party walks its road, so they stay visible, are out of village work and eat from the packs, and their panels say "On the road to the meadow, about N s". The strip has no stream, cut, bridge, stations, rails or minecart, nobody builds on it, and only the mine's road can be upgraded. Its length (`MEADOW_ROAD_LEN`) sets the walk, about 28 s each way. The way home is the same walk back, to the same signpost, where they unpack. Save v60 puts a party saved mid-walk on the strip at the same share of the way.
 
 **The objective** is "Bring back N" of wool, raw mutton, leather, raw beef or raw porkchops. The planner packs no spare pickaxes for the meadow by default.
 
@@ -165,7 +165,7 @@ Save format **v21** (#139, #140):
 |---|---|---|
 | Meadow size | 24×24 | Cells (its layout is hand-laid in `game/sim/meadow.gd`). |
 | Herds | 9 sheep, 6 cows, 6 pigs | At the start, and the most the meadow holds of each. |
-| `MEADOW_WALK` | 30 s | The walk between the west signpost and the meadow, each way. |
+| `MEADOW_ROAD_LEN` | 85 cells | The road to the meadow; at WALK that is 28 s each way (it replaced the timed `MEADOW_WALK`, 30 s). |
 | `MEADOW_REGROW` | sheep 240 s, cows 300 s, pigs 180 s | Seconds for a species to regain one animal. |
 | `BULL_CHANCE` | 0.15 | Chance hunting a cow hurts the hunter (never seriously). |
 | `SLIP_CHANCE` | 0.03 | Chance of a slip each step onto the pond's bank (never serious). |
