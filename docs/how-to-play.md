@@ -399,4 +399,6 @@ You can still give orders while the game is paused.
 
 The menu (the **Menu** button at the top right, or Esc) has five save slots. A save made during the founding is labelled with the next step. After the founding, it's labelled with facts about the village, such as "4 residents, 3 houses, 18 meals".
 
+**Autosave.** The game also saves itself, to a file of its own that never takes one of the five slots: every 5 minutes of play, when a party sets out or comes home, when you choose **Start over** or **Quit**, and when you close the window. **Load game** lists it as **Autosave** above the slots, with when it was made. A game younger than 2 minutes isn't autosaved, so a new game never replaces your village's autosave. Pausing stops the clock, since nothing changes. (In the browser the window closing can't be caught, so the 5-minute and party saves are what you have there.)
+
 **Interface size**, on the menu, sets how big the panels and their text are drawn: 90, 100, 115 or 130%. It's saved along with your key bindings. Older saves keep loading as the game changes.

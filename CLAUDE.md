@@ -44,7 +44,7 @@ $GODOT --path . --resolution 1280x720 -- --screenshot-menu   # Save game menu (-
 
 `.github/workflows/pages.yml` exports the Web preset (`game/export_presets.cfg`, single-threaded so it runs without special headers) on every pull request and publishes it to GitHub Pages from `main`. The web build uses the Compatibility renderer, and its saves live in the browser's storage.
 
-Screenshots and saves (`saves/slot_N.save`) live in `~/Library/Application Support/Godot/app_userdata/Block Village/`. `game_test.gd` and the playtests write to `test_saves/` and `playtest_saves/` there instead, so they never touch real saves. The playtests push input with `push_input(event, true)` (local coordinates) because the window is stretched. Their shared input helpers live in `tests/playtest_base.gd`. It's the quickest way to check view changes without clicking through the game.
+Screenshots and saves (`saves/slot_N.save`, and `saves/autosave.save`, #295) live in `~/Library/Application Support/Godot/app_userdata/Block Village/`. `game_test.gd` and the playtests write to `test_saves/` and `playtest_saves/` there instead, so they never touch real saves. The playtests push input with `push_input(event, true)` (local coordinates) because the window is stretched. Their shared input helpers live in `tests/playtest_base.gd`. It's the quickest way to check view changes without clicking through the game.
 
 To run some of the sim tests, put words after `--`: `run_tests.gd -- farm fireplace` runs every test whose name contains one of them, and exits with code 1 if none does. Tests are named after the behaviour they cover, so the `tests` list in `tests/run_tests.gd` is the index to pick words from.
 
