@@ -320,7 +320,7 @@ func _initialize() -> void:
 	await frames(2)
 	var jk := -1
 	for i in game._hud._panel_btns.size():
-		if "▾" in game._hud._panel_btns[i].text:
+		if "↓" in game._hud._panel_btns[i].text:
 			jk = i
 	check(jk >= 0, "Tomas's job dropdown has a panel key")
 	if jk >= 0:

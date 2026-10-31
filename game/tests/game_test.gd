@@ -72,6 +72,25 @@ func _test_drag(game: Game) -> void:
 ## The tally bar shows a total for each group of items, and hides groups nothing has turned up in
 ## (issues #73, #141). Each group opens a dropdown with every item's stockpiled and loose counts, and
 ## an item can be pinned to the bar on its own.
+## The web build has no system fonts to fall back to, so every symbol the UI types must be in the UI font
+## itself (issue #306). Looks at the strings in the view's code, comments left out.
+func _test_glyphs() -> void:
+	var font: FontFile = load("res://assets/fonts/BricolageGrotesque.ttf")
+	var missing := {}
+	for dir in ["res://view", "res://scenes"]:
+		for f in DirAccess.get_files_at(dir):
+			if not f.ends_with(".gd"):
+				continue
+			for line in FileAccess.get_file_as_string("%s/%s" % [dir, f]).split("\n"):
+				if line.strip_edges().begins_with("#"):
+					continue
+				var code := line.split("  #")[0]
+				for i in code.length():
+					if code.unicode_at(i) > 0xFF and not font.has_char(code.unicode_at(i)):
+						missing[code[i]] = f
+	check(missing.is_empty(), "every symbol the UI types is in its font (missing: %s)" % [missing])
+
+
 func _test_tallies(game: Game) -> void:
 	var hud: Hud = game._hud
 	var sim := game.sim
@@ -489,7 +508,7 @@ func _test_panel_keys(game: Game) -> void:
 	await _frames()
 	var drop_i := -1
 	for i in hud._panel_btns.size():
-		if "▾" in hud._panel_btns[i].text:
+		if "↓" in hud._panel_btns[i].text:
 			drop_i = i
 	check(drop_i >= 0, "the resident's job dropdown has a panel key (%s)" % [hud._panel_btns.map(func(b): return b.text)])
 	var speed_before := game.speed
@@ -609,7 +628,7 @@ func _test_order_menus(game: Game) -> void:
 	game.craft_menu_open = false
 	hud.refresh(sim)
 	check(hud._tool_btns.keys() == ["gather", "paint", "build", "craft"], "the toolbar is Gather, Paint, Build and Craft (%s)" % [hud._tool_btns.keys()])
-	check(hud._tool_btns.gather.text == "Gather  ▸" and hud._tool_btns.paint.text == "Paint  ▸", "with no order on, the menu buttons say so with ▸")
+	check(hud._tool_btns.gather.text == "Gather  →" and hud._tool_btns.paint.text == "Paint  →", "with no order on, the menu buttons say so with →")
 	_key(game, KEY_Z)
 	hud.refresh(sim)
 	check(game.menu_open == "paint" and hud._menu_panels.paint.visible, "Z opens the Paint menu")
@@ -1222,7 +1241,7 @@ func _test_meadow(game: Game) -> void:
 		return null
 	check(game.plan.list.map(func(r): return r.item) == ["coal", "cobble"] and by_label.call("Bring back: Coal") != null, "the planner lists the old mine's cargo: coal, then cobblestone")
 	by_label.call("Cobblestone up").pressed.emit()
-	check(game.plan.list.map(func(r): return r.item) == ["cobble", "coal"], "▲ moves cobblestone above coal")
+	check(game.plan.list.map(func(r): return r.item) == ["cobble", "coal"], "↑ moves cobblestone above coal")
 	hud.refresh(sim)
 	await process_frame
 	by_label.call("Cobblestone more").pressed.emit()
@@ -1441,7 +1460,7 @@ func _test_after_the_founding(game: Game) -> void:
 	hud.refresh(sim)
 	await _frames()
 	labels = _walk(hud._goals).filter(func(n): return n is Button and not n.is_queued_for_deletion()).map(func(l): return l.text)
-	check(labels == ["The village  ✓"] and hud._goals_panel.get_global_rect().size.x < 200, "afterwards it folds to a small chip that opens the book (%s)" % [labels])
+	check(labels == ["The village  √"] and hud._goals_panel.get_global_rect().size.x < 200, "afterwards it folds to a small chip that opens the book (%s)" % [labels])
 	check(Goals.progress_text(sim) == Goals.village_text(sim) and Goals.village_text(sim).begins_with("%d resident" % sim.residents.size()), "the save label is the village's facts: %s" % Goals.progress_text(sim))
 	check(game.save_slot(3) == "" and game.read_slots()[2].summary == Goals.village_text(sim), "a new save carries that label")
 	var old: Dictionary = SaveFormat.read(game._slot_path(3)).data
@@ -1641,6 +1660,7 @@ func _initialize() -> void:
 	await _test_equip(game)
 	await _test_toasts(game)
 	_test_headers(game)
+	_test_glyphs()
 	_test_tallies(game)
 	await _test_meadow(game)
 	await _test_quit(game, menu)
