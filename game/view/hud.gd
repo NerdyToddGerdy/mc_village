@@ -35,6 +35,7 @@ var _loc_drop: PanelContainer       ## The expedition board's location dropdown 
 var _loc_list := VBoxContainer.new()
 var _loc_open := false
 var _loc_anchor := Rect2()
+var _loc_button: Button  ## The button the location dropdown hangs from, so it follows it.
 var _tally_panel: PanelContainer
 var _tally_seen := {}           ## Item types that have turned up in this game; the rest stay hidden.
 var _tally_sim := 0             ## Which sim _tally_seen belongs to (it resets for a new or loaded game).
@@ -256,6 +257,9 @@ func _ready() -> void:
 	_root.add_child(_book_panel)
 	_root.add_child(_job_drop)
 	_root.add_child(_loc_drop)
+	get_viewport().size_changed.connect(func() -> void:  # a resized window must not strand an open list
+		if _loc_drop.visible and game != null and game.sim != null:
+			_refresh_loc_drop(game.sim))
 	_radial.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_radial.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_radial.draw.connect(_draw_radial)
@@ -1313,7 +1317,7 @@ func _process(_delta: float) -> void:
 	if open != "":
 		var b: Button = _group_btns[open]
 		var panel := b.get_parent().get_parent() as Control
-		_tools_drop.position = Vector2(b.global_position.x - 12, panel.get_global_rect().end.y + 6)
+		_place_drop(_tools_drop, Vector2(b.global_position.x - 12, panel.get_global_rect().end.y + 6))
 	for g in _group_btns:
 		_group_btns[g].set_pressed_no_signal(_drop_pinned == g)
 
@@ -1817,7 +1821,7 @@ func _refresh_job_drop(sim: Sim) -> void:
 	_job_drop.visible = true
 	var h := _job_drop.get_combined_minimum_size().y
 	var below := _job_anchor.end.y + 4 + h <= get_viewport().get_visible_rect().size.y
-	_job_drop.position = Vector2(_job_anchor.position.x, _job_anchor.end.y + 4 if below else _job_anchor.position.y - 4 - h)  # above, when there's no room below
+	_place_drop(_job_drop, Vector2(_job_anchor.position.x, _job_anchor.end.y + 4 if below else _job_anchor.position.y - 4 - h))  # above, when there's no room below
 	var counts := {}
 	for o in sim.residents:
 		counts[o.role] = counts.get(o.role, 0) + 1
@@ -2858,12 +2862,23 @@ func _location_button(sim: Sim, rows: Array) -> Button:
 			_close_loc_drop()
 		else:
 			_loc_open = true
+			_loc_button = b
 			_loc_anchor = b.get_global_rect())
 	return b
 
 
+## Puts a dropdown at `pos`, kept wholly inside the visible area on every side (a browser window is rarely
+## 16:9, so what fits on the desktop can run off the edge there).
+func _place_drop(drop: Control, pos: Vector2) -> void:
+	var view := get_viewport().get_visible_rect()
+	var sz := drop.get_combined_minimum_size()
+	drop.position = Vector2(clampf(pos.x, view.position.x + 8.0, maxf(view.position.x + 8.0, view.end.x - sz.x - 8.0)),
+			clampf(pos.y, view.position.y + 8.0, maxf(view.position.y + 8.0, view.end.y - sz.y - 8.0)))
+
+
 func _close_loc_drop() -> void:
 	_loc_open = false
+	_loc_button = null
 	_loc_anchor = Rect2()
 	_loc_drop.visible = false
 
@@ -2876,8 +2891,11 @@ func _refresh_loc_drop(sim: Sim) -> void:
 		return
 	_loc_drop.visible = true
 	var h := _loc_drop.get_combined_minimum_size().y
+	if is_instance_valid(_loc_button) and _loc_button.is_visible_in_tree():
+		_loc_anchor = _loc_button.get_global_rect()  # live: the board can move or resize after it opens
+	var w := _loc_drop.get_combined_minimum_size().x
 	var below := _loc_anchor.end.y + 4 + h <= get_viewport().get_visible_rect().size.y
-	_loc_drop.position = Vector2(maxf(8.0, _loc_anchor.end.x - _loc_drop.get_combined_minimum_size().x), _loc_anchor.end.y + 4 if below else _loc_anchor.position.y - 4 - h)
+	_place_drop(_loc_drop, Vector2(_loc_anchor.end.x - w, _loc_anchor.end.y + 4 if below else _loc_anchor.position.y - 4 - h))
 	var rows := sim.adventures()
 	_rebuild(_loc_list, "%s|%s" % [rows, game.adventure], func(c: Container) -> void:
 		for a in rows:
