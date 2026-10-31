@@ -185,6 +185,42 @@ func _test_headers(game: Game) -> void:
 	long.free()
 
 
+## The roster lists everyone with what they're doing, and puts those who need a look first (issue #300).
+func _test_roster(game: Game) -> void:
+	var hud: Hud = game._hud
+	var sim := game.sim
+	var ada: Dictionary = sim.residents[0]
+	var other: Dictionary = sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(2, 0))
+	var kept_hunger: float = other.hunger
+	other.hunger = 10.0
+	check(hud.roster_flag(sim, other) == "Hungry", "someone below the hungry line is flagged")
+	other.hunger = 0.0
+	check(hud.roster_flag(sim, other) == "Starving", "and at zero, starving")
+	other.hunger = 90.0
+	other.hurt = 1
+	check(hud.roster_flag(sim, other) == "Hurt", "an injured one is flagged")
+	other.hurt = 0
+	hud._toggle_roster()
+	await game.get_tree().process_frame
+	var all := _walk(hud._roster_list).filter(func(n): return not n.is_queued_for_deletion())
+	var summary: Array = all.filter(func(n): return n is Label and " residents " in n.text)
+	check(hud._roster_panel.visible and summary.size() == 1 and summary[0].text.begins_with("%d residents" % sim.residents.size()), "the roster opens with a count line (%s)" % [summary.map(func(n): return n.text)])
+	var names: Array = all.filter(func(n): return n is Button and n.get_meta("label", "").begins_with("Roster: ")).map(func(n): return n.get_meta("label"))
+	check(names.size() == sim.residents.size(), "one row a resident (%s)" % [names])
+	other.hunger = 5.0
+	hud.refresh(sim)
+	await game.get_tree().process_frame
+	all = _walk(hud._roster_list).filter(func(n): return not n.is_queued_for_deletion())
+	names = all.filter(func(n): return n is Button and n.get_meta("label", "").begins_with("Roster: ")).map(func(n): return n.get_meta("label"))
+	check(names[0] == "Roster: Tomas", "someone hungry comes first (%s)" % [names])
+	check(hud.get_viewport().get_visible_rect().encloses(hud._roster_panel.get_global_rect()), "the roster lies inside the window")
+	hud._toggle_roster()
+	check(not hud._roster_panel.visible, "the button closes it")
+	other.hunger = kept_hunger
+	sim.residents.erase(other)
+	await game.get_tree().process_frame
+
+
 ## Toasts are kept in a log that opens from a button, so a missed one can be read (issue #297).
 func _test_message_log(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -1781,6 +1817,7 @@ func _initialize() -> void:
 	await _test_toasts(game)
 	_test_headers(game)
 	await _test_message_log(game)
+	await _test_roster(game)
 	await _test_needs_you(game)
 	await _test_autosave(game)
 	_test_glyphs()

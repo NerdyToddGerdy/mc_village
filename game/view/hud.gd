@@ -14,6 +14,10 @@ var _radial := Control.new()  ## Draws the radial Gather menu (issue #176) when 
 var _tallies := HBoxContainer.new()
 var _tools_btn: Button
 var _jobs_btn: Button               ## Opens the Village jobs board (issue #78).
+var _roster_btn: Button             ## Opens the roster: who is doing what, and who needs a look (issue #300).
+var _roster_panel: PanelContainer
+var _roster_list := VBoxContainer.new()
+var _roster_open := false
 var _claim_btn: Button              ## "2 land claims": starts the Claim land order (issue #187).
 var _maps := HBoxContainer.new()    ## The map switcher (issue #101): Village, and each known site.
 var _party := Button.new()          ## "Party at the old mine: mining", when residents work on another map.
@@ -126,6 +130,11 @@ func _ready() -> void:
 	_jobs_btn.toggle_mode = true
 	_jobs_btn.custom_minimum_size = Vector2(0, 36)
 	tally_row.add_child(_jobs_btn)
+	_roster_btn = _button("Roster", func(): _toggle_roster())
+	_roster_btn.custom_minimum_size = Vector2(0, 36)
+	_roster_btn.toggle_mode = true
+	_roster_btn.set_meta("label", "Roster")
+	tally_row.add_child(_roster_btn)
 	_claim_btn = _button("", func(): game.start_claiming(), "Primary")
 	_claim_btn.custom_minimum_size = Vector2(0, 36)
 	_claim_btn.visible = false
@@ -281,6 +290,17 @@ func _ready() -> void:
 	_log_panel.visible = false
 	_log_panel.top_level = true
 	_root.add_child(_log_panel)
+	_roster_list.add_theme_constant_override("separation", 2)
+	var roster_scroll := ScrollContainer.new()
+	roster_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	roster_scroll.custom_minimum_size = Vector2(470, 0)
+	roster_scroll.add_child(_roster_list)
+	_roster_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_roster_panel = _panel(roster_scroll, Vector2(470, 0), 8)
+	_roster_panel.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 8, Palette.SLATE_DEEP))
+	_roster_panel.visible = false
+	_roster_panel.top_level = true
+	_root.add_child(_roster_panel)
 	get_viewport().size_changed.connect(func() -> void:  # a resized window must not strand an open list
 		if _loc_drop.visible and game != null and game.sim != null:
 			_refresh_loc_drop(game.sim))
@@ -918,6 +938,7 @@ func refresh(sim: Sim) -> void:
 	_refresh_job_drop(sim)
 	_refresh_loc_drop(sim)
 	_refresh_log()
+	_refresh_roster(sim)
 	_refresh_toolbar(sim)
 	_refresh_board(sim)
 	_refresh_craft(sim)
@@ -1263,6 +1284,8 @@ func _input(event: InputEvent) -> void:
 			_close_loc_drop()
 		if event.pressed and _log_open and not _log_panel.get_global_rect().has_point(event.position) and not _log_btn.get_global_rect().has_point(event.position):
 			_toggle_log()
+		if event.pressed and _roster_open and not _roster_panel.get_global_rect().has_point(event.position) and not _roster_btn.get_global_rect().has_point(event.position):
+			_toggle_roster()
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _tools_drop.visible:
 		_close_tools()
 		get_viewport().set_input_as_handled()
@@ -1274,6 +1297,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _log_open:
 		_toggle_log()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _roster_open:
+		_toggle_roster()
 		get_viewport().set_input_as_handled()
 
 
@@ -1624,6 +1650,66 @@ func add_toast(ev: Dictionary) -> void:
 	_toast_list.append({"node": p, "until": Time.get_ticks_msec() + 7000})
 	if _toast_list.size() > 3:
 		_toast_list.pop_front().node.queue_free()
+
+
+# ---------------------------------------------------------------- the roster (issue #300)
+
+func _toggle_roster() -> void:
+	_roster_open = not _roster_open
+	_roster_btn.set_pressed_no_signal(_roster_open)
+	_refresh_roster(game.sim)
+
+
+## What a resident needs a look for, in a word, or "": starving, hurt, hungry, idle, in that order of worry.
+func roster_flag(sim: Sim, r: Dictionary) -> String:
+	if r.hunger <= 0.0:
+		return "Starving"
+	if r.hunger < Tuning.HUNGRY_BELOW:
+		return "Hungry"
+	if r.get("hurt", 0) > 0:
+		return "Hurt" if r.hurt == 1 else "Badly hurt"
+	if r.map == "village" and not r.away and not sim.resting(r) and (r.job == null or r.job.label == "Idle"):
+		return "Idle"
+	return ""
+
+
+## Everyone in one list, with what they're doing, how fed they are and anything that needs a look first.
+func _refresh_roster(sim: Sim) -> void:
+	_roster_panel.visible = _roster_open
+	if not _roster_open:
+		return
+	var rows: Array = sim.residents.duplicate()
+	var rank := func(r: Dictionary) -> int:
+		return ["Starving", "Badly hurt", "Hungry", "Hurt", "Idle", ""].find(roster_flag(sim, r))
+	rows.sort_custom(func(a, b): return rank.call(a) < rank.call(b))
+	var sig := ""
+	for r in rows:
+		sig += "%s|%s|%d|%d|%s;" % [r.name, _status(sim, r), int(r.hunger / 5.0), r.get("hurt", 0), r.map]
+	_place_drop(_roster_panel, Vector2(_roster_btn.get_global_rect().position.x, _roster_btn.get_global_rect().end.y + 8.0))
+	var cap := get_viewport().get_visible_rect().size.y - _roster_panel.position.y - 24.0
+	_roster_panel.get_child(0).custom_minimum_size.y = clampf(minf(cap, 40.0 + rows.size() * 34.0), 80.0, 480.0)
+	_rebuild(_roster_list, sig, func(c: Container) -> void:
+		var idle := rows.filter(func(r): return roster_flag(sim, r) == "Idle").size()
+		var needs := rows.filter(func(r): return roster_flag(sim, r) in ["Starving", "Hungry", "Hurt", "Badly hurt"]).size()
+		var away := rows.filter(func(r): return r.map != "village" or r.away).size()
+		c.add_child(_label("%d %s · %d idle · %d need a look · %d away" % [rows.size(), "resident" if rows.size() == 1 else "residents", idle, needs, away], true, Palette.CHALK, Palette.BODY))
+		for r in rows:
+			var flag := roster_flag(sim, r)
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 10)
+			row.add_child(_swatch(r.shirt))
+			var who := _button(r.name, func(): game.focus_on("res", r.id), "Secondary")
+			who.custom_minimum_size.x = 84
+			who.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			who.set_meta("label", "Roster: " + r.name)
+			row.add_child(who)
+			var doing := _label(_status(sim, r), false, Palette.CHALK_DIM, Palette.BODY, true)
+			doing.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(doing)
+			var note := _label(flag if flag != "" else "%d%% fed" % int(r.hunger), flag != "", Palette.YELLOW if flag != "" else Palette.CHALK_DIM, Palette.CAPTION)
+			note.custom_minimum_size.x = 76
+			row.add_child(note)
+			c.add_child(row))
 
 
 # ---------------------------------------------------------------- the message log (issue #297)
