@@ -34,6 +34,8 @@ var _job_anchor := Rect2()          ## The button it opened from, in global coor
 var _loc_drop: PanelContainer       ## The expedition board's location dropdown (issue #181), under its button.
 var _loc_list := VBoxContainer.new()
 var _loc_open := false
+var _minimap: MiniMap                ## The corner map (issue #298).
+var minimap_on := false
 var _loc_anchor := Rect2()
 var _loc_button: Button  ## The button the location dropdown hangs from, so it follows it.
 var _tally_panel: PanelContainer
@@ -257,6 +259,9 @@ func _ready() -> void:
 	_root.add_child(_book_panel)
 	_root.add_child(_job_drop)
 	_root.add_child(_loc_drop)
+	_minimap = MiniMap.new()
+	_minimap.game = game
+	_root.add_child(_minimap)
 	get_viewport().size_changed.connect(func() -> void:  # a resized window must not strand an open list
 		if _loc_drop.visible and game != null and game.sim != null:
 			_refresh_loc_drop(game.sim))
@@ -893,6 +898,7 @@ func refresh(sim: Sim) -> void:
 	_refresh_selection(sim)
 	_refresh_job_drop(sim)
 	_refresh_loc_drop(sim)
+	_refresh_minimap()
 	_refresh_toolbar(sim)
 	_refresh_board(sim)
 	_refresh_craft(sim)
@@ -1589,6 +1595,22 @@ func add_toast(ev: Dictionary) -> void:
 	_toast_list.append({"node": p, "until": Time.get_ticks_msec() + 7000})
 	if _toast_list.size() > 3:
 		_toast_list.pop_front().node.queue_free()
+
+
+# ---------------------------------------------------------------- the minimap (issue #298)
+
+func toggle_minimap() -> void:
+	minimap_on = not minimap_on
+	_refresh_minimap()
+
+
+## Shown in the bottom right corner above the orders toolbar, over the map, while it's on.
+func _refresh_minimap() -> void:
+	_minimap.visible = minimap_on and not game._menu.visible
+	if not _minimap.visible:
+		return
+	var view := get_viewport().get_visible_rect().size
+	_minimap.position = Vector2(view.x - MiniMap.SIZE - 16.0, view.y - MiniMap.SIZE - 82.0)
 
 
 # ---------------------------------------------------------------- selection panel

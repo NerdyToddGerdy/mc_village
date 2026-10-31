@@ -34,6 +34,8 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 
 **Other maps.** Expeditions go to places off the map, such as an old mine and a meadow. Once the village knows of one, a switcher in the top bar shows **Village**, **Old mine** and the rest (Tab switches), and a dim line under it says what a party there is doing, or how long until it gets there. Each map keeps its own view. Stockpiles, farms and buildings stay in the village.
 
+**The minimap.** Press **I** for a small map of the map in view, in the bottom right: ground, water, trees, buildings (blueprints outlined in blue), stockpile and farm, each resident as a dot in their tunic colour, a yellow square wherever something is stuck, and a white outline of what the camera sees. Click or drag on it to move the camera there. It follows the map switcher, so on the road or in the mine it shows that map.
+
 Marks drawn on the world show what's been ordered. Chalk-white means selected, red means mine or hunt, green hatching is a stockpile, wheat rows are a farm, a blue dashed outline is a blueprint, and a yellow flag means something is stuck.
 
 ## The founding, step by step
@@ -389,6 +391,7 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | 1 / 2 / 3 | Game speed |
 | Esc | Close whatever is open, or open the menu |
 | M / ? | Menu, Controls |
+| I | Show or hide the minimap |
 
 The **Menu** button at the top right, beside the speed buttons, opens the same menu with a click. It shows the menu key (M unless you've changed it), and Esc always works too.
 
