@@ -661,7 +661,7 @@ func _initialize() -> void:
 	await key(KEY_M)
 	check(game._menu.visible, "M opens the menu")
 	check(await click_button("Load game"), "click Load game")
-	check(await click_button("Load"), "click Load on slot 1")
+	check(await click_button("Slot 1: Load"), "click Load on slot 1")
 	check(await click_button("Load slot 1"), "confirm Load slot 1")
 	var slot_tick: int = game.read_slots()[0].tick
 	check(not game._menu.visible, "loading closes the menu")
