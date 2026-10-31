@@ -1204,6 +1204,12 @@ func _test_meadow(game: Game) -> void:
 	await process_frame
 	var rows: Array = _walk(hud._loc_list).filter(func(n): return n is Button and n.has_meta("label") and not n.is_queued_for_deletion())
 	check(rows.map(func(n): return n.get_meta("label")) == ["Adventure: Old mine", "Adventure: Meadow"], "its list has both destinations (%s)" % [rows.map(func(n): return n.get_meta("label"))])
+	var view := hud.get_viewport().get_visible_rect()
+	check(view.encloses(hud._loc_drop.get_global_rect()), "the open list lies inside the window (%s in %s)" % [hud._loc_drop.get_global_rect(), view])
+	for far in [Vector2(-500, -500), Vector2(view.end.x + 500, view.end.y + 500)]:
+		hud._place_drop(hud._loc_drop, far)
+		check(view.encloses(Rect2(hud._loc_drop.position, hud._loc_drop.get_combined_minimum_size())), "a list put at %s is pulled back inside the window" % [far])
+	hud.refresh(sim)
 	rows[0].pressed.emit()
 	hud.refresh(sim)
 	await process_frame
