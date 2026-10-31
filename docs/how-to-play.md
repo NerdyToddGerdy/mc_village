@@ -359,6 +359,7 @@ Anything that can't go on gets a **yellow flag** on the map and an entry in the 
 - The entry that's been stuck longest is at the top.
 - A standing order that's only short of materials, like the toolsmith's spare, goes in a dim **waiting** line instead, without a flag. So does an expedition that's still packing. It's advice, not a blocker.
 - Click the **Stuck** header to fold the list into a small chip. It opens again when something new gets stuck.
+- A choice the game is waiting on you for, such as a loaded freight cart asking to leave, is not stuck. It gets its own **Needs you** section at the top of the list, with the buttons that answer it right there (**Approve departure**, **Decline**), in blue and with no flag on the map. The same line in the building's own panel is dim for the same reason.
 
 ## Controls
 

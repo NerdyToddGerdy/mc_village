@@ -185,6 +185,42 @@ func _test_headers(game: Game) -> void:
 	long.free()
 
 
+## The stuck list sets the choices waiting for the player apart from what's wrong (issue #296).
+func _test_needs_you(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	var kept: Array = sim.stuck.duplicate(true)
+	var entry := func(who: String, why: String, waiting: bool, decision: String) -> Dictionary:
+		return {"who": who, "why": why, "map": "village", "cell": Vector2(5, 5), "height": 1.0, "focus_kind": "", "focus_id": 0, "hidden": false,
+			"waiting": waiting or decision != "", "decision": decision, "key": who + why, "since": 0}
+	sim.stuck = [entry.call("House", "Walls need 4 more planks", false, ""), entry.call("Freight cart", "waiting for approval", true, "freight"), entry.call("Fireplace", "short of logs", true, "")]
+	hud.refresh(sim)
+	await game.get_tree().process_frame
+	var all := _walk(hud._stuck).filter(func(n): return not n.is_queued_for_deletion())
+	var heads: Array = all.filter(func(n): return n is Label and n.text.begins_with("Needs you")).map(func(n): return n.text)
+	check(heads == ["Needs you (1)"], "a \"Needs you\" heading counts the choices (%s)" % [heads])
+	var stuck_head: Array = all.filter(func(n): return n is Button and n.text.begins_with("Stuck ("))
+	check(stuck_head.size() == 1 and "(1)" in stuck_head[0].text, "the Stuck count has only the real problem")
+	var approve: Array = all.filter(func(n): return n is Button and n.get_meta("label", "") == "Needs you: Approve departure")
+	var decline: Array = all.filter(func(n): return n is Button and n.get_meta("label", "") == "Needs you: Decline")
+	check(approve.size() == 1 and decline.size() == 1, "the list holds the buttons that answer it")
+	var pos_need := -1
+	var pos_stuck := -1
+	for i in all.size():
+		if pos_need < 0 and all[i] is Label and all[i].text.begins_with("Needs you"):
+			pos_need = i
+		if pos_stuck < 0 and all[i] is Button and all[i].text.begins_with("Stuck ("):
+			pos_stuck = i
+	check(pos_need >= 0 and pos_need < pos_stuck, "and it comes first")
+	sim.stuck = [entry.call("Freight cart", "waiting for approval", true, "freight")]
+	hud.refresh(sim)
+	await game.get_tree().process_frame
+	check(hud._stuck_panel.visible, "a choice alone still shows the panel")
+	sim.stuck = kept
+	hud.refresh(sim)
+	await game.get_tree().process_frame
+
+
 ## The game saves itself now and then, to a file of its own (issue #295).
 func _test_autosave(game: Game) -> void:
 	var sim := game.sim
@@ -1719,6 +1755,7 @@ func _initialize() -> void:
 	await _test_equip(game)
 	await _test_toasts(game)
 	_test_headers(game)
+	await _test_needs_you(game)
 	await _test_autosave(game)
 	_test_glyphs()
 	_test_tallies(game)
