@@ -57,7 +57,7 @@ func _initialize() -> void:
 	await click(screen(pen.gate, 0.4))
 	await settle()
 	check(game.selection.get("kind", "") == "pen" and visible_label("room for 4") and visible_label("12 sticks more"), "clicking a fence selects the pen: room for 4, 12 sticks to go")
-	# Two cows marked to lead in, with Gather ▸ Lead to a pen.
+	# Two cows marked to lead in, with Gather → Lead to a pen.
 	check(await click_button("Gather") and await click_button("Lead to a pen"), "pick Lead to a pen in the Gather menu")
 	var cows: Array = []
 	for i in 2:

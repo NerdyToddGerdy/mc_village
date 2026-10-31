@@ -103,7 +103,7 @@ func _ready() -> void:
 	_tallies.add_theme_constant_override("separation", 18)
 	tally_row.add_child(_tallies)
 	for g in Defs.TALLY_GROUPS:  # one button per group, each opening its dropdown (issue #141)
-		var gb := _button(g[1] + "  ▾", func(): pass)
+		var gb := _button(g[1] + "  ↓", func(): pass)
 		gb.pressed.connect(func():
 			_drop_pinned = "" if _drop_pinned == g[0] else g[0]
 			gb.release_focus())  # a click pins; only keyboard focus should hold it open (#90)
@@ -710,7 +710,7 @@ func _refresh_toolbar(sim: Sim) -> void:
 			if t != "build" and on_menu == t:
 				name += ": " + OrderMenus.entry(game.tool).name
 			elif OrderMenus.MENUS.has(t):
-				name += "  ▸"
+				name += "  →"
 			_set_order_label(t, name, k.first(t))
 			_tool_icons[t].queue_redraw()
 	for t in _tool_btns:
@@ -861,7 +861,7 @@ func _bar(frac: float, color := Palette.BLUE) -> Control:
 
 
 func _reason(text: String) -> Label:
-	return _label("⚑  " + text, true, Palette.YELLOW, Palette.BODY, true)
+	return _label("!  " + text, true, Palette.YELLOW, Palette.BODY, true)
 
 
 ## Replaces a container's children only when `sig` differs from last time.
@@ -954,7 +954,7 @@ func _refresh_tallies(sim: Sim) -> void:
 		var name: String = b.get_meta("name")
 		match g:
 			"food":
-				b.text = "Food  %d %s%s  ▾" % [meals, "meal" if meals == 1 else "meals", " · %d raw" % raw if raw > 0 else ""]
+				b.text = "Food  %d %s%s  ↓" % [meals, "meal" if meals == 1 else "meals", " · %d raw" % raw if raw > 0 else ""]
 				for k in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
 					if low:
 						b.add_theme_color_override(k, Palette.YELLOW)
@@ -962,9 +962,9 @@ func _refresh_tallies(sim: Sim) -> void:
 						b.remove_theme_color_override(k)
 				b.tooltip_text = "Fewer meals than residents. Cooks need wheat, or raw meat and logs." if low else ""
 			"tools":
-				b.text = "%s  %d  ▾" % [name, gear]
+				b.text = "%s  %d  ↓" % [name, gear]
 			_:
-				b.text = "%s  %d  ▾" % [name, n]
+				b.text = "%s  %d  ↓" % [name, n]
 	_refresh_drop(sim, totals, loose, meals, raw)
 
 
@@ -1336,7 +1336,7 @@ func _refresh_goals(sim: Sim) -> void:
 	_rebuild(_goals, "%d%d%s" % [cur, at, done_sig], func(c: Container) -> void:
 		var n_done := done_sig.count("1")
 		if at < 0:
-			var chip := _button("The village  ✓", func(): game.open_book())
+			var chip := _button("The village  √", func(): game.open_book())
 			chip.flat = true
 			for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 				chip.add_theme_color_override(state, Palette.GREEN)
@@ -1413,7 +1413,7 @@ func _fill_book_goals(c: Container, sim: Sim) -> void:
 		for i in ch[1].size():
 			var g: Dictionary = ch[1][i]
 			var done: bool = ch[2].call(sim, i)
-			var t := _label("%s  %s" % ["✓" if done else "·", g.t], true, Palette.GREEN if done else Palette.CHALK, Palette.BODY, true)
+			var t := _label("%s  %s" % ["√" if done else "·", g.t], true, Palette.GREEN if done else Palette.CHALK, Palette.BODY, true)
 			t.custom_minimum_size.x = 420
 			c.add_child(t)
 			var w := _label(g.w, false, Palette.CHALK_DIM, Palette.CAPTION, true)
@@ -1452,7 +1452,7 @@ func _refresh_stuck(sim: Sim) -> void:
 		sig += s.who + s.why + ";"
 	_rebuild(_stuck, sig, func(c: Container) -> void:
 		if not block.is_empty():
-			var head := _button("Stuck (%d)   %s" % [block.size(), "▴" if stuck_open else "▾"], func(): stuck_open = not stuck_open)
+			var head := _button("Stuck (%d)   %s" % [block.size(), "↑" if stuck_open else "↓"], func(): stuck_open = not stuck_open)
 			head.icon = MarkTextures.flag() if folded else null
 			head.add_theme_constant_override("icon_max_width", 16)
 			head.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -1471,7 +1471,7 @@ func _refresh_stuck(sim: Sim) -> void:
 		if not block.is_empty():
 			c.add_child(_rule())
 		var n := wait.size()
-		var line := _button("%d waiting   %s" % [n, "▴" if waiting_open else "▾"], func(): waiting_open = not waiting_open)
+		var line := _button("%d waiting   %s" % [n, "↑" if waiting_open else "↓"], func(): waiting_open = not waiting_open)
 		line.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		for state in ["font_color", "font_focus_color"]:
 			line.add_theme_color_override(state, Palette.CHALK_DIM)
@@ -1789,7 +1789,7 @@ func _job_picker(sim: Sim, r: Dictionary) -> Control:
 		return l
 	var lv := "" if r.role == "none" else ", level %d" % Sim.level(r, r.role)
 	var short := " (no %s)" % Defs.TEMPLATES[Defs.JOB_STATIONS[r.role]].name.to_lower() if sim.needs_station(r) else ""
-	var b := _button("%s%s%s  ▾" % [Sim.role_name(r), lv, short], func(): pass, "Secondary")
+	var b := _button("%s%s%s  ↓" % [Sim.role_name(r), lv, short], func(): pass, "Secondary")
 	b.set_meta("label", "Job: %s" % r.name)
 	b.toggle_mode = true
 	b.set_pressed_no_signal(_job_for == r.id)
@@ -2148,7 +2148,7 @@ func _fill_pen(c: Container, sim: Sim, p: Dictionary) -> void:
 				parts.append(Defs.animals(sp, grown))
 			if young > 0:
 				parts.append("%d %s" % [young, Defs.SPECIES[sp].young if young == 1 else Defs.SPECIES[sp].youngs])
-		c.add_child(_label(", ".join(parts) + "." if not parts.is_empty() else "Empty. Mark animals with Gather ▸ Lead to a pen, and the party walks them in.", false, Palette.CHALK, Palette.BODY, true))
+		c.add_child(_label(", ".join(parts) + "." if not parts.is_empty() else "Empty. Mark animals with Gather → Lead to a pen, and the party walks them in.", false, Palette.CHALK, Palette.BODY, true))
 		var fed := animals.filter(func(a): return a.get("fed_at", -1) >= 0).size()
 		if fed > 0:
 			c.add_child(_label("%d fed, a young one on the way." % fed, false, Palette.WHEAT, Palette.BODY))
@@ -2853,7 +2853,7 @@ func _location_button(sim: Sim, rows: Array) -> Button:
 	var text := "Nowhere known yet"
 	if not cur.is_empty():
 		text = "%s%s" % [cur[0].name, " · ~%d s each way" % roundi(cur[0].travel) if cur[0].travel >= 0.0 else ""]
-	var b := _button(text + "  ▾", func(): pass, "Secondary")
+	var b := _button(text + "  ↓", func(): pass, "Secondary")
 	b.set_meta("label", "Location: " + text)
 	b.disabled = rows.is_empty()
 	b.tooltip_text = "One expedition at a time" if busy else "Choose where to go"
@@ -2901,7 +2901,7 @@ func _refresh_loc_drop(sim: Sim) -> void:
 		for a in rows:
 			var line := "%s · %s · %s" % [a.name, "~%d s" % roundi(a.travel) if a.travel >= 0.0 else "road not walked", a.status]
 			if not a.hazards.is_empty():
-				line += "  ⚑"
+				line += "  !"
 			var b := _button(line, func():
 				game.open_adventure(a.id)
 				_close_loc_drop(), "Secondary")
@@ -2916,7 +2916,7 @@ func _refresh_loc_drop(sim: Sim) -> void:
 
 
 ## The cargo priority list (issue #185): what to bring back, best first. Each row has a toggle (an item that's
-## off is left), its name, how many are wanted (Max: as much as fits), and ▲ ▼ to reorder. The packs' bar below
+## off is left), its name, how many are wanted (Max: as much as fits), and ↑ ↓ to reorder. The packs' bar below
 ## shows the wanted amounts against the room.
 func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
 	if plan.target.item in ["survey", "scout", "build", "trade", "fortress", "rescue"]:  # these bring nothing back: the objective row says what they do (issues #148, #154)
@@ -2942,7 +2942,7 @@ func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
 		var row: Dictionary = list[i]
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 4)
-		var on := _button("✓" if row.on and not tend else "", func(): game.plan_cargo_toggle(i), "Secondary")
+		var on := _button("√" if row.on and not tend else "", func(): game.plan_cargo_toggle(i), "Secondary")
 		on.toggle_mode = true
 		on.set_pressed_no_signal(row.on and not tend)
 		on.custom_minimum_size = Vector2(28, 0)
@@ -2952,11 +2952,11 @@ func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
 		var name := _label("%s%s" % [Defs.ITEMS[row.item].label, "  New" if row.get("new", false) else ""], false, Palette.CHALK if row.on and not tend else Palette.CHALK_DIM)
 		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(name)
-		var up := _button("▲", func(): game.plan_cargo_move(i, -1), "Secondary")
+		var up := _button("↑", func(): game.plan_cargo_move(i, -1), "Secondary")
 		up.disabled = i == 0
 		up.tooltip_text = "Bring it back before the one above"
 		up.set_meta("label", "%s up" % Defs.ITEMS[row.item].label)
-		var down := _button("▼", func(): game.plan_cargo_move(i, 1), "Secondary")
+		var down := _button("↓", func(): game.plan_cargo_move(i, 1), "Secondary")
 		down.disabled = i == list.size() - 1
 		down.tooltip_text = "Bring it back after the one below"
 		down.set_meta("label", "%s down" % Defs.ITEMS[row.item].label)
