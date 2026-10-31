@@ -47,6 +47,7 @@ var _group_btns := {}           ## Tally group id -> its button in the tally bar
 var _pointer := Vector2(-1, -1)
 var _goals := VBoxContainer.new()
 var _speed_btns := {}
+var _skip_btn: Button               ## Skip ahead until something needs the player (issue #299).
 var _menu_btn: Button                ## The on-screen button for the Esc menu (issue #216), beside the speed buttons.
 var _menu_panel: PanelContainer
 var _menu_cap: PanelContainer        ## Its key badge, which follows the "menu" binding.
@@ -174,6 +175,12 @@ func _ready() -> void:
 		b.toggle_mode = true
 		_speed_btns[v] = b
 		speed.add_child(b)
+	_skip_btn = _button("Skip", func(): game.set_skip(not game.skipping))
+	_skip_btn.toggle_mode = true
+	_skip_btn.custom_minimum_size = Vector2(60, 44)
+	_skip_btn.set_meta("label", "Skip ahead")
+	_skip_btn.tooltip_text = "Skip ahead: run fast until something needs you"
+	speed.add_child(_skip_btn)
 	_menu_btn = _button("Menu", func(): game.toggle_menu())  # the Esc menu, for the mouse and the web build (issue #216)
 	_menu_btn.custom_minimum_size = Vector2(0, 44)
 	_menu_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -887,7 +894,8 @@ func refresh(sim: Sim) -> void:
 	_refresh_goals(sim)
 	_refresh_book(sim)
 	for v in _speed_btns:
-		_speed_btns[v].set_pressed_no_signal(game.speed == v)
+		_speed_btns[v].set_pressed_no_signal(game.speed == v and not game.skipping)
+	_skip_btn.set_pressed_no_signal(game.skipping)
 	_paused_label.visible = game.speed == 0 and sim.pending.is_empty()  # a choice says so itself
 	_refresh_stuck(sim)
 	_refresh_selection(sim)
