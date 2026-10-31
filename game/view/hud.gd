@@ -954,7 +954,7 @@ func _refresh_tallies(sim: Sim) -> void:
 		var name: String = b.get_meta("name")
 		match g:
 			"food":
-				b.text = "Food  %d %s%s  ↓" % [meals, "meal" if meals == 1 else "meals", " · %d raw" % raw if raw > 0 else ""]
+				b.text = "Food  %d %s%s%s  ↓" % [meals, "meal" if meals == 1 else "meals", " · %d raw" % raw if raw > 0 else "", " · low" if low else ""]  # the word as well as the yellow (issue #302)
 				for k in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
 					if low:
 						b.add_theme_color_override(k, Palette.YELLOW)
@@ -1213,7 +1213,7 @@ func _tool_row(type: String, dur: int) -> VBoxContainer:
 	var low := dur <= 3
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
-	var row := _row(Sim.item_title(type), "%d / %d uses" % [dur, most], false)
+	var row := _row(Sim.item_title(type), "%d / %d uses%s" % [dur, most, " · low" if low else ""], false)  # the word as well as the yellow (issue #302)
 	if low:
 		(row.get_child(1) as Label).add_theme_color_override("font_color", Palette.YELLOW)
 	v.add_child(row)

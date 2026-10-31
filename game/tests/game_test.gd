@@ -123,6 +123,7 @@ func _test_tallies(game: Game) -> void:
 	check(food.text.begins_with("Food  1 meal · 2 raw"), "Food counts meals on hand and raw meat to cook apart (%s)" % food.text)
 	var low := 1 < sim.residents.size()
 	check((food.get_theme_color("font_color") == Palette.YELLOW) == low, "Food is yellow only when meals are fewer than residents")
+	check(("low" in food.text) == low, "and says \"low\" in words then too, not by colour alone (%s)" % food.text)
 	sim.drop_items(Sim.rcell(sim.residents[0]), "wool", 2)
 	check(shown.call().has("animal") and hud._group_btns.animal.text.begins_with("Animal goods  2"), "wool brings in Animal goods")
 	for k in sim.items.keys():
