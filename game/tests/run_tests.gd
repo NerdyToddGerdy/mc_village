@@ -5888,6 +5888,8 @@ func test_the_freight_cart() -> void:
 		sim.step()
 	sim.compute_stuck()
 	check(sim.freight.state == "home" and sim.freight.pos == 0.0 and stuck_text(sim).contains("Freight cart: waiting for approval"), "an unapproved cart never departs, and says it's waiting")
+	var ask: Array = sim.stuck.filter(func(x): return x.who == "Freight cart")
+	check(ask.size() == 1 and ask[0].decision == "freight" and ask[0].waiting, "a loaded cart is a decision for the player, not a blocker (issue #296)")
 	check(sim.approve_freight() == "" and sim.freight.approved, "the player approves")
 	w.portal.lit = false
 	for i in 5 * Tuning.TPS:
@@ -6184,6 +6186,7 @@ func test_the_dispatcher_and_the_whole_chain() -> void:
 	check(sim.pending.is_empty(), "the request is not a pending choice: the game doesn't pause")
 	sim.compute_stuck()
 	check(stuck_text(sim).contains("Freight cart: waiting for approval: the dispatcher asks you to approve") and dp.out, "it waits in the stuck list, and the dispatcher says why: %s" % dp.why)
+	check(sim.stuck.filter(func(x): return x.who == "Freight cart" and x.decision == "freight" and x.waiting).size() == 1, "the dispatcher's request is a decision too, not a yellow-flag blocker (issue #296)")
 	var t := sim.tick
 	for i in 100:
 		sim.step()

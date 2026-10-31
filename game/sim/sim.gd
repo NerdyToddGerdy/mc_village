@@ -4313,13 +4313,14 @@ func _toast(text: String, res_id := 0, site_id := 0) -> void:
 
 ## `waiting` marks a standing order short of materials (issue #77): advice, not a blocker, so it
 ## gets no flag and sits in the stuck list's dim Waiting tier.
-func _add_stuck(who: String, why: String, at: Vector2, height: float, fk: String, fid: int, hidden := false, waiting := false) -> void:
+## `decision` names a choice the game is waiting on the player for ("freight"), shown apart from the blockers (issue #296). It is also `waiting`: no flag on the map.
+func _add_stuck(who: String, why: String, at: Vector2, height: float, fk: String, fid: int, hidden := false, waiting := false, decision := "") -> void:
 	# The same problem keeps its age while its count changes ("4 more planks" -> "3 more planks").
 	var key := "%s|%s|%d|%s|%s" % [map_id, fk, fid, who, _DIGITS.sub(why, "#", true)]
 	if not _stuck_since.has(key):
 		_stuck_since[key] = tick
 	stuck.append({"who": who, "why": why, "map": map_id, "cell": at, "height": height, "focus_kind": fk, "focus_id": fid, "hidden": hidden,
-		"waiting": waiting, "key": key, "since": _stuck_since[key]})
+		"waiting": waiting or decision != "", "decision": decision, "key": key, "since": _stuck_since[key]})
 
 
 static var _DIGITS := RegEx.create_from_string("\\d+")
@@ -7782,7 +7783,8 @@ func _stuck_freight() -> void:
 		return
 	var why := freight_block()
 	if why != "":
-		_add_stuck("Freight cart", why, Vector2(ps.origin) + Vector2(1.5, 0.5), 1.2, "site", ps.id, false, why == "waiting for approval")
+		var asking := why.begins_with("waiting for approval")  # the cart is loaded and it's the player's call (issue #296)
+		_add_stuck("Freight cart", why, Vector2(ps.origin) + Vector2(1.5, 0.5), 1.2, "site", ps.id, false, false, "freight" if asking else "")
 
 
 # ---------------------------------------------------------------- enchanting (issues #165-#167)

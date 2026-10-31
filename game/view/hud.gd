@@ -1435,8 +1435,9 @@ func _fill_book_page(c: Container, p: Dictionary) -> void:
 ## The player can fold the blockers into a "Stuck n" chip; a new blocker opens it again.
 func _refresh_stuck(sim: Sim) -> void:
 	var vis := sim.stuck.filter(func(s): return not s.hidden)
+	var need := vis.filter(func(s): return s.get("decision", "") != "")
 	var block := vis.filter(func(s): return not s.waiting)
-	var wait := vis.filter(func(s): return s.waiting)
+	var wait := vis.filter(func(s): return s.waiting and s.get("decision", "") == "")
 	block.sort_custom(func(a, b): return a.since < b.since or (a.since == b.since and vis.find(a) < vis.find(b)))
 	var keys := {}
 	for s in block:
@@ -1446,11 +1447,18 @@ func _refresh_stuck(sim: Sim) -> void:
 	_stuck_keys = keys
 	_stuck_panel.visible = not vis.is_empty() and not _stuck_gives_way
 	var folded := not block.is_empty() and not stuck_open
-	_stuck_panel.custom_minimum_size.x = 0 if folded else 250
+	_stuck_panel.custom_minimum_size.x = 0 if folded and need.is_empty() else 250
 	var sig := "%s%s" % [stuck_open, waiting_open]
-	for s in block + wait:
+	for s in need + block + wait:
 		sig += s.who + s.why + ";"
 	_rebuild(_stuck, sig, func(c: Container) -> void:
+		if not need.is_empty():  # choices waiting for the player, apart from what's wrong (issue #296)
+			var ask := _label("Needs you (%d)" % need.size(), true, Palette.BLUE, Palette.HEADING)
+			c.add_child(ask)
+			for s in need:
+				c.add_child(_decision_entry(sim, s))
+			if not block.is_empty() or not wait.is_empty():
+				c.add_child(_rule())
 		if not block.is_empty():
 			var head := _button("Stuck (%d)   %s" % [block.size(), "↑" if stuck_open else "↓"], func(): stuck_open = not stuck_open)
 			head.icon = MarkTextures.flag() if folded else null
@@ -1480,6 +1488,31 @@ func _refresh_stuck(sim: Sim) -> void:
 		if waiting_open:
 			for s in wait:
 				c.add_child(_stuck_entry(sim, s, true)))
+
+
+## A choice waiting for the player (issue #296): what it is, and the buttons that answer it, so it needs no hunting for the panel.
+func _decision_entry(sim: Sim, s: Dictionary) -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	var b := _button("%s\n%s" % [s.who, s.why], func(): game.focus_on(s.focus_kind, s.focus_id, s.map))
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.custom_minimum_size = Vector2(0, 44)
+	for state in ["font_color", "font_focus_color"]:
+		b.add_theme_color_override(state, Palette.BLUE)
+	v.add_child(b)
+	if s.decision == "freight":
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		var yes := _button("Approve departure", func(): game.approve_freight(), "Primary")
+		yes.set_meta("label", "Needs you: Approve departure")
+		yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var no := _button("Decline", func(): game.decline_freight(), "Secondary")
+		no.set_meta("label", "Needs you: Decline")
+		no.tooltip_text = "Unload the cart back into the stockpile"
+		row.add_child(yes)
+		row.add_child(no)
+		v.add_child(row)
+	return v
 
 
 ## One stuck-list entry; clicking it moves the camera there. A resident's entry carries their
@@ -3522,7 +3555,7 @@ func _fill_portal_station(c: Container, sim: Sim, s: Dictionary) -> void:
 					db.tooltip_text = "Put the load back in the stockpile."
 					c.add_child(db)
 	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
-		c.add_child(_reason(x.why))
+		c.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))  # a choice for you is not a fault
 
 
 ## A station (issue #123): the line's state, where the cart is, and what's on the platform.
