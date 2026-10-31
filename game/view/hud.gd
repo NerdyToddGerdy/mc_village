@@ -2874,6 +2874,12 @@ func _fill_planner(c: Container, sim: Sim) -> void:
 				game.adventure = rows[0].id
 			if game.plan.is_empty() or not game.plan_matches_adventure():  # the planner was left open while an expedition ended
 				game.plan = sim.new_plan(game.adventure)
+			if sim.last_plans.has(game.plan.dest):  # one click to what was packed last time (issue #301)
+				var again := _button("Repeat last trip", func(): game.repeat_last_trip(), "Secondary")
+				again.tooltip_text = "Fill in the party, objective, list and meals of the last trip here. Anyone who can't go is replaced."
+				again.set_meta("label", "Repeat last trip")
+				again.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+				c.add_child(again)
 			_fill_plan(c, sim)
 
 
