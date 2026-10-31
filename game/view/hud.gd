@@ -130,11 +130,10 @@ func _ready() -> void:
 	_jobs_btn.toggle_mode = true
 	_jobs_btn.custom_minimum_size = Vector2(0, 36)
 	tally_row.add_child(_jobs_btn)
-	_roster_btn = _button("Roster", func(): _toggle_roster())
-	_roster_btn.custom_minimum_size = Vector2(0, 36)
+	_roster_btn = _button("Roster", func(): _toggle_roster())  # beside Log, top right: the top left bar has no room for another button (issue #300)
+	_roster_btn.custom_minimum_size = Vector2(0, 44)
 	_roster_btn.toggle_mode = true
 	_roster_btn.set_meta("label", "Roster")
-	tally_row.add_child(_roster_btn)
 	_claim_btn = _button("", func(): game.start_claiming(), "Primary")
 	_claim_btn.custom_minimum_size = Vector2(0, 36)
 	_claim_btn.visible = false
@@ -219,7 +218,11 @@ func _ready() -> void:
 	_log_btn.custom_minimum_size = Vector2(0, 44)
 	_log_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_log_btn.set_meta("label", "Log")
-	tr.add_child(_panel(_log_btn, Vector2.ZERO, 4))
+	var log_row := HBoxContainer.new()
+	log_row.add_theme_constant_override("separation", 4)
+	log_row.add_child(_roster_btn)
+	log_row.add_child(_log_btn)
+	tr.add_child(_panel(log_row, Vector2.ZERO, 4))
 	_stuck_panel = _panel(_stuck, Vector2(250, 0))
 	tr.add_child(_stuck_panel)
 
@@ -1685,7 +1688,7 @@ func _refresh_roster(sim: Sim) -> void:
 	var sig := ""
 	for r in rows:
 		sig += "%s|%s|%d|%d|%s;" % [r.name, _status(sim, r), int(r.hunger / 5.0), r.get("hurt", 0), r.map]
-	_place_drop(_roster_panel, Vector2(_roster_btn.get_global_rect().position.x, _roster_btn.get_global_rect().end.y + 8.0))
+	_place_drop(_roster_panel, Vector2(_roster_btn.get_global_rect().end.x - 470.0, _roster_btn.get_global_rect().end.y + 8.0))
 	var cap := get_viewport().get_visible_rect().size.y - _roster_panel.position.y - 24.0
 	_roster_panel.get_child(0).custom_minimum_size.y = clampf(minf(cap, 40.0 + rows.size() * 34.0), 80.0, 480.0)
 	_rebuild(_roster_list, sig, func(c: Container) -> void:
