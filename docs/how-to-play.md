@@ -217,6 +217,8 @@ Once Ada's house is finished, a bench queues the planks and sticks a recipe need
 
 Place a blueprint from the **Build** menu, and residents with **Build** on bring materials and put it up in stages. The site panel shows what the current stage still needs.
 
+**Seeing what's being built.** The trees standing in front of a blueprint (up to 8 of them), or of a building that's stuck, fade to see-through on their own, as they do for whatever you've selected, so a site under a canopy isn't lost.
+
 **Clearing the ground.** Whatever lies where a building goes is cleared first. Trees are felled and boulders broken, berry bushes are dug up, and loose items are carried off to a stockpile by haulers; nothing is built until the ground is bare. The hint while placing says what it will clear ("Clears 2 trees, 6 logs and a bush"), and the blueprint's panel and the stuck list say what's left, including "no room in a stockpile" if there's nowhere to put it. With no stockpile yet, loose items are carried to open ground beside the building.
 
 | Building | Stages and costs |

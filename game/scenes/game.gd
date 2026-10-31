@@ -53,6 +53,7 @@ var _autosave_tick := 0  ## The sim tick of the last autosave, or of the load.
 var _autosave_sig := ""
 var save_dir := "user://saves"  ## Tests point this elsewhere so they never touch real saves.
 const SLOTS := 5
+const WATCHED_SITES := 8  ## Blueprints and stuck buildings whose trees in front fade, besides the selected one (issue #304).
 
 ## How big the HUD and menus are drawn (issue #80), the player's choice from the menu. The world
 ## isn't scaled. Saved beside the key bindings, so tests use their own settings folder.
@@ -375,6 +376,15 @@ func _update_focus(sel) -> void:
 			_add_rect_points(pts, sel.rect, 0.8, 0)
 		else:
 			pts.append([Vector3(sel.cell.x + 0.5, 0.5, sel.cell.y + 0.5), sel.id])
+	# What's being built, and what's stuck, stay in view without selecting it: the trees in front of them fade (issue #304).
+	var watched := 0
+	var stuck_sites: Array = sim.stuck.filter(func(x): return not x.waiting and x.focus_kind == "site" and x.map == "village").map(func(x): return x.focus_id)
+	for s in sim.sites:
+		if watched >= WATCHED_SITES:
+			break
+		if (not s.done or stuck_sites.has(s.id)) and not (sel != null and sel.kind == "site" and sel.id == s.id):
+			_add_rect_points(pts, Rect2i(s.origin, s.size), sim.site_height(s), 0)
+			watched += 1
 	_world.focus_points = pts
 	var roofs: Array = []
 	if sel != null and sel.kind == "site" and sel.tpl == "house":

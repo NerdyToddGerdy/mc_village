@@ -185,6 +185,24 @@ func _test_headers(game: Game) -> void:
 	long.free()
 
 
+## Trees in front of a blueprint, or of a building that is stuck, fade without selecting it (issue #304).
+func _test_fade_for_blueprints(game: Game) -> void:
+	var sim := game.sim
+	game.selection = {}
+	var spot := Vector2i(sim.w / 2 + 6, sim.h / 2 - 6)
+	var bp := sim.place_site("bench", spot)
+	check(bp != null and not bp.done, "a blueprint is placed")
+	game._update_focus(null)
+	var near: Array = game._world.focus_points.filter(func(f): return absf(f[0].x - (spot.x + 0.5)) < 3.0 and absf(f[0].z - (spot.y + 0.5)) < 3.0)
+	check(not near.is_empty(), "an unselected blueprint is a focus for the fade (%d points)" % near.size())
+	bp.done = true
+	game._update_focus(null)
+	near = game._world.focus_points.filter(func(f): return absf(f[0].x - (spot.x + 0.5)) < 3.0 and absf(f[0].z - (spot.y + 0.5)) < 3.0)
+	check(near.is_empty(), "a finished, unstuck building is not")
+	sim.sites.erase(bp)
+	sim.rev += 1
+
+
 ## The stuck list sets the choices waiting for the player apart from what's wrong (issue #296).
 func _test_needs_you(game: Game) -> void:
 	var sim := game.sim
@@ -323,6 +341,11 @@ func _test_fading(game: Game) -> void:
 	check(world.faded_trees.has(tree.id), "selecting a bench behind a tree fades that tree")
 	check(world.faded_trees.size() <= 2, "only trees in front of it fade (%d faded)" % world.faded_trees.size())
 	game.selection = {}
+	await process_frame
+	await process_frame
+	check(world.faded_trees.has(tree.id), "an unfinished blueprint keeps the tree in front of it faded, selected or not (issue #304)")
+	bench.done = true
+	sim.rev += 1
 	await process_frame
 	await process_frame
 	check(not world.faded_trees.has(tree.id), "the tree turns solid again when nothing behind it is focused")
@@ -1755,6 +1778,7 @@ func _initialize() -> void:
 	await _test_equip(game)
 	await _test_toasts(game)
 	_test_headers(game)
+	_test_fade_for_blueprints(game)
 	await _test_needs_you(game)
 	await _test_autosave(game)
 	_test_glyphs()
