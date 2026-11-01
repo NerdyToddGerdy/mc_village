@@ -592,6 +592,8 @@ func _add_device(b_in: Batch, s: Dictionary) -> void:
 	if not done:
 		return
 	b.box(Vector3(o.x + 0.25, lift + 0.4, o.y + 0.25), Vector3(o.x + 0.75, lift + 0.46, o.y + 0.75), REDSTONE_ON if on else REDSTONE_OFF)
+	if on:  # a raised chalk stud as well as the brighter red, so on and off differ in shape and lightness, not hue alone (issue #302)
+		b.box(Vector3(o.x + 0.4, lift + 0.46, o.y + 0.62), Vector3(o.x + 0.6, lift + 0.56, o.y + 0.72), Palette.CHALK)
 	if Defs.TEMPLATES[s.tpl].device == "sensor":
 		b.box(Vector3(o.x + 0.42, lift + 0.46, o.y + 0.42), Vector3(o.x + 0.58, lift + 0.85, o.y + 0.58), Palette.STONE)
 		b.box(Vector3(o.x + 0.38, lift + 0.85, o.y + 0.38), Vector3(o.x + 0.62, lift + 0.95, o.y + 0.62), REDSTONE_ON if on else REDSTONE_OFF)
