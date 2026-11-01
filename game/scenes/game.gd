@@ -49,6 +49,11 @@ var keys: KeyBindings
 var keys_path := ""  ## Tests set this before the game starts, so they always use default keys.
 var _menu_prev_speed := 1
 
+var skipping := false  ## Running fast until something needs the player (issue #299).
+var _skip_from := 0
+var _skip_sig := ""
+var _skip_problems := {}
+var _skip_decisions := {}
 var _autosave_tick := 0  ## The sim tick of the last autosave, or of the load.
 var _autosave_sig := ""
 var save_dir := "user://saves"  ## Tests point this elsewhere so they never touch real saves.
@@ -158,7 +163,7 @@ func _place_camera() -> void:
 
 func _process(delta: float) -> void:
 	_pan_with_keys(delta)
-	_acc += minf(delta, 0.1) * speed
+	_acc += minf(delta, 0.1) * (Tuning.SKIP_SPEED if skipping else float(speed))
 	var n := 0
 	while _acc >= Tuning.DT and n < 30:
 		_world.remember_positions()
@@ -166,7 +171,14 @@ func _process(delta: float) -> void:
 		_acc -= Tuning.DT
 		n += 1
 		if not sim.pending.is_empty():
+			if skipping:
+				_end_skip("a choice is waiting")
 			break
+		if skipping:
+			var why := _skip_stop_reason()
+			if why != "":
+				_end_skip(why)
+				break
 	if _autosave_due():
 		autosave()
 	# A choice for the player stops the game until it's answered (issues #110, #111).
@@ -815,6 +827,7 @@ func _key(e: InputEventKey) -> void:
 # ---------------------------------------------------------------- menu, saving and loading
 
 func open_menu(view: String) -> void:
+	skipping = false
 	if not _menu.visible:
 		_menu_prev_speed = speed if speed != 0 else last_speed
 		speed = 0
@@ -992,11 +1005,77 @@ func _load_path(path: String, what: String, toast: String) -> String:
 func set_speed(v: int) -> void:
 	if v != 0 and not sim.pending.is_empty():
 		return  # a choice is waiting for the player
+	skipping = false  # picking a speed ends a skip
 	if speed != 0:
 		last_speed = speed
 	speed = v
 	if v == 0:
 		_acc = 0.0  # no leftover time may tick the sim after pausing
+
+
+# ---------------------------------------------------------------- skipping ahead (issue #299)
+
+## Starts or ends a skip: the game runs fast until something needs the player (a choice, a message, a new problem,
+## a party setting out or coming home) or `SKIP_MAX_SECS` pass, and then stops at the normal speed.
+func set_skip(on: bool) -> void:
+	if not on:
+		if skipping:
+			_end_skip("")
+		return
+	if _menu.visible or not sim.pending.is_empty():
+		return
+	if speed == 0:
+		set_speed(maxi(1, last_speed))
+	skipping = true
+	_skip_from = sim.tick
+	_skip_sig = _party_sig()
+	_skip_problems = _problem_keys()
+	_skip_decisions = _decision_keys()
+
+
+## The problems on the list, not the waiting orders and not the choices: what a skip must not sleep through.
+func _problem_keys() -> Dictionary:
+	var out := {}
+	for s in sim.stuck:
+		if not s.hidden and not s.waiting:
+			out[s.key] = true
+	return out
+
+
+## The decisions waiting on the player (a freight cart's say). One already waiting when a skip starts doesn't stop it.
+func _decision_keys() -> Dictionary:
+	var out := {}
+	for s in sim.stuck:
+		if s.get("decision", "") != "":
+			out[s.key] = true
+	return out
+
+
+## Why the skip should stop now, or "".
+func _skip_stop_reason() -> String:
+	if not sim.pending.is_empty():
+		return "a choice is waiting"
+	if sim.events.any(func(e): return e.type == "toast"):
+		return "there is a message"
+	if _party_sig() != _skip_sig:
+		return "a party set out or came home"
+	for k in _problem_keys():
+		if not _skip_problems.has(k):
+			return "something got stuck"
+	for k in _decision_keys():
+		if not _skip_decisions.has(k):
+			return "something needs your say"
+	if sim.tick - _skip_from >= int(Tuning.SKIP_MAX_SECS * Tuning.TPS):
+		return "ten minutes passed"
+	return ""
+
+
+func _end_skip(why: String) -> void:
+	skipping = false
+	_acc = 0.0
+	if why != "":
+		var secs := (sim.tick - _skip_from) / Tuning.TPS
+		_hud.add_toast({"text": "Skipped ahead %d:%02d: %s." % [secs / 60, secs % 60, why], "res_id": 0, "site_id": 0})
 
 
 ## Finished benches and fireplaces, for the Craft panel.

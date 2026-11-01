@@ -36,6 +36,16 @@ var _loc_list := VBoxContainer.new()
 var _loc_open := false
 var _minimap: MiniMap                ## The corner map (issue #298).
 var minimap_on := false
+
+
+## The message log (issue #297): the toasts so far, newest last, in a list that opens under its button.
+var _log: Array = []              ## {text, tick, res_id, site_id}
+var _log_unread := 0
+var _log_open := false
+var _log_btn: Button
+var _log_panel: PanelContainer
+var _log_list := VBoxContainer.new()
+const LOG_MAX := 60
 var _loc_anchor := Rect2()
 var _loc_button: Button  ## The button the location dropdown hangs from, so it follows it.
 var _tally_panel: PanelContainer
@@ -49,6 +59,7 @@ var _group_btns := {}           ## Tally group id -> its button in the tally bar
 var _pointer := Vector2(-1, -1)
 var _goals := VBoxContainer.new()
 var _speed_btns := {}
+var _skip_btn: Button               ## Skip ahead until something needs the player (issue #299).
 var _menu_btn: Button                ## The on-screen button for the Esc menu (issue #216), beside the speed buttons.
 var _menu_panel: PanelContainer
 var _menu_cap: PanelContainer        ## Its key badge, which follows the "menu" binding.
@@ -176,6 +187,11 @@ func _ready() -> void:
 		b.toggle_mode = true
 		_speed_btns[v] = b
 		speed.add_child(b)
+	_skip_btn = _button("Skip", func(): game.set_skip(not game.skipping))
+	_skip_btn.toggle_mode = true
+	_skip_btn.custom_minimum_size = Vector2(60, 44)
+	_skip_btn.set_meta("label", "Skip ahead")
+	_skip_btn.tooltip_text = "Skip ahead: run fast until something needs you"
 	_menu_btn = _button("Menu", func(): game.toggle_menu())  # the Esc menu, for the mouse and the web build (issue #216)
 	_menu_btn.custom_minimum_size = Vector2(0, 44)
 	_menu_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -198,8 +214,18 @@ func _ready() -> void:
 	_menu_cap.minimum_size_changed.connect(place_cap)
 	_speed_panel = _panel(speed, Vector2.ZERO, 4)
 	tr.add_child(_speed_panel)
-	_menu_panel = _panel(_menu_btn, Vector2.ZERO, 4)  # its own panel under the speed buttons, so the speed row stays narrow
+	_menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var menu_row := HBoxContainer.new()  # Skip sits beside Menu: in the speed row it widened the panel over the map switcher
+	menu_row.add_theme_constant_override("separation", 2)
+	menu_row.add_child(_skip_btn)
+	menu_row.add_child(_menu_btn)
+	_menu_panel = _panel(menu_row, Vector2.ZERO, 4)  # its own panel under the speed buttons, so the speed row stays narrow
 	tr.add_child(_menu_panel)
+	_log_btn = _button("Log", func(): _toggle_log())  # what the toasts said, for the ones that were missed (issue #297)
+	_log_btn.custom_minimum_size = Vector2(0, 44)
+	_log_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_log_btn.set_meta("label", "Log")
+	tr.add_child(_panel(_log_btn, Vector2.ZERO, 4))
 	_stuck_panel = _panel(_stuck, Vector2(250, 0))
 	tr.add_child(_stuck_panel)
 
@@ -262,6 +288,19 @@ func _ready() -> void:
 	_minimap = MiniMap.new()
 	_minimap.game = game
 	_root.add_child(_minimap)
+
+
+	_log_list.add_theme_constant_override("separation", 4)
+	var log_scroll := ScrollContainer.new()
+	log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	log_scroll.custom_minimum_size = Vector2(430, 0)
+	log_scroll.add_child(_log_list)
+	_log_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_log_panel = _panel(log_scroll, Vector2(430, 0), 8)
+	_log_panel.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 8, Palette.SLATE_DEEP))
+	_log_panel.visible = false
+	_log_panel.top_level = true
+	_root.add_child(_log_panel)
 	get_viewport().size_changed.connect(func() -> void:  # a resized window must not strand an open list
 		if _loc_drop.visible and game != null and game.sim != null:
 			_refresh_loc_drop(game.sim))
@@ -892,13 +931,17 @@ func refresh(sim: Sim) -> void:
 	_refresh_goals(sim)
 	_refresh_book(sim)
 	for v in _speed_btns:
-		_speed_btns[v].set_pressed_no_signal(game.speed == v)
+		_speed_btns[v].set_pressed_no_signal(game.speed == v and not game.skipping)
+	_skip_btn.set_pressed_no_signal(game.skipping)
 	_paused_label.visible = game.speed == 0 and sim.pending.is_empty()  # a choice says so itself
 	_refresh_stuck(sim)
 	_refresh_selection(sim)
 	_refresh_job_drop(sim)
 	_refresh_loc_drop(sim)
 	_refresh_minimap()
+
+
+	_refresh_log()
 	_refresh_toolbar(sim)
 	_refresh_board(sim)
 	_refresh_craft(sim)
@@ -960,7 +1003,7 @@ func _refresh_tallies(sim: Sim) -> void:
 		var name: String = b.get_meta("name")
 		match g:
 			"food":
-				b.text = "Food  %d %s%s  ↓" % [meals, "meal" if meals == 1 else "meals", " · %d raw" % raw if raw > 0 else ""]
+				b.text = "Food  %d %s%s%s  ↓" % [meals, "meal" if meals == 1 else "meals", " · %d raw" % raw if raw > 0 else "", " · low" if low else ""]  # the word as well as the yellow (issue #302)
 				for k in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
 					if low:
 						b.add_theme_color_override(k, Palette.YELLOW)
@@ -1219,7 +1262,7 @@ func _tool_row(type: String, dur: int) -> VBoxContainer:
 	var low := dur <= 3
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
-	var row := _row(Sim.item_title(type), "%d / %d uses" % [dur, most], false)
+	var row := _row(Sim.item_title(type), "%d / %d uses%s" % [dur, most, " · low" if low else ""], false)  # the word as well as the yellow (issue #302)
 	if low:
 		(row.get_child(1) as Label).add_theme_color_override("font_color", Palette.YELLOW)
 	v.add_child(row)
@@ -1242,6 +1285,8 @@ func _input(event: InputEvent) -> void:
 			_close_job_drop()
 		if event.pressed and _loc_drop.visible and not _loc_drop.get_global_rect().has_point(event.position) and not _loc_anchor.has_point(event.position):
 			_close_loc_drop()
+		if event.pressed and _log_open and not _log_panel.get_global_rect().has_point(event.position) and not _log_btn.get_global_rect().has_point(event.position):
+			_toggle_log()
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _tools_drop.visible:
 		_close_tools()
 		get_viewport().set_input_as_handled()
@@ -1250,6 +1295,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _loc_drop.visible:
 		_close_loc_drop()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _log_open:
+		_toggle_log()
 		get_viewport().set_input_as_handled()
 
 
@@ -1579,6 +1627,11 @@ func _place_toasts() -> void:
 
 
 func add_toast(ev: Dictionary) -> void:
+	_log.append({"text": ev.text, "tick": game.sim.tick if game.sim != null else 0, "res_id": ev.get("res_id", 0), "site_id": ev.get("site_id", 0)})
+	if _log.size() > LOG_MAX:
+		_log.pop_front()
+	if not _log_open:
+		_log_unread += 1
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 14)
 	var who: Dictionary = game.sim.resident(ev.res_id) if ev.res_id else {}
@@ -1611,6 +1664,52 @@ func _refresh_minimap() -> void:
 		return
 	var view := get_viewport().get_visible_rect().size
 	_minimap.position = Vector2(view.x - MiniMap.SIZE - 16.0, view.y - MiniMap.SIZE - 82.0)
+
+
+# ---------------------------------------------------------------- the message log (issue #297)
+
+func _toggle_log() -> void:
+	_log_open = not _log_open
+	if _log_open:
+		_log_unread = 0
+	_refresh_log()
+
+
+## "12:05": the game time a message was shown at.
+func _log_time(tick: int) -> String:
+	var secs := tick / Tuning.TPS
+	return "%d:%02d" % [secs / 60, secs % 60]
+
+
+## The button says how many are new; the list, newest first, is each message with when it was said and a way to the place.
+func _refresh_log() -> void:
+	_log_btn.text = "Log" if _log_unread == 0 else "Log  (%d new)" % _log_unread
+	_log_btn.tooltip_text = "What the messages said, newest first. Click one's button to go there."
+	_log_panel.visible = _log_open
+	if not _log_open:
+		return
+	_place_drop(_log_panel, Vector2(_log_btn.get_global_rect().end.x - 430.0 - 16.0, _log_btn.get_global_rect().end.y + 8.0))
+	var cap := get_viewport().get_visible_rect().size.y - _log_panel.position.y - 24.0
+	_log_panel.get_child(0).custom_minimum_size.y = clampf(cap, 80.0, 440.0)
+	_rebuild(_log_list, "%d" % _log.size() + str(_log.back().text if not _log.is_empty() else ""), func(c: Container) -> void:
+		if _log.is_empty():
+			c.add_child(_label("Nothing yet. The messages that pop up will be kept here.", false, Palette.CHALK_DIM, Palette.BODY, true))
+			return
+		for i in range(_log.size() - 1, -1, -1):
+			var e: Dictionary = _log[i]
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 10)
+			var t := _label(_log_time(e.tick), false, Palette.CHALK_DIM, Palette.CAPTION)
+			t.custom_minimum_size.x = 44
+			row.add_child(t)
+			var msg := _label(e.text, false, Palette.CHALK, Palette.BODY, true)
+			msg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(msg)
+			if e.res_id:
+				row.add_child(_button("Go", func(): game.focus_on("res", e.res_id), "Secondary"))
+			elif e.site_id:
+				row.add_child(_button("Show", func(): game.focus_on("site", e.site_id), "Secondary"))
+			c.add_child(row))
 
 
 # ---------------------------------------------------------------- selection panel
