@@ -55,6 +55,7 @@ var _group_btns := {}           ## Tally group id -> its button in the tally bar
 var _pointer := Vector2(-1, -1)
 var _goals := VBoxContainer.new()
 var _speed_btns := {}
+var _skip_btn: Button               ## Skip ahead until something needs the player (issue #299).
 var _menu_btn: Button                ## The on-screen button for the Esc menu (issue #216), beside the speed buttons.
 var _menu_panel: PanelContainer
 var _menu_cap: PanelContainer        ## Its key badge, which follows the "menu" binding.
@@ -182,6 +183,11 @@ func _ready() -> void:
 		b.toggle_mode = true
 		_speed_btns[v] = b
 		speed.add_child(b)
+	_skip_btn = _button("Skip", func(): game.set_skip(not game.skipping))
+	_skip_btn.toggle_mode = true
+	_skip_btn.custom_minimum_size = Vector2(60, 44)
+	_skip_btn.set_meta("label", "Skip ahead")
+	_skip_btn.tooltip_text = "Skip ahead: run fast until something needs you"
 	_menu_btn = _button("Menu", func(): game.toggle_menu())  # the Esc menu, for the mouse and the web build (issue #216)
 	_menu_btn.custom_minimum_size = Vector2(0, 44)
 	_menu_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -204,7 +210,12 @@ func _ready() -> void:
 	_menu_cap.minimum_size_changed.connect(place_cap)
 	_speed_panel = _panel(speed, Vector2.ZERO, 4)
 	tr.add_child(_speed_panel)
-	_menu_panel = _panel(_menu_btn, Vector2.ZERO, 4)  # its own panel under the speed buttons, so the speed row stays narrow
+	_menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var menu_row := HBoxContainer.new()  # Skip sits beside Menu: in the speed row it widened the panel over the map switcher
+	menu_row.add_theme_constant_override("separation", 2)
+	menu_row.add_child(_skip_btn)
+	menu_row.add_child(_menu_btn)
+	_menu_panel = _panel(menu_row, Vector2.ZERO, 4)  # its own panel under the speed buttons, so the speed row stays narrow
 	tr.add_child(_menu_panel)
 	_log_btn = _button("Log", func(): _toggle_log())  # what the toasts said, for the ones that were missed (issue #297)
 	_log_btn.custom_minimum_size = Vector2(0, 44)
@@ -911,7 +922,8 @@ func refresh(sim: Sim) -> void:
 	_refresh_goals(sim)
 	_refresh_book(sim)
 	for v in _speed_btns:
-		_speed_btns[v].set_pressed_no_signal(game.speed == v)
+		_speed_btns[v].set_pressed_no_signal(game.speed == v and not game.skipping)
+	_skip_btn.set_pressed_no_signal(game.skipping)
 	_paused_label.visible = game.speed == 0 and sim.pending.is_empty()  # a choice says so itself
 	_refresh_stuck(sim)
 	_refresh_selection(sim)

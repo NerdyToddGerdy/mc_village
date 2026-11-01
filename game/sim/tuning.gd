@@ -41,6 +41,9 @@ const PLANT_TIME := 2.0                 ## Seconds to plant one farm cell (no se
 const HARVEST_TIME := 2.0               ## Seconds to harvest one ripe cell.
 const WHEAT_GROW := 120.0               ## Seconds from planting to ripe.
 const WHEAT_YIELD := 2                  ## Wheat per harvested cell.
+# Skipping ahead (issue #299).
+const SKIP_SPEED := 12.0                ## How many times faster than 1× the game runs while skipping ahead.
+const SKIP_MAX_SECS := 600.0            ## Game seconds a skip runs at most, if nothing needs the player first.
 # Autosave (issue #295).
 const AUTOSAVE_SECS := 300.0            ## Seconds of play between autosaves.
 const AUTOSAVE_MIN_SECS := 120.0        ## A game younger than this isn't autosaved, so a fresh one never replaces a real village's.

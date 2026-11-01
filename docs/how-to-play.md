@@ -32,7 +32,7 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 
 - **Top left:** what's in the village, in groups: **Building**, **Food**, **Tools and armor**, **Animal goods** and **Ores**. A group shows up once one of its items has. **Food** counts meals on hand and raw meat still to cook, and turns yellow, and says "low", when there are fewer meals than residents. A worn tool says "low" too, and a powered redstone device has a raised white stud as well as its brighter red, so none of these rely on colour alone. Hover over a group, or click it to keep it open, for a list of each item with how much is lying loose; **Tools and armor** lists everyone's tools, armor and the spares. **Pin** an item there (up to 4) to keep its count in the bar on its own; pins are saved with your key bindings. **Jobs** opens the village jobs board.
 - **Below that:** the **goals panel**, which walks you through the founding one step at a time. Once the founding is done, it folds to a small "Founding ✓".
-- **Top right:** pause and speed, the **Menu** and **Log** buttons, and the **stuck list**, which shows anything that can't go on and why. **Log** keeps the last 60 messages that popped up (arrivals, finds, a party's return), newest first with the game time, and says how many are new; a message about a person or place has a button to go there. Esc, a click elsewhere or the button closes it.
+- **Top right:** pause and speed, the **Skip**, **Menu** and **Log** buttons, and the **stuck list**, which shows anything that can't go on and why. **Log** keeps the last 60 messages that popped up (arrivals, finds, a party's return), newest first with the game time, and says how many are new; a message about a person or place has a button to go there. Esc, a click elsewhere or the button closes it.
 - **Bottom left:** whatever you've selected: a resident, a building, a tree, a farm plot.
 - **Bottom right:** the **orders toolbar**, and the Craft panel when it's open.
 
@@ -404,6 +404,7 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | Mouse wheel, + / − | Zoom |
 | Space / ~ | Pause or resume, pause |
 | 1 / 2 / 3 | Game speed |
+| Skip button | Skip ahead: run about 12× faster until something needs you |
 | Esc | Close whatever is open, or open the menu |
 | M / ? | Menu, Controls |
 | O | Show or hide the redstone overlay |
@@ -413,6 +414,8 @@ The **Menu** button at the top right, beside the speed buttons, opens the same m
 **Panel keys.** When something is selected, the first seven buttons in its panel each show a small key: **Q E R Z X C V**, in the order the buttons appear. Click a tree and press **Q** to mark it for chopping, and **Q** again to cancel. A key that opens a list, such as a resident's job, then lets **1 to 9** pick an entry (and the speed keys wait). Buttons that remove something, like a farm plot's, arm on the key and act on the same key again; any other key puts them away. The selection stays after a key, so you see the panel change. With nothing selected these keys keep their usual meanings (**E** gather, **Z** paint, **X** mine, **C** craft), **F** still cycles residents, and **Esc** clears the selection. The panel keys can be changed on the Controls page, under Selection.
 
 You can still give orders while the game is paused.
+
+**Skipping ahead.** The **Skip** button beside the speeds runs the game about 12 times faster until something needs you: a choice, a message, a new problem in the stuck list, a freight cart that newly needs your say, or a party setting out or coming home, or ten game minutes with none of those. It then drops back to the speed it had and says why it stopped ("Skipped ahead 3:20: there is a message."). Picking a speed, pausing, or opening the menu ends it.
 
 ## Saving and settings
 

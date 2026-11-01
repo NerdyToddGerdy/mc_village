@@ -304,6 +304,48 @@ func _test_autosave(game: Game) -> void:
 	game.speed = 1
 
 
+## Skipping ahead runs fast until something needs the player (issue #299).
+func _test_skip_ahead(game: Game) -> void:
+	var sim := game.sim
+	game._menu.visible = false
+	game.set_speed(1)
+	sim.events.clear()
+	game.set_skip(true)
+	await game.get_tree().process_frame
+	game._hud.refresh(sim)
+	check(game.skipping and game._hud._skip_btn.button_pressed, "Skip starts a skip, and its button shows it")
+	check(game._skip_stop_reason() == "", "nothing needs the player right after it starts")
+	var t0 := sim.tick
+	game._process(0.1)
+	check(sim.tick - t0 >= 20 and sim.tick - t0 <= 30, "a skip runs faster than 1× (%d ticks in a tenth of a second)" % (sim.tick - t0))
+	sim.events.append({"type": "toast", "text": "x"})
+	check(game._skip_stop_reason() == "there is a message", "a message stops it")
+	sim.events.clear()
+	var kept: Array = sim.stuck.duplicate(true)
+	sim.stuck.append({"who": "Z", "why": "needs a thing", "map": "village", "cell": Vector2.ZERO, "height": 1.0, "focus_kind": "", "focus_id": 0, "hidden": false, "waiting": false, "decision": "", "key": "z|new", "since": 0})
+	check(game._skip_stop_reason() == "something got stuck", "a new problem stops it")
+	sim.stuck = kept
+	var dec := {"who": "Cart", "why": "needs your say", "map": "village", "cell": Vector2.ZERO, "height": 1.0, "focus_kind": "", "focus_id": 0, "hidden": false, "waiting": true, "decision": "freight", "key": "d|cart", "since": 0}
+	sim.stuck.append(dec)
+	check(game._skip_stop_reason() == "something needs your say", "a new decision stops it")
+	game._skip_decisions = game._decision_keys()
+	check(game._skip_stop_reason() == "", "a decision already waiting when it started doesn't")
+	sim.stuck = kept
+	sim.expeditions.overworld["state"] = "staging"
+	check(game._skip_stop_reason() == "a party set out or came home", "a party setting out stops it")
+	sim.expeditions.overworld.erase("state")
+	game._skip_from = sim.tick - int(Tuning.SKIP_MAX_SECS * Tuning.TPS)
+	check(game._skip_stop_reason() == "ten minutes passed", "ten minutes of nothing ends it")
+	game._skip_from = sim.tick - 400  # 20 s
+	var toasts: int = game._hud._toast_list.size()
+	game._end_skip("something got stuck")
+	check(not game.skipping and game._hud._toast_list.size() >= mini(toasts + 1, 3), "ending it says why in a toast")
+	game.set_skip(true)
+	game.set_speed(2)
+	check(not game.skipping and game.speed == 2, "picking a speed ends a skip")
+	game.set_speed(1)
+
+
 ## Toasts sit in the gap below the tally bar, clear of the goals panel and the stuck list (issue #71).
 func _test_toasts(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -1781,6 +1823,7 @@ func _initialize() -> void:
 	await _test_equip(game)
 	await _test_toasts(game)
 	_test_headers(game)
+	await _test_skip_ahead(game)
 	await _test_message_log(game)
 	await _test_needs_you(game)
 	await _test_autosave(game)
