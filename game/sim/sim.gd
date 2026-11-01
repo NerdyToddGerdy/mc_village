@@ -7385,768 +7385,121 @@ func enchant_missing(ws: Dictionary) -> Dictionary:
 
 
 # ---------------------------------------------------------------- stranding and rescue (issue #158)
+# The rules live in stranding.gd (#305); these forward to them.
 
-## The meals a Nether party has: in its packs, and in the shelter's cache once it stands.
-func _meals_left() -> int:
-	var n := 0
-	for k in expedition.get("provisions", {}):
-		n += expedition.provisions[k]
-	return n + cache_meals()
-
-
-## Whether the Nether party out now can't go on, and, if it can't, stranding it: its provisions gone with someone hungry, the
-## portal dark with no flint and steel to relight it, or everyone seriously hurt. Also the countdown of a rescue window.
 func _check_stranded() -> void:
-	var ex := expedition
-	if ex.get("state", "") != "out":
-		return
-	if ex.has("stranded"):
-		if ex.stranded.why.begins_with("the portal is dark") and portal_lit():  # the village lit it again: they can go home (issue #158)
-			ex.erase("stranded")
-			_toast("The portal is lit again. The party is no longer stranded.", ex.party[0])
-			return
-		if tick >= ex.stranded.until:
-			_abandon("the rescue window passed")
-		return
-	var party: Array = ex.party.map(func(id): return resident(id)).filter(func(r): return not r.is_empty())
-	if party.is_empty() or not party.all(func(r): return realm_of(r.map) == "nether" and not r.away):
-		ex.erase("dark_since")
-		return
-	var why := ""
-	if _meals_left() <= 0 and party.any(func(r): return r.hunger < Tuning.EAT_BELOW):
-		why = "the provisions are gone"
-	elif party.all(func(r): return r.get("hurt", 0) >= 2):
-		why = "everyone is seriously hurt"
-	elif ex.get("leg", "out") == "home" and not portal_lit() and ex.get("lighter", {}).is_empty() and party.all(func(r): return r.map == NetherLanding.ID):
-		ex.dark_since = ex.get("dark_since", tick)
-		if tick - ex.dark_since >= int(Tuning.STRAND_WAIT * Tuning.TPS):
-			why = "the portal is dark and no one has flint and steel"
-	else:
-		ex.erase("dark_since")
-	if why != "":
-		_strand(party, why)
+	Stranding._check_stranded(self)
 
 
-## The party can't go on: it shelters, and the game stops for the player with the costs shown (issue #158).
-func _strand(party: Array, why: String) -> void:
-	var ex := expedition
-	var at: String = party[0].map
-	ex.stranded = {"why": why, "at": at, "since": tick, "until": tick + int(Tuning.RESCUE_WINDOW * Tuning.TPS)}
-	for r in party:
-		fail_job(r)
-		r.direct = null
-		r.orders.clear()
-	_toast("%s is stranded: %s." % [party_name(slot), why], party[0].id)
-	var cargo_text := "nothing" if ex.get("cargo", {}).is_empty() else ", ".join(ex.cargo.keys().map(func(k): return Defs.words(k, ex.cargo[k])))
-	on_map(at, func(): _ask("stranded", "%s is stranded: %s. It shelters %s. Plan a rescue from the expedition board within %d seconds. If none reaches it, the party walks home on its own, hurt, and leaves its cargo (%s) and spare gear behind." % [
-		party_name(slot), why, "in the shelter" if at == NetherLanding.ID and shelter_site().get("done", false) else "where it stands", int(Tuning.RESCUE_WINDOW), cargo_text], [
-		{"id": "wait", "label": "Shelter and wait", "cost": "%d seconds for a rescue, on what supplies are left." % int(Tuning.RESCUE_WINDOW)},
-		{"id": "walk", "label": "Set out on their own", "cost": "Now, slowly and hurt, leaving the cargo (%s) and spare gear where they stand." % cargo_text},
-	], party[0].id))
-
-
-## The window is missed, or the player chose to walk: the party sets off on its own, slowly and hurt, leaving its cargo and
-## spare tools where it stood as abandoned cargo a later mission can recover. Nobody dies.
 func _abandon(why: String) -> void:
-	var ex := expedition
-	var party: Array = ex.party.map(func(id): return resident(id)).filter(func(r): return not r.is_empty())
-	var left: Array = []
-	var at: String = party[0].map if not party.is_empty() else NetherLanding.ID
-	var cell: Vector2i = rcell(party[0]) if not party.is_empty() else maps[at].entrance
-	on_map(at, func():
-		for k in ex.get("cargo", {}):
-			drop_items(cell, k, ex.cargo[k])
-			m.abandoned.append({"item": k, "n": ex.cargo[k], "cell": cell})
-			if not m.drops_known.has(k) and m.kind == "site":
-				m.drops_known.append(k)
-			left.append(Defs.words(k, ex.cargo[k]))
-		for t in ex.get("tools", []):
-			drop_items(cell, t.type, 1, t.dur)
-			left.append(Defs.words(t.type, 1)))
-	ex.cargo = {}
-	ex.tools = []
-	ex.erase("stranded")
-	ex.abandoned = left
-	ex.leg = "home"
-	ex.home_why = why
-	for r in party:
-		fail_job(r)
-		r.direct = null
-		r.orders.clear()
-		on_map(r.map, func(): injure(r, 1, "the long walk home"))
-	_toast("The party walked home on its own, hurt%s." % (", leaving %s behind" % ", ".join(left) if not left.is_empty() else ""), party[0].id if not party.is_empty() else 0)
+	Stranding._abandon(self, why)
 
 
-## The countdown, supplies and cost shown for a stranded party, for the panel.
 func stranded_text(ex: Dictionary) -> String:
-	if not ex.has("stranded"):
-		return ""
-	var left := maxi(0, int((ex.stranded.until - tick) / Tuning.TPS))
-	var meals := 0
-	for k in ex.get("provisions", {}):
-		meals += ex.provisions[k]
-	return "Stranded: %s. Rescue window %d:%02d. Supplies: %s, %s." % [ex.stranded.why, left / 60, left % 60, "%d %s" % [meals, "meal" if meals == 1 else "meals"], "flint and steel" if ex.get("lighter", {}).size() > 0 else "no flint and steel"]
+	return Stranding.stranded_text(self, ex)
 
 
-## A stranded party member shelters in the shelter if the party is on the landing and it stands, else stays put.
 func _stranded_job(r: Dictionary) -> Job:
-	var sh := shelter_site()
-	var j := Job.new("rest", "Sheltering, waiting for a rescue", "the shelter" if map_id == NetherLanding.ID and sh.get("done", false) else "where they stand")
-	if map_id == NetherLanding.ID and sh.get("done", false):
-		j.step(_goto(site_cells(sh), true))
-	if r.get("hurt", 0) > 0:
-		j.step({"op": "rest", "bed": false})
-	j.step({"op": "wait_stranded"})
-	return j
+	return Stranding._stranded_job(self, r)
 
 
-## A rescue party at the place it was sent: walk to the stranded, then reach them.
 func _rescue_job(r: Dictionary, c: Vector2i):
-	var lost: Dictionary = expeditions.nether
-	if not lost.has("stranded"):
-		return null
-	var who: Array = lost.party.map(func(id): return resident(id)).filter(func(o): return not o.is_empty() and o.map == map_id)
-	if who.is_empty():
-		return null
-	var near: Dictionary = nearest(who.map(func(o): return {"cell": rcell(o), "id": o.id}), c)
-	var j := Job.new("rescue", "Going to the stranded party", "the stranded party")
-	if manhattan(near.cell, c) > 2:
-		j.step(_goto([near.cell], false))
-	j.step({"op": "rescue_reach"})
-	return j
+	return Stranding._rescue_job(self, r, c)
 
 
-## Whether the party is out to delve the fortress (issue #157).
 func delving() -> bool:
-	return expedition.get("target", {}).get("item", "") == "fortress"
+	return Stranding.delving(self)
 
 
-## What a party member does in the fortress (issue #157): walk the halls to the salvage chest at the far end, the guards
-## dealing with whatever comes. Once it's taken they pack what's lying about.
 func _delve_job(r: Dictionary, c: Vector2i):
-	if m.salvage_taken or not delving() or r.get("hurt", 0) > 0:
-		return _stow_job(r, c)
-	var j := Job.new("scout", "Delving the fortress", "the salvage chest")
-	j.step(_goto([m.salvage], true))
-	j.step({"op": "open_salvage"})
-	return j
+	return Stranding._delve_job(self, r, c)
 
 
-## The first enchanted book found stops the game, and says what it teaches (issue #164), like the iron discovery.
 func _note_book(item: String, r: Dictionary) -> void:
-	if not Defs.ITEMS[item].has("book") or stats.get("book_found", false):
-		return
-	stats.book_found = true
-	var what: String = Defs.ENCHANTS[Defs.ITEMS[item].book].name
-	_ask("book", "%s found an enchanted book of %s. Brought home to an enchanting workshop, it would teach that recipe for good." % [r.get("name", "Someone"), what], [
-		{"id": "ok", "label": "Carry on", "cost": "It's packed like any find, and comes home as cargo."},
-	], r.get("id", 0))
+	Stranding._note_book(self, item, r)
 
 
-## The salvage goes into the packs, what doesn't fit left on the chest's cell; taken once (issue #157).
 func _take_salvage() -> void:
-	if m.salvage_taken:
-		return
-	m.salvage_taken = true
-	var contents: Dictionary = Defs.FORTRESS_SALVAGE.duplicate()
-	var book := Defs.book_for("fortress", hash([seed, "salvage"]))  # an enchanted book, favouring the protections (issue #164)
-	contents[book] = 1
-	for k in contents:
-		var n: int = contents[k]
-		var fit := mini(n, maxi(0, pack_room()))
-		if fit > 0:
-			expedition.cargo[k] = expedition.cargo.get(k, 0) + fit
-		if n - fit > 0:
-			drop_items(m.salvage, k, n - fit)
-	rev += 1
-	_toast("The party took the salvage, with an enchanted book: %s." % Defs.ITEMS[book].label, expedition.party[0])
-	_note_book(book, resident(expedition.party[0]))
+	Stranding._take_salvage(self)
 
 
-## What a party member does at the piglin camp (issue #156): with gold in the packs, walk up to a piglin and trade, down the
-## table as shown. Once the trades are made, or the camp has turned hostile, there's nothing more to do.
 func _camp_job(r: Dictionary, c: Vector2i):
-	if not trading() or expedition.get("trade_done", false) or m.hostile:
-		return null
-	var piglins := m.creatures.filter(func(x): return x.alive and x.species == "piglin")
-	if piglins.is_empty():
-		return null
-	var p: Dictionary = nearest(piglins, c)
-	var j := Job.new("trade", "Going to the piglins to trade", "a piglin")
-	j.step({"op": "chase", "target": p, "planned_for": null})
-	j.step({"op": "trade"})
-	return j
+	return Stranding._camp_job(self, r, c)
 
 
-## The first row of the table the packs can pay for, or -1.
 func _next_trade() -> int:
-	var gold: int = expedition.get("supplies", {}).get("gold_ingot", 0)
-	for i in Defs.TRADES.size():
-		var t: Dictionary = Defs.TRADES[i]
-		var paid := 0
-		for k in t.give:
-			paid += t.give[k]
-		var got := 0
-		for k in t.get:
-			got += t.get[k]
-		if gold >= t.give.get("gold_ingot", 0) and pack_room() + paid >= got:
-			return i
-	return -1
+	return Stranding._next_trade(self)
 
 
-## What a party member does on the portal landing (issue #148): walk to the landmarks not yet seen, then wait.
 func _landing_job(r: Dictionary, c: Vector2i):
-	if building_pline():  # the portal line's rails and the landing station (issue #168)
-		var pt := pline_task(r.id)
-		if not pt.is_empty():
-			return _pline_job(pt, r.id)
-	var sh := shelter_site()
-	if not sh.is_empty() and not sh.done and expedition.get("shelter", false) and sh.builder == 0 and _supplies_cover(Tuning.SHELTER_COST):
-		var bj := Job.new("build", "Going to build the shelter", "the shelter")
-		bj.work = "build"
-		bj.target = sh
-		sh.builder = r.id
-		bj.hold({"t": "builder", "site": sh})
-		bj.step(_goto(site_cells(sh), true))
-		bj.step({"op": "work", "what": "shelter", "site": sh, "label": "Building the shelter"})
-		return bj
-	if not sh.is_empty() and sh.done and expedition.get("stock", 0) > 0:  # meals left in the cache (issue #152)
-		var cj := Job.new("stock", "Stocking the cache", "the cache")
-		cj.step(_goto(site_cells(sh), true))
-		cj.step({"op": "cache_stock"})
-		return cj
-	if scouting():  # out along the route to scout (issue #153)
-		var rk: String = expedition.target.get("route", "")
-		if NetherRoute.ROUTES.has(rk) and not maps[NetherRoute.ROUTES[rk].id].surveyed:
-			var ej := Job.new("scout", "Setting out to scout the route", "the way out")
-			ej.step(_goto([NetherRoute.ROUTES[rk].exit], true))
-			ej.step({"op": "enter_route", "route": rk})
-			return ej
-		return null
-	var left := m.landmarks.filter(func(x): return not m.landmarks_seen.has(x))
-	if left.is_empty():
-		return null
-	var at: Vector2i = left[0]
-	for x in left:
-		if manhattan(x, c) < manhattan(at, c):
-			at = x
-	var j := Job.new("scout", "Surveying the landing", "a landmark")
-	j.step(_goto([at], true))
-	j.step({"op": "mark_seen", "cell": at})
-	return j
+	return Stranding._landing_job(self, r, c)
 
 
 # ---------------------------------------------------------------- creatures and combat (issue #151)
+# The rules live in creatures.gd (#305); these forward to them.
 
-## Puts a creature of a species on a map, at a cell. Creatures live on one map and never leave it.
 func spawn_creature(id: String, species: String, cell: Vector2i) -> Dictionary:
-	var c := {"id": _id(), "kind": "creature", "species": species, "cell": cell, "pos": Vector2(cell), "alive": true,
-		"hp": Defs.CREATURES[species].hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0}
-	maps[id].creatures.append(c)
-	rev += 1
-	return c
+	return Creatures.spawn_creature(self, id, species, cell)
 
 
-## Whether a creature is a danger to the party now: one that goes for people, or one that's been hit or has struck.
 func _dangerous(x: Dictionary) -> bool:
-	return x.alive and (Defs.CREATURES[x.species].notice > 0 or x.angry or x.engaged)
+	return Creatures._dangerous(self, x)
 
 
-## One tick of the map's creatures: each notices the nearest resident in range (a neutral one only after it's been hit),
-## closes in, and strikes when it's close enough and its blow is ready.
 func _step_creatures() -> void:
-	var folks := here().filter(func(o): return not _riding(o))  # riders move too fast to be caught (issue #159)
-	for x in m.creatures:
-		if not x.alive:
-			continue
-		x.cool = maxf(0.0, x.cool - Tuning.DT)
-		var sp: Dictionary = Defs.CREATURES[x.species]
-		var tgt = null
-		var best := 999
-		for r in folks:
-			var d := manhattan(x.cell, rcell(r))
-			if ((sp.notice > 0 and d <= sp.notice) or (x.angry and d <= 10)) and d < best:
-				best = d
-				tgt = r
-		if tgt == null:
-			continue
-		x.engaged = true  # it's after someone: a guard goes for it
-		if best <= sp.reach:
-			if x.cool <= 0.0:
-				x.cool = sp.cool
-				x.flash = tick + 6
-				_hazard(tgt, sp.hit, sp.serious, "a " + sp.name.to_lower(), "creature")
-			continue
-		x.acc += Tuning.CREATURE_SPEED * Tuning.DT
-		while x.acc >= 1.0:
-			x.acc -= 1.0
-			var at := rcell(tgt)
-			var steps: Array = [Vector2i(signi(at.x - x.cell.x), 0), Vector2i(0, signi(at.y - x.cell.y))]
-			if absi(at.y - x.cell.y) > absi(at.x - x.cell.x):
-				steps.reverse()
-			for st in steps:
-				var n: Vector2i = x.cell + st
-				if st != Vector2i.ZERO and walkable(n) and not m.creatures.any(func(o): return o.alive and o.cell == n):
-					x.cell = n
-					x.pos = Vector2(n)
-					rev += 1
-					break
+	Creatures._step_creatures(self)
 
 
-## A guard's blow (issue #151): it wears the sword, lands by chance (more often the higher the Guard level) and does
-## more with a sword than without. The creature that's hit is angry; a creature brought down leaves its drops.
 func _strike(r: Dictionary, cr: Dictionary) -> void:
-	var dmg: int = Tuning.BARE_DAMAGE
-	if r.sword != null:
-		dmg = Tuning.SWORD_DAMAGE
-		_wear(r, "sword")
-	cr.flash = tick + 6
-	if cr.species == "piglin" and not m.hostile:  # the rule shown up front is broken (issue #156)
-		m.hostile = true
-		for x in m.creatures:
-			if x.species == "piglin":
-				x.angry = true
-		_toast("The piglins turn hostile.", r.id)
-	if not _roll(Tuning.HIT_CHANCE + 0.08 * (mini(level(r, "guard"), Tuning.SKILL_CORE) - 1)):
-		return
-	cr.hp -= dmg
-	cr.angry = true
-	if cr.hp > 0:
-		return
-	cr.alive = false
-	stats.creatures_beaten = stats.get("creatures_beaten", 0) + 1
-	var sp: Dictionary = Defs.CREATURES[cr.species]
-	for k in sp.drops:
-		drop_items(cr.cell, k, sp.drops[k])
-		if not m.drops_known.has(k):
-			m.drops_known.append(k)
-	gain_xp(r, "guard")
-	rev += 1
-	_toast("%s brought down a %s." % [r.name, sp.name.to_lower()], r.id)
+	Creatures._strike(self, r, cr)
 
 
-## What a party member does about creatures (issue #151). A guard (or Ada) goes for what threatens the party, or, when the
-## party doesn't avoid combat, anything near; anyone else moves away from what's dangerous and goes back to work.
 func _fight_job(r: Dictionary, c: Vector2i):
-	if m.creatures.is_empty() or r.get("hurt", 0) >= 2:
-		return null
-	var guard: bool = r.role == "guard" or r.role == "all"
-	var party := here().filter(func(o): return not expedition_of(o).is_empty())
-	var foe: Dictionary = {}
-	var best := 999
-	for x in m.creatures:
-		if not x.alive or x.get("unreach_until", 0) > tick:
-			continue
-		var d := manhattan(x.cell, c)
-		if guard:
-			var near_us: bool = party.any(func(o): return manhattan(x.cell, rcell(o)) <= Tuning.SELF_DEFENSE_RANGE)
-			var wanted: bool = (_dangerous(x) and (x.engaged or near_us)) or (expedition.get("fight", false) and d <= Tuning.ENGAGE_RANGE) or (near_us and _dangerous(x))
-			if wanted and d < best:
-				best = d
-				foe = x
-		elif _dangerous(x) and d <= Tuning.AVOID_RANGE and d < best:
-			best = d
-			foe = x
-	if foe.is_empty():
-		return null
-	var name: String = Defs.CREATURES[foe.species].name.to_lower()
-	if guard:
-		var j := Job.new("fight", "Going for the %s" % name, "the " + name)
-		j.target = foe
-		j.step({"op": "chase", "target": foe, "planned_for": null})
-		j.step({"op": "fight", "target": foe})
-		return j
-	var away = _clear_of(c, foe.cell)
-	if away == null or away == c:
-		return null
-	var f := Job.new("flee", "Moving away from the %s" % name, "away")
-	f.step(_goto([away], true))
-	return f
+	return Creatures._fight_job(self, r, c)
 
 
-## A cell a few steps off that's further from `from`, or null.
-func _clear_of(c: Vector2i, from: Vector2i):
-	var seen := {c: true}
-	var queue: Array = [c]
-	var qi := 0
-	var best = null
-	var best_d := manhattan(c, from)
-	while qi < queue.size():
-		var cur: Vector2i = queue[qi]
-		qi += 1
-		if manhattan(cur, from) > best_d:
-			best = cur
-			best_d = manhattan(cur, from)
-		if manhattan(cur, c) >= 6:
-			continue
-		for d in DIRS:
-			var n: Vector2i = cur + d
-			if in_bounds(n) and not seen.has(n) and walkable(n) and not m.heat().has(n):
-				seen[n] = true
-				queue.append(n)
-	return best
-
-
-## What a party member does at the meadow (issues #137, #139): pack what the objective still needs,
-## build the pens, lead marked animals in, feed pairs, hunt what's marked, then pack the rest.
 func _meadow_job(r: Dictionary, c: Vector2i):
-	var pk = _stow_job(r, c)
-	if pk != null and (_priority_stack(pk.target) or pack_load() + 4 >= pack_capacity(expedition)):
-		return pk
-	for f in [_fence_job, _lead_job, _feed_job]:
-		var j = f.call(r, c)
-		if j != null:
-			_drop_unused(r, pk)
-			return j
-	var prey := m.sheep.filter(func(a): return a.alive and a.des and a.claim == 0 and not _cooling(a))
-	if not prey.is_empty():
-		_drop_unused(r, pk)
-		return _tagged(_hunt_job(r, nearest(prey, c)), "hunt")
-	return pk
+	return Creatures._meadow_job(self, r, c)
 
 
-## A job that was drawn up but not taken: what it reserved is free again.
 func _drop_unused(r: Dictionary, j) -> void:
-	if j != null:
-		_release(r, j)
+	Creatures._drop_unused(self, r, j)
 
 
-## Whether a stack is one a row with an amount still wants: packed before more mining (issue #185).
 func _priority_stack(st: Dictionary) -> bool:
-	for r in cargo_rows(expedition):
-		if r.item == st.type:
-			return r.n > 0 and cargo_have(r.item) < r.n
-	return false
+	return Creatures._priority_stack(self, st)
 
 
-## Whether anything lying at the site can still go into the packs: an item on the list while there's room
-## (the room kept for the rows above it aside), or one that outranks something in the packs.
-func _stowable() -> bool:
-	if tending():  # whatever the herd gives, in the room there is
-		return pack_room() > 0 and not stacks_where(func(s): return avail(s) > 0).is_empty()
-	if not swap_candidate().is_empty():
-		return true
-	var room := pack_room()
-	return not stacks_where(func(s): return avail(s) > 0 and cargo_rank(expedition, s.type) >= 0 and room - _reserve_above(s.type) > 0).is_empty()
-
-
-## Carrying a loose stack at the site into the packs at the entrance (issue #185): the items on the list, best
-## first, the packs keeping room for the rows above each; when they're full, a better item swaps out the
-## lowest-priority cargo, which is left here as a stack.
 func _stow_job(r: Dictionary, c: Vector2i):
-	var room := _room_to_promise()
-	var swap := {}
-	if room <= 0:
-		swap = swap_candidate()
-		if swap.is_empty():
-			return null
-	# An amount already packed is only topped up once nothing else is marked to mine, so the packs keep
-	# room for what's still to come.
-	var working := m.boulders.any(func(b): return b.alive and b.des) or m.sheep.any(func(a): return a.alive and a.des)
-	var loose: Array = [swap.stack] if not swap.is_empty() else stacks_where(func(s):
-		if avail(s) <= 0:
-			return false
-		if tending():
-			return true
-		for row in cargo_rows(expedition):
-			if row.item == s.type:
-				return row.n <= 0 or cargo_have(s.type) < row.n or not working
-		return false)
-	if loose.is_empty():
-		return null
-	loose.sort_custom(func(a, b): return cargo_rank(expedition, a.type) < cargo_rank(expedition, b.type) or (cargo_rank(expedition, a.type) == cargo_rank(expedition, b.type) and manhattan(a.cell, c) < manhattan(b.cell, c)))
-	var st: Dictionary = loose[0]
-	var n: int = mini(avail(st), carry_cap(r))
-	if swap.is_empty():
-		n = mini(n, room - _reserve_above(st.type))
-	else:
-		n = mini(n, cargo_have(swap.drop))
-	if n <= 0:
-		return null
-	var j := Job.new("stow", "Packing %s" % Defs.ITEMS[st.type].many, "the packs")
-	j.target = st
-	j.work = "haul"
-	st.res += n
-	var hd := j.hold({"t": "stack", "stack": st, "n": n})
-	j.step(_goto(reach(st.cell), false))
-	j.step({"op": "pickup", "stack": st, "n": n, "hold": hd})
-	j.step(_goto([m.entrance], false))
-	var stow := {"op": "stow", "n": n}
-	if not swap.is_empty():
-		stow.swap = swap.drop
-	j.step(stow)
-	return j
+	return Creatures._stow_job(self, r, c)
 
 
-## An item the party learns the place gives while it's there (the iron vein, surveyed) joins its list at the
-## bottom, marked New, and a toast says so (issue #185).
-func _learn_items() -> void:
-	if tending() or not expedition.has("list"):
-		return
-	for x in plan_targets(expedition.dest):
-		if not expedition.list.any(func(r): return r.item == x.item):
-			expedition.list.append({"item": x.item, "on": true, "n": 0, "new": true})
-			_toast("%s is known in the %s now. It joins the list of what to bring back." % [Defs.ITEMS[x.item].label, maps[expedition.dest].name.to_lower()], expedition.party[0])
-
-
-## Marks what the list asks for, going down it (issue #185): the first row that still wants more gets its
-## nearest blocks marked, nearest the entrance first, a block at a time, until what's packed, lying about and
-## marked will make its amount (an as-much-as-fits row always wants more). At the meadow an animal is hunted
-## for the highest row among what it drops. Blocks under a known loose ceiling are left for the player to choose.
 func _mark_objective() -> void:
-	if tending():  # the penned animals over the herd size kept (issue #139)
-		for a in pen_surplus():
-			if not a.des:
-				a.des = true
-				a.unreach_until = 0
-				rev += 1
-		return
-	var party_size: int = expedition.party.size()
-	for row in cargo_rows(expedition):
-		var item: String = row.item
-		if not can_mine_item(item):  # nobody could mine it: left to the stuck list to say so
-			continue
-		var have := cargo_have(item)
-		for st in m.items.values():
-			if st.type == item:
-				have += st.n
-		if m.sheep.any(func(a): return a.alive and gives(a, item)):  # the meadow: the animals that give it (issue #137)
-			var hunted := m.sheep.filter(func(a): return a.alive and a.des and gives(a, item))
-			if row.n > 0 and cargo_have(item) >= row.n:
-				continue  # that amount is packed: on to the next row
-			if row.n > 0 and have + hunted.size() * block_yield(item) >= row.n:
-				return  # enough is marked or lying about: the next row waits until it's packed
-			if m.sheep.filter(func(a): return a.alive and a.des).size() >= party_size:
-				return
-			var herd := m.sheep.filter(func(a): return a.alive and not a.des and a.get("pen", 0) == 0 and gives(a, item))  # pens are the player's (issue #139)
-			if herd.is_empty():
-				if row.n > 0:
-					return  # a row with an amount holds the rows below it back until it's packed
-				continue
-			var a: Dictionary = nearest(herd, m.entrance)
-			a.des = true
-			a.unreach_until = 0
-			rev += 1
-			return
-		var marked := m.boulders.filter(func(b): return b.alive and b.des and gives(b, item))
-		if row.n > 0 and cargo_have(item) >= row.n:
-			continue  # that amount is packed: on to the next row
-		if row.n > 0 and have + marked.size() * block_yield(item) >= row.n:
-			return  # enough is marked or lying about: the next row waits until it's packed
-		if m.boulders.filter(func(b): return b.alive and b.des).size() >= party_size:
-			return
-		var door := MineLevels.door_front(m) if m.door_state == "closed" else Vector2i(-1, -1)  # digging to the door is the player's call (#132)
-		var free := m.boulders.filter(func(b): return b.alive and not b.des and not b.get("hidden", false) and not b.get("loose", false) and gives(b, item) and b.cell != door)
-		if free.is_empty():
-			if row.n > 0:
-				return
-			continue
-		var b: Dictionary = nearest(free, m.entrance)
-		var way := _way_through(b.cell)
-		if way.is_empty():
-			if row.n > 0:
-				return
-			continue
-		b = way[0]  # the block itself, or the first boulder in the way to it
-		b.des = true
-		b.unreach_until = 0
-		rev += 1
-		return
+	Creatures._mark_objective(self)
 
 
-## The way from the entrance to a block, as the blocks to mine to get there: the first boulder in
-## the way and so on, ending with the block itself. Empty when rock or a loose ceiling bars it, or
-## another marked block is already being mined toward it.
 func _way_through(to: Vector2i, allow_loose := false) -> Array:
-	var blocks := {}
-	for b in m.boulders:
-		if b.alive and not b.get("hidden", false):
-			blocks[b.cell] = b
-	var prev := {m.entrance: m.entrance}
-	var queue: Array = [m.entrance]
-	var qi := 0
-	while qi < queue.size():
-		var c: Vector2i = queue[qi]
-		qi += 1
-		if c == to:
-			var path: Array = []
-			var p := c
-			while p != m.entrance:
-				if blocks.has(p):
-					path.push_front(blocks[p])
-				p = prev[p]
-			if path.is_empty():
-				return []
-			var first: Dictionary = path[0]
-			if (first.get("loose", false) and not allow_loose) or (first.des and first.cell != to):
-				return []
-			return path
-		for d in DIRS:
-			var n: Vector2i = c + d
-			if prev.has(n) or not m.in_bounds(n) or m.rock.has(n):
-				continue
-			if blocks.has(n) and n != to and blocks[n].get("loose", false) and not allow_loose:
-				continue
-			prev[n] = c
-			queue.append(n)
-	return []
+	return Creatures._way_through(self, to, allow_loose)
 
 
-## Why the party should head home now, by its return policy (issue #109), or "". A pending choice
-## waits for the player first.
-func policy_met() -> String:
-	var ex := expedition
-	if not pending.is_empty():
-		return ""
-	if ex.get("rescue", false):  # a rescue party comes home once it has reached them, which sends it (issue #158)
-		return ""
-	if building_pline():  # home once the rails and the station are down, or the supplies are used (issue #168)
-		return "the portal line work is done" if pline_task(-1).is_empty() else ""
-	if building_line():  # home once the line work at the far end is done (issue #159)
-		return "the line work is done" if nline_task("site", -1).is_empty() else ""
-	if delving():  # home once the salvage is taken and the halls are clear, if they pressed on (issue #157)
-		if m.salvage_taken and ex.get("pressing", false) and not m.creatures.any(func(x): return x.alive and Defs.CREATURES[x.species].notice > 0):
-			return "the halls are cleared"
-		return "provisions low" if ex.policy.get("low", false) and spendable_meals() <= 0 else ""
-	if trading():  # the trades are made, or the piglins have turned (issue #156)
-		if ex.get("trade_done", false) or m.hostile:
-			return "the piglins turned hostile" if m.hostile else "the trades are made"
-		return "provisions low" if ex.policy.get("low", false) and spendable_meals() <= 0 else ""
-	if scouting():  # a scout comes home when the route is walked, which sends them (issue #153)
-		return "provisions low" if ex.policy.get("low", false) and spendable_meals() <= 0 else ""
-	if surveying():  # the landing: home once every landmark has been seen (issue #148)
-		if m.surveyed and (not ex.get("shelter", false) or shelter_site().get("done", false)):
-			return "the landing is surveyed" if not ex.get("shelter", false) else "the landing is surveyed and the shelter built"
-		if ex.policy.get("low", false) and spendable_meals() <= 0:
-			return "provisions low"
-		return ""
-	if ex.policy.get("target", false) and not tending() and objective_met():
-		return "target reached"
-	if ex.policy.get("full", false) and pack_room() <= 0 and swap_candidate().is_empty():  # a better find would swap in (issue #185)
-		return "packs full"
-	if ex.policy.get("low", false) and spendable_meals() <= 0:
-		return "provisions low"
-	if _nothing_left() and not ex.get("survey", false):
-		if tending():
-			return "the pens are tended"
-		if ex.get("clear", false) and level_of(ex.dest) > 0:
-			return "the level is cleared"
-		return Adventures.def(m.id).left
-	return ""
-
-
-## Whether the party has nothing left to do here: no one busy, nothing marked or worth marking that can be reached,
-## and nothing lying about that would go into the packs.
 func _nothing_left() -> bool:
-	var ex := expedition
-	var party: Array = ex.party.map(func(id): return resident(id))
-	var busy := party.any(func(r): return r.job != null and r.job.kind in ["gather", "stow", "survey", "eat", "equip", "door", "fence", "lead", "feed"])
-	var to_mine := m.boulders.any(func(b): return b.alive and not b.get("hidden", false) and ((b.des and not _cooling(b)) or (not b.get("loose", false) and gives_wanted(b) and not _way_through(b.cell).is_empty())))
-	to_mine = to_mine or m.sheep.any(func(a): return a.alive and ((a.des and not _cooling(a)) or (a.get("pen", 0) == 0 and gives_wanted(a))))
-	if m.id == Meadow.ID and tending():  # issue #139
-		to_mine = to_mine or pen_work() or not pen_surplus().is_empty()
-	return not busy and not to_mine and not _stowable()
+	return Creatures._nothing_left(self)
 
 
-## How many blocks of what the party is after are left to mine on the level being worked, out of the loose ceilings'
-## reach (issue #188).
 func level_left() -> int:
-	var map_here: SimMap = maps[expedition.dest] if expedition.get("dest", "") != "" and maps.has(expedition.dest) else m
-	return map_here.boulders.filter(func(b): return b.alive and not b.get("hidden", false) and not b.get("loose", false) and cargo_rows(expedition).any(func(r): return gives(b, r.item))).size()
+	return Creatures.level_left(self)
 
 
-## A cleared level (issue #188): with nothing left to mine on it, the party digs to the door itself and goes down, the
-## objective carried over. Returns whether it's busy with that, so the party isn't sent home for having nothing to mine.
-func _clear_step() -> bool:
-	var ex := expedition
-	if not ex.get("clear", false) or level_of(ex.dest) == 0 or not pending.is_empty() or not _nothing_left():
-		return false
-	if m.door_state != "closed":  # the door's been reached: through it
-		go_down()
-		return true
-	var front := MineLevels.door_front(m)
-	var way := _way_through(front)  # never through a loose ceiling: that's the player's call
-	if way.is_empty():
-		return walkable(front)  # open to the door: someone is on their way to look; blocked: home it is
-	for b in way:
-		b.des = true
-		b.unreach_until = 0
-	rev += 1
-	return true
-
-
-## Sends the party home from the site, saying why ("target reached", "retreat"...).
 func _head_home(why: String) -> void:
-	expedition.leg = "home"
-	expedition.home_why = why
-	for id in expedition.party:
-		var r := resident(id)
-		fail_job(r)
-		r.direct = null
-		r.orders.clear()
-	_toast("Heading home: %s." % why, expedition.party[0])
-	if in_nether() and portal_lit() and rng.randf() < Tuning.PORTAL_GUTTER_CHANCE:  # a hazard: the portal goes out (issue #148)
-		village_portal().lit = false
-		rev += 1
-		_toast("The portal has gone out behind the party.", expedition.party[0])
+	Creatures._head_home(self, why)
 
 
-## Each tick at the site: mark the objective, and check the return policy once the whole party is there.
 func _step_site() -> void:
-	if expedition.get("state", "") != "out" or expedition.dest != map_id or expedition.get("leg", "out") != "out":
-		return
-	if not expedition.party.all(func(id): return at_site(resident(id))):
-		return
-	if tick % 10 == 0:
-		_learn_items()
-		_mark_objective()
-		var why := policy_met()
-		if why == "the level is cleared" and _clear_step():  # the packs, food and injuries still come first (issue #188)
-			return
-		if why != "":
-			_head_home(why)
+	Creatures._step_site(self)
 
 
-## The site's stuck reasons (issue #109), which carry its map.
 func _stuck_site() -> void:
-	if expedition.get("state", "") != "out" or expedition.dest != map_id:
-		return
-	if realm_of(map_id) == "nether" and expedition.get("leg", "out") == "home" and not portal_lit() and expedition.get("lighter", {}).is_empty():
-		_add_stuck(m.name, "The portal has gone out and no one has flint and steel", Vector2(m.entrance) + Vector2(0.5, 0.5), 1.6, "", 0)
-	var party: Array = expedition.party.map(func(id): return resident(id)).filter(func(r): return at_site(r))
-	if party.is_empty():
-		return
-	var at := Vector2(m.entrance) + Vector2(0.5, 0.5)
-	if party.any(func(r): return r.job != null and r.job.kind in ["fight", "flee"]):  # issue #151
-		_add_stuck(party_name(slot), "fighting", at, 1.6, "", 0, false, true)
-	if m.id == NetherLanding.ID:  # the shelter and its cache (issue #152)
-		var shelter := shelter_site()
-		if not shelter.is_empty() and not shelter.done and expedition.get("shelter", false):
-			for k in Tuning.SHELTER_COST:
-				var short: int = Tuning.SHELTER_COST[k] - expedition.get("supplies", {}).get(k, 0)
-				if short > 0:
-					_add_stuck("Shelter", "needs %d more %s" % [short, Defs.ITEMS[k].one if short == 1 else Defs.ITEMS[k].many], Vector2(shelter.origin) + Vector2(1.5, 1.5), 1.6, "", 0)
-					break
-		elif shelter.get("done", false) and cache_meals() == 0:
-			_add_stuck("Cache", "empty", Vector2(shelter.origin) + Vector2(1.5, 1.5), 1.6, "", 0, false, true)
-	var to_mine := m.boulders.any(func(b): return b.alive and b.des)
-	if to_mine and party.all(func(r): return r.get("hurt", 0) > 0):
-		_add_stuck(m.name, "Everyone is hurt, so nobody can mine. Call them home", at, 1.6, "", 0)
-	elif to_mine and not party.any(func(r): return r.pick != null and r.get("hurt", 0) == 0) and expedition.get("tools", []).is_empty():
-		_add_stuck(m.name, "No pickaxe left. The party can only pack what's mined; call them home", at, 1.6, "", 0)
-	if pack_room() <= 0 and not stacks_where(func(s): return avail(s) > 0).is_empty() and not expedition.policy.get("full", false):
-		_add_stuck(m.name, "The packs are full", at, 1.6, "", 0, false, true)
-	if expedition.get("survey", false) and not party.any(func(r): return r.pick != null and r.get("hurt", 0) == 0):
-		_add_stuck(m.name, "Investigating the vein needs someone with a pickaxe", at, 1.6, "", 0)
-	for ore in Tuning.ORE_PICK_TIER:  # a block that needs a better pickaxe than anyone has (issues #186, #146)
-		var wanted := cargo_rows(expedition).any(func(r): return r.item == Defs.ORES[ore].item) or m.boulders.any(func(b): return b.alive and b.des and b.get("ore", "") == ore)
-		if wanted and m.boulders.any(func(b): return b.alive and not b.get("hidden", false) and b.get("ore", "") == ore) and not can_mine_ore(ore):
-			_add_stuck(m.name, pick_need_text(ore), at, 1.6, "", 0)
-	var sticks: int = expedition.get("supplies", {}).get("stick", 0)
-	if fence_left(map_id) > 0 and sticks < Tuning.FENCE_STICKS and not party.any(func(r): return r.job != null and r.job.kind == "fence"):
-		_add_stuck(m.name, "The pens need %s more. Pack them next time" % Defs.words("stick", fence_left(map_id)), at, 1.6, "", 0, false, true)
-	if m.sheep.any(func(a): return a.alive and a.get("lead", false) and a.get("pen", 0) == 0) and not m.pens.any(func(p): return pen_done(p) and pen_free(p) > 0):
-		_add_stuck(m.name, "No finished pen has room for the animals marked to lead", at, 1.6, "", 0, false, true)
+	Creatures._stuck_site(self)
 
 
 # ---------------------------------------------------------------- choices that stop the game (issues #110, #111)
@@ -8205,313 +7558,101 @@ func choose(option: String) -> void:
 
 
 # ---------------------------------------------------------------- hazards and injuries (issue #110)
+# The rules live in hazards.gd (#305); these forward to them.
 
-## Ada, the founder (the PC): she can be hurt, but never seriously (brief §8).
-func is_pc(r: Dictionary) -> bool:
-	return not residents.is_empty() and residents[0].id == r.id
-
-
-## Hurts a resident: 1 injured, 2 seriously. A serious injury on an expedition stops the game for the
-## player: retreat, or press on without them.
 func injure(r: Dictionary, level: int, cause: String) -> void:
-	if is_pc(r):
-		level = mini(level, 1)
-	if level <= r.get("hurt", 0):
-		return
-	r.hurt = level
-	r.hurt_cause = cause
-	r.heal = Tuning.HEAL_TIME[level]
-	if r.job != null:
-		fail_job(r)
-	stats.injuries = stats.get("injuries", 0) + 1
-	if expedition.get("state", "") == "out" and expedition.party.has(r.id):
-		expedition.hurt = expedition.get("hurt", {})
-		expedition.hurt[r.name] = maxi(expedition.hurt.get(r.name, 0), level)
-	rev += 1
-	if level == 1:
-		_toast("%s was hurt in %s. Injured, %s can't mine and works slower." % [r.name, cause, "she" if is_pc(r) else "they"], r.id)
-		return
-	_toast("%s is seriously hurt in %s." % [r.name, cause], r.id)
-	if at_site(r):
-		_ask("injury", "%s is seriously hurt in %s and can't work." % [r.name, cause], [
-			{"id": "retreat", "label": "Retreat", "cost": "The party heads home now, with what it has packed."},
-			{"id": "press_on", "label": "Press on", "cost": "%s waits at the entrance while the rest keep working." % r.name},
-		], r.id)
+	Hazards.injure(self, r, level, cause)
 
 
-## A hazard roll, from the sim's seeded random numbers, so a game replays the same.
 func _roll(chance: float) -> bool:
-	return rng.randf() < chance
+	return Hazards._roll(self, chance)
 
 
-## A hazard strikes someone with `chance` (issues #110, #140). Armor takes the blow and wears, and
-## turns some injuries aside; a full set makes a serious one less likely. `serious` is the chance an
-## injury is serious, 0 for one that never is.
 func _hazard(r: Dictionary, chance: float, serious: float, cause: String, kind := "") -> void:
-	if kind == "creature":  # Protection armor, a piece at a time (issue #167)
-		chance *= pow(1.0 - Tuning.PROTECTION_CUT, armor_ench_count(r, "protection"))
-	elif kind == "fire":  # Fire protection (issue #167)
-		chance *= pow(1.0 - Tuning.FIRE_PROTECTION_CUT, armor_ench_count(r, "fire_protection"))
-	if not _roll(chance):
-		return
-	var guard := protection(r)
-	var full := armor_worn(r).size() == Defs.ARMOR_SLOTS.size()
-	if guard > 0.0:
-		_wear_armor(r)
-		if _roll(guard):
-			stats.turned_aside = stats.get("turned_aside", 0) + 1
-			_toast("%s's armor turned aside %s." % [r.name, cause], r.id)
-			return
-	var level := 1
-	if serious > 0.0 and _roll(serious * (Tuning.FULL_SET_SERIOUS if full else 1.0)):
-		level = 2
-	injure(r, level, cause)
+	Hazards._hazard(self, r, chance, serious, cause, kind)
 
 
-## How many pieces someone wears with an enchantment.
 static func armor_ench_count(r: Dictionary, ench: String) -> int:
-	var n := 0
-	var worn := armor_worn(r)
-	for slot in worn:
-		if Defs.ITEMS[worn[slot].type].get("ench", "") == ench:
-			n += 1
-	return n
+	return Hazards.armor_ench_count(r, ench)
 
 
-## The armor someone has on: slot -> {type, dur}.
 static func armor_worn(r: Dictionary) -> Dictionary:
-	var out := {}
-	for slot in r.get("armor", {}):
-		if r.armor[slot] != null:
-			out[slot] = r.armor[slot]
-	return out
+	return Hazards.armor_worn(r)
 
 
-## The share of hazard injuries someone's armor turns aside (issue #140).
 static func protection(r: Dictionary) -> float:
-	var g := 0.0
-	var worn := armor_worn(r)
-	for slot in worn:
-		g += Defs.ITEMS[worn[slot].type].get("guard", Tuning.ARMOR_GUARD[slot])  # iron turns more aside (issue #150)
-	return g
+	return Hazards.protection(r)
 
 
-## Every piece worn takes the blow: a use each, and one used up wears out.
 func _wear_armor(r: Dictionary) -> void:
-	for slot in armor_worn(r):
-		var a: Dictionary = r.armor[slot]
-		if not _use_up(a):
-			continue
-		if a.dur <= 0:
-			r.armor[slot] = null
-			stats.armor_worn_out = stats.get("armor_worn_out", 0) + 1
-			_toast("%s's %s wore out." % [r.name, Defs.ITEMS[a.type].one], r.id)
-	rev += 1
+	Hazards._wear_armor(self, r)
 
 
-## A guard without a sword takes one lying about, and keeps it (issue #150).
 func _arm_job(r: Dictionary, c: Vector2i):
-	if map_id != "village" or r.role != "guard" or r.sword != null or r.get("hurt", 0) > 0:
-		return null
-	var swords := tool_items("sword", 0)
-	if swords.is_empty():
-		return null
-	var st: Dictionary = nearest(swords, c)
-	var it: Dictionary = Defs.ITEMS[st.type]
-	var j := Job.new("equip", "Going to get the %s" % it.one, "the %s" % it.one)
-	st.res += 1
-	var hd := j.hold({"t": "stack", "stack": st, "n": 1})
-	j.step(_goto(reach(st.cell), false))
-	j.step({"op": "pickup_tool", "stack": st, "hold": hd, "keep": true})
-	return j
+	return Hazards._arm_job(self, r, c)
 
 
-## Putting on armor lying about (issue #140): the nearest piece for a slot they haven't filled.
-## Like tools, residents take it themselves; only in the village.
 func _dress_job(r: Dictionary, c: Vector2i):
-	if map_id != "village":
-		return null
-	var pieces := stacks_where(func(s): return Defs.is_armor(s.type) and avail(s) > 0 and r.get("armor", {}).get(Defs.ITEMS[s.type].armor) == null)
-	if pieces.is_empty():
-		return null
-	return _dress(r, nearest(pieces, c))
+	return Hazards._dress_job(self, r, c)
 
 
 func _dress(r: Dictionary, stack: Dictionary) -> Job:
-	if not r.has("armor"):
-		r.armor = {}
-	var it: Dictionary = Defs.ITEMS[stack.type]
-	var j := Job.new("dress", "Going to put on the %s" % it.one, "the %s" % it.one)
-	stack.res += 1
-	var hd := j.hold({"t": "stack", "stack": stack, "n": 1})
-	j.step(_goto(reach(stack.cell), false))
-	j.step({"op": "pickup_armor", "stack": stack, "hold": hd})
-	return j
+	return Hazards._dress(self, r, stack)
 
 
-## The nearest walkable cell that isn't on fire, within a few steps, or null.
-func _clear_ground(c: Vector2i):
-	var seen := {c: true}
-	var queue: Array = [c]
-	var qi := 0
-	while qi < queue.size():
-		var cur: Vector2i = queue[qi]
-		qi += 1
-		if walkable(cur) and not m.fire.has(cur):
-			return cur
-		if manhattan(cur, c) >= 4:
-			continue
-		for d in DIRS:
-			var n: Vector2i = cur + d
-			if in_bounds(n) and not seen.has(n) and walkable(n):
-				seen[n] = true
-				queue.append(n)
-	return null
-
-
-## Someone alight (issue #149): they burn for a few seconds after leaving the fire, each second a chance of a burn, and
-## step off a fire at once. Reaching clear ground and waiting it out stops it.
 func _burn_step(r: Dictionary) -> void:
-	var c := rcell(r)
-	if m.fire.has(c):
-		r.burn = Tuning.FIRE_BURN_TIME
-		var out = _clear_ground(c)
-		if out != null and out != c:
-			r.pos = Vector2(out)
-			r.path = []
-			if r.job != null:
-				fail_job(r)
-	else:
-		r.burn = maxf(0.0, r.burn - Tuning.DT)
-	r.burn_acc = r.get("burn_acc", 0.0) + Tuning.DT
-	if r.burn_acc >= 1.0:
-		r.burn_acc -= 1.0
-		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning", "fire")
-	if r.burn <= 0.0:
-		r.burn_acc = 0.0
+	Hazards._burn_step(self, r)
 
 
-## Stepping onto a ledge in the dark can be a fall.
 func _ledge_step(r: Dictionary, c: Vector2i) -> void:
-	if _riding(r):
-		return
-	if m.fire.has(c):  # stepping onto a fire sets someone alight (issue #149)
-		r.burn = Tuning.FIRE_BURN_TIME
-		_hazard(r, Tuning.FIRE_CHANCE, Tuning.FIRE_SERIOUS, "burning", "fire")
-		return
-	if m.beside_lava(c):
-		_hazard(r, Tuning.LAVA_CHANCE, Tuning.LAVA_SERIOUS, "a burn beside lava", "fire")
-	if c in m.ledges and (m.is_dark(c) or realm_of(map_id) == "nether"):  # the Nether's drops need no dark (issue #149)
-		_hazard(r, fall_chance(m.level), Tuning.FALL_SERIOUS, "a fall from a ledge")
-	elif c in m.banks:  # the meadow's pond bank (issue #137): never serious
-		_hazard(r, Tuning.SLIP_CHANCE, 0.0, "a slip on the pond bank")
+	Hazards._ledge_step(self, r, c)
 
 
-## The chance a loose ceiling comes down, and of a fall from a ledge in the dark: higher on each level
-## down (issue #132).
 static func cave_in_chance(level: int) -> float:
-	return minf(0.95, Tuning.CAVE_IN_CHANCE * (1.0 + Tuning.LEVEL_RISK * maxi(0, level - 1)))
+	return Hazards.cave_in_chance(level)
 
 
 static func fall_chance(level: int) -> float:
-	return minf(0.95, Tuning.FALL_CHANCE * (1.0 + Tuning.LEVEL_RISK * maxi(0, level - 1)))
+	return Hazards.fall_chance(level)
 
 
-## How much slower a resident walks and works: injured, and (for work) in the dark.
 static func hurt_speed(r: Dictionary) -> float:
-	return Tuning.INJURED_SPEED if r.get("hurt", 0) > 0 else 1.0
+	return Hazards.hurt_speed(r)
 
 
-## Resting to heal at home: in their own bed, or slower without one.
 func _rest_job(r: Dictionary) -> Job:
-	var bed = null
-	for s in m.sites:
-		if s.tpl == "house" and s.done and s.owner == r.id:
-			bed = s
-	var j := Job.new("rest", "Resting in bed" if bed != null else "Resting, with no bed of their own", "their bed")
-	if bed != null:
-		j.step(_goto(site_cells(bed), true))
-	j.step({"op": "rest", "bed": bed != null})
-	return j
+	return Hazards._rest_job(self, r)
 
 
-## Whether a resident is home and hurt, so resting.
 func _has_bed(r: Dictionary) -> bool:
-	return maps.village.sites.any(func(s): return s.tpl == "house" and s.done and s.owner == r.id)
+	return Hazards._has_bed(self, r)
 
 
 func resting(r: Dictionary) -> bool:
-	return r.get("hurt", 0) > 0 and r.map == "village" and not r.away and not on_the_way(r) and not in_staging_party(r)
+	return Hazards.resting(self, r)
 
 
 # ---------------------------------------------------------------- the iron discovery (issue #111)
+# The rules live in iron_discovery.gd (#305); these forward to them.
 
-## Mining near the hidden vein finds it: it's revealed, and the game stops for the player to choose.
 func _check_find(c: Vector2i) -> void:
-	if m.found or m.kind != "site":
-		return
-	if not m.boulders.any(func(b): return b.alive and b.get("hidden", false) and manhattan(b.cell, c) <= Tuning.FIND_RADIUS):
-		return
-	_find_vein()
-	_toast("The party found iron in the %s." % m.name.to_lower())
-	if expedition.get("state", "") == "out" and expedition.dest == map_id:
-		_ask("discovery", "The party found an iron vein in the %s." % m.name.to_lower(), [
-			{"id": "keep", "label": "Keep mining", "cost": "Carry on for %s. The vein stays marked." % objective_text()},
-			{"id": "investigate", "label": "Investigate", "cost": "Someone spends about %d s and %d pickaxe uses surveying it. Iron becomes a resource you can send a party for." % [int(Tuning.SURVEY_TIME), Tuning.SURVEY_USES]},
-			{"id": "return", "label": "Mark it and return later", "cost": "The party heads home now, with what it has packed."},
-		])
+	IronDiscovery._check_find(self, c)
 
 
-## Mining next to a hidden diamond finds the level's diamonds (issue #186): they're revealed, diamonds become
-## a known resource of the level, and, with the party working here, the game stops for the player.
 func _check_find_diamond(c: Vector2i) -> void:
-	if m.diamond_found or m.kind != "site":
-		return
-	if not m.boulders.any(func(b): return b.alive and b.get("ore", "") == "diamond" and b.get("hidden", false) and manhattan(b.cell, c) <= Tuning.FIND_RADIUS):
-		return
-	m.diamond_found = true
-	for b in m.boulders:
-		if b.get("ore", "") == "diamond":
-			b.erase("hidden")
-	rev += 1
-	_toast("The party found diamonds on level %d." % m.level)
-	if expedition.get("state", "") == "out" and expedition.dest == map_id:
-		_ask("discovery", "The party found diamonds on level %d of the old mine." % m.level, [
-			{"id": "keep", "label": "Keep mining", "cost": "Carry on for %s. Diamonds can only be mined with an iron pickaxe." % objective_text()},
-			{"id": "return", "label": "Mark it and return later", "cost": "The party heads home now, with what it has packed."},
-		])
+	IronDiscovery._check_find_diamond(self, c)
 
 
-## The vein is revealed: it can be seen, marked and mined, though its size isn't known yet.
 func _find_vein() -> void:
-	m.found = true
-	for b in m.boulders:
-		if b.get("ore", "") != "diamond":  # diamonds have a find of their own (issue #186)
-			b.erase("hidden")
-	rev += 1
+	IronDiscovery._find_vein(self)
 
 
-## Walking to the vein and surveying it, at the cost of time and pickaxe uses.
 func _survey_job(r: Dictionary):
-	var vein := m.boulders.filter(func(b): return b.alive and b.get("ore", "") == "iron")
-	if vein.is_empty():
-		expedition.survey = false
-		return null
-	var j := Job.new("survey", "Going to investigate the vein", "the iron vein")
-	j.work = "mason"
-	j.step(_goto(vein.map(func(b): return b.cell), true))
-	j.step({"op": "work", "what": "survey", "label": "Investigating the vein"})
-	return j
+	return IronDiscovery._survey_job(self, r)
 
 
-## The vein is surveyed: iron is a known resource, with an estimate.
 func survey(id: String) -> void:
-	var mp: SimMap = maps[id]
-	mp.found = true
-	mp.discovered = true
-	for b in mp.boulders:
-		b.erase("hidden")
-	rev += 1
+	IronDiscovery.survey(self, id)
 
 
 # ---------------------------------------------------------------- the old mine's levels (issue #132)

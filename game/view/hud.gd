@@ -221,11 +221,15 @@ func _ready() -> void:
 	menu_row.add_child(_menu_btn)
 	_menu_panel = _panel(menu_row, Vector2.ZERO, 4)  # its own panel under the speed buttons, so the speed row stays narrow
 	tr.add_child(_menu_panel)
+	_speed_panel.z_index = 1  # the speed and Menu buttons stay clickable under the big top-level panels (#316)
+	_menu_panel.z_index = 1
 	_log_btn = _button("Log", func(): _toggle_log())  # what the toasts said, for the ones that were missed (issue #297)
 	_log_btn.custom_minimum_size = Vector2(0, 44)
 	_log_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_log_btn.set_meta("label", "Log")
-	tr.add_child(_panel(_log_btn, Vector2.ZERO, 4))
+	var log_panel := _panel(_log_btn, Vector2.ZERO, 4)
+	log_panel.z_index = 1  # stays clickable under the big panels too (#316)
+	tr.add_child(log_panel)
 	_stuck_panel = _panel(_stuck, Vector2(250, 0))
 	tr.add_child(_stuck_panel)
 
@@ -484,7 +488,15 @@ func box(bg: Color, radius: int, margin: int, border := Color(0, 0, 0, 0)) -> St
 	return _box(bg, radius, margin, border)
 
 
+func _overlay_open() -> bool:
+	for c in _root.get_children():
+		if c is GameMenu and c.visible:
+			return true
+	return false
+
+
 func add_overlay(c: Control) -> void:
+	c.z_index = 10  # above the panels, the Menu button and the toasts
 	_root.add_child(c)
 
 
@@ -890,6 +902,14 @@ func _row(left: String, right: String, left_dim := true) -> HBoxContainer:
 	r.autowrap_mode = TextServer.AUTOWRAP_OFF
 	h.add_child(r)
 	return h
+
+
+func _update_progress_bar(sim: Sim) -> void:
+	for bar in _sel.find_children("*", "Panel", true, false):
+		if bar.has_meta("progress_of") and not bar.is_queued_for_deletion():
+			for r in sim.residents:
+				if r.id == bar.get_meta("progress_of") and r.progress >= 0:
+					(bar.get_child(0) as Control).anchor_right = clampf(r.progress, 0.0, 1.0)
 
 
 func _bar(frac: float, color := Palette.BLUE) -> Control:
@@ -1340,6 +1360,7 @@ func _process(_delta: float) -> void:
 		for n in _sel.find_children("*", "Button", true, false) + _plan_box.find_children("*", "Button", true, false):
 			if n.has_meta("disarmed_text"):
 				n.text = n.get_meta("disarmed_text")
+	_toasts.visible = not _overlay_open()  # no stray toast beside the menu's dialog (#314)
 	_place_toasts()
 	var room: float = get_viewport().get_visible_rect().size.y - 150.0  # below the top bar, above the bottom edge
 	var want := minf(_sel.get_combined_minimum_size().y, maxf(120.0, room))
@@ -1722,7 +1743,7 @@ func _refresh_selection(sim: Sim) -> void:
 		for id in sel.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, int(r.progress * 10), r.orders, int(r.hunger / 5)] + "%s%s%s%s%s%s%d%d" % [r.jobs, r.role, _job_for == r.id, r.kept, equip_kind, r.away, int(sim.back_in(r)), r.get("hurt", 0)] + "%s" % [r.get("armor", {})]
+				sig += "%s%s%s%s%s%s%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, r.progress >= 0, r.orders, int(r.hunger / 5)] + "%s%s%s%s%s%s%d%d" % [r.jobs, r.role, _job_for == r.id, r.kept, equip_kind, r.away, int(sim.back_in(r)), r.get("hurt", 0)] + "%s" % [r.get("armor", {})]
 		for kind in ["axe", "pick"]:  # Equip appears when there's a tool to choose
 			for st in sim.tool_items(kind, 0):
 				sig += "%s%s%s" % [st.type, st.dur, st.cell]
@@ -1743,6 +1764,7 @@ func _refresh_selection(sim: Sim) -> void:
 		sig += s.why
 	sig += game.tool + str(game.area_site)  # the Paint area button reads Done painting while it's on (issue #203)
 	sig += _keys_sig
+	_update_progress_bar(sim)
 	_rebuild(_sel, sig, func(c: Container) -> void:
 		_fill_selection(c, sim, sel, target)
 		_register_panel_keys(c))
@@ -1769,7 +1791,9 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		var r: Dictionary = rs[0]
 		c.add_child(_head(r.name, _status(sim, r), true, 24, r.shirt))
 		if r.progress >= 0:
-			c.add_child(_bar(r.progress))
+			var pbar := _bar(r.progress)
+			pbar.set_meta("progress_of", r.id)  # filled in place each frame, so the panel isn't rebuilt (#336)
+			c.add_child(pbar)
 		if r.away:  # on the walk to or from the meadow (issue #137)
 			c.add_child(_label("Off the map with the party. Residents on the way don’t work or get hungry.", false, Palette.CHALK_DIM, Palette.BODY, true))
 			c.add_child(_bar(1.0 - sim.back_in(r) / sim.trip_time(r.trip), Palette.GREEN))
