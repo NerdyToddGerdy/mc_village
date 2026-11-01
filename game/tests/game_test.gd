@@ -185,6 +185,31 @@ func _test_headers(game: Game) -> void:
 	long.free()
 
 
+## Toasts are kept in a log that opens from a button, so a missed one can be read (issue #297).
+func _test_message_log(game: Game) -> void:
+	var hud: Hud = game._hud
+	var base: int = hud._log.size()
+	hud._log_unread = 0
+	hud.add_toast({"text": "A traveler arrived at the first house.", "res_id": 0, "site_id": 0})
+	hud.add_toast({"text": "The expedition board is up.", "res_id": 0, "site_id": 1})
+	hud.refresh(game.sim)
+	check(hud._log.size() == base + 2 and hud._log_btn.text == "Log  (2 new)", "two toasts are kept, and the button counts them (%s)" % hud._log_btn.text)
+	hud._toggle_log()
+	await game.get_tree().process_frame
+	var all := _walk(hud._log_list).filter(func(n): return not n.is_queued_for_deletion())
+	var texts: Array = all.filter(func(n): return n is Label and ("arrived at the first house" in n.text or "board is up" in n.text)).map(func(n): return n.text)
+	check(hud._log_panel.visible and texts.size() == 2 and "board is up" in texts[0], "opening it lists them, newest first (%s)" % [texts])
+	check(hud._log_btn.text == "Log" and hud._log_unread == 0, "and clears the count")
+	check(hud.get_viewport().get_visible_rect().encloses(hud._log_panel.get_global_rect()), "the list lies inside the window")
+	check(all.any(func(n): return n is Button and n.text == "Show"), "a message about a place has a button to it")
+	for i in 80:
+		hud.add_toast({"text": "Message %d" % i, "res_id": 0, "site_id": 0})
+	check(hud._log.size() == Hud.LOG_MAX and hud._log.back().text == "Message 79", "it keeps the last %d" % Hud.LOG_MAX)
+	hud._toggle_log()
+	check(not hud._log_panel.visible, "the button closes it again")
+	await game.get_tree().process_frame
+
+
 ## The stuck list sets the choices waiting for the player apart from what's wrong (issue #296).
 func _test_needs_you(game: Game) -> void:
 	var sim := game.sim
@@ -298,6 +323,12 @@ func _test_skip_ahead(game: Game) -> void:
 	var kept: Array = sim.stuck.duplicate(true)
 	sim.stuck.append({"who": "Z", "why": "needs a thing", "map": "village", "cell": Vector2.ZERO, "height": 1.0, "focus_kind": "", "focus_id": 0, "hidden": false, "waiting": false, "decision": "", "key": "z|new", "since": 0})
 	check(game._skip_stop_reason() == "something got stuck", "a new problem stops it")
+	sim.stuck = kept
+	var dec := {"who": "Cart", "why": "needs your say", "map": "village", "cell": Vector2.ZERO, "height": 1.0, "focus_kind": "", "focus_id": 0, "hidden": false, "waiting": true, "decision": "freight", "key": "d|cart", "since": 0}
+	sim.stuck.append(dec)
+	check(game._skip_stop_reason() == "something needs your say", "a new decision stops it")
+	game._skip_decisions = game._decision_keys()
+	check(game._skip_stop_reason() == "", "a decision already waiting when it started doesn't")
 	sim.stuck = kept
 	sim.expeditions.overworld["state"] = "staging"
 	check(game._skip_stop_reason() == "a party set out or came home", "a party setting out stops it")
@@ -1792,6 +1823,7 @@ func _initialize() -> void:
 	await _test_toasts(game)
 	_test_headers(game)
 	await _test_skip_ahead(game)
+	await _test_message_log(game)
 	await _test_needs_you(game)
 	await _test_autosave(game)
 	_test_glyphs()

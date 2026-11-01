@@ -53,6 +53,7 @@ var skipping := false  ## Running fast until something needs the player (issue #
 var _skip_from := 0
 var _skip_sig := ""
 var _skip_problems := {}
+var _skip_decisions := {}
 var _autosave_tick := 0  ## The sim tick of the last autosave, or of the load.
 var _autosave_sig := ""
 var save_dir := "user://saves"  ## Tests point this elsewhere so they never touch real saves.
@@ -161,7 +162,7 @@ func _place_camera() -> void:
 
 func _process(delta: float) -> void:
 	_pan_with_keys(delta)
-	_acc += minf(delta, 0.1) * speed * (Tuning.SKIP_SPEED if skipping else 1.0)
+	_acc += minf(delta, 0.1) * (Tuning.SKIP_SPEED if skipping else float(speed))
 	var n := 0
 	while _acc >= Tuning.DT and n < 30:
 		_world.remember_positions()
@@ -169,6 +170,8 @@ func _process(delta: float) -> void:
 		_acc -= Tuning.DT
 		n += 1
 		if not sim.pending.is_empty():
+			if skipping:
+				_end_skip("a choice is waiting")
 			break
 		if skipping:
 			var why := _skip_stop_reason()
@@ -1025,6 +1028,7 @@ func set_skip(on: bool) -> void:
 	_skip_from = sim.tick
 	_skip_sig = _party_sig()
 	_skip_problems = _problem_keys()
+	_skip_decisions = _decision_keys()
 
 
 ## The problems on the list, not the waiting orders and not the choices: what a skip must not sleep through.
@@ -1032,6 +1036,15 @@ func _problem_keys() -> Dictionary:
 	var out := {}
 	for s in sim.stuck:
 		if not s.hidden and not s.waiting:
+			out[s.key] = true
+	return out
+
+
+## The decisions waiting on the player (a freight cart's say). One already waiting when a skip starts doesn't stop it.
+func _decision_keys() -> Dictionary:
+	var out := {}
+	for s in sim.stuck:
+		if s.get("decision", "") != "":
 			out[s.key] = true
 	return out
 
@@ -1047,8 +1060,9 @@ func _skip_stop_reason() -> String:
 	for k in _problem_keys():
 		if not _skip_problems.has(k):
 			return "something got stuck"
-	if sim.stuck.any(func(s): return s.get("decision", "") != ""):
-		return "something needs your say"
+	for k in _decision_keys():
+		if not _skip_decisions.has(k):
+			return "something needs your say"
 	if sim.tick - _skip_from >= int(Tuning.SKIP_MAX_SECS * Tuning.TPS):
 		return "ten minutes passed"
 	return ""

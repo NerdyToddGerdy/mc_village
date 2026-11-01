@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect width="128" height="128" rx="22" fill="#232C29"/>
+  <!-- an isometric block: grass on top, earth on the sides -->
+  <polygon points="64,20 108,44 64,68 20,44" fill="#6F8F4E"/>
+  <polygon points="20,44 64,68 64,112 20,88" fill="#7B5E42"/>
+  <polygon points="108,44 64,68 64,112 108,88" fill="#5E4733"/>
+  <!-- a little house on the grass, drawn in chalk -->
+  <polygon points="64,34 82,44 64,54 46,44" fill="#C49A62"/>
+  <polygon points="46,44 64,54 64,64 46,54" fill="#8E5E3C"/>
+  <polygon points="82,44 64,54 64,64 82,54" fill="#6B4630"/>
+  <polyline points="64,20 108,44 64,68 20,44 64,20" fill="none" stroke="#ECEAE2" stroke-width="3" stroke-linejoin="round"/>
+  <polyline points="20,44 20,88 64,112 108,88 108,44" fill="none" stroke="#ECEAE2" stroke-width="3" stroke-linejoin="round"/>
+  <line x1="64" y1="68" x2="64" y2="112" stroke="#ECEAE2" stroke-width="3"/>
+</svg>
