@@ -360,6 +360,46 @@ func _test_autosave(game: Game) -> void:
 	game.speed = 1
 
 
+## A corner map of the map in view; clicking it moves the camera (issue #298).
+func _test_minimap(game: Game) -> void:
+	var hud: Hud = game._hud
+	var mm: MiniMap = hud._minimap
+	game._menu.visible = false
+	check(not mm.visible, "the minimap starts hidden")
+	check(game.keys.action_for(_key_event(KEY_I)) == "minimap", "I is its key")
+	game._key(_key_event(KEY_I))
+	hud.refresh(game.sim)
+	await game.get_tree().process_frame
+	await game.get_tree().process_frame
+	check(mm.visible and hud.minimap_on, "pressing it shows the map")
+	check(hud.get_viewport().get_visible_rect().encloses(mm.get_global_rect()), "inside the window (%s)" % [mm.get_global_rect()])
+	var mp: SimMap = game.sim.get_map(game.view_map)
+	var before: Vector3 = game._target
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = true
+	ev.position = Vector2(MiniMap.SIZE * 0.25, MiniMap.SIZE * 0.75)
+	mm._gui_input(ev)
+	ev.pressed = false
+	mm._gui_input(ev)
+	var k := MiniMap.SIZE / float(maxi(mp.w, mp.h))
+	check(absf(game._target.x - MiniMap.SIZE * 0.25 / k) < 0.01 and absf(game._target.z - MiniMap.SIZE * 0.75 / k) < 0.01 and game._target != before, "clicking it centres the camera on that cell (%s)" % [game._target])
+	mm.queue_redraw()
+	await game.get_tree().process_frame
+	check(true, "it draws without error")
+	game._key(_key_event(KEY_I))
+	hud.refresh(game.sim)
+	check(not mm.visible, "and the key hides it again")
+
+
+func _key_event(code: Key) -> InputEventKey:
+	var e := InputEventKey.new()
+	e.keycode = code
+	e.physical_keycode = code
+	e.pressed = true
+	return e
+
+
 ## Skipping ahead runs fast until something needs the player (issue #299).
 func _test_skip_ahead(game: Game) -> void:
 	var sim := game.sim
@@ -1888,6 +1928,9 @@ func _initialize() -> void:
 
 	await _test_skip_ahead(game)
 	await _test_message_log(game)
+	await _test_minimap(game)
+
+
 	_test_fade_for_blueprints(game)
 
 

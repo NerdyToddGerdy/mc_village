@@ -34,6 +34,10 @@ var _job_anchor := Rect2()          ## The button it opened from, in global coor
 var _loc_drop: PanelContainer       ## The expedition board's location dropdown (issue #181), under its button.
 var _loc_list := VBoxContainer.new()
 var _loc_open := false
+var _minimap: MiniMap                ## The corner map (issue #298).
+var minimap_on := false
+
+
 ## The message log (issue #297): the toasts so far, newest last, in a list that opens under its button.
 var _log: Array = []              ## {text, tick, res_id, site_id}
 var _log_unread := 0
@@ -281,6 +285,11 @@ func _ready() -> void:
 	_root.add_child(_book_panel)
 	_root.add_child(_job_drop)
 	_root.add_child(_loc_drop)
+	_minimap = MiniMap.new()
+	_minimap.game = game
+	_root.add_child(_minimap)
+
+
 	_log_list.add_theme_constant_override("separation", 4)
 	var log_scroll := ScrollContainer.new()
 	log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -929,6 +938,9 @@ func refresh(sim: Sim) -> void:
 	_refresh_selection(sim)
 	_refresh_job_drop(sim)
 	_refresh_loc_drop(sim)
+	_refresh_minimap()
+
+
 	_refresh_log()
 	_refresh_toolbar(sim)
 	_refresh_board(sim)
@@ -1636,6 +1648,22 @@ func add_toast(ev: Dictionary) -> void:
 	_toast_list.append({"node": p, "until": Time.get_ticks_msec() + 7000})
 	if _toast_list.size() > 3:
 		_toast_list.pop_front().node.queue_free()
+
+
+# ---------------------------------------------------------------- the minimap (issue #298)
+
+func toggle_minimap() -> void:
+	minimap_on = not minimap_on
+	_refresh_minimap()
+
+
+## Shown in the bottom right corner above the orders toolbar, over the map, while it's on.
+func _refresh_minimap() -> void:
+	_minimap.visible = minimap_on and not game._menu.visible
+	if not _minimap.visible:
+		return
+	var view := get_viewport().get_visible_rect().size
+	_minimap.position = Vector2(view.x - MiniMap.SIZE - 16.0, view.y - MiniMap.SIZE - 82.0)
 
 
 # ---------------------------------------------------------------- the message log (issue #297)

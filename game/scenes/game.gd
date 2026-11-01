@@ -112,6 +112,7 @@ func _ready() -> void:
 	selection = {"kind": "res", "ids": [sim.residents[0].id]}
 	if "--screenshot" in OS.get_cmdline_user_args():
 		_menu.visible = false
+		_hud.minimap_on = "--minimap" in OS.get_cmdline_user_args()
 		_screenshot_scene.call_deferred()
 	elif "--screenshot-menu" in OS.get_cmdline_user_args():
 		_screenshot_menu.call_deferred()
@@ -817,6 +818,7 @@ func _key(e: InputEventKey) -> void:
 		"portal_station": start_placing("portal_station")
 		"cache_sensor", "condition", "freight_loader", "dispatcher": start_placing(keys.action_for(e))
 		"redstone_overlay": toggle_redstone_overlay()
+		"minimap": _hud.toggle_minimap()
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
 		"toolsmith_bench", "composter", "lodge", "builder_table": start_placing(keys.action_for(e))
