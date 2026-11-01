@@ -293,14 +293,21 @@ func job_button(r: Dictionary, on_board := true) -> Button:
 
 ## Opens a resident's job dropdown and chooses a job from it (issue #134): one of Defs.JOBS, or "none".
 func choose_job(r: Dictionary, role: String, on_board := true) -> bool:
-	var b: Button = await job_button(r, on_board)
-	if b == null:
-		printerr("     (no job button for %s)" % r.name)
-		return false
-	await click(b.get_global_rect().get_center())
-	game._hud.refresh(game.sim)
-	await frames(2)
-	if not await click_button("Job choice: " + ("No job" if role == "none" else Defs.JOB_NAMES[role] + " · ")):
+	var label: String = "Job choice: " + ("No job" if role == "none" else Defs.JOB_NAMES[role] + " · ")
+	# The Jobs page lays itself out over a few frames once the book opens, so a click can land on a
+	# button that has since moved: look again and click once more before giving up.
+	for _attempt in 2:
+		var b: Button = await job_button(r, on_board)
+		if b == null:
+			printerr("     (no job button for %s)" % r.name)
+			return false
+		var rect := b.get_global_rect()
+		await click(rect.get_center())
+		game._hud.refresh(game.sim)
+		await frames(2)
+		if find_button(label) != null:
+			break
+	if not await click_button(label):
 		return false
 	game._hud.refresh(game.sim)
 	await frames(2)
