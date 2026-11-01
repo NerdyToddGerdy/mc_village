@@ -30,9 +30,9 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- **Top left:** what's in the village, in groups: **Building**, **Food**, **Tools and armor**, **Animal goods** and **Ores**. A group shows up once one of its items has. **Food** counts meals on hand and raw meat still to cook, and turns yellow, and says "low", when there are fewer meals than residents. A worn tool says "low" too, and a powered redstone device has a raised white stud as well as its brighter red, so none of these rely on colour alone. Hover over a group, or click it to keep it open, for a list of each item with how much is lying loose; **Tools and armor** lists everyone's tools, armor and the spares. **Pin** an item there (up to 4) to keep its count in the bar on its own; pins are saved with your key bindings. **Jobs** opens the village jobs board.
+- **The top bar** runs across the whole screen and counts as its upper edge: every other panel sits below it. On the left, what's in the village, in groups: **Building**, **Food**, **Tools and armor**, **Animal goods** and **Ores**. A group shows up once one of its items has. **Food** counts meals on hand and raw meat still to cook, and turns yellow, and says "low", when there are fewer meals than residents. A worn tool says "low" too, and a powered redstone device has a raised white stud as well as its brighter red, so none of these rely on colour alone. Hover over a group, or click it to keep it open, for a list of each item with how much is lying loose; **Tools and armor** lists everyone's tools, armor and the spares. **Pin** an item there (up to 4) to keep its count in the bar on its own; pins are saved with your key bindings. **Book** opens the village book (see below).
 - **Below that:** the **goals panel**, which walks you through the founding one step at a time. Once the founding is done, it folds to a small "Founding ✓".
-- **Top right:** pause and speed, then **Skip** and the **gear** (the menu) in the same row, and the **Log** button, and the **stuck list**, which shows anything that can't go on and why. **Log** keeps the last 60 messages that popped up (arrivals, finds, a party's return), newest first with the game time, and says how many are new; a message about a person or place has a button to go there. Esc, a click elsewhere or the button closes it.
+- **Top right of the bar:** pause and speed, then **Skip**, the **gear** (the menu) and the **Log** button, and the **stuck list**, which shows anything that can't go on and why. **Log** keeps the last 60 messages that popped up (arrivals, finds, a party's return), newest first with the game time, and says how many are new; a message about a person or place has a button to go there. Esc, a click elsewhere or the button closes it.
 - **Bottom left:** whatever you've selected: a resident, a building, a tree, a farm plot.
 - **Bottom right:** the **orders toolbar**, and the Craft panel when it's open.
 
@@ -141,7 +141,7 @@ Click a wedge, press 1 to 4, or hold the right button, drag to a wedge and let g
 
 A workstation's panel names who works from it ("Tomas's composter"). Giving someone a new job frees their old workstation.
 
-**The village jobs board** (press **J**, or click **Jobs** in the top bar) lists every resident.
+**The village book** (click **Book** in the top bar) has tabs: **Goals** (the founding and village steps, with why each matters), **Jobs**, **Residents** (who needs a look first, who is idle, what each is doing; click a name to centre on them) and a page for every building. **J** opens it on the Jobs tab. **The jobs page** lists every resident.
 - Click a resident's job (for example "Farmer, level 3 ▾") for the **job dropdown**. It lists each job with their level in it, best first, how many residents already have it, and whether a workstation for it is free. Choose one to give them that job.
 - The board shows each resident's **level** in every job, with a thin bar of progress to the next. Their own job is lit.
 - A column's header counts the residents with that job, and reads "nobody" in yellow when no one has it. When Ada is away, work of a job nobody has waits, and the stuck list says "No one is a farmer".
@@ -403,7 +403,7 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | Right-click a tree, boulder or animal | Its orders, in a ring: click one, press 1–4, or drag to one and let go. Esc closes it |
 | Right-click the ground | Walk the selected residents there |
 | Shift + right-click | Queue an order after their current one, skipping the ring |
-| J | Village jobs board |
+| J | Village book, on its Jobs page |
 | F / N | Next resident, next stuck item |
 | Tab | Switch between the village, the old caves (and its levels), the road to it and the meadow, once they're known |
 | Drag, W A S D, arrow keys | Pan |

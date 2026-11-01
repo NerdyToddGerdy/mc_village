@@ -475,8 +475,41 @@ func _test_toasts(game: Game) -> void:
 	game.jobs_board_open = true
 	for i in 4:
 		await process_frame
-	check(hud._menu_panel.z_index > hud._board_panel.z_index, "the Menu button draws above the jobs board (#316)")
+	check(hud._tally_panel.z_index > hud._book_panel.z_index, "the top bar, with the gear, draws above the book (#316)")
 	game.jobs_board_open = false
+
+
+func _test_book(game: Game) -> void:
+	var hud: Hud = game._hud
+	var sim := game.sim
+	var bar := hud._tally_panel.get_global_rect()
+	check(bar.position.y == 0.0 and bar.size.x >= get_root().get_visible_rect().size.x - 1.0, "the top bar runs across the whole screen")
+	check(hud._menu_btn.get_parent().get_parent().get_parent() == hud._topbar_row and hud._log_btn.get_parent() == hud._topbar_row, "the speeds, Skip, the gear and Log are in the bar")
+	for panel in [hud._goals_panel, hud._stuck_panel, hud._sel_panel]:
+		check(not panel.visible or panel.get_global_rect().position.y >= bar.end.y, "%s starts below the top bar" % panel.name)
+	game.open_book("residents")
+	hud.refresh(sim)
+	await _frames()
+	hud.refresh(sim)
+	await _frames()
+	check(game.book_open and hud._book_panel.visible and not game.jobs_board_open, "the book opens on its Residents page (open %s, page %s, visible %s)" % [game.book_open, game.book_page, hud._book_panel.visible])
+	var tabs: Array = _walk(hud._book).filter(func(n): return n is Button and str(n.get_meta("label", "")).begins_with("Book: ")).map(func(n): return n.get_meta("label"))
+	check(tabs.slice(0, 3) == ["Book: Goals", "Book: Jobs", "Book: Residents"], "its tabs begin Goals, Jobs, Residents (%s)" % [tabs.slice(0, 3)])
+	var buttons: Array = _walk(hud._roster).filter(func(n): return n is Button).map(func(n): return n.text)
+	check(buttons.has(sim.residents[0].name) and hud._roster.is_inside_tree(), "the Residents page lists everyone (%s)" % [buttons])
+	game.open_book("jobs")
+	hud.refresh(sim)
+	await _frames()
+	hud.refresh(sim)
+	await _frames()
+	check(game.jobs_board_open and hud._board.is_inside_tree() and not hud._roster.is_inside_tree(), "the Jobs page shows the jobs board in the book")
+	game.open_book("goals")
+	hud.refresh(sim)
+	await _frames()
+	hud.refresh(sim)
+	await _frames()
+	check(not hud._board.is_inside_tree() and not hud._roster.is_inside_tree(), "the Goals page has neither borrowed page")
+	game.open_book("goals", false)
 
 
 func _test_fading(game: Game) -> void:
@@ -882,8 +915,8 @@ func _test_menu_button(game: Game) -> void:
 	check(row.find(hud._skip_btn) == row.size() - 2 and row.find(b) == row.size() - 1 and row.find(hud._speed_btns[3]) == row.find(hud._skip_btn) - 1, "Skip sits between the speeds and the gear")
 	var r := b.get_global_rect()
 	check(get_root().get_visible_rect().encloses(r), "it's on screen")
-	for other in [hud._stuck_panel, hud._tally_panel]:
-		check(not other.visible or not other.get_global_rect().intersects(hud._menu_panel.get_global_rect()), "it covers neither the stuck list nor the tally bar")
+	for other in [hud._stuck_panel]:
+		check(not other.visible or not other.get_global_rect().intersects(hud._menu_panel.get_global_rect()), "it covers not the stuck list")
 	for m in hud._maps.get_children():  # the map switcher runs along the top (the slice 3.5 bot's Meadow button)
 		check(not m is Button or not m.is_visible_in_tree() or not m.get_global_rect().intersects(hud._menu_panel.get_global_rect()), "nor the %s button of the map switcher" % m.name)
 	b.pressed.emit()
@@ -1335,7 +1368,7 @@ func _test_jobs_grid(game: Game) -> void:
 	open_btn[0].pressed.emit()
 	hud.refresh(sim)
 	await process_frame
-	check(game.jobs_board_open and hud._board_panel.visible and hud._jobs_btn.button_pressed, "it opens the board, and the Jobs button shows it")
+	check(game.jobs_board_open and hud._book_panel.visible and game.book_page == "jobs" and hud._jobs_btn.button_pressed, "it opens the book on its Jobs page, and the Book button shows it")
 	check(_walk(hud._board).filter(func(n): return n.has_meta("cell") and not n.is_queued_for_deletion()).size() == Defs.JOBS.size() * sim.residents.size(), "a level cell per resident and job")
 	var nobody: Array = _walk(hud._board).filter(func(n): return n is Label and n.text == "nobody" and not n.is_queued_for_deletion())
 	check(nobody.filter(func(l): return l.get_theme_color("font_color") == Palette.YELLOW).size() == Defs.JOBS.size() - 2, "the jobs nobody has say so in yellow, Haul and Farm aside (%d)" % nobody.size())
@@ -1648,9 +1681,13 @@ func _test_resident_marks(game: Game) -> void:
 	game._mouse = Vector2(-100, -100)
 	await _frames()
 	check(not tag.visible, "no name tag on an unselected resident away from the mouse")
-	game._mouse = game._cam.unproject_position(Vector3(ada.pos.x + 0.5, 0.6, ada.pos.y + 0.5))
+	var at := game._cam.unproject_position(Vector3(ada.pos.x + 0.5, 0.6, ada.pos.y + 0.5))
+	var move := InputEventMouseMotion.new()  # a real move: the viewport asks what's under the pointer, and the pointer starts under the top bar
+	move.position = at
+	move.global_position = at
+	get_root().push_input(move, true)
 	await _frames()
-	check(tag.visible and tag.text == "Ada" and tag.no_depth_test, "hovering a resident shows their name over everything")
+	check(tag.visible and tag.text == "Ada" and tag.no_depth_test, "hovering a resident shows their name over everything (mouse %s, vis %s)" % [game._mouse, tag.visible])
 	game._mouse = Vector2(-100, -100)
 	game.selection = {"kind": "res", "ids": [ada.id]}
 	hud.refresh(sim)
@@ -1949,6 +1986,7 @@ func _initialize() -> void:
 	await _test_land_claims(game)
 	await _test_equip(game)
 	await _test_toasts(game)
+	await _test_book(game)
 	_test_headers(game)
 
 

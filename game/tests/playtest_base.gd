@@ -111,11 +111,19 @@ func screen(cell: Vector2i, h := 0.0) -> Vector2:
 
 ## The visible button whose text contains `text`. With `near`, the one in the same row as a label
 ## containing `near` (for the bench's per-recipe Queue buttons).
-## Goes to a place by the map switcher's dropdown: opens the list, then picks the place from it.
+## Goes to a place by the map switcher's dropdown: opens the list, then picks the place from it (an exact
+## match in the list itself, since other panels, like the board's Location button, carry place names too).
 func go_to(place: String) -> bool:
 	if not await click_button("another place"):
 		return false
-	return await click_button(place)
+	game._hud.refresh(game.sim)
+	await frames(2)
+	for n in game._hud._maps_list.get_children():
+		if n is Button and n.is_visible_in_tree() and n.get_meta("label", "") == place and not n.is_queued_for_deletion():
+			await click(n.get_global_rect().get_center())
+			return true
+	printerr("     (no place \"%s\" in the list)" % place)
+	return false
 
 
 func find_button(text: String, near := "", last := false) -> Button:
