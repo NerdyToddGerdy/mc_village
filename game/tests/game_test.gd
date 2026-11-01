@@ -283,7 +283,7 @@ func _test_toasts(game: Game) -> void:
 	var hud: Hud = game._hud
 	hud.add_toast({"text": "Tomas is now level 2 at Mine.", "res_id": 0, "site_id": 0})
 	hud.add_toast({"text": "A traveler, Mira, has arrived. She claims the new house and needs tools from the bench before she can mine anything.", "res_id": game.sim.residents[0].id, "site_id": 0})
-	for i in 3:
+	for i in 8:  # let the panels lay out before reading their rects (#309)
 		await process_frame
 	var clear := true
 	var inside := true
@@ -300,6 +300,19 @@ func _test_toasts(game: Game) -> void:
 				overlaps.append("%s %s over %s %s" % [p.name, r, (other as Control).name, (other as Control).get_global_rect()])
 	check(clear, "toasts don't cover the tally bar, the goals panel or the stuck list (%s; toasts at %s %s)" % [overlaps, hud._toasts.position, hud._toasts.size])
 	check(inside, "toasts fit on screen, wrapping when long")
+	game.open_menu("main")
+	await process_frame
+	await process_frame
+	check(not hud._toasts.visible, "no toast shows while the menu is open (#314)")
+	game.close_menu()
+	await process_frame
+	check(hud._toasts.visible, "toasts come back when the menu closes")
+	check(GameMenu.SAVES_NOTE != GameMenu.SAVES_NOTE_WEB and GameMenu.SAVES_NOTE_WEB.contains("browser"), "the saves note differs on the web (#315)")
+	game.jobs_board_open = true
+	for i in 4:
+		await process_frame
+	check(hud._menu_panel.z_index > hud._board_panel.z_index, "the Menu button draws above the jobs board (#316)")
+	game.jobs_board_open = false
 
 
 func _test_fading(game: Game) -> void:
