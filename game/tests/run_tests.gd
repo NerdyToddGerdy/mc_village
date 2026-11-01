@@ -105,6 +105,9 @@ func _init() -> void:
 		"test_cows_and_pigs",
 		"test_adventures_list",
 		"test_repeat_the_last_trip",
+
+
+		"test_the_adventures_registry",
 		"test_meadow_expedition",
 		"test_the_road_to_the_meadow",
 		"test_old_meadow_trips_come_home",
@@ -2921,6 +2924,25 @@ func test_repeat_the_last_trip() -> void:
 	check(f61.last_plans.has("meadow") and f61.last_plans.meadow.meals == 5, "the v61 fixture keeps its last trip")
 	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v60.save").data.state)
 	check(old.last_plans.is_empty(), "an older save has none")
+
+
+## Issue #242: what each adventure is lives in one table (`Adventures`), and the places that used to ask "is it the
+## meadow?" read it, with no change in what the old mine, the meadow and the Nether landing do.
+func test_the_adventures_registry() -> void:
+	var need := ["kind", "sign", "road", "cargo", "others", "target", "picks", "pens", "got", "left"]
+	for id in Adventures.IDS:
+		var d: Dictionary = Adventures.def(id)
+		check(need.all(func(k): return d.has(k)), "%s has every field" % id)
+		check(Tuning.CARGO_DEFAULTS.has(d.cargo), "%s's Bring-back defaults exist" % id)
+	check(Sim.ADVENTURES == Adventures.IDS and Sim.ADVENTURES == [OldMine.ID, Meadow.ID, NetherLanding.ID], "the board's order is the registry's")
+	var sim := Sim.new_game()
+	check(sim.sign_for(Meadow.ID) == sim.meadow_sign() and sim.sign_for(OldMine.ID) == sim.route_sign(), "the meadow's party leaves by the west signpost, the mine's by the east")
+	check(Sim.road_map_for(Meadow.ID) == MeadowRoad.ID and Sim.road_map_for(OldMine.ID) == Road.ID and Sim.road_map_for(MineLevels.level_id(2)) == Road.ID, "the road each walks, a deeper level by the mine's")
+	var mp := sim.new_plan(Meadow.ID)
+	check(mp.target.item == "wool" and mp.target.n == 6 and mp.picks == 0 and mp.has("sticks"), "a meadow plan asks for wool and packs no pickaxes")
+	var op := sim.new_plan(OldMine.ID)
+	check(op.target.item == "coal" and op.target.n == 8 and op.picks == 1 and op.sticks == 0 and op.wheat == 0, "a mine plan asks for coal, with a spare pickaxe and no pens")
+	check(Adventures.def("a_place_nobody_listed") == Adventures.def(OldMine.ID), "an unlisted destination works as the old mine does")
 
 
 ## Issue #137: the meadow is an expedition site with its own map: herds of sheep, cows and pigs, a pond,
