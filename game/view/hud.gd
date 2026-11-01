@@ -1743,7 +1743,7 @@ func _refresh_selection(sim: Sim) -> void:
 		for id in sel.ids:
 			var r := sim.resident(id)
 			if not r.is_empty():
-				sig += "%s%s%s%s%s%d%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, r.progress >= 0, r.orders, int(r.hunger / 5)] + "%s%s%s%s%s%s%d%d" % [r.jobs, r.role, _job_for == r.id, r.kept, equip_kind, r.away, int(sim.back_in(r)), r.get("hurt", 0)] + "%s" % [r.get("armor", {})]
+				sig += "%s%s%s%s%s%s%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, r.progress >= 0, r.orders, int(r.hunger / 5)] + "%s%s%s%s%s%s%d%d" % [r.jobs, r.role, _job_for == r.id, r.kept, equip_kind, r.away, int(sim.back_in(r)), r.get("hurt", 0)] + "%s" % [r.get("armor", {})]
 		for kind in ["axe", "pick"]:  # Equip appears when there's a tool to choose
 			for st in sim.tool_items(kind, 0):
 				sig += "%s%s%s" % [st.type, st.dur, st.cell]
