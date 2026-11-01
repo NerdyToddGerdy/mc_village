@@ -271,6 +271,9 @@ func _test_message_log(game: Game) -> void:
 func _test_needs_you(game: Game) -> void:
 	var sim := game.sim
 	var hud: Hud = game._hud
+	game.set_speed(0)  # a tick would recompute the stuck list over the entries made here
+	game.planner_open = false  # the stuck list gives way to an open planner
+	game.open_book("goals", false)
 	var kept: Array = sim.stuck.duplicate(true)
 	var entry := func(who: String, why: String, waiting: bool, decision: String) -> Dictionary:
 		return {"who": who, "why": why, "map": "village", "cell": Vector2(5, 5), "height": 1.0, "focus_kind": "", "focus_id": 0, "hidden": false,
@@ -1593,6 +1596,8 @@ func _test_stuck_list(game: Game) -> void:
 	var hud: Hud = game._hud
 	var world: WorldView = game._world
 	game.set_speed(0)
+	game.planner_open = false  # the stuck list gives way to an open planner, which an earlier test may have left
+	game.jobs_board_open = false
 	var ada: Dictionary = sim.residents[0]
 	var bench := sim.place_site("bench", Sim.rcell(ada) + Vector2i(3, 0))
 	bench.stage = 1
