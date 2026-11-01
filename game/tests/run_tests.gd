@@ -128,6 +128,7 @@ func _init() -> void:
 		"test_mason_bench_becomes_a_mineshaft",
 		"test_work_areas_are_painted",
 		"test_work_areas_saved",
+		"test_a_finished_building_moves",
 		"test_worn_paths_wear_and_regrow",
 		"test_worn_paths_pathing_and_speed",
 		"test_worn_paths_saved",
@@ -4162,6 +4163,58 @@ func test_work_areas_are_painted() -> void:
 
 
 ## Issue #203: a work area is saved with its workstation, and older saves get the circle they worked.
+## A free spot for a finished site to move to, clear of trees and boulders: the first one the move check accepts.
+func move_spot(sim: Sim, s: Dictionary, from := Vector2i(8, 8)) -> Vector2i:
+	for d in range(0, 14):
+		for x in range(from.x - d, from.x + d + 1):
+			for y in range(from.y - d, from.y + d + 1):
+				var c := Vector2i(x, y)
+				var foot := Rect2i(c, s.size)
+				if c != s.origin and sim.move_check(s, c, s.rot) == "" and sim.obstacles_in(foot).trees.is_empty() and sim.obstacles_in(foot).boulders.is_empty() and sim.obstacles_in(foot).items.is_empty():
+					return c
+	return Vector2i(-1, -1)
+
+
+func test_a_finished_building_moves() -> void:
+	var sim := Sim.new_game()
+	var block := place_done(sim, "chopping_block")
+	block.store = {"plank": 2}
+	var bench := place_done(sim, "bench", Vector2i(24, 24))
+	sim.queue_add(bench, "planks")
+	var old_origin: Vector2i = block.origin
+	var spot := move_spot(sim, block)
+	check(spot != Vector2i(-1, -1) and sim.move_check(block, spot, 0) == "", "a finished, idle building can go to a free spot (%s)" % spot)
+	var area_cells: int = block.area.size()
+	check(sim.move_site(block, spot, 1) == "" and block.origin == spot and block.rot == 1, "moving it is at once")
+	var bspot := move_spot(sim, bench, Vector2i(24, 10))
+	check(sim.move_site(bench, bspot, 0) == "" and bench.queue == ["planks"] and block.store == {"plank": 2} and block.done, "its stored items and queue go with it")
+	check(block.plot == Sim.plot_rect("chopping_block", spot, 1), "its reserved plot is where it stands now")
+	check(block.area.has(block.origin) or block.area.size() > 0 and block.area.size() <= area_cells, "its work area moved with it (%d of %d cells)" % [block.area.size(), area_cells])
+	check(sim.site_at(old_origin) == null or not is_same(sim.site_at(old_origin), block), "the old spot is free")
+	check(sim.placement_check("chopping_block", old_origin, 0) == "", "a building can go where it stood")
+	# Refusals say why.
+	var other := place_done(sim, "bench")
+	check(sim.move_site(other, block.origin, 0) == "Overlaps another building", "it can't go on another building (%s)" % sim.move_site(other, block.origin, 0))
+	var blueprint := sim.place_site("house", Vector2i(4, 4))
+	check(sim.move_check(blueprint, Vector2i(5, 5), 0) == "Only a finished building can be moved", "a blueprint is cancelled, not moved")
+	block.crafter = 99
+	check(sim.move_check(block, spot + Vector2i(1, 0), 1) == "It's in use right now", "a building in use stays put")
+	block.crafter = 0
+	check(sim.move_site(block, Vector2i(-3, 0), 1) == "Too close to the edge", "it can't go off the edge")
+	# Houses move too, and keep their occupant.
+	var house := place_done(sim, "house", Vector2i(20, 20))
+	house.owner = 7
+	var hspot := move_spot(sim, house, Vector2i(12, 20))
+	check(hspot != Vector2i(-1, -1) and sim.move_site(house, hspot, 2) == "" and house.owner == 7 and house.origin == hspot, "a house moves, and keeps who lives in it")
+	# The portal and its neighbours are tied together.
+	var tied := ["portal", "portal_station", "dispatcher", "freight_loader"].all(func(t): return t in Sim.UNMOVABLE)
+	check(tied, "the portal and the buildings by it can't move")
+	# Saves are unchanged by it: a moved building round-trips.
+	var back := Sim.from_state(str_to_var(var_to_str(sim.save_state())))
+	var again: Dictionary = back.sites.filter(func(st): return st.id == block.id)[0]
+	check(again.origin == block.origin and again.rot == block.rot and again.store == block.store, "a moved building is saved where it now stands")
+
+
 func test_work_areas_saved() -> void:
 	var sim := Sim.new_game()
 	var block := place_done(sim, "chopping_block")

@@ -479,6 +479,46 @@ func _test_toasts(game: Game) -> void:
 	game.jobs_board_open = false
 
 
+## Issue #234: a finished building's panel has a Move button; it picks the building up, and a click puts it down at once.
+func _test_move_building(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	game.set_tool("")
+	game.view_map = "village"
+	var spot := Vector2i(-1, -1)
+	var bench: Dictionary = {}
+	for d in range(0, 14):
+		for c in [Vector2i(10 + d, 6), Vector2i(6, 10 + d)]:
+			if bench.is_empty() and sim.placement_check("bench", c) == "" and sim.obstacles_in(Rect2i(c, Vector2i(3, 3))).trees.is_empty() and sim.obstacles_in(Rect2i(c, Vector2i(3, 3))).boulders.is_empty():
+				bench = sim.place_site("bench", c)
+	bench.stage = Defs.TEMPLATES.bench.stages.size()
+	bench.done = true
+	sim._occ_dirty = true
+	for d in range(2, 20):
+		var c := Vector2i(28 - d, 28 - d)
+		if spot == Vector2i(-1, -1) and sim.move_check(bench, c, 0) == "" and sim.obstacles_in(Rect2i(c, bench.size)).trees.is_empty() and sim.obstacles_in(Rect2i(c, bench.size)).boulders.is_empty():
+			spot = c
+	game.selection = {"kind": "site", "id": bench.id}
+	hud.refresh(sim)
+	await _frames()
+	var mv: Array = _walk(hud._sel).filter(func(n): return n is Button and n.get_meta("label", "") == "Move building" and not n.is_queued_for_deletion())
+	check(mv.size() == 1 and not mv[0].disabled, "a finished building's panel has a Move button")
+	mv[0].pressed.emit()
+	check(game.tool == "build" and game.placing == "bench" and game.moving_id == bench.id, "it picks the building up")
+	var hover: Vector2i = spot + bench.size / 2
+	var at: Vector2 = game._cam.unproject_position(Vector3(hover.x + 0.5, 0, hover.y + 0.5))
+	_mouse(game, "move", at)
+	await _frames()
+	_mouse(game, "down", at)
+	_mouse(game, "up", at)
+	check(bench.origin == spot and game.moving_id == 0 and game.tool == "", "a click puts it down at once (%s, wanted %s)" % [bench.origin, spot])
+	check(game.selection.get("id", 0) == bench.id, "and it stays selected")
+	game.start_moving(bench)
+	game.set_tool("")
+	check(game.moving_id == 0 and game.placing == "", "putting the tool away drops the move")
+	game.selection = {}
+
+
 func _test_fading(game: Game) -> void:
 	var sim := game.sim
 	var world: WorldView = game._world
@@ -1936,6 +1976,7 @@ func _initialize() -> void:
 	await _test_land_claims(game)
 	await _test_equip(game)
 	await _test_toasts(game)
+	await _test_move_building(game)
 	_test_headers(game)
 
 
