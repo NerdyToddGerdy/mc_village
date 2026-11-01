@@ -4657,7 +4657,7 @@ func _drop_crop(c: Vector2i) -> void:
 ## Why a blueprint can't go here, or "" when it can. Trees, boulders, stockpile cells and farm plots
 ## don't block placement: the blueprint clears them (spec §8). Reserved plots do, and a job
 ## building's own plot needs room too (Slice 2 spec §8).
-func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
+func placement_check(tpl: String, origin: Vector2i, rot := 0, ignore := 0) -> String:  # `ignore`: the site being moved, which isn't in its own way
 	if m.kind != "village":
 		return "Buildings go in the village"
 	if tpl == "portal":
@@ -4687,10 +4687,10 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 		if not ps.plot.encloses(foot):
 			return "The loader goes on the station's plot"
 	for s in m.sites:
-		if Rect2i(s.origin, s.size).intersects(foot):
+		if s.id != ignore and Rect2i(s.origin, s.size).intersects(foot):
 			return "Overlaps another building"
 	for s in m.sites:
-		if s.get("plot") != null and s.plot.intersects(foot) and not (tpl == "freight_loader" and s.tpl == "portal_station"):
+		if s.id != ignore and s.get("plot") != null and s.plot.intersects(foot) and not (tpl == "freight_loader" and s.tpl == "portal_station"):
 			return "Overlaps a reserved plot"
 	if tpl == "portal_station":  # beside the portal (issue #168)
 		var pf := village_portal()
@@ -4707,8 +4707,66 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 		if not Rect2i(0, 0, w, h).encloses(plot):
 			return no_room
 		for s in m.sites:
-			if Rect2i(s.origin, s.size).intersects(plot) or (s.get("plot") != null and s.plot.intersects(plot)):
+			if s.id != ignore and (Rect2i(s.origin, s.size).intersects(plot) or (s.get("plot") != null and s.plot.intersects(plot))):
 				return no_room
+	return ""
+
+
+## Buildings that can't move: the portal and the three that stand by it (issues #168, #172, #173) are placed
+## relative to each other, so one can't be lifted without the rest.
+const UNMOVABLE := ["portal", "portal_station", "dispatcher", "freight_loader"]
+
+
+## Why a finished building can't be moved to `origin` turned `rot`, or "" when it can (issue #234). The new spot
+## has to pass the same placement checks as a new building; the building itself isn't in its own way.
+func move_check(s: Dictionary, origin: Vector2i, rot := 0) -> String:
+	if s.map != map_id:
+		return on_map(s.map, move_check.bind(s, origin, rot))
+	if m.kind != "village":
+		return "Buildings are moved in the village"
+	if not s.done:
+		return "Only a finished building can be moved"
+	if s.tpl in UNMOVABLE:
+		return "The %s stands by the portal and can't be moved" % Defs.TEMPLATES[s.tpl].name.to_lower()
+	if s.crafter != 0 or s.builder != 0 or not s.incoming.is_empty() or residents.any(func(r): return r.job != null and is_same(r.job.target, s)):
+		return "It's in use right now"
+	if expedition.get("board", 0) == s.id and expedition.get("state", "") != "":
+		return "The expedition is using the board"
+	return placement_check(s.tpl, origin, rot, s.id)
+
+
+## Moves a finished building at once (issue #234): it keeps its queue, its stored items, its worker or its
+## occupant, its work area (shifted with it) and its standing orders. Whatever the new footprint covers is
+## cleared the way a new building's would be. Returns why it can't be moved, or "".
+func move_site(s: Dictionary, origin: Vector2i, rot := 0) -> String:
+	if s.map != map_id:
+		return on_map(s.map, move_site.bind(s, origin, rot))
+	var why := move_check(s, origin, rot)
+	if why != "":
+		return why
+	var delta: Vector2i = origin - s.origin
+	if s.has("area"):
+		var shifted := {}
+		for c in s.area:
+			var n: Vector2i = c + delta
+			if m.in_bounds(n) and _area_owner(s.tpl, n, s).is_empty():
+				shifted[n] = true
+		s.area = shifted
+	s.origin = origin
+	s.rot = rot
+	s.plot = plot_rect(s.tpl, origin, rot)
+	for c in site_cells(s):
+		m.zone.erase(c)
+		_drop_crop(c)
+		_clear_wear(c)
+	if s.plot != null:
+		for x in range(s.plot.position.x, s.plot.end.x):
+			for y in range(s.plot.position.y, s.plot.end.y):
+				m.zone.erase(Vector2i(x, y))
+				_drop_crop(Vector2i(x, y))
+	_occ_dirty = true
+	_mark_obstacles(s)
+	rev += 1
 	return ""
 
 
