@@ -1102,7 +1102,7 @@ func _on_site_done(s: Dictionary) -> void:
 		road().known = true
 		maps[Meadow.ID].known = true
 		maps[MeadowRoad.ID].known = true
-		_toast("The expedition board is up, with word of an old mine to the east and a meadow to the west. Select it to plan an adventure.", 0, s.id)
+		_toast("The expedition board is up, with word of some old caves to the east and a meadow to the west. Select it to plan an adventure.", 0, s.id)
 		return
 	if s.tpl != "house":  # only a house is a home: anything else without its own case above does nothing more
 		return
@@ -4811,7 +4811,7 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0) -> String:
 	if foot.has_point(meadow_sign()):
 		return "The meadow signpost is in the way"
 	if foot.has_point(route_sign()):
-		return "The signpost to the old mine is in the way"
+		return "The signpost to the old caves is in the way"
 	if tpl == "dispatcher":  # beside the village station (issue #173)
 		var pst := portal_station()
 		if not pst.get("done", false):
@@ -5803,7 +5803,7 @@ func _road_job() -> Job:
 		h.step({"op": "depart", "to": "village"})
 		return h
 	if m.level > 1:  # up to the level above, then on up
-		h.label = "Heading up to level %d" % (m.level - 1) if m.level > 2 else "Heading up to the old mine"
+		h.label = "Heading up to level %d" % (m.level - 1) if m.level > 2 else "Heading up to the old caves"
 		h.step({"op": "ascend"})
 		return h
 	h.step({"op": "depart", "to": "village"})
@@ -8981,7 +8981,7 @@ func _check_find_diamond(c: Vector2i) -> void:
 	rev += 1
 	_toast("The party found diamonds on level %d." % m.level)
 	if expedition.get("state", "") == "out" and expedition.dest == map_id:
-		_ask("discovery", "The party found diamonds on level %d of the old mine." % m.level, [
+		_ask("discovery", "The party found diamonds on level %d of the old caves." % m.level, [
 			{"id": "keep", "label": "Keep mining", "cost": "Carry on for %s. Diamonds can only be mined with an iron pickaxe." % objective_text()},
 			{"id": "return", "label": "Mark it and return later", "cost": "The party heads home now, with what it has packed."},
 		])
@@ -9073,7 +9073,7 @@ func open_door(id: String) -> void:
 func go_down() -> String:
 	var ex := expedition
 	if ex.get("state", "") != "out" or ex.get("leg", "out") != "out" or level_of(ex.dest) == 0:
-		return "The party isn't working the old mine"
+		return "The party isn't working the old caves"
 	var mp: SimMap = maps[ex.dest]
 	if mp.door_state == "closed":
 		return "Nobody has reached the door yet"
@@ -9197,7 +9197,7 @@ func site_report(id: String) -> Dictionary:
 		hazards.append("An underground stream: the way goes around it")
 	var told: String = OldMine.TOLD if mp.level <= 1 else "Behind the door at the far end of level %d. Nobody has been down." % (mp.level - 1)
 	if mp.level > 1 and mp.level - 1 == 1:
-		told = "Behind the door at the far end of the old mine. Nobody has been down."
+		told = "Behind the door at the far end of the old caves. Nobody has been down."
 	var levels: Array = []
 	for lid in mine_levels():  # every level known so far (issue #132)
 		var lm: SimMap = maps[lid]
@@ -9206,7 +9206,7 @@ func site_report(id: String) -> Dictionary:
 		levels.append({"id": lid, "level": lm.level, "pattern": MineLevels.FAMILY_NAMES.get(lm.pattern, ""), "ore": left if lm.visited else -1, "door": door, "visited": lm.visited})
 	var travel := route_walk_time() + level_walk(id) if route_surveyed() else -1.0
 	return {"name": mp.name, "told": told, "visited": mp.visited, "travel": travel, "level": mp.level, "pattern": MineLevels.FAMILY_NAMES.get(mp.pattern, ""),
-		"resources": res, "hazards": hazards, "access": MineLevels.ACCESS.get(mp.pattern, []).duplicate() if mp.visited else [], "finds": finds,
+		"biome": MineLevels.BIOMES[MineLevels.biome(mp.level)] if mp.level > 0 else "", "resources": res, "hazards": hazards, "access": (MineLevels.ACCESS.get(mp.pattern, []) + [MineLevels.BIOME_NOTES[MineLevels.biome(mp.level)]]) if mp.visited else [], "finds": finds,
 		"levels": levels if mp.level > 0 else [], "door": mp.door_state}
 
 
@@ -9423,6 +9423,8 @@ static func from_state(d: Dictionary) -> Sim:
 	ids.sort_custom(func(a, b): return [order.find(a) if a in order else 9, MineLevels.level_of(a)] < [order.find(b) if b in order else 9, MineLevels.level_of(b)])
 	for id in ids:
 		s.maps[id] = SimMap.from_save(d.maps[id])
+		if MineLevels.level_of(id) > 0:  # an older save names it "Old mine" (issue #238): the name is display only
+			s.maps[id].name = MineLevels.level_name(MineLevels.level_of(id))
 	s.use_map("village")
 	s.stats = d.stats.duplicate(true)
 	s.arrival_at = d.arrival_at

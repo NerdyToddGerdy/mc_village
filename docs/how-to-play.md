@@ -32,11 +32,11 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 
 - **Top left:** what's in the village, in groups: **Building**, **Food**, **Tools and armor**, **Animal goods** and **Ores**. A group shows up once one of its items has. **Food** counts meals on hand and raw meat still to cook, and turns yellow, and says "low", when there are fewer meals than residents. A worn tool says "low" too, and a powered redstone device has a raised white stud as well as its brighter red, so none of these rely on colour alone. Hover over a group, or click it to keep it open, for a list of each item with how much is lying loose; **Tools and armor** lists everyone's tools, armor and the spares. **Pin** an item there (up to 4) to keep its count in the bar on its own; pins are saved with your key bindings. **Jobs** opens the village jobs board.
 - **Below that:** the **goals panel**, which walks you through the founding one step at a time. Once the founding is done, it folds to a small "Founding ✓".
-- **Top right:** pause and speed, the **Skip**, **Menu** and **Log** buttons, and the **stuck list**, which shows anything that can't go on and why. **Log** keeps the last 60 messages that popped up (arrivals, finds, a party's return), newest first with the game time, and says how many are new; a message about a person or place has a button to go there. Esc, a click elsewhere or the button closes it.
+- **Top right:** pause and speed, then **Skip** and the **gear** (the menu) in the same row, and the **Log** button, and the **stuck list**, which shows anything that can't go on and why. **Log** keeps the last 60 messages that popped up (arrivals, finds, a party's return), newest first with the game time, and says how many are new; a message about a person or place has a button to go there. Esc, a click elsewhere or the button closes it.
 - **Bottom left:** whatever you've selected: a resident, a building, a tree, a farm plot.
 - **Bottom right:** the **orders toolbar**, and the Craft panel when it's open.
 
-**Other maps.** Expeditions go to places off the map, such as an old mine and a meadow. Once the village knows of one, a switcher in the top bar shows **Village**, **Old mine** and the rest (Tab switches), and a dim line under it says what a party there is doing, or how long until it gets there. Each map keeps its own view. Stockpiles, farms and buildings stay in the village.
+**Other maps.** Expeditions go to places off the map, such as some old caves and a meadow. Once the village knows of one, a place button in the top bar shows where you are; click it for a list of **Village**, **Old caves** and the rest, and pick one (Tab cycles through them), and a dim line under it says what a party there is doing, or how long until it gets there. Each map keeps its own view. Stockpiles, farms and buildings stay in the village.
 
 **The minimap.** Press **I** for a small map of the map in view, in the bottom right: ground, water, trees, buildings (blueprints outlined in blue), stockpile and farm, each resident as a dot in their tunic colour, a yellow square wherever something is stuck, and a white outline of what the camera sees. Click or drag on it to move the camera there. It follows the map switcher, so on the road or in the mine it shows that map.
 
@@ -69,13 +69,13 @@ When the founding is done, a second chapter of goals follows in the same panel, 
 1. **Paint a farm plot.** **Paint → Farm plot**, on open grass. A farmer plants and harvests it: the village's steady food. Farmers stop once the village has 20 wheat, so it doesn't crowd the stockpiles: change that with − and + on the composter's panel or the jobs board. The stuck list shows "Farm: enough wheat" as a waiting reason, and the crop waits ripe on its plot.
 2. **Cook a meal.** Queue bread or cooked mutton at the fireplace. Cooked food fills a resident for much longer.
 3. **Give a second resident a workstation.** Build another workstation (a mason's bench, composter and so on) and give someone that job from the Jobs board. Tomas's chopping block was the first.
-4. **Bring iron ore home from the old mine.** Plan a trip at the expedition board. Smelted with coal at the fireplace's furnace, iron makes tools that last more than twice as long as stone.
+4. **Bring iron ore home from the old caves.** Plan a trip at the expedition board. Smelted with coal at the fireplace's furnace, iron makes tools that last more than twice as long as stone.
 
 When both chapters are done the panel folds to a green **The village ✓** chip.
 
 ### The village book
 
-The goals panel's **Book** button (or the chip, once the chapters are done) opens the village book in its place. Its **Goals** page lists every step with its why. Every other page is a building or zone: what it's for, who works it, what it grows into and what goes wrong without it. A page shows once its building can be built (the expedition board once Ada's house is up, the pen once the board is built, the road once a party has been to the old mine). Select a building and click **? About the…** to jump to its page. Esc or **Close** shuts the book.
+The goals panel's **Book** button (or the chip, once the chapters are done) opens the village book in its place. Its **Goals** page lists every step with its why. Every other page is a building or zone: what it's for, who works it, what it grows into and what goes wrong without it. A page shows once its building can be built (the expedition board once Ada's house is up, the pen once the board is built, the road once a party has been to the old caves). Select a building and click **? About the…** to jump to its page. Esc or **Close** shuts the book.
 
 ## Paths
 
@@ -176,7 +176,7 @@ A lumberjack or stonemason works whatever you've marked first. With nothing mark
 
 The workstation's panel and the stuck list say what's holding it up: "No trees in the chopping block's area", "Target reached", "Full", or a stonemason with no pickaxe.
 
-**The mineshaft.** Boulders never come back. Once every boulder on the map is gone, select a **mason's bench** and choose **Dig out a mineshaft** (the button says what's still missing: the boulders, or 6 stone bricks to cut at the bench first). Builders rebuild it with 8 planks and 6 stone bricks, and it keeps its stonemason, queue and work area. From then on the stonemason digs cobblestone from where it stands, slowly (1 every 12 seconds), until the village has as much as the bench is set to keep. It never gives coal or iron: for those, and for stone by the cartload, go to the old mine.
+**The mineshaft.** Boulders never come back. Once every boulder on the map is gone, select a **mason's bench** and choose **Dig out a mineshaft** (the button says what's still missing: the boulders, or 6 stone bricks to cut at the bench first). Builders rebuild it with 8 planks and 6 stone bricks, and it keeps its stonemason, queue and work area. From then on the stonemason digs cobblestone from where it stands, slowly (1 every 12 seconds), until the village has as much as the bench is set to keep. It never gives coal or iron: for those, and for stone by the cartload, go to the old caves.
 
 ## Materials and stockpiles
 
@@ -260,9 +260,9 @@ Residents get hungry. A full resident empties in about 6 minutes of game time.
 
 ## Expeditions
 
-The **expedition board** is where expeditions are planned. Once it's built, the village has word of an **old mine** a short walk east, with stone and coal, and a **meadow** a short walk west, with sheep, cows and pigs.
+The **expedition board** is where expeditions are planned. Once it's built, the village has word of some **old caves** a short walk east, with stone and coal, and a **meadow** a short walk west, with sheep, cows and pigs.
 
-**The Location dropdown.** Select the board and it opens on the place you last planned for (the first one the first time), with a **Location** dropdown in its header showing it and its walk, such as "Meadow · ~28 s each way". Open the dropdown to see everywhere the village knows of, one line each with its walk and whether anyone has been, and a flag where hazards are known; choose one to see its site report and planner. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open the board on it, or the old mine's for **Plan a trip to the old mine**. Only one expedition goes at a time, so while one is packing or out, the dropdown shows where the party is and the other places are listed but can't be chosen.
+**The Location dropdown.** Select the board and it opens on the place you last planned for (the first one the first time), with a **Location** dropdown in its header showing it and its walk, such as "Meadow · ~28 s each way". Open the dropdown to see everywhere the village knows of, one line each with its walk and whether anyone has been, and a flag where hazards are known; choose one to see its site report and planner. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open the board on it, or the old caves' for **Plan a trip to the old caves**. Only one expedition goes at a time, so while one is packing or out, the dropdown shows where the party is and the other places are listed but can't be chosen.
 
 **Repeat last trip.** Once a trip has been planned to a place, the board shows **Repeat last trip** above the planner: one click fills in the same party, objective, Bring-back list, meals and return policy as last time. If someone in that party can't go now (hurt, or away) the next free resident goes in their place, and a message says who and why. The pens' sticks and wheat are worked out afresh. Check the plan and press **Start packing** as usual.
 
@@ -270,16 +270,16 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 
 **Planning:**
 - **Party:** choose 1 to 3 residents. Each shows their Stonemason level, pickaxe and hunger. Anyone who can't go, such as someone still walking in, says why.
-- **Bring back, best first:** a ranked list of what this place can give. Each row has a tick (an item that's off is left behind), its name, how many you want (**Max** takes as much as fits), and ▲ ▼ to move it up or down. The party fills its packs in that order, marks the blocks (or animals) of the top row that still wants more, and when the packs are full and something better turns up, swaps out the lowest-priority cargo, which stays at the site as a stack. A place you have planned for remembers its list, and an item you learn it gives later joins at the bottom marked **New**. The old mine starts with coal then cobblestone, the meadow with wool, leather, then meat. "Target reached" means every row with an amount is packed; a row set to Max never blocks it.
-- **Clear the level:** a toggle above the list, for the old mine. The party works every block of what's ticked, nearest the entrance first (never one under a known loose ceiling), whatever the amounts say. Once the level is cleared it digs to the door itself and goes down with no choice to make, and carries on down until the packs are full, the food runs low, or someone is badly hurt. The party panel shows how many blocks are left on the level.
+- **Bring back, best first:** a ranked list of what this place can give. Each row has a tick (an item that's off is left behind), its name, how many you want (**Max** takes as much as fits), and ▲ ▼ to move it up or down. The party fills its packs in that order, marks the blocks (or animals) of the top row that still wants more, and when the packs are full and something better turns up, swaps out the lowest-priority cargo, which stays at the site as a stack. A place you have planned for remembers its list, and an item you learn it gives later joins at the bottom marked **New**. The old caves starts with coal then cobblestone, the meadow with wool, leather, then meat. "Target reached" means every row with an amount is packed; a row set to Max never blocks it.
+- **Clear the level:** a toggle above the list, for the old caves. The party works every block of what's ticked, nearest the entrance first (never one under a known loose ceiling), whatever the amounts say. Once the level is cleared it digs to the door itself and goes down with no choice to make, and carries on down until the packs are full, the food runs low, or someone is badly hurt. The party panel shows how many blocks are left on the level.
 - **Meals to take** and **spare pickaxes.** One meal each is kept for the walk home, unless you choose **Spend it**.
 - **Packs:** each member carries 15 items. Supplies (yellow) and cargo (blue) share that room, so more food leaves less room for what they bring back.
 - **Come home when:** the target is reached, the packs are full, or food runs low. Choose one or more. A serious injury always brings them home.
 
-**What the old mine gives.** Deeper levels hold more, and each find shows on the level's report and the Bring back list once someone has seen it.
-- **Diamonds.** From level 4 down the old mine hides a few blocks of **diamond ore**, found only when someone mines next to one (the game stops to tell you). Diamond ore can only be mined with an **iron pickaxe**; with less the stuck list says so. Once found, diamonds join the Bring back list (at the bottom, marked New) so you can rank them. Three diamonds and two sticks make a **diamond pickaxe** or **axe** at the bench, the best tools there are, and the toolsmith keeps a diamond spare when there are enough.
-- **Gold, gravel and obsidian.** Deeper still, the old mine has **gold ore** (from level 2), **gravel** (from level 3) and **obsidian** (from level 5, beside a glowing lava pool nobody can walk into). Gold smelts at the fireplace with coal into gold ingots. Gravel sometimes gives a **flint**; a flint and an iron ingot make **flint and steel** at the bench. Obsidian can only be mined with a **diamond pickaxe**. All of them show up on the level's report and the Bring back list once someone has seen them.
-- **Lapis and redstone.** From level 3 down, the old mine also holds **lapis ore** and **redstone ore**, in plain sight in the rock. Both need an **iron pickaxe** or better, and a block gives 3. They show on the level's report and the Bring back list once someone has seen them. Lapis is the common cost of enchanting; redstone powers the automation devices that come later.
+**What the old caves gives.** Deeper levels hold more, and each find shows on the level's report and the Bring back list once someone has seen it.
+- **Diamonds.** From level 4 down the old caves hides a few blocks of **diamond ore**, found only when someone mines next to one (the game stops to tell you). Diamond ore can only be mined with an **iron pickaxe**; with less the stuck list says so. Once found, diamonds join the Bring back list (at the bottom, marked New) so you can rank them. Three diamonds and two sticks make a **diamond pickaxe** or **axe** at the bench, the best tools there are, and the toolsmith keeps a diamond spare when there are enough.
+- **Gold, gravel and obsidian.** Deeper still, the old caves has **gold ore** (from level 2), **gravel** (from level 3) and **obsidian** (from level 5, beside a glowing lava pool nobody can walk into). Gold smelts at the fireplace with coal into gold ingots. Gravel sometimes gives a **flint**; a flint and an iron ingot make **flint and steel** at the bench. Obsidian can only be mined with a **diamond pickaxe**. All of them show up on the level's report and the Bring back list once someone has seen them.
+- **Lapis and redstone.** From level 3 down, the old caves also holds **lapis ore** and **redstone ore**, in plain sight in the rock. Both need an **iron pickaxe** or better, and a block gives 3. They show on the level's report and the Bring back list once someone has seen them. Lapis is the common cost of enchanting; redstone powers the automation devices that come later.
 
 **Packing.** **Start packing** doesn't send anyone yet. Residents with Haul on carry the meals and spare pickaxes to the board, where they stack up as crates. The party finishes what they're doing and waits at the board. The planner shows what's packed and who's there, and the stuck list says what it's waiting for.
 
@@ -291,16 +291,16 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 
 **Coming home.** The party heads home by itself when its return policy is met: the target reached, the packs full, or the food running low. You can also choose **Call the party home** at any time: it's in the bar under the tallies while you're looking at the mine, and on the board and each party member's panel. Back at the signpost, they set the cargo down and it's hauled to the stockpile before anything else. A report says what came back, what it cost and who was hurt, and the board shows it until the next expedition.
 
-**Hazards.** Once someone has been to the old mine, its report lists the dangers:
+**Hazards.** Once someone has been to the old caves, its report lists the dangers:
 - **Loose ceilings** over a few blocks, drawn with cracks. Mining one can bring it down on the miner. The party never marks these by itself; it's your call.
 - **A ledge** in the dark tunnel to the deepest part, where someone can fall.
 - **Dark tunnels**, where work is slower.
 
 **Injuries.** An injured resident wears a white bandage, walks and works slower, and can't mine. Someone **seriously hurt** can't work, and the game stops for you to choose: **Retreat** (everyone heads home now) or **Press on** (they wait at the entrance while the rest keep working). Ada can be hurt, but never seriously. At home, the hurt rest in their own bed until they've healed: 2 minutes for an injury, 5 for a serious one, and slower without a bed of their own.
 
-**The discovery.** There's something else in the old mine. When the party finds it, the game stops with three choices, each with its cost: **Keep mining**, **Investigate** (someone spends time and pickaxe uses surveying it, and you can send parties for it from then on), or **Mark it and return later** (the party heads home now). The find is remembered either way.
+**The discovery.** There's something else in the old caves. When the party finds it, the game stops with three choices, each with its cost: **Keep mining**, **Investigate** (someone spends time and pickaxe uses surveying it, and you can send parties for it from then on), or **Mark it and return later** (the party heads home now). The find is remembered either way.
 
-**Deeper levels.** At the far end of the old mine, a heavy wooden door is set in the rock, with a block of stone in front of it. **Dig to the door**, in the party's panel, marks the way. When someone reaches it, the game stops: **Go down now** (the door opens and the party works the level below instead), **Mark it for later** (the party heads home now) or **Keep mining here**. Every level has a door at its far end to the next one, and every floor is laid out differently: a winding cave, a hall of pillars, a maze of tunnels, a cavern split by a stream, a field of rubble. Deeper levels have more coal and iron, but they're darker, and cave-ins and falls are more likely. Once there's more than one level, the planner has a **Work level** row, and the site report lists every level with what's left and its door. The party walks down through each level above to get there, and carries its cargo back up the same way. A level's ore never comes back once mined.
+**Deeper levels.** At the far end of the old caves, a heavy wooden door is set in the rock, with a block of stone in front of it. **Dig to the door**, in the party's panel, marks the way. When someone reaches it, the game stops: **Go down now** (the door opens and the party works the level below instead), **Mark it for later** (the party heads home now) or **Keep mining here**. Every level has a door at its far end to the next one, and each stretch of depth has its own **underground biome** with its own rock and floor colours, named on the site report: the cave mouth (the old workings, level 1), the **dripstone cave** (levels 2 and 3), the **flooded cavern** (levels 4 and 5) and the **deep cave** (level 6 and down). A biome is a look for now; the hazards and ore are the same. and every floor is laid out differently: a winding cave, a hall of pillars, a maze of tunnels, a cavern split by a stream, a field of rubble. Deeper levels have more coal and iron, but they're darker, and cave-ins and falls are more likely. Once there's more than one level, the planner has a **Work level** row, and the site report lists every level with what's left and its door. The party walks down through each level above to get there, and carries its cargo back up the same way. A level's ore never comes back once mined.
 
 ## The meadow
 
@@ -320,7 +320,7 @@ Each kind of wild animal grows back on its own, a few minutes at a time, up to t
 
 ## The road to the mine
 
-The road between the village and the old mine is a map of its own: **Road to the mine** in the map switcher, once the expedition board has word of the mine. It's split into six segments, from the village edge to the slope below the mine.
+The road between the village and the old caves is a map of its own: **Road to the mine** in the map switcher, once the expedition board has word of the mine. It's split into six segments, from the village edge to the slope below the mine.
 
 **Surveying.** At first, only the segment by the village is known, and the rest is fog. The first party to walk the road reveals it as they go. After that, the **signpost** (in the village, or at either end of the road) shows the route: each segment with its length, its terrain and anything in the way, and how long the walk takes. The expedition planner uses that estimate too.
 
@@ -330,19 +330,19 @@ The road between the village and the old mine is a map of its own: **Road to the
 
 Residents who go out to work on the road walk back to the village when they're done, or when they get hungry.
 
-**Rails and minecarts** are made at the bench from the old mine's iron: 6 iron ingots and a stick make 16 rails, and 5 iron ingots make a minecart. Both are Craft work.
+**Rails and minecarts** are made at the bench from the old caves' iron: 6 iron ingots and a stick make 16 rails, and 5 iron ingots make a minecart. Both are Craft work.
 
 **Planning the line.** Once the road has been walked, **Plan the line** on the signpost's panel shows what it would cost: the rails it takes (2 a segment), how many are on hand, the iron to craft the rest, and about how much time a round trip would save by cart. **Lay track** puts a track blueprint along every segment. Track is laid from the village end outward by the **track crew**, residents with Build on. They carry rails out to a **railhead** pile at the road's village end, then from there to the segment being laid, which fills in rail by rail. The stream's segment waits for the bridge, and the cut's for its boulders to be cleared. The stuck list says what the track needs: more rails, the bridge, the cut, or someone with Build on.
 
 **Stations.** **Build the village station** and **Build the mine station** (6 planks and 4 cobblestone each) put a platform beside the line at each end. Once the village station is built, a minecart from the village is hauled out and parked there. Select a station to see how much of the line is laid, where the cart is and what's on its platform.
 
-**Riding.** When the cart waits at the village station, both stations are built and the cut is clear, the next party rides. They get in at the road's end, ride the laid track fast, and push the cart at walking pace where there's no track yet. Coming home, their cargo is loaded into the cart at the mine and unloaded onto the village platform, faster than unpacking by hand at the signpost. Haulers carry it to the stockpile from there. With the whole line laid, the cart also adds 20 to the party's packs. The report says how long they spent on the road and how much time the cart saved. Mining at the old mine is no faster.
+**Riding.** When the cart waits at the village station, both stations are built and the cut is clear, the next party rides. They get in at the road's end, ride the laid track fast, and push the cart at walking pace where there's no track yet. Coming home, their cargo is loaded into the cart at the mine and unloaded onto the village platform, faster than unpacking by hand at the signpost. Haulers carry it to the stockpile from there. With the whole line laid, the cart also adds 20 to the party's packs. The report says how long they spent on the road and how much time the cart saved. Mining at the old caves is no faster.
 
 **Unpacking.** A party coming home on foot unpacks at the signpost, two items a second each, before it goes back to work.
 
 ## The Nether
 
-Once the old mine has given obsidian, a portal leads to the Nether. Everything here is planned at the same expedition board.
+Once the old caves has given obsidian, a portal leads to the Nether. Everything here is planned at the same expedition board.
 
 - **The Nether portal.** Once obsidian has come home, the Build menu offers a **Nether portal**: a frame of 10 obsidian, with room in front for a party to gather. Builders carry the obsidian in and build it. A finished frame stays dark until someone lights it with **flint and steel**, which is put back with a use fewer. A lit portal shimmers violet. If it's stuck, the list says what it needs: "Portal frame needs 6 more obsidian" or "Needs flint and steel to light".
 - **The Nether landing.** Once the portal is lit, the expedition board lists **Nether: portal landing**. Plan a trip to it like any other: the party packs on the staging area in front of the portal, walks through it, surveys the landing's three landmarks and comes home the same way. The board can plan one Overworld trip and one Nether trip at once. If the portal goes out while the party is through, a flint and steel in their packs relights it; without one they wait for the village to light it from this side. The landing is hot and red, with lava pools nobody walks into. It has **hazards**: stepping beside lava can burn someone, a patch of fire sets them alight (they step off it, and the burning stops a couple of seconds later), and a ledge can drop them. Residents go round the heat when there's a way. A burn is an injury like any other: they work slower and can't mine, and a serious one stops the game to ask whether to retreat. The stuck list says "Burned" when it was fire. The site report lists the hazards once someone's been there.
@@ -405,7 +405,7 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | Shift + right-click | Queue an order after their current one, skipping the ring |
 | J | Village jobs board |
 | F / N | Next resident, next stuck item |
-| Tab | Switch between the village, the old mine (and its levels), the road to it and the meadow, once they're known |
+| Tab | Switch between the village, the old caves (and its levels), the road to it and the meadow, once they're known |
 | Drag, W A S D, arrow keys | Pan |
 | Mouse wheel, + / − | Zoom |
 | Space / ~ | Pause or resume, pause |
@@ -418,7 +418,7 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 
 | O | Show or hide the redstone overlay |
 
-The **Menu** button at the top right, beside the speed buttons, opens the same menu with a click. It shows the menu key (M unless you've changed it), and Esc always works too.
+The **gear** at the top right, at the end of the speed buttons, opens the same menu with a click. Its tooltip shows the menu key (M unless you've changed it), and Esc always works too.
 
 **Panel keys.** When something is selected, the first seven buttons in its panel each show a small key: **Q E R Z X C V**, in the order the buttons appear. Click a tree and press **Q** to mark it for chopping, and **Q** again to cancel. A key that opens a list, such as a resident's job, then lets **1 to 9** pick an entry (and the speed keys wait). Buttons that remove something, like a farm plot's, arm on the key and act on the same key again; any other key puts them away. The selection stays after a key, so you see the panel change. With nothing selected these keys keep their usual meanings (**E** gather, **Z** paint, **X** mine, **C** craft), **F** still cycles residents, and **Esc** clears the selection. The panel keys can be changed on the Controls page, under Selection.
 
@@ -428,7 +428,7 @@ You can still give orders while the game is paused.
 
 ## Saving and settings
 
-The menu (the **Menu** button at the top right, or Esc) has five save slots. A save made during the founding is labelled with the next step. After the founding, it's labelled with facts about the village, such as "4 residents, 3 houses, 18 meals".
+The menu (the **gear** at the top right, or Esc) has five save slots. A save made during the founding is labelled with the next step. After the founding, it's labelled with facts about the village, such as "4 residents, 3 houses, 18 meals".
 
 **Autosave.** The game also saves itself, to a file of its own that never takes one of the five slots: every 5 minutes of play, when a party sets out or comes home, when you choose **Start over** or **Quit**, and when you close the window. **Load game** lists it as **Autosave** above the slots, with when it was made. A game younger than 2 minutes isn't autosaved, so a new game never replaces your village's autosave. Pausing stops the clock, since nothing changes. (In the browser the window closing can't be caught, so the 5-minute and party saves are what you have there.)
 

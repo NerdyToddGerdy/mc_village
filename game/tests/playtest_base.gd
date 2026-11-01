@@ -111,6 +111,13 @@ func screen(cell: Vector2i, h := 0.0) -> Vector2:
 
 ## The visible button whose text contains `text`. With `near`, the one in the same row as a label
 ## containing `near` (for the bench's per-recipe Queue buttons).
+## Goes to a place by the map switcher's dropdown: opens the list, then picks the place from it.
+func go_to(place: String) -> bool:
+	if not await click_button("another place"):
+		return false
+	return await click_button(place)
+
+
 func find_button(text: String, near := "", last := false) -> Button:
 	var found: Button = null
 	for n in _all(root):

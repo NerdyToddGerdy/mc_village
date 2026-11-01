@@ -31,6 +31,10 @@ var _job_drop: PanelContainer       ## A resident's job dropdown (issue #134), u
 var _job_list := VBoxContainer.new()
 var _job_for := -1                  ## The resident whose job dropdown is open, or -1.
 var _job_anchor := Rect2()          ## The button it opened from, in global coordinates.
+var _maps_drop: PanelContainer      ## The map switcher's dropdown: every place the village knows, under its button.
+var _maps_list := VBoxContainer.new()
+var _maps_btn: Button
+var _maps_open := false
 var _loc_drop: PanelContainer       ## The expedition board's location dropdown (issue #181), under its button.
 var _loc_list := VBoxContainer.new()
 var _loc_open := false
@@ -62,8 +66,6 @@ var _speed_btns := {}
 var _skip_btn: Button               ## Skip ahead until something needs the player (issue #299).
 var _menu_btn: Button                ## The on-screen button for the Esc menu (issue #216), beside the speed buttons.
 var _menu_panel: PanelContainer
-var _menu_cap: PanelContainer        ## Its key badge, which follows the "menu" binding.
-var _menu_cap_label: Label
 var _stuck_panel: PanelContainer
 var _stuck := VBoxContainer.new()
 var stuck_open := true          ## The stuck list shows its entries; false folds it to a chip (issue #77).
@@ -175,6 +177,11 @@ func _ready() -> void:
 	_loc_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))  # opaque: it lies over the planner
 	_loc_drop.visible = false
 	_loc_drop.top_level = true
+	_maps_list.add_theme_constant_override("separation", 2)
+	_maps_drop = _panel(_maps_list, Vector2(200, 0), 6)
+	_maps_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))
+	_maps_drop.visible = false
+	_maps_drop.top_level = true
 	_goals_panel = _panel(_goals, Vector2(290, 0))
 	tl.add_child(_goals_panel)
 
@@ -192,37 +199,18 @@ func _ready() -> void:
 	_skip_btn.custom_minimum_size = Vector2(60, 44)
 	_skip_btn.set_meta("label", "Skip ahead")
 	_skip_btn.tooltip_text = "Skip ahead: run fast until something needs you"
-	_menu_btn = _button("Menu", func(): game.toggle_menu())  # the Esc menu, for the mouse and the web build (issue #216)
-	_menu_btn.custom_minimum_size = Vector2(0, 44)
-	_menu_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_menu_cap = PanelContainer.new()
-	var menu_cap_box := _box(Color(0, 0, 0, 0), 3, 0, Palette.CHALK_DIM)
-	menu_cap_box.content_margin_left = 5
-	menu_cap_box.content_margin_right = 5
-	menu_cap_box.content_margin_top = 0
-	menu_cap_box.content_margin_bottom = 0
-	_menu_cap.add_theme_stylebox_override("panel", menu_cap_box)
-	_menu_cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_menu_cap_label = _label("", false, Palette.CHALK_DIM, Palette.CAPTION)
-	_menu_cap.add_child(_menu_cap_label)
-	_menu_btn.add_child(_menu_cap)
-	var place_cap := func() -> void:
-		var cs := _menu_cap.get_combined_minimum_size()
-		_menu_cap.size = cs
-		_menu_cap.position = Vector2(_menu_btn.size.x - cs.x - 10, (_menu_btn.size.y - cs.y) / 2)
-	_menu_btn.resized.connect(place_cap)
-	_menu_cap.minimum_size_changed.connect(place_cap)
+	speed.add_child(_skip_btn)  # Skip sits between the speeds and the settings gear
+	_menu_btn = _button("", func(): game.toggle_menu())  # the Esc menu, for the mouse and the web build (issue #216)
+	_menu_btn.icon = _gear_tex()
+	_menu_btn.expand_icon = false
+	_menu_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_menu_btn.custom_minimum_size = Vector2(44, 44)
+	_menu_btn.set_meta("label", "Menu")
+	speed.add_child(_menu_btn)
 	_speed_panel = _panel(speed, Vector2.ZERO, 4)
 	tr.add_child(_speed_panel)
-	_menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var menu_row := HBoxContainer.new()  # Skip sits beside Menu: in the speed row it widened the panel over the map switcher
-	menu_row.add_theme_constant_override("separation", 2)
-	menu_row.add_child(_skip_btn)
-	menu_row.add_child(_menu_btn)
-	_menu_panel = _panel(menu_row, Vector2.ZERO, 4)  # its own panel under the speed buttons, so the speed row stays narrow
-	tr.add_child(_menu_panel)
-	_speed_panel.z_index = 1  # the speed and Menu buttons stay clickable under the big top-level panels (#316)
-	_menu_panel.z_index = 1
+	_menu_panel = _speed_panel  # the gear lives in the speed panel
+	_speed_panel.z_index = 1  # the speed buttons and the gear stay clickable under the big top-level panels (#316)
 	_log_btn = _button("Log", func(): _toggle_log())  # what the toasts said, for the ones that were missed (issue #297)
 	_log_btn.custom_minimum_size = Vector2(0, 44)
 	_log_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -289,6 +277,7 @@ func _ready() -> void:
 	_root.add_child(_book_panel)
 	_root.add_child(_job_drop)
 	_root.add_child(_loc_drop)
+	_root.add_child(_maps_drop)
 	_minimap = MiniMap.new()
 	_minimap.game = game
 	_root.add_child(_minimap)
@@ -736,13 +725,7 @@ func _refresh_key_labels() -> void:
 		_tool_btns[t].tooltip_text = tips[t] + (" (%s)" % k.first(t) if k.first(t) != "" else "")
 	_toolbar_sig = ""
 	var menu_key := k.first("menu")
-	_menu_cap_label.text = menu_key
-	_menu_cap.visible = menu_key != ""
-	_menu_btn.tooltip_text = "Save, load, controls and more" + (" (%s, or Esc)" % menu_key if menu_key != "" else " (Esc)")
-	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
-		var sb := (_theme.get_stylebox(state, "Button") as StyleBoxFlat).duplicate() as StyleBoxFlat
-		sb.content_margin_right = 10 + (_font.get_string_size(menu_key, HORIZONTAL_ALIGNMENT_LEFT, -1, Palette.CAPTION).x + 12 + 10 if menu_key != "" else 2)
-		_menu_btn.add_theme_stylebox_override(state, sb)
+	_menu_btn.tooltip_text = "Menu: save, load, controls and more" + (" (%s, or Esc)" % menu_key if menu_key != "" else " (Esc)")
 	var speed_actions := {0: "pause", 1: "speed1", 2: "speed2", 3: "speed3"}
 	for v in _speed_btns:
 		var keytext := k.text(speed_actions[v]).replace("  ", " or ")
@@ -1039,21 +1022,43 @@ func _refresh_tallies(sim: Sim) -> void:
 
 ## The map switcher (issue #101), shown once a site map is known, and a dim line for residents at
 ## work on a map that isn't in view, which switches to it on a click.
+## The list under the place button: every place the village knows, the one in view marked. Deeper cave levels
+## are named "Old caves, level 3" in full, since there is room in a list.
+func _refresh_maps_drop(sim: Sim, known: Array) -> void:
+	if not _maps_open or not _maps.visible or not is_instance_valid(_maps_btn):
+		_maps_open = false
+		_maps_drop.visible = false
+		return
+	_maps_drop.visible = true
+	var anchor := _maps_btn.get_global_rect()
+	_place_drop(_maps_drop, Vector2(anchor.position.x, anchor.end.y + 4))
+	_rebuild(_maps_list, "%s|%s" % [known, game.view_map], func(c: Container) -> void:
+		for id in known:
+			var nm: String = sim.get_map(id).name
+			var b := _button(nm, func():
+				game.switch_map(id)
+				_maps_open = false
+				_maps_drop.visible = false, "Secondary")
+			b.set_meta("label", nm)
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.toggle_mode = true
+			b.set_pressed_no_signal(id == game.view_map)
+			c.add_child(b))
+
+
 func _refresh_maps(sim: Sim) -> void:
 	var known: Array = game.known_maps()
 	_maps.visible = known.size() > 1
 	var key: String = game.keys.first("map")
 	_rebuild(_maps, "%s%s%s" % [known, game.view_map, key], func(c: Container) -> void:
 		c.add_child(_divider())
-		for id in known:
-			var lv: int = sim.get_map(id).level
-			var b := _button(sim.get_map(id).name if lv <= 1 else "Lv %d" % lv, func(): game.switch_map(id))  # deeper levels short (issue #132)
-			b.set_meta("label", sim.get_map(id).name)
-			b.toggle_mode = true
-			b.set_pressed_no_signal(id == game.view_map)
-			b.custom_minimum_size = Vector2(0, 36)
-			b.tooltip_text = "Show the %s." % sim.get_map(id).name.to_lower() + (" %s switches maps." % key if key != "" else "")
-			c.add_child(b))
+		var cur: String = sim.get_map(game.view_map).name
+		_maps_btn = _button(cur + "  ↓", func(): _maps_open = not _maps_open, "Secondary")
+		_maps_btn.set_meta("label", "Go to another place")  # not the name, so a search for "Village" finds the list's row
+		_maps_btn.custom_minimum_size = Vector2(0, 36)
+		_maps_btn.tooltip_text = "Go to another place." + (" %s switches maps." % key if key != "" else "")
+		c.add_child(_maps_btn))
+	_refresh_maps_drop(sim, known)
 	var line := ""
 	for r in sim.residents:  # a party on the road (issues #107, #108)
 		if r.away:
@@ -1154,6 +1159,22 @@ var _swatches := {}
 
 ## A colour as a small chalk-edged square, for icons: a resident's tunic (pass its hex, issue #79)
 ## or an item's colour (issue #76).
+## A gear for the Menu button, drawn here so it doesn't depend on a font having the glyph (the web build's might not).
+func _gear_tex() -> ImageTexture:
+	var n := 24
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var mid := (n - 1) / 2.0
+	for x in n:
+		for y in n:
+			var d := Vector2(x - mid, y - mid)
+			var r := d.length()
+			var tooth := absf(fmod(d.angle() / TAU * 8.0 + 8.0, 1.0) - 0.5) < 0.27  # eight teeth round the rim
+			var body := r <= 7.4 or (r <= 10.8 and tooth)
+			if body and r > 3.6:
+				img.set_pixel(x, y, Palette.CHALK)
+	return ImageTexture.create_from_image(img)
+
+
 func _swatch_tex(color) -> ImageTexture:
 	var c: Color = Color("#" + color) if color is String else color
 	var key := c.to_html()
@@ -1303,6 +1324,9 @@ func _input(event: InputEvent) -> void:
 			_close_tools()
 		if event.pressed and _job_drop.visible and not _job_drop.get_global_rect().has_point(event.position) and not _job_anchor.has_point(event.position):
 			_close_job_drop()
+		if event.pressed and _maps_drop.visible and not _maps_drop.get_global_rect().has_point(event.position) and (not is_instance_valid(_maps_btn) or not _maps_btn.get_global_rect().has_point(event.position)):
+			_maps_open = false
+			_maps_drop.visible = false
 		if event.pressed and _loc_drop.visible and not _loc_drop.get_global_rect().has_point(event.position) and not _loc_anchor.has_point(event.position):
 			_close_loc_drop()
 		if event.pressed and _log_open and not _log_panel.get_global_rect().has_point(event.position) and not _log_btn.get_global_rect().has_point(event.position):
@@ -1312,6 +1336,10 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _job_drop.visible:
 		_close_job_drop()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _maps_drop.visible:
+		_maps_open = false
+		_maps_drop.visible = false
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _loc_drop.visible:
 		_close_loc_drop()
@@ -3197,7 +3225,7 @@ func _add_site_report(c: Container, sim: Sim, dest: String) -> void:
 	var rep := sim.site_report(dest)
 	c.add_child(_row(rep.name, "about %d s walk each way" % roundi(rep.travel) if rep.travel >= 0.0 else "the road isn’t walked yet", false))
 	if rep.visited and rep.get("pattern", "") != "":
-		c.add_child(_label(rep.pattern, false, Palette.CHALK_DIM, Palette.CAPTION))
+		c.add_child(_label(rep.pattern if rep.get("biome", "") == "" else "%s · %s" % [rep.biome, rep.pattern], false, Palette.CHALK_DIM, Palette.CAPTION))
 	if not rep.visited:
 		c.add_child(_label("“%s”" % rep.told, false, Palette.CHALK_DIM, Palette.BODY, true))
 	for x in rep.resources:
@@ -3595,7 +3623,7 @@ func _fill_route(c: Container, sim: Sim) -> void:
 	if game.view_map != Road.ID:
 		c.add_child(_button("Show the road", func(): game.switch_map(Road.ID), "Secondary"))
 	if not sim.expedition_board().is_empty() and sim.expedition.is_empty():  # the old mine's adventure (issue #136)
-		c.add_child(_button("Plan a trip to the old mine", func(): game.open_adventure(OldMine.ID), "Secondary"))
+		c.add_child(_button("Plan a trip to the old caves", func(): game.open_adventure(OldMine.ID), "Secondary"))
 	# The work the road needs.
 	var seen: int = sim.road().seen
 	if sim.bridge().is_empty() and seen > Sim._seg_of("stream"):
@@ -3776,7 +3804,7 @@ func _board_status(sim: Sim) -> String:
 			return "Packing for the %s." % sim.get_map(ex.dest).name.to_lower()
 		"out":
 			return "The party is out at the %s." % sim.get_map(ex.dest).name.to_lower()
-	return "Plan an adventure here: the old mine or the meadow."
+	return "Plan an adventure here: the old caves or the meadow."
 
 
 # ---------------------------------------------------------------- the party at work, and choices (issues #109-#111)

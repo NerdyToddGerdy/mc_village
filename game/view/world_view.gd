@@ -265,6 +265,9 @@ static var CRACK := Color("#2A2724")
 static var MINE_ROCK := Color("#6E6A63")
 static var TORCH_FLAME := Color("#F2A640")
 static var DARK_TINT := Color("#2C3445")
+## Each underground biome's rock and floor (issue #238), so the levels don't all read as one cold grey.
+static var BIOME_ROCK := {"mouth": Color("#6E6A63"), "dripstone": Color("#7A6E5C"), "flooded": Color("#58666A"), "deep": Color("#46444E")}
+static var BIOME_FLOOR := {"mouth": Color("#5B5650"), "dripstone": Color("#6A5F4E"), "flooded": Color("#4A5A5C"), "deep": Color("#38363E")}
 
 
 ## A site map's ground (issue #102): a stone floor, rock walls a block high, torches on the walls,
@@ -272,8 +275,9 @@ static var DARK_TINT := Color("#2C3445")
 func _add_site_ground(b: Batch) -> void:
 	var mp := sim.m
 	var nether: bool = mp.id.begins_with("nether")  # red netherrack, and rock that's nearly black (issues #148, #155)
-	var rock_base: Color = NETHER_ROCK if nether else MINE_ROCK
-	var floor_base: Color = NETHERRACK if nether else MINE_FLOOR
+	var biome := MineLevels.biome(mp.level) if mp.level > 0 else "mouth"
+	var rock_base: Color = NETHER_ROCK if nether else BIOME_ROCK[biome]
+	var floor_base: Color = NETHERRACK if nether else BIOME_FLOOR[biome]
 	for x in mp.w:
 		for y in mp.h:
 			var c := Vector2i(x, y)

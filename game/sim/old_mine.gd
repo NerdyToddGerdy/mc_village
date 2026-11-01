@@ -6,7 +6,7 @@ extends RefCounted
 ## ledge in the dark make it dangerous (#110).
 
 const ID := "old_mine"
-const NAME := "Old mine"
+const NAME := "Old caves"
 
 ## One row per line, west to east. The party arrives at E, on the west edge.
 ##   # rock wall (can't be mined)   t rock with a torch on it   . open floor   E the entrance
@@ -37,7 +37,7 @@ const LOOSE := [Vector2i(3, 5), Vector2i(12, 8), Vector2i(5, 13)]
 const LEDGES := [Vector2i(11, 11)]
 
 ## What the village has been told about it, before anyone has been (issue #102).
-const TOLD := "An old mine a short walk east. Stone and coal, they say."
+const TOLD := "Some old caves a short walk east. Stone and coal, they say."
 ## Access notes for the site report.
 const ACCESS := ["Narrow tunnels: 1 resident per tunnel"]
 

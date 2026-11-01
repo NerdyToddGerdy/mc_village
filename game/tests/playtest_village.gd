@@ -193,7 +193,7 @@ func _initialize() -> void:
 	check(game.planner_open and game.adventure == Meadow.ID and visible_label("Meadow"), "clicking the meadow's signpost opens its adventure on the board")
 	check(await click_button("Location"), "open the Location dropdown")
 	await settle()
-	check(find_button("Adventure: Old mine") != null and find_button("Adventure: Meadow") != null, "the dropdown lists the old mine and the meadow")
+	check(find_button("Adventure: Old caves") != null and find_button("Adventure: Meadow") != null, "the dropdown lists the old caves and the meadow")
 	check(await click_button("Adventure: Meadow"), "pick the meadow")
 	check(await click_button("Tomas"), "add Tomas")
 	check(await plan_wants("Wool"), "send them for wool")
@@ -247,7 +247,7 @@ func _initialize() -> void:
 
 	# ---- The expedition board (issue #105), built for the meadow above, with its map room plot
 	check(board != null and board.tpl == "board" and board.plot != null, "the board has its map room plot reserved")
-	check(seen("expedition board is up") and game.known_maps().has(OldMine.ID), "it brought word of the old mine, which the switcher shows")
+	check(seen("expedition board is up") and game.known_maps().has(OldMine.ID), "it brought word of the old caves, which the switcher shows")
 
 	# ---- Planning (issue #106): select the board, pick the old mine, read its site report, and fill in the plan
 	await look_at(bp)
@@ -255,9 +255,9 @@ func _initialize() -> void:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(game.planner_open and find_button("Location") != null, "selecting the board opens the planner with its Location dropdown")
-	check(await pick_location("Old mine"), "pick the old mine")
+	check(await pick_location("Old caves"), "pick the old caves")
 	await settle()
-	check(game.adventure == OldMine.ID and visible_label("Old mine"), "its report and planner open")
+	check(game.adventure == OldMine.ID and visible_label("Old caves"), "its report and planner open")
 	check(visible_label("“%s”" % OldMine.TOLD), "the report says what the village has been told")
 	check(await click_button("Tomas"), "add Tomas to the party")
 	check(await plan_wants("Coal"), "send them for coal")
@@ -272,18 +272,18 @@ func _initialize() -> void:
 	check(await click_button("Depart"), "click Depart")
 	check(sim.carrying_packs(ada) and sim.carrying_packs(tomas), "Ada and Tomas carry the packs to the signpost")
 	check(await play_until(60, func(): return ada.map == Road.ID and tomas.map == Road.ID), "they set off from the signpost onto the road (issues #108, #118)")
-	check(ada.trip == OldMine.ID, "for the old mine")
+	check(ada.trip == OldMine.ID, "for the old caves")
 	await play(2)
-	check(visible_label("on the road to the old mine") or find_button("Party on the road to the old mine") != null, "the board and the party line say they're on the road")
+	check(visible_label("on the road to the old caves") or find_button("Party on the road to the old caves") != null, "the board and the party line say they're on the road")
 	# The signpost shows who's on the road.
 	await look_at(sim.route_sign())
 	await click(screen(sim.route_sign(), 1.4))
 	game._hud.refresh(sim)
 	await frames(2)
-	check(game.selection.get("kind", "") == "route" and visible_label("Road to the old mine"), "clicking the signpost shows the road to the old mine")
-	check(await play_until(40, func(): return ada.map == OldMine.ID and tomas.map == OldMine.ID), "they walk the road and reach the old mine")
+	check(game.selection.get("kind", "") == "route" and visible_label("Road to the old caves"), "clicking the signpost shows the road to the old caves")
+	check(await play_until(40, func(): return ada.map == OldMine.ID and tomas.map == OldMine.ID), "they walk the road and reach the old caves")
 	await key(KEY_TAB)
-	check(game.view_map == OldMine.ID, "Tab shows them at the old mine")
+	check(game.view_map == OldMine.ID, "Tab shows them at the old caves")
 	# Mine the coal nearest the entrance, then call them home from the party line.
 	var mine := sim.get_map(OldMine.ID)
 	sim.on_map(OldMine.ID, func():
@@ -307,7 +307,7 @@ func _initialize() -> void:
 		await key(KEY_QUOTELEFT)  # answering carries on at speed: pause again, so only play() moves time
 		check(game.speed == 0, "~ pauses again")
 	check(await play_until(150, func(): return sim.expedition.is_empty()), "the party gets home, the hurt walking slower (%s, unloading %s)" % [sim.expedition.get("party", []).map(func(id): return [sim.resident(id).map, sim.resident(id).job.label if sim.resident(id).job != null else "idle", sim.resident(id).hurt, sim.resident(id).pos, sim.resident(id).path.size(), sim.resident(id).job.i if sim.resident(id).job != null else -1, sim.resident(id).trip, sim.cart]), sim.expedition.get("unloading", false)])
-	check(seen("Back from the old mine: ") and seen("coal"), "a toast reports what came back")
+	check(seen("Back from the old caves: ") and seen("coal"), "a toast reports what came back")
 	check(ada.map == "village" and tomas.map == "village" and not ada.away, "Ada and Tomas are back in the village")
 	if true:  # room for the cargo: the stockpile is nearly full by now, so paint more, as a player would
 		await look_at(at(9, 9))

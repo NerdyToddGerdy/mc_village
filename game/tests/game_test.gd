@@ -876,12 +876,14 @@ func _test_menu_button(game: Game) -> void:
 		game.close_menu()
 	hud.refresh(game.sim)
 	var b: Button = hud._menu_btn
-	check(b.is_visible_in_tree() and b.text == "Menu", "the HUD has a Menu button")
-	check(hud._menu_cap_label.text == game.keys.first("menu"), "it shows the menu key (%s)" % hud._menu_cap_label.text)
+	check(b.is_visible_in_tree() and b.icon != null and b.get_meta("label") == "Menu", "the HUD has a Menu button, drawn as a gear")
+	check(b.get_parent() == hud._speed_panel.get_child(0) and hud._skip_btn.get_parent() == b.get_parent(), "the gear is in the speed row, with Skip")
+	var row := b.get_parent().get_children()
+	check(row.find(hud._skip_btn) == row.size() - 2 and row.find(b) == row.size() - 1 and row.find(hud._speed_btns[3]) == row.find(hud._skip_btn) - 1, "Skip sits between the speeds and the gear")
 	var r := b.get_global_rect()
 	check(get_root().get_visible_rect().encloses(r), "it's on screen")
-	for other in [hud._speed_panel, hud._stuck_panel, hud._tally_panel]:
-		check(not other.visible or not other.get_global_rect().intersects(hud._menu_panel.get_global_rect()), "it covers neither the speed buttons, the stuck list nor the tally bar")
+	for other in [hud._stuck_panel, hud._tally_panel]:
+		check(not other.visible or not other.get_global_rect().intersects(hud._menu_panel.get_global_rect()), "it covers neither the stuck list nor the tally bar")
 	for m in hud._maps.get_children():  # the map switcher runs along the top (the slice 3.5 bot's Meadow button)
 		check(not m is Button or not m.is_visible_in_tree() or not m.get_global_rect().intersects(hud._menu_panel.get_global_rect()), "nor the %s button of the map switcher" % m.name)
 	b.pressed.emit()
@@ -891,7 +893,7 @@ func _test_menu_button(game: Game) -> void:
 	game.keys.assign("menu", KEY_F2)
 	hud._keys_sig = ""
 	hud.refresh(game.sim)
-	check(hud._menu_cap_label.text == "F2" and "F2" in b.tooltip_text, "the badge and tooltip follow a rebound key")
+	check("F2" in b.tooltip_text, "the tooltip follows a rebound key")
 	game.keys.reset()
 	hud._keys_sig = ""
 	hud.refresh(game.sim)
@@ -1499,7 +1501,7 @@ func _test_meadow(game: Game) -> void:
 	hud.refresh(sim)
 	await process_frame
 	var rows: Array = _walk(hud._loc_list).filter(func(n): return n is Button and n.has_meta("label") and not n.is_queued_for_deletion())
-	check(rows.map(func(n): return n.get_meta("label")) == ["Adventure: Old mine", "Adventure: Meadow"], "its list has both destinations (%s)" % [rows.map(func(n): return n.get_meta("label"))])
+	check(rows.map(func(n): return n.get_meta("label")) == ["Adventure: Old caves", "Adventure: Meadow"], "its list has both destinations (%s)" % [rows.map(func(n): return n.get_meta("label"))])
 	var view := hud.get_viewport().get_visible_rect()
 	check(view.encloses(hud._loc_drop.get_global_rect()), "the open list lies inside the window (%s in %s)" % [hud._loc_drop.get_global_rect(), view])
 	for far in [Vector2(-500, -500), Vector2(view.end.x + 500, view.end.y + 500)]:
@@ -1509,14 +1511,14 @@ func _test_meadow(game: Game) -> void:
 	rows[0].pressed.emit()
 	hud.refresh(sim)
 	await process_frame
-	check(game.adventure == OldMine.ID and game.plan.dest == OldMine.ID and not hud._loc_drop.visible, "choosing the old mine shows its planner and closes the list")
+	check(game.adventure == OldMine.ID and game.plan.dest == OldMine.ID and not hud._loc_drop.visible, "choosing the old caves shows its planner and closes the list")
 	# The cargo priority list (issue #185): rows to turn on and off, reorder and set amounts.
 	var by_label := func(label: String) -> Button:
 		for n in _walk(hud._plan_box):
 			if n is Button and n.get_meta("label", "") == label and not n.is_queued_for_deletion():
 				return n
 		return null
-	check(game.plan.list.map(func(r): return r.item) == ["coal", "cobble"] and by_label.call("Bring back: Coal") != null, "the planner lists the old mine's cargo: coal, then cobblestone")
+	check(game.plan.list.map(func(r): return r.item) == ["coal", "cobble"] and by_label.call("Bring back: Coal") != null, "the planner lists the old caves' cargo: coal, then cobblestone")
 	by_label.call("Cobblestone up").pressed.emit()
 	check(game.plan.list.map(func(r): return r.item) == ["cobble", "coal"], "↑ moves cobblestone above coal")
 	hud.refresh(sim)
@@ -1534,7 +1536,7 @@ func _test_meadow(game: Game) -> void:
 	check(_walk(hud._plan_box).any(func(n): return n is Label and n.text == "Max" and not n.is_queued_for_deletion()), "a row with no amount reads Max")
 	# Clear the level (issue #188): a toggle that makes every amount Max.
 	var cl: Array = _walk(hud._plan_box).filter(func(n): return n is Button and n.text == "Clear the level" and not n.is_queued_for_deletion())
-	check(cl.size() == 1 and not game.plan.clear, "the old mine's planner has a Clear the level toggle, off at first")
+	check(cl.size() == 1 and not game.plan.clear, "the old caves' planner has a Clear the level toggle, off at first")
 	cl[0].pressed.emit()
 	hud.refresh(sim)
 	await process_frame
@@ -1796,12 +1798,23 @@ func _test_maps(game: Game) -> void:
 	mine.known = true
 	hud.refresh(sim)
 	await _frames()
-	var names: Array = hud._maps.get_children().filter(func(b): return b is Button and not b.is_queued_for_deletion()).map(func(b): return b.text)
-	check(hud._maps.visible and names == ["Village", "Old mine"], "the switcher shows Village and Old mine (%s)" % [names])
+	var btns: Array = hud._maps.get_children().filter(func(b): return b is Button and not b.is_queued_for_deletion())
+	check(hud._maps.visible and btns.size() == 1 and btns[0].text.begins_with("Village"), "the switcher is one dropdown button showing the place in view (%s)" % [btns.map(func(b): return b.text)])
+	check(not hud._maps_drop.visible, "the list of places is closed at first")
+	btns[0].pressed.emit()
+	hud.refresh(sim)
+	await _frames()
+	var rows: Array = hud._maps_list.get_children().filter(func(n): return n is Button and not n.is_queued_for_deletion()).map(func(n): return n.text)
+	check(hud._maps_drop.visible and rows == ["Village", "Old caves"], "opened, it lists Village and Old caves (%s)" % [rows])
+	hud._maps_list.get_children().filter(func(n): return n is Button and n.text == "Old caves")[0].pressed.emit()
+	await _frames()
+	check(game.view_map == OldMine.ID and not hud._maps_drop.visible, "picking a place goes there and closes the list (%s, open %s)" % [game.view_map, hud._maps_drop.visible])
+	game.switch_map("village")
+	await _frames()
 	var village_cam: Vector3 = game._target
 	game.selection = {"kind": "res", "ids": [sim.residents[0].id]}
 	_key(game, KEY_TAB)
-	check(game.view_map == OldMine.ID and game._world.map_id == OldMine.ID, "Tab switches to the old mine")
+	check(game.view_map == OldMine.ID and game._world.map_id == OldMine.ID, "Tab switches to the old caves")
 	check(game.selection.is_empty(), "switching clears the selection")
 	check(Vector2(game._target.x, game._target.z).distance_to(Vector2(mine.entrance)) < 8.0, "the mine opens near its entrance")
 	await _frames()
@@ -1840,7 +1853,7 @@ func _test_maps(game: Game) -> void:
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(sim.residents[0]) + Vector2i(1, 0))
 	sim.move_to_map(tomas, OldMine.ID, sim.get_map(OldMine.ID).entrance)
 	hud.refresh(sim)
-	check(hud._party_panel.visible and hud._party.text.begins_with("Party at the old mine: "), "a dim line says the party is at the old mine (%s)" % hud._party.text)
+	check(hud._party_panel.visible and hud._party.text.begins_with("Party at the old caves: "), "a dim line says the party is at the old caves (%s)" % hud._party.text)
 	hud._party.pressed.emit()
 	check(game.view_map == OldMine.ID, "clicking it switches to the mine")
 	game.switch_map("village")
