@@ -1369,6 +1369,8 @@ func _tree_occludes(t: Dictionary) -> bool:
 		if f[1] == t.id:
 			continue
 		var p: Vector3 = f[0]
+		if t.cell.x < p.x - 1.5 or t.cell.y < p.z - 1.5 or t.cell.x > p.x + 7.0 or t.cell.y > p.z + 7.0:  # a tree hides only what's behind it, to the camera's side of the point
+			continue
 		for box in _tree_boxes(t.cell, Sim.tree_stage(t)):
 			if box.intersects_segment(p + _TOWARD_CAMERA * 0.05, p + _TOWARD_CAMERA * 80.0) != null:
 				return true
