@@ -186,6 +186,62 @@ func _test_headers(game: Game) -> void:
 	long.free()
 
 
+## Trees in front of a blueprint, or of a building that is stuck, fade without selecting it (issue #304).
+func _test_fade_for_blueprints(game: Game) -> void:
+	var sim := game.sim
+	game.selection = {}
+	var spot := Vector2i(sim.w / 2 + 6, sim.h / 2 - 6)
+	var bp := sim.place_site("bench", spot)
+	check(bp != null and not bp.done, "a blueprint is placed")
+	game._update_focus(null)
+	var near: Array = game._world.focus_points.filter(func(f): return absf(f[0].x - (spot.x + 0.5)) < 3.0 and absf(f[0].z - (spot.y + 0.5)) < 3.0)
+	check(not near.is_empty(), "an unselected blueprint is a focus for the fade (%d points)" % near.size())
+	bp.done = true
+	game._update_focus(null)
+	near = game._world.focus_points.filter(func(f): return absf(f[0].x - (spot.x + 0.5)) < 3.0 and absf(f[0].z - (spot.y + 0.5)) < 3.0)
+	check(near.is_empty(), "a finished, unstuck building is not")
+	sim.sites.erase(bp)
+	sim.rev += 1
+
+
+## The planner has "Repeat last trip" once there is a last trip to the place (issue #301).
+func _test_repeat_button(game: Game) -> void:
+	var hud: Hud = game._hud
+	var sim := game.sim
+	var saved: Dictionary = sim.last_plans.duplicate(true)
+	var made := false
+	if sim.expedition_board().is_empty():  # a board of our own, taken down again after
+		var spot := Vector2i(sim.w / 2 + 5, sim.h / 2 + 5)
+		var bs := sim.place_site("board", spot)
+		bs.stage = 1
+		bs.done = true
+		sim._on_site_done(bs)
+		made = true
+	game.open_adventure(Meadow.ID)
+	sim.last_plans.erase(Meadow.ID)
+	hud.refresh(sim)
+	await game.get_tree().process_frame
+	var buttons := func() -> Array: return _walk(hud._plan_box).filter(func(n): return n is Button and n.get_meta("label", "") == "Repeat last trip" and not n.is_queued_for_deletion())
+	check(buttons.call().is_empty(), "no Repeat button before there's a last trip")
+	var plan := sim.new_plan(Meadow.ID)
+	plan.meals = 4
+	sim.last_plans[Meadow.ID] = plan
+	hud._sigs.clear()
+	hud.refresh(sim)
+	await game.get_tree().process_frame
+	var b: Array = buttons.call()
+	check(b.size() == 1, "a Repeat button once there is one")
+	if b.size() == 1:
+		game.plan.meals = 1
+		b[0].pressed.emit()
+		check(game.plan.meals == 4, "pressing it fills the plan in from the last trip")
+	sim.last_plans = saved
+	game.close_planner()
+	if made:
+		sim.sites = sim.sites.filter(func(x): return x.tpl != "board")
+		sim.rev += 1
+
+
 ## Toasts are kept in a log that opens from a button, so a missed one can be read (issue #297).
 func _test_message_log(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -431,6 +487,11 @@ func _test_fading(game: Game) -> void:
 	check(world.faded_trees.has(tree.id), "selecting a bench behind a tree fades that tree")
 	check(world.faded_trees.size() <= 2, "only trees in front of it fade (%d faded)" % world.faded_trees.size())
 	game.selection = {}
+	await process_frame
+	await process_frame
+	check(world.faded_trees.has(tree.id), "an unfinished blueprint keeps the tree in front of it faded, selected or not (issue #304)")
+	bench.done = true
+	sim.rev += 1
 	await process_frame
 	await process_frame
 	check(not world.faded_trees.has(tree.id), "the tree turns solid again when nothing behind it is focused")
@@ -1863,9 +1924,17 @@ func _initialize() -> void:
 	await _test_equip(game)
 	await _test_toasts(game)
 	_test_headers(game)
+
+
 	await _test_skip_ahead(game)
 	await _test_message_log(game)
 	await _test_minimap(game)
+
+
+	_test_fade_for_blueprints(game)
+
+
+	await _test_repeat_button(game)
 	await _test_needs_you(game)
 	await _test_autosave(game)
 	_test_glyphs()
