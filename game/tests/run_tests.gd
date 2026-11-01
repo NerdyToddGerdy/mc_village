@@ -104,6 +104,10 @@ func _init() -> void:
 		"test_the_door_down_and_back",
 		"test_cows_and_pigs",
 		"test_adventures_list",
+		"test_repeat_the_last_trip",
+
+
+		"test_the_adventures_registry",
 		"test_meadow_expedition",
 		"test_the_road_to_the_meadow",
 		"test_old_meadow_trips_come_home",
@@ -2886,6 +2890,59 @@ func test_the_road_to_the_meadow() -> void:
 		if h.map == "village":
 			break
 	check(h.map == "village" and not h.away, "and comes home")
+
+
+## Issue #301: the board remembers the last trip packed for each place, and fills a new plan in from it in one go: the
+## same party, objective, list and meals. Anyone who can't go is replaced, and it says so.
+func test_repeat_the_last_trip() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], Sim.rcell(ada) + Vector2i(2, 0))
+	built_board(sim)
+	check(sim.repeat_plan(Meadow.ID).is_empty(), "no last trip, nothing to repeat")
+	var plan := sim.new_plan(Meadow.ID)
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 5
+	sim.aim_plan(plan, "leather", 4)
+	check(sim.plan_expedition(plan) == "", "a trip is planned")
+	check(sim.last_plans.has(Meadow.ID) and sim.last_plans[Meadow.ID].meals == 5, "and remembered")
+	sim.expeditions.overworld = {}  # the trip is over
+	var again: Dictionary = sim.repeat_plan(Meadow.ID)
+	var p: Dictionary = again.plan
+	check(p.party == [ada.id, tomas.id] and p.meals == 5 and p.target.item == "leather" and p.list[0].item == "leather" and again.changes.is_empty(), "the same party, meals and objective, nothing changed (%s)" % [again.changes])
+	tomas.hurt = 1  # hurt, resting
+	again = sim.repeat_plan(Meadow.ID)
+	check(again.plan.party == [ada.id, mira.id] and again.changes.size() == 1 and "Tomas" in again.changes[0] and "Mira" in again.changes[0], "a hurt member is replaced, and it says who and why (%s)" % [again.changes])
+	mira.hurt = 1
+	again = sim.repeat_plan(Meadow.ID)
+	check(again.plan.party == [ada.id] and again.changes.size() == 1 and "nobody can take their place" in again.changes[0], "with nobody to take their place, the party is smaller (%s)" % [again.changes])
+	check(sim.repeat_plan(OldMine.ID).is_empty(), "another place has its own last trip")
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.last_plans.has(Meadow.ID) and loaded.last_plans[Meadow.ID].meals == 5, "the last trips are saved")
+	var f61 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v61.save").data.state)
+	check(f61.last_plans.has("meadow") and f61.last_plans.meadow.meals == 5, "the v61 fixture keeps its last trip")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v60.save").data.state)
+	check(old.last_plans.is_empty(), "an older save has none")
+
+
+## Issue #242: what each adventure is lives in one table (`Adventures`), and the places that used to ask "is it the
+## meadow?" read it, with no change in what the old mine, the meadow and the Nether landing do.
+func test_the_adventures_registry() -> void:
+	var need := ["kind", "sign", "road", "cargo", "others", "target", "picks", "pens", "got", "left"]
+	for id in Adventures.IDS:
+		var d: Dictionary = Adventures.def(id)
+		check(need.all(func(k): return d.has(k)), "%s has every field" % id)
+		check(Tuning.CARGO_DEFAULTS.has(d.cargo), "%s's Bring-back defaults exist" % id)
+	check(Sim.ADVENTURES == Adventures.IDS and Sim.ADVENTURES == [OldMine.ID, Meadow.ID, NetherLanding.ID], "the board's order is the registry's")
+	var sim := Sim.new_game()
+	check(sim.sign_for(Meadow.ID) == sim.meadow_sign() and sim.sign_for(OldMine.ID) == sim.route_sign(), "the meadow's party leaves by the west signpost, the mine's by the east")
+	check(Sim.road_map_for(Meadow.ID) == MeadowRoad.ID and Sim.road_map_for(OldMine.ID) == Road.ID and Sim.road_map_for(MineLevels.level_id(2)) == Road.ID, "the road each walks, a deeper level by the mine's")
+	var mp := sim.new_plan(Meadow.ID)
+	check(mp.target.item == "wool" and mp.target.n == 6 and mp.picks == 0 and mp.has("sticks"), "a meadow plan asks for wool and packs no pickaxes")
+	var op := sim.new_plan(OldMine.ID)
+	check(op.target.item == "coal" and op.target.n == 8 and op.picks == 1 and op.sticks == 0 and op.wheat == 0, "a mine plan asks for coal, with a spare pickaxe and no pens")
+	check(Adventures.def("a_place_nobody_listed") == Adventures.def(OldMine.ID), "an unlisted destination works as the old mine does")
 
 
 ## Issue #137: the meadow is an expedition site with its own map: herds of sheep, cows and pigs, a pond,

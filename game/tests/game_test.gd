@@ -123,6 +123,7 @@ func _test_tallies(game: Game) -> void:
 	check(food.text.begins_with("Food  1 meal · 2 raw"), "Food counts meals on hand and raw meat to cook apart (%s)" % food.text)
 	var low := 1 < sim.residents.size()
 	check((food.get_theme_color("font_color") == Palette.YELLOW) == low, "Food is yellow only when meals are fewer than residents")
+	check(("low" in food.text) == low, "and says \"low\" in words then too, not by colour alone (%s)" % food.text)
 	sim.drop_items(Sim.rcell(sim.residents[0]), "wool", 2)
 	check(shown.call().has("animal") and hud._group_btns.animal.text.begins_with("Animal goods  2"), "wool brings in Animal goods")
 	for k in sim.items.keys():
@@ -183,6 +184,87 @@ func _test_headers(game: Game) -> void:
 	check(long is VBoxContainer and long.get_child_count() == 2, "a long status gets its own line below the title")
 	short.free()
 	long.free()
+
+
+## Trees in front of a blueprint, or of a building that is stuck, fade without selecting it (issue #304).
+func _test_fade_for_blueprints(game: Game) -> void:
+	var sim := game.sim
+	game.selection = {}
+	var spot := Vector2i(sim.w / 2 + 6, sim.h / 2 - 6)
+	var bp := sim.place_site("bench", spot)
+	check(bp != null and not bp.done, "a blueprint is placed")
+	game._update_focus(null)
+	var near: Array = game._world.focus_points.filter(func(f): return absf(f[0].x - (spot.x + 0.5)) < 3.0 and absf(f[0].z - (spot.y + 0.5)) < 3.0)
+	check(not near.is_empty(), "an unselected blueprint is a focus for the fade (%d points)" % near.size())
+	bp.done = true
+	game._update_focus(null)
+	near = game._world.focus_points.filter(func(f): return absf(f[0].x - (spot.x + 0.5)) < 3.0 and absf(f[0].z - (spot.y + 0.5)) < 3.0)
+	check(near.is_empty(), "a finished, unstuck building is not")
+	sim.sites.erase(bp)
+	sim.rev += 1
+
+
+## The planner has "Repeat last trip" once there is a last trip to the place (issue #301).
+func _test_repeat_button(game: Game) -> void:
+	var hud: Hud = game._hud
+	var sim := game.sim
+	var saved: Dictionary = sim.last_plans.duplicate(true)
+	var made := false
+	if sim.expedition_board().is_empty():  # a board of our own, taken down again after
+		var spot := Vector2i(sim.w / 2 + 5, sim.h / 2 + 5)
+		var bs := sim.place_site("board", spot)
+		bs.stage = 1
+		bs.done = true
+		sim._on_site_done(bs)
+		made = true
+	game.open_adventure(Meadow.ID)
+	sim.last_plans.erase(Meadow.ID)
+	hud.refresh(sim)
+	await game.get_tree().process_frame
+	var buttons := func() -> Array: return _walk(hud._plan_box).filter(func(n): return n is Button and n.get_meta("label", "") == "Repeat last trip" and not n.is_queued_for_deletion())
+	check(buttons.call().is_empty(), "no Repeat button before there's a last trip")
+	var plan := sim.new_plan(Meadow.ID)
+	plan.meals = 4
+	sim.last_plans[Meadow.ID] = plan
+	hud._sigs.clear()
+	hud.refresh(sim)
+	await game.get_tree().process_frame
+	var b: Array = buttons.call()
+	check(b.size() == 1, "a Repeat button once there is one")
+	if b.size() == 1:
+		game.plan.meals = 1
+		b[0].pressed.emit()
+		check(game.plan.meals == 4, "pressing it fills the plan in from the last trip")
+	sim.last_plans = saved
+	game.close_planner()
+	if made:
+		sim.sites = sim.sites.filter(func(x): return x.tpl != "board")
+		sim.rev += 1
+
+
+## Toasts are kept in a log that opens from a button, so a missed one can be read (issue #297).
+func _test_message_log(game: Game) -> void:
+	var hud: Hud = game._hud
+	var base: int = hud._log.size()
+	hud._log_unread = 0
+	hud.add_toast({"text": "A traveler arrived at the first house.", "res_id": 0, "site_id": 0})
+	hud.add_toast({"text": "The expedition board is up.", "res_id": 0, "site_id": 1})
+	hud.refresh(game.sim)
+	check(hud._log.size() == base + 2 and hud._log_btn.text == "Log  (2 new)", "two toasts are kept, and the button counts them (%s)" % hud._log_btn.text)
+	hud._toggle_log()
+	await game.get_tree().process_frame
+	var all := _walk(hud._log_list).filter(func(n): return not n.is_queued_for_deletion())
+	var texts: Array = all.filter(func(n): return n is Label and ("arrived at the first house" in n.text or "board is up" in n.text)).map(func(n): return n.text)
+	check(hud._log_panel.visible and texts.size() == 2 and "board is up" in texts[0], "opening it lists them, newest first (%s)" % [texts])
+	check(hud._log_btn.text == "Log" and hud._log_unread == 0, "and clears the count")
+	check(hud.get_viewport().get_visible_rect().encloses(hud._log_panel.get_global_rect()), "the list lies inside the window")
+	check(all.any(func(n): return n is Button and n.text == "Show"), "a message about a place has a button to it")
+	for i in 80:
+		hud.add_toast({"text": "Message %d" % i, "res_id": 0, "site_id": 0})
+	check(hud._log.size() == Hud.LOG_MAX and hud._log.back().text == "Message 79", "it keeps the last %d" % Hud.LOG_MAX)
+	hud._toggle_log()
+	check(not hud._log_panel.visible, "the button closes it again")
+	await game.get_tree().process_frame
 
 
 ## The stuck list sets the choices waiting for the player apart from what's wrong (issue #296).
@@ -278,6 +360,88 @@ func _test_autosave(game: Game) -> void:
 	game.speed = 1
 
 
+## A corner map of the map in view; clicking it moves the camera (issue #298).
+func _test_minimap(game: Game) -> void:
+	var hud: Hud = game._hud
+	var mm: MiniMap = hud._minimap
+	game._menu.visible = false
+	check(not mm.visible, "the minimap starts hidden")
+	check(game.keys.action_for(_key_event(KEY_I)) == "minimap", "I is its key")
+	game._key(_key_event(KEY_I))
+	hud.refresh(game.sim)
+	await game.get_tree().process_frame
+	await game.get_tree().process_frame
+	check(mm.visible and hud.minimap_on, "pressing it shows the map")
+	check(hud.get_viewport().get_visible_rect().encloses(mm.get_global_rect()), "inside the window (%s)" % [mm.get_global_rect()])
+	var mp: SimMap = game.sim.get_map(game.view_map)
+	var before: Vector3 = game._target
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = true
+	ev.position = Vector2(MiniMap.SIZE * 0.25, MiniMap.SIZE * 0.75)
+	mm._gui_input(ev)
+	ev.pressed = false
+	mm._gui_input(ev)
+	var k := MiniMap.SIZE / float(maxi(mp.w, mp.h))
+	check(absf(game._target.x - MiniMap.SIZE * 0.25 / k) < 0.01 and absf(game._target.z - MiniMap.SIZE * 0.75 / k) < 0.01 and game._target != before, "clicking it centres the camera on that cell (%s)" % [game._target])
+	mm.queue_redraw()
+	await game.get_tree().process_frame
+	check(true, "it draws without error")
+	game._key(_key_event(KEY_I))
+	hud.refresh(game.sim)
+	check(not mm.visible, "and the key hides it again")
+
+
+func _key_event(code: Key) -> InputEventKey:
+	var e := InputEventKey.new()
+	e.keycode = code
+	e.physical_keycode = code
+	e.pressed = true
+	return e
+
+
+## Skipping ahead runs fast until something needs the player (issue #299).
+func _test_skip_ahead(game: Game) -> void:
+	var sim := game.sim
+	game._menu.visible = false
+	game.set_speed(1)
+	sim.events.clear()
+	game.set_skip(true)
+	await game.get_tree().process_frame
+	game._hud.refresh(sim)
+	check(game.skipping and game._hud._skip_btn.button_pressed, "Skip starts a skip, and its button shows it")
+	check(game._skip_stop_reason() == "", "nothing needs the player right after it starts")
+	var t0 := sim.tick
+	game._process(0.1)
+	check(sim.tick - t0 >= 20 and sim.tick - t0 <= 30, "a skip runs faster than 1× (%d ticks in a tenth of a second)" % (sim.tick - t0))
+	sim.events.append({"type": "toast", "text": "x"})
+	check(game._skip_stop_reason() == "there is a message", "a message stops it")
+	sim.events.clear()
+	var kept: Array = sim.stuck.duplicate(true)
+	sim.stuck.append({"who": "Z", "why": "needs a thing", "map": "village", "cell": Vector2.ZERO, "height": 1.0, "focus_kind": "", "focus_id": 0, "hidden": false, "waiting": false, "decision": "", "key": "z|new", "since": 0})
+	check(game._skip_stop_reason() == "something got stuck", "a new problem stops it")
+	sim.stuck = kept
+	var dec := {"who": "Cart", "why": "needs your say", "map": "village", "cell": Vector2.ZERO, "height": 1.0, "focus_kind": "", "focus_id": 0, "hidden": false, "waiting": true, "decision": "freight", "key": "d|cart", "since": 0}
+	sim.stuck.append(dec)
+	check(game._skip_stop_reason() == "something needs your say", "a new decision stops it")
+	game._skip_decisions = game._decision_keys()
+	check(game._skip_stop_reason() == "", "a decision already waiting when it started doesn't")
+	sim.stuck = kept
+	sim.expeditions.overworld["state"] = "staging"
+	check(game._skip_stop_reason() == "a party set out or came home", "a party setting out stops it")
+	sim.expeditions.overworld.erase("state")
+	game._skip_from = sim.tick - int(Tuning.SKIP_MAX_SECS * Tuning.TPS)
+	check(game._skip_stop_reason() == "ten minutes passed", "ten minutes of nothing ends it")
+	game._skip_from = sim.tick - 400  # 20 s
+	var toasts: int = game._hud._toast_list.size()
+	game._end_skip("something got stuck")
+	check(not game.skipping and game._hud._toast_list.size() >= mini(toasts + 1, 3), "ending it says why in a toast")
+	game.set_skip(true)
+	game.set_speed(2)
+	check(not game.skipping and game.speed == 2, "picking a speed ends a skip")
+	game.set_speed(1)
+
+
 ## Toasts sit in the gap below the tally bar, clear of the goals panel and the stuck list (issue #71).
 func _test_toasts(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -336,6 +500,11 @@ func _test_fading(game: Game) -> void:
 	check(world.faded_trees.has(tree.id), "selecting a bench behind a tree fades that tree")
 	check(world.faded_trees.size() <= 2, "only trees in front of it fade (%d faded)" % world.faded_trees.size())
 	game.selection = {}
+	await process_frame
+	await process_frame
+	check(world.faded_trees.has(tree.id), "an unfinished blueprint keeps the tree in front of it faded, selected or not (issue #304)")
+	bench.done = true
+	sim.rev += 1
 	await process_frame
 	await process_frame
 	check(not world.faded_trees.has(tree.id), "the tree turns solid again when nothing behind it is focused")
@@ -1768,6 +1937,17 @@ func _initialize() -> void:
 	await _test_equip(game)
 	await _test_toasts(game)
 	_test_headers(game)
+
+
+	await _test_skip_ahead(game)
+	await _test_message_log(game)
+	await _test_minimap(game)
+
+
+	_test_fade_for_blueprints(game)
+
+
+	await _test_repeat_button(game)
 	await _test_needs_you(game)
 	await _test_autosave(game)
 	_test_glyphs()

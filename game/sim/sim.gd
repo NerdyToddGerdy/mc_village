@@ -1420,6 +1420,7 @@ func _chest_job(r: Dictionary, c: Vector2i):
 
 ## Claims made so far: strips added to the village. Saved.
 var claims_made := 0
+var last_plans := {}                ## Destination -> the plan last packed for it, for "Repeat last trip" (issue #301).
 var cargo_lists := {}               ## Destination -> its last cargo priority list, for the next plan to start from (issue #185).
 
 
@@ -3645,7 +3646,7 @@ func sign_for(dest: String) -> Vector2i:
 	if realm_of(dest) == "nether":  # a Nether party gathers in front of the portal (issue #148)
 		var p := village_portal()
 		return staging_cells(p)[1] if not p.is_empty() else route_sign()
-	return meadow_sign() if dest == Meadow.ID else route_sign()
+	return meadow_sign() if Adventures.def(dest).sign == "west" else route_sign()
 
 
 ## The village's finished portal, or {} (issue #148).
@@ -5127,10 +5128,10 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 			"list": cargo_list_for(dest) if NetherRoute.site_key(dest) != "" else [],
 			"shelter": build_it, "cobble": Tuning.SHELTER_COST.cobble if build_it else 0, "planks": Tuning.SHELTER_COST.plank if build_it else 0, "stock": 0,
 			"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": false, "clear": false, "fight": false}
-	var meadow := dest == Meadow.ID  # issue #137: wool, and no pickaxes, for the meadow
-	var sticks := fence_left() if meadow else 0  # issue #139: what the pens need
-	var wheat := wheat_wanted() if meadow else 0
-	var plan := {"dest": dest, "party": party, "target": {"item": "wool" if meadow else "coal", "n": 6 if meadow else 8}, "meals": 3, "picks": 0 if meadow else 1,
+	var ad := Adventures.def(dest)  # issue #137: wool, and no pickaxes, for the meadow
+	var sticks := fence_left() if ad.pens else 0  # issue #139: what the pens need
+	var wheat := wheat_wanted() if ad.pens else 0
+	var plan := {"dest": dest, "party": party, "target": {"item": ad.target[0], "n": ad.target[1]}, "meals": 3, "picks": ad.picks,
 		"sticks": sticks, "wheat": wheat,
 		"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": cart_adds_room(), "clear": false}
 	plan.list = cargo_list_for(dest)
@@ -5169,12 +5170,53 @@ static func sync_target(plan: Dictionary) -> void:
 		plan.target = {"item": pick.item, "n": maxi(1, pick.n)}
 
 
+## The last trip packed for `dest`, as a new plan (issue #301): the same objective, list, meals, policy and party. A
+## member who can't go now is left out, and the next resident who can goes in their place; pens' sticks and wheat and
+## the Nether's building stock are worked out afresh, since what's needed has changed. Returns {plan, changes}, where
+## `changes` says in words what is not the same, or {} when there is no last trip.
+func repeat_plan(dest: String) -> Dictionary:
+	if not last_plans.has(dest):
+		return {}
+	var last: Dictionary = last_plans[dest]
+	var plan := new_plan(dest)
+	for k in last:
+		if not k in ["party", "sticks", "wheat", "shelter", "cobble", "planks", "stock"]:
+			plan[k] = last[k].duplicate(true) if last[k] is Dictionary or last[k] is Array else last[k]
+	var changes: Array = []
+	var party: Array = []
+	var left_out: Array = []
+	for id in last.party:
+		var r := resident(id)
+		if r.is_empty():
+			continue
+		var why := cant_join(r)
+		if why == "":
+			party.append(id)
+		else:
+			left_out.append("%s (%s)" % [r.name, why.to_lower()])
+	for name in left_out:
+		var sub: Dictionary = {}
+		for r in residents:
+			if cant_join(r) == "" and not party.has(r.id) and not last.party.has(r.id):
+				sub = r
+				break
+		if sub.is_empty():
+			changes.append("%s can't go, and nobody can take their place" % name)
+		else:
+			party.append(sub.id)
+			changes.append("%s can't go; %s goes instead" % [name, sub.name])
+	plan.party = party
+	if party.is_empty():
+		changes.append("nobody can go")
+	return {"plan": plan, "changes": changes}
+
+
 ## Sets a plan's (or an expedition's) list to one wanted item first, then everything else its place gives as much
 ## as fits: the old single objective, for plans made in code.
 func aim_plan(plan: Dictionary, item: String, n: int) -> void:
 	var rows: Array = [{"item": item, "on": true, "n": n}]
 	var known: Array = plan_targets(plan.dest).map(func(x): return x.item)
-	var others: Array = ["wool", "mutton", "leather", "beef", "porkchop"] if plan.dest == Meadow.ID else ["iron_ore", "coal", "cobble"]
+	var others: Array = Adventures.def(plan.dest).others
 	for o in others:
 		if o != item and known.has(o):
 			rows.append({"item": o, "on": true, "n": 0})
@@ -5192,7 +5234,7 @@ func cargo_list_for(dest: String) -> Array:
 		if known.has(r.item):
 			out.append({"item": r.item, "on": r.on, "n": r.n})
 	if kept.is_empty():  # never planned here: the defaults, in their order
-		for d in Tuning.CARGO_DEFAULTS["meadow" if dest == Meadow.ID else "mine"]:
+		for d in Tuning.CARGO_DEFAULTS[Adventures.def(dest).cargo]:
 			if known.has(d[0]):
 				out.append({"item": d[0], "on": true, "n": d[1]})
 	for item in known:
@@ -5419,6 +5461,8 @@ func plan_expedition(plan: Dictionary) -> String:
 		return problems[0]
 	if not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line", "pline"]:  # each place keeps its last list (issue #185)
 		cargo_lists[plan.dest] = plan.get("list", []).map(func(r): return {"item": r.item, "on": r.on, "n": r.n})
+	if not plan.get("rescue", false):
+		last_plans[plan.dest] = plan.duplicate(true)
 	use_slot("rescue" if plan.get("rescue", false) else slot_of_dest(plan.dest))
 	expedition = plan.duplicate(true)
 	expedition.board = village_portal().id if in_nether() else expedition_board().id  # a Nether party packs at the portal (issue #148)
@@ -5715,7 +5759,8 @@ func route_sign() -> Vector2i:
 
 ## Seconds on the way to `to`, or home from it: the road to the meadow, or the road to the mine.
 func trip_time(to: String) -> float:
-	return MeadowRoad.walk_time() if to == Meadow.ID or (to == "village" and expedition.get("dest", "") == Meadow.ID) else route_walk_time()
+	var dest: String = expedition.get("dest", "") if to == "village" else to
+	return MeadowRoad.walk_time() if Adventures.road_of(dest) == MeadowRoad.ID else route_walk_time()
 
 
 ## Whether a party member is on their way: walking to the signpost to leave the village, or to the
@@ -5898,7 +5943,7 @@ func expedition_report(ex: Dictionary) -> Array:
 	for k in ex.get("provisions", {}):
 		meals_back += ex.provisions[k]
 	var name: String = maps[ex.dest].name.to_lower()
-	var lines: Array = ["Back from the %s: %s" % [name, ", ".join(got)] if not got.is_empty() else "Back from the %s with nothing %s" % [name, "hunted" if ex.dest == Meadow.ID else "mined"]]
+	var lines: Array = ["Back from the %s: %s" % [name, ", ".join(got)] if not got.is_empty() else "Back from the %s with nothing %s" % [name, Adventures.def(ex.dest).got]]
 	var meals_packed := 0
 	for k in ex.get("packed", {}):
 		if Defs.MEALS.has(k):
@@ -5938,7 +5983,7 @@ func on_road(r: Dictionary) -> bool:
 
 ## The road map a trip to `dest` walks: the meadow's strip, or the road to the mine.
 static func road_map_for(dest: String) -> String:
-	return MeadowRoad.ID if dest == Meadow.ID else Road.ID
+	return Adventures.road_of(dest)
 
 
 ## The two ends of the road map `id`: the village's and the site's.
@@ -8594,7 +8639,7 @@ func policy_met() -> String:
 			return "the pens are tended"
 		if ex.get("clear", false) and level_of(ex.dest) > 0:
 			return "the level is cleared"
-		return "nothing left to hunt" if m.id == Meadow.ID else "nothing left to mine"
+		return Adventures.def(m.id).left
 	return ""
 
 
@@ -9392,7 +9437,7 @@ func _landing_report() -> Dictionary:
 
 ## The destinations the expedition board offers, in order. A later one (the Nether, an outpost) is a
 ## new row here.
-const ADVENTURES := [OldMine.ID, Meadow.ID, NetherLanding.ID]
+const ADVENTURES := Adventures.IDS
 
 
 ## The adventures list: one row per known destination, with where it is, what's there, its hazards
@@ -9463,7 +9508,7 @@ func save_state() -> Dictionary:
 	for id in maps:
 		maps_out[id] = maps[id].save()
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
-		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made, "cargo_lists": cargo_lists.duplicate(true),
+		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made, "cargo_lists": cargo_lists.duplicate(true), "last_plans": last_plans.duplicate(true),
 		"herd_floor": herd_floor.duplicate(), "wheat_keep": wheat_keep, "rng_state": rng.state, "seed": seed,
 		"expeditions": expeditions.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true),
 		"portal_line": portal_line.duplicate(true), "freight": freight.duplicate(true), "wires": wires.duplicate(true)}
@@ -9488,6 +9533,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.auto_craft = d.auto_craft
 	s.claims_made = d.get("claims_made", 0)
 	s.cargo_lists = d.get("cargo_lists", {}).duplicate(true)
+	s.last_plans = d.get("last_plans", {}).duplicate(true)
 	s.herd_floor = d.herd_floor.duplicate()
 	s.wheat_keep = d.get("wheat_keep", Tuning.WHEAT_KEEP)
 	# Bushes added to older saves (v7) may sit where something now stands; drop those.
