@@ -5,6 +5,9 @@ extends Control
 ## here on the page. The game pauses while the menu is open.
 
 ## Mouse controls and Esc, which can't be rebound; shown alongside the rebindable keys.
+const SAVES_NOTE := "Saves are kept on this computer."
+const SAVES_NOTE_WEB := "Saves are kept in this browser only. Clearing site data or using a private window erases them."
+
 const FIXED_ROWS := {
 	"Orders": [["Shift-drag", "With Mine: trees only"], ["Alt-drag", "With Mine: boulders only (Option on a Mac)"],
 		["Esc", "Cancel the current order"]],
@@ -123,7 +126,7 @@ func _render_main() -> void:
 		_box.add_child(_big_button("Quit", func(): _ask("Quit Block Village? Anything you haven’t saved will be lost.", "Quit", "quit")))
 	_add_confirm()
 	var auto = _auto
-	var note := "Saves are kept on this computer. Esc or M opens this menu."
+	var note := (SAVES_NOTE_WEB if OS.has_feature("web") else SAVES_NOTE) + " Esc or M opens this menu."
 	if auto != null and not auto.has("error"):
 		note += " The game saves itself now and then, on its own autosave (last: %s); Load game lists it." % _when(auto.saved_at)
 	_box.add_child(hud.label(note, false, Palette.CHALK_DIM, Palette.CAPTION, true))
