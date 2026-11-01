@@ -689,11 +689,11 @@ func _initialize() -> void:
 	sim = game.sim
 	sim.get_map(OldMine.ID).known = true
 	await key(KEY_TAB)
-	check(game.view_map == OldMine.ID, "Tab switches to the old mine")
-	check(await click_button("Village"), "click Village in the switcher")
+	check(game.view_map == OldMine.ID, "Tab switches to the old caves")
+	check(await go_to("Village"), "click Village in the switcher")
 	check(game.view_map == "village", "the switcher goes back to the village")
-	check(await click_button("Old mine"), "click Old mine in the switcher")
-	check(game.view_map == OldMine.ID, "and to the old mine")
+	check(await go_to("Old caves"), "click Old caves in the switcher")
+	check(game.view_map == OldMine.ID, "and to the old caves")
 	await key(KEY_TAB)
 	check(game.view_map == "village", "Tab goes back to the village")
 	var miner := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(sim.residents[0]) + Vector2i(1, 0))

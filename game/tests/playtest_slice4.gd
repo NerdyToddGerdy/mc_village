@@ -38,7 +38,7 @@ func _initialize() -> void:
 
 	# ---- The first trip, on foot: it surveys the road (issues #118, #119)
 	var foot := await trip(sim, ada)
-	check(foot.road > 0.0, "Ada walks to the old mine and back (%.0f s on the road)" % foot.road)
+	check(foot.road > 0.0, "Ada walks to the old caves and back (%.0f s on the road)" % foot.road)
 	check(sim.route_surveyed(), "the first trip surveys the road")
 	check(seen("The road to the mine is surveyed"), "a toast says so, with the walking time")
 
@@ -77,7 +77,7 @@ func _initialize() -> void:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(visible_label("The cart is parked at the village end") and visible_label("6 of 6 segments laid"), "the village station shows the cart parked and the line laid (view %s, selected %s)" % [game.view_map, game.selection])
-	await click_button("Village")
+	await go_to("Village")
 
 	# ---- The second trip, by cart (issue #124)
 	var cart := await trip(sim, ada, true)
@@ -101,7 +101,7 @@ func _initialize() -> void:
 ## Selects the signpost on the village's east edge, which shows the route.
 func open_signpost(sim: Sim) -> void:
 	if game.view_map != "village":
-		await click_button("Village")
+		await go_to("Village")
 	game.selection = {}
 	game.close_planner()  # the board's plan can cover the signpost
 	await look_at(sim.route_sign())
@@ -110,7 +110,7 @@ func open_signpost(sim: Sim) -> void:
 	await click(screen(sim.route_sign(), 1.4))
 	game._hud.refresh(sim)
 	await frames(2)
-	check(game.selection.get("kind", "") == "route", "the signpost shows the road to the old mine")
+	check(game.selection.get("kind", "") == "route", "the signpost shows the road to the old caves")
 
 
 ## Plans and sends Ada alone to the old mine for 3 coal, through the planner, and plays until she's
@@ -131,7 +131,7 @@ func trip(sim: Sim, ada: Dictionary, by_cart := false) -> Dictionary:
 	game._hud.refresh(sim)
 	await frames(2)
 	check(game.planner_open, "selecting the board opens the planner")
-	check(await pick_location("Old mine"), "pick the old mine from the Location dropdown")
+	check(await pick_location("Old caves"), "pick the old caves from the Location dropdown")
 	await settle()
 	game.plan = sim.new_plan()
 	game._hud.refresh(sim)

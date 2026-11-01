@@ -101,6 +101,7 @@ func _init() -> void:
 		"test_stations_and_the_cart",
 		"test_ride_the_line",
 		"test_mine_levels_are_generated",
+		"test_cave_biomes",
 		"test_the_door_down_and_back",
 		"test_cows_and_pigs",
 		"test_adventures_list",
@@ -458,7 +459,8 @@ func test_every_save_fixture_still_loads() -> void:
 		var mine := sim.get_map(OldMine.ID)
 		if v >= 15:  # issues #100-#102: Mira at the old mine, with coal she's mined
 			var mira: Dictionary = sim.residents[2]
-			check(mira.map == OldMine.ID and mine.visited and mine.known, "v%d: Mira is still at the old mine" % v)
+			check(mira.map == OldMine.ID and mine.visited and mine.known, "v%d: Mira is still at the old caves" % v)
+			check(mine.name == OldMine.NAME, "v%d: the old mine is shown under its new name, the old caves" % v)
 			check(sim.on_map(OldMine.ID, count.bind(sim, "coal")) > 0 and count(sim, "coal") == 0, "v%d: the mine's coal stays at the mine" % v)
 			check(OldMine.LAYOUT.size() == mine.h and sim.ore_left(OldMine.ID, "coal") < 6, "v%d: the mine's mined-out coal stays mined" % v)
 			if v >= 17:  # issues #109-#111: Mira's expedition at the mine, hurt, with the iron found and a choice waiting
@@ -474,7 +476,7 @@ func test_every_save_fixture_still_loads() -> void:
 				check(sim.expedition.is_empty(), "v%d: no expedition in an older save" % v)
 		else:  # issue #100: an older save is all village, and gets an unvisited old mine
 			check(sim.residents.all(func(r): return r.map == "village") and sim.sites.all(func(s): return s.map == "village"), "v%d: everyone and everything is on the village map" % v)
-			check(not mine.known and not mine.visited and sim.ore_left(OldMine.ID, "coal") == 6, "v%d: an unvisited old mine is added" % v)
+			check(not mine.known and not mine.visited and sim.ore_left(OldMine.ID, "coal") == 6, "v%d: an unvisited old caves is added" % v)
 			check(mine.boulders.all(func(b): return sim.maps.village.boulders.all(func(o): return o.id != b.id) and b.id < sim.next_id), "v%d: the mine's ids don't clash with the village's" % v)
 		if v < 16:
 			check(sim.residents.all(func(r): return r.trip == ("meadow" if r.away else "")), "v%d: anyone away is at the meadow" % v)
@@ -498,9 +500,9 @@ func test_every_save_fixture_still_loads() -> void:
 			var calves := 1 if v >= 21 else 0  # v21 adds a calf in a pen
 			check(mead.visited and mead.regrow.get("pig", 0.0) == 60.0 and sim.herds().pig == Meadow.herd().pig - 1 and sim.herds().cow == Meadow.herd().cow - 1 + calves, "v%d: the meadow's herds and regrowth survive" % v)
 		else:  # issue #132: the old mine is Level 1, its door not reached, with a boulder in front of it
-			check(mine.level == 1 and mine.door == Vector2i(15, 8) and mine.door_state == "closed" and not sim.maps.has(two_id), "v%d: the old mine gets its door, not yet reached" % v)
+			check(mine.level == 1 and mine.door == Vector2i(15, 8) and mine.door_state == "closed" and not sim.maps.has(two_id), "v%d: the old caves gets its door, not yet reached" % v)
 			check(mine.boulders.any(func(b): return b.cell == Vector2i(14, 8)) and not sim.on_map(OldMine.ID, sim.walkable.bind(Vector2i(14, 8))) and sim.seed == Tuning.SEED, "v%d: with a boulder in front of it, and the game's seed" % v)
-			check(sim.get_map(Meadow.ID).known == mine.known, "v%d: the meadow is known if the old mine is" % v)
+			check(sim.get_map(Meadow.ID).known == mine.known, "v%d: the meadow is known if the old caves is" % v)
 		if v >= 21:  # issues #139, #140: a built pen with a fed pair and a calf, a part-built one; Mira's armor
 			var mead := sim.get_map(Meadow.ID)
 			check(mead.pens.size() == 2 and Sim.pen_done(mead.pens[0]) and mead.pens[1].built.size() == 5 and mead.gates.has(mead.pens[0].gate), "v%d: the pens and their fences survive" % v)
@@ -511,7 +513,7 @@ func test_every_save_fixture_still_loads() -> void:
 		check(sim.maps.village.sheep.all(func(a): return a.kind == "animal" and a.species == "sheep"), "v%d: the village's animals are sheep" % v)
 		if v < 17:  # issues #109-#111: nobody hurt, no choice waiting, and the mine gets its hazards
 			check(sim.residents.all(func(r): return r.hurt == 0) and sim.pending.is_empty(), "v%d: nobody is hurt and no choice waits" % v)
-			check(mine.ledges == OldMine.LEDGES and mine.boulders.filter(func(b): return b.get("loose", false)).size() == OldMine.LOOSE.size(), "v%d: the old mine gets its loose ceilings and ledge" % v)
+			check(mine.ledges == OldMine.LEDGES and mine.boulders.filter(func(b): return b.get("loose", false)).size() == OldMine.LOOSE.size(), "v%d: the old caves gets its loose ceilings and ledge" % v)
 		check(sim.sites.any(func(s): return s.tpl == "bench" and s.done and s.queue.has("stone_axe")), "v%d: the bench and its queue survive" % v)
 		if v >= 3:
 			check(sim.residents[0].orders.size() == 2, "v%d: Ada's queued orders survive" % v)
@@ -1544,12 +1546,12 @@ func send_to_mine(sim: Sim, r: Dictionary) -> void:
 ## tallies leave out what lies on another map.
 func test_residents_only_work_on_their_own_map() -> void:
 	var sim := Sim.new_game()
-	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID, NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old mine, the road between them, the meadow and its road, and the Nether landing, with the village current")
+	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID, NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old caves, the road between them, the meadow and its road, and the Nether landing, with the village current")
 	var ada: Dictionary = sim.residents[0]
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
 	check(ada.map == "village" and tomas.map == "village", "residents start on the village map")
 	send_to_mine(sim, tomas)
-	check(tomas.map == OldMine.ID and sim.here().has(ada) and not sim.here().has(tomas), "travel moves Tomas onto the old mine")
+	check(tomas.map == OldMine.ID and sim.here().has(ada) and not sim.here().has(tomas), "travel moves Tomas onto the old caves")
 	sim.designate_mine(whole_map())  # village trees and boulders: Ada's work, never Tomas's
 	sim.on_map(OldMine.ID, func(): sim.designate_mine(Rect2i(0, 0, 16, 16)))
 	var village_ids := {}
@@ -1566,7 +1568,7 @@ func test_residents_only_work_on_their_own_map() -> void:
 		mined_here = mined_here or (tomas.job != null and tomas.job.work == "mason")
 	check(sim.map_id == "village", "the sim is back on the village after ticking")
 	check(not crossed, "nobody claims a job on another map")
-	check(mined_here and sim.on_map(OldMine.ID, func(): return count(sim, "cobble") + count(sim, "coal")) > 0, "Tomas mines the old mine while nobody looks at it")
+	check(mined_here and sim.on_map(OldMine.ID, func(): return count(sim, "cobble") + count(sim, "coal")) > 0, "Tomas mines the old caves while nobody looks at it")
 	check(sim.stats.felled > 0, "and Ada works the village meanwhile")
 	# The village's counts leave out the mine's items.
 	sim.on_map(OldMine.ID, func(): sim.drop_items(sim.get_map(OldMine.ID).entrance + Vector2i(1, 0), "coal", 5))
@@ -1586,7 +1588,7 @@ func test_residents_only_work_on_their_own_map() -> void:
 	tomas.note = {"text": "Can’t reach this boulder", "until": sim.tick + 100}
 	sim.compute_stuck()
 	var entry = sim.stuck.filter(func(x): return x.focus_id == tomas.id)
-	check(not entry.is_empty() and entry[0].map == OldMine.ID, "a stuck reason on the old mine says so")
+	check(not entry.is_empty() and entry[0].map == OldMine.ID, "a stuck reason on the old caves says so")
 
 
 ## Issue #100: saving and loading keeps both maps and who is on which.
@@ -1616,7 +1618,7 @@ func test_save_and_load_two_maps() -> void:
 func test_old_mine_layout_and_ore() -> void:
 	var sim := Sim.new_game()
 	var mine := sim.get_map(OldMine.ID)
-	check(OldMine.LAYOUT.all(func(row): return row.length() == 16) and mine.w == 16 and mine.h == 16, "the old mine is 16×16")
+	check(OldMine.LAYOUT.all(func(row): return row.length() == 16) and mine.w == 16 and mine.h == 16, "the old caves is 16×16")
 	check(mine.kind == "site" and not mine.known and not mine.visited and not mine.discovered, "it starts unknown and unvisited")
 	check(mine.entrance == Vector2i(0, 8) and sim.on_map(OldMine.ID, sim.walkable.bind(mine.entrance)), "the party arrives at the entrance on the west edge")
 	var ores := {}
@@ -1667,7 +1669,7 @@ func test_site_report_and_depletion() -> void:
 	rep = sim.site_report(OldMine.ID)
 	check(rep.resources[0].reserve == 6 * Tuning.BOULDER_COBBLE and rep.resources[1].reserve == 6 * Tuning.ORE_YIELD.coal, "after a visit: estimated reserves (%s)" % [rep.resources])
 	check(rep.resources.size() == 3 and rep.resources[2].name == "?" and rep.resources[2].reserve == -1, "iron shows as ? until it's found")
-	check(rep.hazards.has("Dark tunnels past the torches: work there is slower") and rep.access == OldMine.ACCESS, "the dark tunnels and narrow access are reported")
+	check(rep.hazards.has("Dark tunnels past the torches: work there is slower") and rep.access.slice(0, 1) == OldMine.ACCESS, "the dark tunnels and narrow access are reported")
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Vector2i(16, 16))
 	send_to_mine(sim, tomas)
 	sim.on_map(OldMine.ID, func():
@@ -1777,7 +1779,7 @@ func built_board(sim: Sim) -> Dictionary:
 func test_expedition_board() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
-	check(not sim.get_map(OldMine.ID).known, "nobody knows of the old mine before there's a board")
+	check(not sim.get_map(OldMine.ID).known, "nobody knows of the old caves before there's a board")
 	var spot := open_rect(sim, Vector2i(3, 3))
 	var o := spot.position + Vector2i(1, 0)
 	check(sim.placement_check("board", o) == "", "a board fits on open grass")
@@ -1799,7 +1801,7 @@ func test_expedition_board() -> void:
 		if b.done:
 			break
 	check(b.done and toast, "it's built from 6 planks and 4 sticks, and says so")
-	check(sim.get_map(OldMine.ID).known and not sim.get_map(OldMine.ID).visited, "the old mine is known now, though nobody has been")
+	check(sim.get_map(OldMine.ID).known and not sim.get_map(OldMine.ID).visited, "the old caves is known now, though nobody has been")
 	check(sim.expedition_board() == b and not sim.walkable(o), "the finished board stands in its cell")
 
 
@@ -1809,7 +1811,7 @@ func test_planning_an_expedition() -> void:
 	var ada: Dictionary = sim.residents[0]
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
 	var plan := sim.new_plan()
-	check(plan.party == [ada.id] and plan.dest == OldMine.ID, "a new plan starts with Ada, for the old mine")
+	check(plan.party == [ada.id] and plan.dest == OldMine.ID, "a new plan starts with Ada, for the old caves")
 	check(sim.plan_problems(plan).has("Build an expedition board first"), "it needs a board")
 	built_board(sim)
 	check(sim.plan_targets(OldMine.ID).map(func(x): return x.item) == ["cobble", "coal"], "before a visit, the party can be sent for stone or coal")
@@ -1916,7 +1918,7 @@ func test_staging_and_departure() -> void:
 	until_at_site(sim, [ada])
 	run(sim, 2)
 	var mine := sim.get_map(OldMine.ID)
-	check(ada.map == OldMine.ID and not ada.away and mine.visited and mine.known, "after the walk, Ada is at the old mine")
+	check(ada.map == OldMine.ID and not ada.away and mine.visited and mine.known, "after the walk, Ada is at the old caves")
 	check(sim.expedition.provisions == {"bread": 2} and sim.on_map(OldMine.ID, func(): return sim.items.is_empty()), "with the supplies in the packs (%s)" % [sim.expedition.provisions])
 	check(sim.expedition.tools.is_empty() and ada.pick != null and ada.pick.dur == 9, "Ada, who had no pickaxe, takes the spare from the packs")
 	check(tomas.map == "village", "Tomas keeps the village going")
@@ -1953,8 +1955,8 @@ func send_party(sim: Sim) -> Dictionary:
 func test_travel_to_the_mine_and_back() -> void:
 	var sim := Sim.new_game()
 	var sign := sim.route_sign()
-	check(sign == Vector2i(sim.w - 1, sim.h / 2) and sim.walkable(sign), "the signpost to the old mine stands on the east edge")
-	check(sim.farm_blocked(sign) == "the signpost" and sim.placement_check("bench", sign) == "The signpost to the old mine is in the way", "nothing is built, farmed or stockpiled on it")
+	check(sign == Vector2i(sim.w - 1, sim.h / 2) and sim.walkable(sign), "the signpost to the old caves stands on the east edge")
+	check(sim.farm_blocked(sign) == "the signpost" and sim.placement_check("bench", sign) == "The signpost to the old caves is in the way", "nothing is built, farmed or stockpiled on it")
 	var p := send_party(sim)
 	var ada: Dictionary = p.ada
 	var tomas: Dictionary = p.tomas
@@ -2019,7 +2021,7 @@ func test_return_and_unloading() -> void:
 	var near_sign := sim.stacks_where(func(st): return Sim.manhattan(st.cell, sim.route_sign()) <= 3)
 	check(near_sign.any(func(st): return st.type == "coal"), "the cargo is set down at the signpost as stacks")
 	var b: Dictionary = p.board
-	check(b.report.size() == 2 and b.report[0].begins_with("Back from the old mine: ") and "coal" in b.report[0], "the board has the report: %s" % [b.report])
+	check(b.report.size() == 2 and b.report[0].begins_with("Back from the old caves: ") and "coal" in b.report[0], "the board has the report: %s" % [b.report])
 	check(b.report[1].contains("meal") and b.report[1].ends_with("1 pickaxe broken") and not b.report[1].begins_with("0 meals"), "with what it cost: %s" % b.report[1])
 	check(sim.plan_problems(sim.new_plan()).filter(func(x): return x == "One expedition at a time").is_empty() and sim.cant_join(ada) == "", "the board is free for the next expedition")
 	var coal_home := 0
@@ -2112,7 +2114,7 @@ func test_party_works_the_site() -> void:
 func test_hazards_and_injuries() -> void:
 	var sim := Sim.new_game()
 	var mine := sim.get_map(OldMine.ID)
-	check(mine.boulders.filter(func(b): return b.get("loose", false)).size() == OldMine.LOOSE.size() and mine.ledges == OldMine.LEDGES, "the old mine has its loose ceilings and its ledge")
+	check(mine.boulders.filter(func(b): return b.get("loose", false)).size() == OldMine.LOOSE.size() and mine.ledges == OldMine.LEDGES, "the old caves has its loose ceilings and its ledge")
 	check(OldMine.LEDGES.all(func(c): return mine.is_dark(c)), "the ledge is in the dark")
 	mine.visited = true
 	var hz: Array = sim.site_report(OldMine.ID).hazards
@@ -2582,6 +2584,17 @@ func test_ride_the_line() -> void:
 ## Issue #132: every level has its door at the far end and a minable way to it, plus some ore; deeper
 ## levels come from the seed, each from a pattern family the mine hasn't used yet, never the same
 ## family twice in a row; deeper is richer and riskier.
+func test_cave_biomes() -> void:
+	var order := [1, 2, 3, 4, 5, 6, 9].map(func(n): return MineLevels.biome(n))
+	check(order == ["mouth", "dripstone", "dripstone", "flooded", "flooded", "deep", "deep"], "the caves' biomes follow depth: mouth, dripstone, flooded, deep (%s)" % [order])
+	check(MineLevels.BIOMES.keys().all(func(k): return MineLevels.BIOME_NOTES.has(k)), "every biome has a note for the site report")
+	var sim := Sim.new_game()
+	sim.get_map(OldMine.ID).visited = true
+	var rep := sim.site_report(OldMine.ID)
+	check(rep.biome == "Cave mouth" and rep.access.back() == MineLevels.BIOME_NOTES.mouth, "the site report names Level 1's biome and what it is like (%s)" % [rep.biome])
+	check(OldMine.NAME == "Old caves" and MineLevels.level_name(2) == "Old caves, level 2" and MineLevels.level_id(2) == "old_mine_2", "the caves are renamed in display only: the ids stay")
+
+
 func test_mine_levels_are_generated() -> void:
 	var sim := Sim.new_game()
 	var top := sim.get_map(OldMine.ID)
@@ -2616,7 +2629,7 @@ func test_mine_levels_are_generated() -> void:
 	var ores := func(mp: SimMap, ore: String) -> int: return mp.boulders.filter(func(b): return b.get("ore", "") == ore).size()
 	check(ores.call(two, "coal") > ores.call(top, "coal") and ores.call(two, "iron") > ores.call(top, "iron"), "Level 2 has more coal and iron than Level 1 (%d/%d against %d/%d)" % [ores.call(two, "coal"), ores.call(two, "iron"), ores.call(top, "coal"), ores.call(top, "iron")])
 	check(Sim.cave_in_chance(2) > Sim.cave_in_chance(1) and Sim.fall_chance(2) > Sim.fall_chance(1) and two.torches.size() < top.torches.size() + 1, "and higher cave-in and fall chances, and no more torches")
-	check(two.name == "Old mine, level 2" and two.kind == "site" and not two.known and two.found and two.discovered, "Level 2 is a site map named for its level, its ore all in plain sight")
+	check(two.name == "Old caves, level 2" and two.kind == "site" and not two.known and two.found and two.discovered, "Level 2 is a site map named for its level, its ore all in plain sight")
 
 
 ## Issue #132: the party mines its way to the door, the game stops for a choice, the door opens onto
@@ -2679,7 +2692,7 @@ func test_the_door_down_and_back() -> void:
 			break
 	check(went_up and sim.expedition.is_empty() and ada.map == "village", "the party heads home up through Level 1 and the road")
 	var b: Dictionary = sims.down[1].board
-	check(b.report[0].begins_with("Back from the old mine, level 2: ") and "coal" in b.report[0], "the report says what came back from Level 2: %s" % [b.report])
+	check(b.report[0].begins_with("Back from the old caves, level 2: ") and "coal" in b.report[0], "the report says what came back from Level 2: %s" % [b.report])
 	run(sim, 120)
 	check(count(sim, "coal") >= 6 and sim.stacks_where(func(st): return st.type == "coal" and sim.in_zone(st.cell)).size() > 0, "Level 2's coal reaches the village, and is hauled to the stockpile (%d)" % count(sim, "coal"))
 	# Planning a trip straight to Level 2: its walk includes Level 1's.
@@ -2781,7 +2794,7 @@ func test_adventures_list() -> void:
 	check(sim.sign_for(Meadow.ID) == sim.meadow_sign() and sim.meadow_sign().x == 0 and sim.sign_for(OldMine.ID) == sim.route_sign() and sim.route_sign().x == sim.w - 1, "a signpost per destination, on the matching edge: the meadow west, the mine east")
 	var b := built_board(sim)
 	var rows := sim.adventures()
-	check(rows.map(func(a): return a.id) == [OldMine.ID, Meadow.ID] and sim.get_map(Meadow.ID).known, "the board lists the old mine and the meadow")
+	check(rows.map(func(a): return a.id) == [OldMine.ID, Meadow.ID] and sim.get_map(Meadow.ID).known, "the board lists the old caves and the meadow")
 	check(rows.all(func(a): return a.status == "Not yet visited" and not a.locked and a.hazards.is_empty()), "neither visited yet, no hazards known")
 	check(absf(rows[1].travel - MeadowRoad.walk_time()) < 0.01 and rows[0].travel == -1.0 and rows[1].what == "Sheep, cows and pigs, they say", "the meadow's walk and what's said of it; the road isn't walked yet")
 	var plan := sim.new_plan(Meadow.ID)
@@ -2943,7 +2956,7 @@ func test_the_adventures_registry() -> void:
 	check(mp.target.item == "wool" and mp.target.n == 6 and mp.picks == 0 and mp.has("sticks"), "a meadow plan asks for wool and packs no pickaxes")
 	var op := sim.new_plan(OldMine.ID)
 	check(op.target.item == "coal" and op.target.n == 8 and op.picks == 1 and op.sticks == 0 and op.wheat == 0, "a mine plan asks for coal, with a spare pickaxe and no pens")
-	check(Adventures.def("a_place_nobody_listed") == Adventures.def(OldMine.ID), "an unlisted destination works as the old mine does")
+	check(Adventures.def("a_place_nobody_listed") == Adventures.def(OldMine.ID), "an unlisted destination works as the old caves does")
 
 
 ## Issue #137: the meadow is an expedition site with its own map: herds of sheep, cows and pigs, a pond,
@@ -4005,7 +4018,7 @@ func test_worn_paths_wear_and_regrow() -> void:
 	var mine_worn: bool = sim.on_map("old_mine", func():
 		sim._wear_step(Vector2i(1, 1))
 		return not sim.m.wear.is_empty())
-	check(not mine_worn, "the old mine doesn't wear")
+	check(not mine_worn, "the old caves doesn't wear")
 	var road_worn: bool = sim.on_map(Road.ID, func():
 		sim._wear_step(Vector2i(2, Road.LINE_ROW))
 		return not sim.m.wear.is_empty())
@@ -4306,7 +4319,7 @@ func test_cargo_priority_list_plans() -> void:
 	var board := built_board(sim)
 	var plan := sim.new_plan(OldMine.ID)
 	var items: Array = plan.list.map(func(r): return r.item)
-	check(items == ["coal", "cobble"] and plan.list[0].n == 8 and plan.list[1].n == 0, "the old mine starts with coal then cobblestone as much as fits, iron unknown yet (%s)" % [items])
+	check(items == ["coal", "cobble"] and plan.list[0].n == 8 and plan.list[1].n == 0, "the old caves starts with coal then cobblestone as much as fits, iron unknown yet (%s)" % [items])
 	var mead := sim.new_plan(Meadow.ID)
 	check(mead.list.map(func(r): return r.item) == ["wool", "leather", "beef", "porkchop", "mutton"] and mead.list[0].n == 6, "the meadow starts with wool, leather, then meat")
 	check(plan.target == {"item": "coal", "n": 8}, "the old single target is the first row with an amount")
@@ -5438,7 +5451,7 @@ func test_mission_types() -> void:
 	check(sim.plan_briefing(p2).any(func(l): return l.begins_with("Risk: no one in the party can fight")), "a guard with no sword is a risk")
 	# Overworld plans keep their form.
 	var old := sim.new_plan(OldMine.ID)
-	check(not old.has("objective") and old.target.item == "coal", "an Overworld plan is still a gather at the old mine")
+	check(not old.has("objective") and old.target.item == "coal", "an Overworld plan is still a gather at the old caves")
 
 
 ## The quartz site and the gather mission to it (issue #155).

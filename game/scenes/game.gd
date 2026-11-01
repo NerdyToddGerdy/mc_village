@@ -24,9 +24,11 @@ var build_menu_open: bool:
 	set(v): menu_open = "build" if v else ("" if menu_open == "build" else menu_open)
 var craft_menu_open := false            ## The Craft panel above the toolbar (issue #57).
 var craft_bench_i := 0                  ## Which finished bench the Craft panel shows.
-var jobs_board_open := false            ## The Village jobs board (issue #78).
+var jobs_board_open: bool:                ## The village book is open on its Jobs page (issues #78, #198).
+	get: return book_open and book_page == "jobs"
+	set(v): toggle_jobs_board(v)
 var book_open := false                  ## The village book (issue #198).
-var book_page := "goals"                ## Its open page: "goals", or a page's id from Goals.PAGES.
+var book_page := "goals"                ## Its open page: "goals", "jobs", "residents", or a page's id from Goals.PAGES.
 var planner_open := false               ## The expedition planner above the toolbar (issue #106).
 var line_preview := false                ## The route panel shows the line's cost before it's planned (issue #121).
 var plan := {}                          ## The plan being drawn up in the planner; the sim's once confirmed.
@@ -1353,9 +1355,9 @@ func set_role(r: Dictionary, role: String) -> void:
 
 
 func toggle_jobs_board(open = null) -> void:
-	jobs_board_open = (not jobs_board_open) if open == null else open
-	if jobs_board_open:
-		book_open = false
+	var want: bool = (not jobs_board_open) if open == null else open
+	if want or jobs_board_open:  # closing leaves the book alone when it's on another page
+		open_book("jobs", want)
 
 
 ## Opens the village book on a page ("goals" or a page id), or closes it (issue #198).
@@ -1363,7 +1365,6 @@ func open_book(page := "goals", open := true) -> void:
 	book_open = open
 	if open:
 		book_page = page
-		jobs_board_open = false
 
 
 func set_keep_meals(f: Dictionary, on: bool) -> void:
@@ -2101,6 +2102,20 @@ func _screenshot_scene() -> void:
 			sim.compute_stuck()
 			_hud.refresh(sim)  # what's stuck now counts as seen, so it stays folded
 			_hud.stuck_open = false
+	if "--move" in OS.get_cmdline_user_args():  # a finished building selected, with its Move button (issue #234); --storehouse for the storehouse's panel
+		var tpl := "storehouse" if "--storehouse" in OS.get_cmdline_user_args() else "bench"
+		var spot: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(4, 0))
+		for d in range(0, 14):
+			if sim.placement_check(tpl, spot + Vector2i(d, 0)) == "":
+				spot += Vector2i(d, 0)
+				break
+		var built := sim.place_site(tpl, spot)
+		built.stage = Defs.TEMPLATES[tpl].stages.size()
+		built.done = true
+		sim._occ_dirty = true
+		selection = {"kind": "site", "id": built.id}
+		_target = Vector3(spot.x + 1.5, 0, spot.y + 1.5)
+		_place_camera()
 	if "--jobs" in OS.get_cmdline_user_args():  # the Village jobs board (issues #78, #134); add --village for more rows
 		sim.residents[0].jobs.mine.xp = 30
 		for i in range(1, sim.residents.size()):

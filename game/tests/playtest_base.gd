@@ -111,6 +111,21 @@ func screen(cell: Vector2i, h := 0.0) -> Vector2:
 
 ## The visible button whose text contains `text`. With `near`, the one in the same row as a label
 ## containing `near` (for the bench's per-recipe Queue buttons).
+## Goes to a place by the map switcher's dropdown: opens the list, then picks the place from it (an exact
+## match in the list itself, since other panels, like the board's Location button, carry place names too).
+func go_to(place: String) -> bool:
+	if not await click_button("another place"):
+		return false
+	game._hud.refresh(game.sim)
+	await frames(2)
+	for n in game._hud._maps_list.get_children():
+		if n is Button and n.is_visible_in_tree() and n.get_meta("label", "") == place and not n.is_queued_for_deletion():
+			await click(n.get_global_rect().get_center())
+			return true
+	printerr("     (no place \"%s\" in the list)" % place)
+	return false
+
+
 func find_button(text: String, near := "", last := false) -> Button:
 	var found: Button = null
 	for n in _all(root):
@@ -278,14 +293,21 @@ func job_button(r: Dictionary, on_board := true) -> Button:
 
 ## Opens a resident's job dropdown and chooses a job from it (issue #134): one of Defs.JOBS, or "none".
 func choose_job(r: Dictionary, role: String, on_board := true) -> bool:
-	var b: Button = await job_button(r, on_board)
-	if b == null:
-		printerr("     (no job button for %s)" % r.name)
-		return false
-	await click(b.get_global_rect().get_center())
-	game._hud.refresh(game.sim)
-	await frames(2)
-	if not await click_button("Job choice: " + ("No job" if role == "none" else Defs.JOB_NAMES[role] + " · ")):
+	var label: String = "Job choice: " + ("No job" if role == "none" else Defs.JOB_NAMES[role] + " · ")
+	# The Jobs page lays itself out over a few frames once the book opens, so a click can land on a
+	# button that has since moved: look again and click once more before giving up.
+	for _attempt in 2:
+		var b: Button = await job_button(r, on_board)
+		if b == null:
+			printerr("     (no job button for %s)" % r.name)
+			return false
+		var rect := b.get_global_rect()
+		await click(rect.get_center())
+		game._hud.refresh(game.sim)
+		await frames(2)
+		if find_button(label) != null:
+			break
+	if not await click_button(label):
 		return false
 	game._hud.refresh(game.sim)
 	await frames(2)

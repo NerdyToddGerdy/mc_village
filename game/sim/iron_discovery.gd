@@ -33,7 +33,7 @@ static func _check_find_diamond(sim: Sim, c: Vector2i) -> void:
 	sim.rev += 1
 	sim._toast("The party found diamonds on level %d." % sim.m.level)
 	if sim.expedition.get("state", "") == "out" and sim.expedition.dest == sim.map_id:
-		sim._ask("discovery", "The party found diamonds on level %d of the old mine." % sim.m.level, [
+		sim._ask("discovery", "The party found diamonds on level %d of the old caves." % sim.m.level, [
 			{"id": "keep", "label": "Keep mining", "cost": "Carry on for %s. Diamonds can only be mined with an iron pickaxe." % sim.objective_text()},
 			{"id": "return", "label": "Mark it and return later", "cost": "The party heads home now, with what it has packed."},
 		])

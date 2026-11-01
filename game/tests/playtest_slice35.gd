@@ -44,7 +44,7 @@ func _initialize() -> void:
 	await tally_dropdowns(sim)
 
 	# ---- A pen at the meadow (issue #139): the Paint menu's Pen, dragged out near the entrance
-	check(await click_button("Meadow") and game.view_map == Meadow.ID, "the map switcher shows the meadow")
+	check(await go_to("Meadow") and game.view_map == Meadow.ID, "the map switcher shows the meadow")
 	await look_at(mead.entrance + Vector2i(-5, 0))
 	check(await click_button("Paint") and await click_button("Pen"), "pick Pen in the Paint menu")
 	check(game.tool == "pen", "Pen is on")
@@ -72,7 +72,7 @@ func _initialize() -> void:
 	check(visible_label("Marked to lead into a pen"), "a marked cow's panel says so")
 
 	# ---- Supplies for the pen: sticks from the bench, wheat from the farms
-	check(await click_button("Village"), "back to the village")
+	check(await go_to("Village"), "back to the village")
 	if count("stick") < 12:
 		check(await open_bench_panel() and await queue_recipe("Sticks", 3), "queue sticks for the fences")
 		await key(KEY_ESCAPE)
@@ -104,7 +104,7 @@ func _initialize() -> void:
 	check(await play_until(120, func(): return party.all(func(r): return sim.at_site(r))), "they reach the meadow")
 
 	# ---- At the meadow: a pig marked to hunt; the pen built, the cows led in and fed
-	check(await click_button("Meadow") and game.view_map == Meadow.ID, "show the meadow")
+	check(await go_to("Meadow") and game.view_map == Meadow.ID, "show the meadow")
 	await key(KEY_G)
 	var pig = Sim.nearest(mead.sheep.filter(func(a): return a.alive and a.species == "pig"), mead.entrance)
 	await look_at(pig.cell)
@@ -123,7 +123,7 @@ func _initialize() -> void:
 	check(seen("A calf was born in the pen"), "a toast says so")
 
 	# ---- Home: unloading, and cooking beef
-	check(await click_button("Village"), "back to the village")
+	check(await go_to("Village"), "back to the village")
 	check(await play_until(200, func(): return sim.expedition.is_empty()), "the party gets home and unpacks")
 	check(seen("Back from the meadow: ") and _seen.any(func(t): return t.begins_with("Back from the meadow") and "raw beef" in t and "leather" in t and "porkchop" in t), "the report lists beef, leather and porkchops")
 	var fire = null
@@ -149,7 +149,7 @@ func _initialize() -> void:
 
 	# ---- A mine trip with the tunic on: the planner's protection line
 	check(await open_adventures(sim), "back to the board")
-	check(await pick_location("Old mine"), "the Location dropdown: pick the old mine")
+	check(await pick_location("Old caves"), "the Location dropdown: pick the old caves")
 	await settle()
 	for id in game.plan.party.duplicate():
 		if id != wearer.id:
@@ -168,7 +168,7 @@ func _initialize() -> void:
 			await click_button("Retreat")
 			await key(KEY_QUOTELEFT)
 	check(await play_until(300, func(): return sim.expedition.is_empty()), "the mine trip comes home")
-	check(seen("Back from the old mine"), "with its report")
+	check(seen("Back from the old caves"), "with its report")
 
 	# ---- Every stall had a reason the player could act on
 	var unknown: Array = _blockers.keys().filter(func(why): return not ACTIONABLE.any(func(a): return a in why))
@@ -194,7 +194,7 @@ func pen_spot(sim: Sim) -> Rect2i:
 ## Opens the expedition board through the meadow signpost, on the meadow. The fixture's
 ## board stands behind a house, where the fixed camera can't see it to click.
 func open_adventures(sim: Sim) -> bool:
-	if game.view_map != "village" and not await click_button("Village"):
+	if game.view_map != "village" and not await go_to("Village"):
 		return false
 	var sign := sim.meadow_sign()
 	await look_at(sign)
