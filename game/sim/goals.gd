@@ -29,7 +29,7 @@ const VILLAGE := [
 		"w": "Cooked food fills a resident for much longer than raw. A hungry resident works slower."},
 	{"t": "Give a second resident a workstation", "h": "Choose Build for a mason's bench, composter or another workstation, and give someone that job from the Jobs board.",
 		"w": "A resident with a workstation works their job on their own, in its area. One workstation is Tomas's; the next frees you from marking boulders, fields or game."},
-	{"t": "Bring iron ore home from the old mine", "h": "Plan a trip to the old mine at the expedition board. If the road isn't built yet, the board says what to build first.",
+	{"t": "Bring iron ore home from the old caves", "h": "Plan a trip to the old caves at the expedition board. If the road isn't built yet, the board says what to build first.",
 		"w": "The clearing has no ore: only expeditions find it. Smelted with coal at the fireplace's furnace, it makes iron tools that last more than twice as long as stone, and lets the toolsmith's bench grow into an anvil."},
 ]
 
@@ -69,7 +69,7 @@ const PAGES := [
 	{"id": "mason_bench", "title": "Mason's bench", "tpl": "mason_bench", "who": "A stonemason",
 		"what": "A stonemason breaks the boulders around it, and cuts stone bricks.",
 		"grows": "Reserves a plot. Once every boulder on the map is gone, it can be dug out into a mineshaft that digs cobblestone from where it stands, slowly.",
-		"without": "Stone comes only from boulders you mark, and they run out. Then the mineshaft or a trip to the old mine is the only stone."},
+		"without": "Stone comes only from boulders you mark, and they run out. Then the mineshaft or a trip to the old caves is the only stone."},
 	{"id": "toolsmith_bench", "title": "Toolsmith's bench", "tpl": "toolsmith_bench", "who": "A toolsmith",
 		"what": "A toolsmith keeps spare tools made, and tools they make last longer.",
 		"grows": "Reserves a plot, and grows into an anvil.",
@@ -123,7 +123,7 @@ const PAGES := [
 		"grows": "Reserves a plot, and grows into a map room.",
 		"without": "Wool, ore and anything off the map stay out of reach."},
 	{"id": "road", "title": "The road", "unlock": "road", "who": "Builders, and the party",
-		"what": "A bridge, a track and a station at each end: the way to the old mine, and a minecart to ride it.",
+		"what": "A bridge, a track and a station at each end: the way to the old caves, and a minecart to ride it.",
 		"grows": "A faster ride each way, but mining takes just as long.",
 		"without": "Every trip is a long walk, and the party carries everything it needs."},
 ]

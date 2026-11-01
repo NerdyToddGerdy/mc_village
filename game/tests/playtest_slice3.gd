@@ -55,7 +55,7 @@ func _initialize() -> void:
 	var board = sim.site_at(bp)
 	check(board != null and board.tpl == "board", "the board is placed")
 	check(await play_until(300, func(): return board != null and board.done), "the board is built")
-	check(game.known_maps().has(OldMine.ID), "the village has word of the old mine")
+	check(game.known_maps().has(OldMine.ID), "the village has word of the old caves")
 
 	# ---- Plan (issue #106): Ada and Tomas, for 10 cobblestone, with 6 meals they may all eat. They
 	# come home when the packs are full; here, the injury brings them home first.
@@ -67,10 +67,10 @@ func _initialize() -> void:
 	check(await click_button("Location"), "open the dropdown")
 	game._hud.refresh(sim)
 	await frames(2)
-	check(find_button("Adventure: Old mine") != null and find_button("Adventure: Meadow") != null, "it lists the old mine and the meadow")
-	check(await click_button("Adventure: Old mine"), "pick the old mine")
+	check(find_button("Adventure: Old caves") != null and find_button("Adventure: Meadow") != null, "it lists the old caves and the meadow")
+	check(await click_button("Adventure: Old caves"), "pick the old caves")
 	await settle()
-	check(game.adventure == OldMine.ID and visible_label("Old mine"), "its site report and planner open (%s)" % game.adventure)
+	check(game.adventure == OldMine.ID and visible_label("Old caves"), "its site report and planner open (%s)" % game.adventure)
 	check(await click_button("Tomas"), "add Tomas")
 	check(await plan_wants("Cobblestone", 10), "send them for 10 cobblestone")
 	check(await click_button("picks less"), "no spare pickaxe: both have their own")
@@ -94,7 +94,7 @@ func _initialize() -> void:
 	check(await play_until(90, func(): return ada.map == Road.ID and tomas.map == Road.ID), "they carry the packs to the signpost and onto the road")
 	var mira: Dictionary = sim.residents[2]
 	# ---- The road to the mine (issues #118, #119): watch them walk it, surveying as they go
-	check(await click_button("Road to the mine"), "the map switcher shows the road")
+	check(await go_to("Road to the mine"), "the map switcher shows the road")
 	check(game.view_map == Road.ID and game._world._people[ada.id].visible, "the party is drawn walking the road")
 	await play_until(20, func(): return ada.job == null or not ada.job.label.begins_with("Eating"))  # a meal on the way shows instead
 	await look_at(Sim.rcell(ada))
@@ -102,10 +102,10 @@ func _initialize() -> void:
 	game._hud.refresh(sim)
 	await frames(2)
 	# The party line ("Ada and Tomas are on the road to the old mine"), not Ada's own job: she may be eating from the packs just then.
-	check(game.selection.get("kind", "") == "res" and visible_label("on the road to the old mine"), "Ada can be selected on the road, and says where she's going (%s; %s)" % [game.selection, ada.job.label if ada.job != null else "idle"])
-	check(await play_until(40, func(): return sim.at_site(ada) and sim.at_site(tomas)), "they reach the old mine")
+	check(game.selection.get("kind", "") == "res" and visible_label("on the road to the old caves"), "Ada can be selected on the road, and says where she's going (%s; %s)" % [game.selection, ada.job.label if ada.job != null else "idle"])
+	check(await play_until(40, func(): return sim.at_site(ada) and sim.at_site(tomas)), "they reach the old caves")
 	check(sim.route_surveyed(), "walking it surveyed the road")
-	check(await click_button("Village"), "back to the village")
+	check(await go_to("Village"), "back to the village")
 	# Mira stays home: made a lumberjack (one job each, issue #134; #177), with the village's trees marked for her
 	check(await choose_job(mira, "lumber"), "the jobs board: Mira, staying home, is made a lumberjack (%s)" % mira.role)
 	await key(KEY_ESCAPE)
@@ -117,7 +117,7 @@ func _initialize() -> void:
 
 	# ---- The party works the site (issue #109); the player marks the rubble at the tunnel's end
 	await key(KEY_TAB)
-	check(game.view_map == OldMine.ID, "Tab: the old mine")
+	check(game.view_map == OldMine.ID, "Tab: the old caves")
 	await key(KEY_X)
 	var rubble := Vector2i(12, 12)
 	await look_at(rubble)
@@ -163,7 +163,7 @@ func _initialize() -> void:
 
 	# ---- Return and unloading (issue #112)
 	check(await play_until(120, func(): return sim.expedition.is_empty()), "the party gets home")
-	check(seen("Back from the old mine: ") and seen("Tomas seriously injured"), "the report says what came back and who was hurt")
+	check(seen("Back from the old caves: ") and seen("Tomas seriously injured"), "the report says what came back and who was hurt")
 	check(await play_until(20, func(): return tomas.job != null and tomas.job.kind == "rest"), "Tomas rests in bed to heal (hurt %d, %s)" % [tomas.hurt, tomas.job.kind if tomas.job != null else "idle"])
 	check(tomas.hurt == 2, "still seriously hurt while he rests")
 	check(await play_until(400, func(): return sim.stacks_where(func(st): return st.get("cargo", false)).is_empty() and count("iron_ore") >= 3), "the cargo is hauled to the stockpile (left %s, iron ore %d)" % [sim.stacks_where(func(st): return st.get("cargo", false)).map(func(st): return [st.type, st.n]), count("iron_ore")] + " zone %d free %s jobs %s" % [sim.zone.size(), sim.zone_dest("cobble"), sim.residents.map(func(r): return [r.name, r.map, r.job.label if r.job != null else "idle", r.role])])
@@ -217,7 +217,7 @@ func _initialize() -> void:
 	await click(screen(board.origin, 1.0))
 	game._hud.refresh(sim)
 	await frames(2)
-	check(await pick_location("Old mine"), "the board: pick the old mine again")
+	check(await pick_location("Old caves"), "the board: pick the old caves again")
 	check(await plan_wants("Coal", 0, true), "send the party for coal")
 	check(await click_button("picks less"), "no spare pickaxe")
 	var goer0 := sim.resident(game.plan.party[0])
@@ -228,9 +228,9 @@ func _initialize() -> void:
 	check(await play_until(240, func(): return sim.depart_blocker() == ""), "packed again (%s)" % sim.depart_blocker())
 	check(await click_button("Depart"), "click Depart")
 	var goer: Dictionary = sim.resident(sim.expedition.party[0])
-	check(await play_until(120, func(): return sim.at_site(goer)), "%s reaches the old mine" % goer.name)
+	check(await play_until(120, func(): return sim.at_site(goer)), "%s reaches the old caves" % goer.name)
 	sim.expedition.policy = {"target": false, "full": true, "low": true}
-	check(await click_button("Old mine") and game.view_map == OldMine.ID, "show the old mine")
+	check(await go_to("Old caves") and game.view_map == OldMine.ID, "show the old caves")
 	check(await click_button("Dig to the door"), "click Dig to the door in the party panel")
 	for i in 4:  # a fall or a cave-in on the way is luck: healed by command, so the door still gets tested
 		if await play_until(60, func(): return not sim.pending.is_empty() or goer.hurt > 0) and goer.hurt > 0:
@@ -246,20 +246,20 @@ func _initialize() -> void:
 	await key(KEY_QUOTELEFT)
 	var two_id := MineLevels.level_id(2)
 	check(await play_until(60, func(): return goer.map == two_id and sim.at_site(goer)), "%s walks through the door into Level 2" % goer.name)
-	check(await click_button("Old mine, level 2") and game.view_map == two_id, "the map switcher shows Level 2")
+	check(await go_to("Old caves, level 2") and game.view_map == two_id, "the map switcher shows Level 2")
 	var packed_before: int = sim.pack_load()
 	check(await play_until(120, func(): return sim.pack_load() > packed_before), "the party mines and packs on Level 2")
 	if sim.expedition.get("leg", "") != "home":  # unless its return policy already sent it
 		check(await click_button("Call the party home"), "call the party home")
 	check(await play_until(200, func(): return sim.expedition.is_empty()), "home up through Level 1 and the road")
-	check(seen("Back from the old mine, level 2: "), "the report is from Level 2")
+	check(seen("Back from the old caves, level 2: "), "the report is from Level 2")
 
 	# ---- Clear the level (issue #188): a trip that clears Level 1 and carries on to Level 2 by itself
 	await look_at(board.origin)
 	await click(screen(board.origin, 1.0))
 	game._hud.refresh(sim)
 	await frames(2)
-	check(await pick_location("Old mine"), "the board: pick the old mine for a clearing trip")
+	check(await pick_location("Old caves"), "the board: pick the old caves for a clearing trip")
 	check(await click_button("Clear the level"), "click Clear the level")
 	check(game.plan.clear and Sim.list_text(game.plan) == "clear the level", "the plan clears the level")
 	check(await click_button("picks less"), "no spare pickaxe")
@@ -270,7 +270,7 @@ func _initialize() -> void:
 	check(await play_until(240, func(): return sim.depart_blocker() == ""), "packed for the clearing trip (%s)" % sim.depart_blocker())
 	check(await click_button("Depart"), "click Depart")
 	var clearer_now: Dictionary = sim.resident(sim.expedition.party[0])
-	check(await play_until(120, func(): return sim.at_site(clearer_now)), "%s reaches the old mine" % clearer_now.name)
+	check(await play_until(120, func(): return sim.at_site(clearer_now)), "%s reaches the old caves" % clearer_now.name)
 	check(visible_label("Clearing the level"), "the party panel says it's clearing the level")
 	# The level's blocks are cleared by command, since working through them takes minutes.
 	sim.on_map(OldMine.ID, func():

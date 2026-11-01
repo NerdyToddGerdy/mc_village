@@ -39,9 +39,29 @@ static func level_of(id: String) -> int:
 	return 0
 
 
-## "Old mine" for Level 1, "Old mine, level 2" below it.
+## "Old caves" for Level 1, "Old caves, level 2" below it.
 static func level_name(n: int) -> String:
 	return OldMine.NAME if n <= 1 else "%s, level %d" % [OldMine.NAME, n]
+
+
+## The underground biome of a level (issue #238): a look and a name for each stretch of depth, so the caves
+## aren't one grey. It follows from the level number alone, so saves need nothing new and a level keeps its look.
+## Level 1 stays the old workings; a biome decides how a level looks, the family still decides its shape.
+const BIOMES := {"mouth": "Cave mouth", "dripstone": "Dripstone cave", "flooded": "Flooded cavern", "deep": "Deep cave"}
+const BIOME_NOTES := {
+	"mouth": "Old timbers and torches: people were here once",
+	"dripstone": "Damp rock hung with stalactites",
+	"flooded": "Pools and wet, slippery stone",
+	"deep": "Bare dark stone, far from any daylight",
+}
+
+
+static func biome(n: int) -> String:
+	if n <= 1:
+		return "mouth"
+	if n <= 3:
+		return "dripstone"
+	return "flooded" if n <= 5 else "deep"
 
 
 ## The pattern family of a level: "workings" for Level 1, then each family once in a seeded order,
@@ -65,7 +85,7 @@ static func family(seed: int, n: int) -> String:
 
 static func _rng(seed: int, salt: int) -> RandomNumberGenerator:
 	var g := RandomNumberGenerator.new()
-	g.seed = hash([seed, salt, "old mine"])
+	g.seed = hash([seed, salt, "old mine"])  # the salt stays, so every saved level comes out the same
 	return g
 
 

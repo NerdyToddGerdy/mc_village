@@ -13,7 +13,7 @@ var _root := Control.new()
 var _radial := Control.new()  ## Draws the radial Gather menu (issue #176) when it's open.
 var _tallies := HBoxContainer.new()
 var _tools_btn: Button
-var _jobs_btn: Button               ## Opens the Village jobs board (issue #78).
+var _jobs_btn: Button               ## Opens the village book (the Jobs page was the jobs board, issue #78).
 var _claim_btn: Button              ## "2 land claims": starts the Claim land order (issue #187).
 var _maps := HBoxContainer.new()    ## The map switcher (issue #101): Village, and each known site.
 var _party := Button.new()          ## "Party at the old mine: mining", when residents work on another map.
@@ -22,15 +22,20 @@ var _home_btn: Button               ## "Call the party home", beside the party l
 var _party_details := VBoxContainer.new()  ## The party's members, packs and objective, while the site is in view (#109).
 var _choice_panel: PanelContainer   ## A choice the game stopped for (issues #110, #111).
 var _choice_box := VBoxContainer.new()
-var _board_panel: PanelContainer
 var _book_panel: PanelContainer      ## The village book (issue #198), over the goals panel's place.
 var _book := VBoxContainer.new()
-var _board := VBoxContainer.new()
+var _board := VBoxContainer.new()    ## The Jobs page, which the book shows in its body.
+var _roster := VBoxContainer.new()   ## The Residents page.
+var _book_scroll: ScrollContainer
 var _tools_drop: PanelContainer
 var _job_drop: PanelContainer       ## A resident's job dropdown (issue #134), under the button it opened from.
 var _job_list := VBoxContainer.new()
 var _job_for := -1                  ## The resident whose job dropdown is open, or -1.
 var _job_anchor := Rect2()          ## The button it opened from, in global coordinates.
+var _maps_drop: PanelContainer      ## The map switcher's dropdown: every place the village knows, under its button.
+var _maps_list := VBoxContainer.new()
+var _maps_btn: Button
+var _maps_open := false
 var _loc_drop: PanelContainer       ## The expedition board's location dropdown (issue #181), under its button.
 var _loc_list := VBoxContainer.new()
 var _loc_open := false
@@ -48,6 +53,8 @@ var _log_list := VBoxContainer.new()
 const LOG_MAX := 60
 var _loc_anchor := Rect2()
 var _loc_button: Button  ## The button the location dropdown hangs from, so it follows it.
+const TOP_BAR_H := 60.0  ## The top bar's height: the screen's upper edge, as far as panels are concerned.
+var _topbar_row := HBoxContainer.new()
 var _tally_panel: PanelContainer
 var _tally_seen := {}           ## Item types that have turned up in this game; the rest stay hidden.
 var _tally_sim := 0             ## Which sim _tally_seen belongs to (it resets for a new or loaded game).
@@ -62,8 +69,6 @@ var _speed_btns := {}
 var _skip_btn: Button               ## Skip ahead until something needs the player (issue #299).
 var _menu_btn: Button                ## The on-screen button for the Esc menu (issue #216), beside the speed buttons.
 var _menu_panel: PanelContainer
-var _menu_cap: PanelContainer        ## Its key badge, which follows the "menu" binding.
-var _menu_cap_label: Label
 var _stuck_panel: PanelContainer
 var _stuck := VBoxContainer.new()
 var stuck_open := true          ## The stuck list shows its entries; false folds it to a chip (issue #77).
@@ -78,6 +83,8 @@ var _build_menu: PanelContainer
 var _craft_panel: PanelContainer
 var _plan_panel: PanelContainer     ## The expedition planner (issues #105-#107).
 var _plan_box := VBoxContainer.new()
+var _plan_scroll := ScrollContainer.new()
+var _toolbar_panel: PanelContainer   ## The toolbar along the bottom, which the planner stands above.
 var _craft_box := VBoxContainer.new()
 var _craft_pick := {}           ## Station template -> the recipe its Craft panel shows (issue #95).
 var _craft_n := {}              ## Recipe id -> how many its Queue button queues (issue #76).
@@ -127,9 +134,11 @@ func _ready() -> void:
 		tally_row.add_child(gb)
 		_group_btns[g[0]] = gb
 	_tools_btn = _group_btns.tools
-	_jobs_btn = _button("Jobs", func(): game.toggle_jobs_board())
+	_jobs_btn = _button("Book", func(): game.open_book(game.book_page, not game.book_open))  # the village book: goals, jobs, residents and a page for each building
 	_jobs_btn.toggle_mode = true
+	_jobs_btn.set_meta("label", "Book")
 	_jobs_btn.custom_minimum_size = Vector2(0, 36)
+	_jobs_btn.tooltip_text = "The village book: the founding goals, who does what, the residents, and a page for every building"
 	tally_row.add_child(_jobs_btn)
 	_claim_btn = _button("", func(): game.start_claiming(), "Primary")
 	_claim_btn.custom_minimum_size = Vector2(0, 36)
@@ -137,8 +146,18 @@ func _ready() -> void:
 	tally_row.add_child(_claim_btn)
 	_maps.add_theme_constant_override("separation", 2)
 	tally_row.add_child(_maps)
-	_tally_panel = _panel(tally_row, Vector2(0, 0))
-	tl.add_child(_tally_panel)
+	_tally_panel = PanelContainer.new()  # the top bar: tallies on the left, the speeds, Skip, the gear and Log on the right
+	_tally_panel.add_theme_stylebox_override("panel", _box(Palette.SLATE, 0, 8, Palette.SLATE_DEEP))
+	_tally_panel.custom_minimum_size.y = TOP_BAR_H
+	_tally_panel.z_index = 2  # above the big panels, so every button on it stays clickable (#316)
+	_tally_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_topbar_row.add_child(tally_row)
+	var bar_gap := Control.new()
+	bar_gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_topbar_row.add_child(bar_gap)
+	_tally_panel.add_child(_topbar_row)
+	_root.add_child(_tally_panel)
 	_party.flat = true
 	_party.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_party.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -175,6 +194,11 @@ func _ready() -> void:
 	_loc_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))  # opaque: it lies over the planner
 	_loc_drop.visible = false
 	_loc_drop.top_level = true
+	_maps_list.add_theme_constant_override("separation", 2)
+	_maps_drop = _panel(_maps_list, Vector2(200, 0), 6)
+	_maps_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))
+	_maps_drop.visible = false
+	_maps_drop.top_level = true
 	_goals_panel = _panel(_goals, Vector2(290, 0))
 	tl.add_child(_goals_panel)
 
@@ -192,44 +216,24 @@ func _ready() -> void:
 	_skip_btn.custom_minimum_size = Vector2(60, 44)
 	_skip_btn.set_meta("label", "Skip ahead")
 	_skip_btn.tooltip_text = "Skip ahead: run fast until something needs you"
-	_menu_btn = _button("Menu", func(): game.toggle_menu())  # the Esc menu, for the mouse and the web build (issue #216)
-	_menu_btn.custom_minimum_size = Vector2(0, 44)
-	_menu_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_menu_cap = PanelContainer.new()
-	var menu_cap_box := _box(Color(0, 0, 0, 0), 3, 0, Palette.CHALK_DIM)
-	menu_cap_box.content_margin_left = 5
-	menu_cap_box.content_margin_right = 5
-	menu_cap_box.content_margin_top = 0
-	menu_cap_box.content_margin_bottom = 0
-	_menu_cap.add_theme_stylebox_override("panel", menu_cap_box)
-	_menu_cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_menu_cap_label = _label("", false, Palette.CHALK_DIM, Palette.CAPTION)
-	_menu_cap.add_child(_menu_cap_label)
-	_menu_btn.add_child(_menu_cap)
-	var place_cap := func() -> void:
-		var cs := _menu_cap.get_combined_minimum_size()
-		_menu_cap.size = cs
-		_menu_cap.position = Vector2(_menu_btn.size.x - cs.x - 10, (_menu_btn.size.y - cs.y) / 2)
-	_menu_btn.resized.connect(place_cap)
-	_menu_cap.minimum_size_changed.connect(place_cap)
-	_speed_panel = _panel(speed, Vector2.ZERO, 4)
-	tr.add_child(_speed_panel)
-	_menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var menu_row := HBoxContainer.new()  # Skip sits beside Menu: in the speed row it widened the panel over the map switcher
-	menu_row.add_theme_constant_override("separation", 2)
-	menu_row.add_child(_skip_btn)
-	menu_row.add_child(_menu_btn)
-	_menu_panel = _panel(menu_row, Vector2.ZERO, 4)  # its own panel under the speed buttons, so the speed row stays narrow
-	tr.add_child(_menu_panel)
-	_speed_panel.z_index = 1  # the speed and Menu buttons stay clickable under the big top-level panels (#316)
-	_menu_panel.z_index = 1
+	speed.add_child(_skip_btn)  # Skip sits between the speeds and the settings gear
+	_menu_btn = _button("", func(): game.toggle_menu())  # the Esc menu, for the mouse and the web build (issue #216)
+	_menu_btn.icon = _gear_tex()
+	_menu_btn.expand_icon = false
+	_menu_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_menu_btn.custom_minimum_size = Vector2(44, 44)
+	_menu_btn.set_meta("label", "Menu")
+	speed.add_child(_menu_btn)
+	_speed_panel = PanelContainer.new()  # no panel of its own now: the bar is the panel
+	_speed_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	_speed_panel.add_child(speed)
+	_topbar_row.add_child(_speed_panel)
+	_menu_panel = _speed_panel  # the gear lives in the speed row
 	_log_btn = _button("Log", func(): _toggle_log())  # what the toasts said, for the ones that were missed (issue #297)
 	_log_btn.custom_minimum_size = Vector2(0, 44)
-	_log_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_log_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_log_btn.set_meta("label", "Log")
-	var log_panel := _panel(_log_btn, Vector2.ZERO, 4)
-	log_panel.z_index = 1  # stays clickable under the big panels too (#316)
-	tr.add_child(log_panel)
+	_topbar_row.add_child(_log_btn)  # Log ends the bar, after the gear
 	_stuck_panel = _panel(_stuck, Vector2(250, 0))
 	tr.add_child(_stuck_panel)
 
@@ -263,7 +267,10 @@ func _ready() -> void:
 	_craft_panel.visible = false
 	br.add_child(_craft_panel)
 	_plan_box.add_theme_constant_override("separation", 8)
-	_plan_panel = _panel(_plan_box, Vector2(0, 0))
+	_plan_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED  # a tall planner scrolls instead of running off the top
+	_plan_scroll.add_child(_plan_box)
+	_plan_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_plan_panel = _panel(_plan_scroll, Vector2(0, 0))
 	_plan_panel.visible = false
 	br.add_child(_plan_panel)
 	var tools := HBoxContainer.new()
@@ -276,19 +283,17 @@ func _ready() -> void:
 			rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			tools.add_child(rule)
 		tools.add_child(_order_button(t))
-	br.add_child(_panel(tools, Vector2.ZERO, 4))
+	_toolbar_panel = _panel(tools, Vector2.ZERO, 4)
+	br.add_child(_toolbar_panel)
 
 	_root.add_child(_tools_drop)
-	_board_panel = _panel(_board, Vector2.ZERO)
-	_board_panel.top_level = true
-	_board_panel.visible = false
-	_root.add_child(_board_panel)
 	_book_panel = _panel(_book, Vector2(460, 0))
 	_book_panel.top_level = true
 	_book_panel.visible = false
 	_root.add_child(_book_panel)
 	_root.add_child(_job_drop)
 	_root.add_child(_loc_drop)
+	_root.add_child(_maps_drop)
 	_minimap = MiniMap.new()
 	_minimap.game = game
 	_root.add_child(_minimap)
@@ -557,6 +562,8 @@ func _corner(preset: int) -> VBoxContainer:
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(v)
 	v.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, 16)
+	if preset in [Control.PRESET_TOP_LEFT, Control.PRESET_TOP_RIGHT]:
+		v.offset_top = TOP_BAR_H + 8.0  # the top bar is the upper edge of the screen
 	if preset in [Control.PRESET_TOP_RIGHT, Control.PRESET_BOTTOM_RIGHT]:
 		v.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 		v.child_entered_tree.connect(func(ch): if ch is Control: ch.size_flags_horizontal = Control.SIZE_SHRINK_END)
@@ -736,13 +743,7 @@ func _refresh_key_labels() -> void:
 		_tool_btns[t].tooltip_text = tips[t] + (" (%s)" % k.first(t) if k.first(t) != "" else "")
 	_toolbar_sig = ""
 	var menu_key := k.first("menu")
-	_menu_cap_label.text = menu_key
-	_menu_cap.visible = menu_key != ""
-	_menu_btn.tooltip_text = "Save, load, controls and more" + (" (%s, or Esc)" % menu_key if menu_key != "" else " (Esc)")
-	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
-		var sb := (_theme.get_stylebox(state, "Button") as StyleBoxFlat).duplicate() as StyleBoxFlat
-		sb.content_margin_right = 10 + (_font.get_string_size(menu_key, HORIZONTAL_ALIGNMENT_LEFT, -1, Palette.CAPTION).x + 12 + 10 if menu_key != "" else 2)
-		_menu_btn.add_theme_stylebox_override(state, sb)
+	_menu_btn.tooltip_text = "Menu: save, load, controls and more" + (" (%s, or Esc)" % menu_key if menu_key != "" else " (Esc)")
 	var speed_actions := {0: "pause", 1: "speed1", 2: "speed2", 3: "speed3"}
 	for v in _speed_btns:
 		var keytext := k.text(speed_actions[v]).replace("  ", " or ")
@@ -929,7 +930,7 @@ func _reason(text: String) -> Label:
 
 
 ## Replaces a container's children only when `sig` differs from last time.
-func _rebuild(c: Container, sig: String, fill: Callable) -> void:
+func _rebuild(c: Container, sig: String, fill: Callable, before := Callable()) -> void:
 	if _sigs.get(c.get_instance_id(), "") == sig:
 		return
 	# Rebuilding between a button's press and release would swallow the click (the press lands on
@@ -937,6 +938,8 @@ func _rebuild(c: Container, sig: String, fill: Callable) -> void:
 	if _held and c.is_visible_in_tree() and c.get_global_rect().has_point(_pointer):
 		return
 	_sigs[c.get_instance_id()] = sig
+	if before.is_valid():
+		before.call()
 	for ch in c.get_children():
 		ch.queue_free()
 	fill.call(c)
@@ -964,6 +967,7 @@ func refresh(sim: Sim) -> void:
 	_refresh_log()
 	_refresh_toolbar(sim)
 	_refresh_board(sim)
+	_refresh_roster(sim)
 	_refresh_craft(sim)
 	_refresh_planner(sim)
 	_refresh_choice(sim)
@@ -1039,21 +1043,43 @@ func _refresh_tallies(sim: Sim) -> void:
 
 ## The map switcher (issue #101), shown once a site map is known, and a dim line for residents at
 ## work on a map that isn't in view, which switches to it on a click.
+## The list under the place button: every place the village knows, the one in view marked. Deeper cave levels
+## are named "Old caves, level 3" in full, since there is room in a list.
+func _refresh_maps_drop(sim: Sim, known: Array) -> void:
+	if not _maps_open or not _maps.visible or not is_instance_valid(_maps_btn):
+		_maps_open = false
+		_maps_drop.visible = false
+		return
+	_maps_drop.visible = true
+	var anchor := _maps_btn.get_global_rect()
+	_place_drop(_maps_drop, Vector2(anchor.position.x, anchor.end.y + 4))
+	_rebuild(_maps_list, "%s|%s" % [known, game.view_map], func(c: Container) -> void:
+		for id in known:
+			var nm: String = sim.get_map(id).name
+			var b := _button(nm, func():
+				game.switch_map(id)
+				_maps_open = false
+				_maps_drop.visible = false, "Secondary")
+			b.set_meta("label", nm)
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.toggle_mode = true
+			b.set_pressed_no_signal(id == game.view_map)
+			c.add_child(b))
+
+
 func _refresh_maps(sim: Sim) -> void:
 	var known: Array = game.known_maps()
 	_maps.visible = known.size() > 1
 	var key: String = game.keys.first("map")
 	_rebuild(_maps, "%s%s%s" % [known, game.view_map, key], func(c: Container) -> void:
 		c.add_child(_divider())
-		for id in known:
-			var lv: int = sim.get_map(id).level
-			var b := _button(sim.get_map(id).name if lv <= 1 else "Lv %d" % lv, func(): game.switch_map(id))  # deeper levels short (issue #132)
-			b.set_meta("label", sim.get_map(id).name)
-			b.toggle_mode = true
-			b.set_pressed_no_signal(id == game.view_map)
-			b.custom_minimum_size = Vector2(0, 36)
-			b.tooltip_text = "Show the %s." % sim.get_map(id).name.to_lower() + (" %s switches maps." % key if key != "" else "")
-			c.add_child(b))
+		var cur: String = sim.get_map(game.view_map).name
+		_maps_btn = _button(cur + "  ↓", func(): _maps_open = not _maps_open, "Secondary")
+		_maps_btn.set_meta("label", "Go to another place")  # not the name, so a search for "Village" finds the list's row
+		_maps_btn.custom_minimum_size = Vector2(0, 36)
+		_maps_btn.tooltip_text = "Go to another place." + (" %s switches maps." % key if key != "" else "")
+		c.add_child(_maps_btn))
+	_refresh_maps_drop(sim, known)
 	var line := ""
 	for r in sim.residents:  # a party on the road (issues #107, #108)
 		if r.away:
@@ -1154,6 +1180,22 @@ var _swatches := {}
 
 ## A colour as a small chalk-edged square, for icons: a resident's tunic (pass its hex, issue #79)
 ## or an item's colour (issue #76).
+## A gear for the Menu button, drawn here so it doesn't depend on a font having the glyph (the web build's might not).
+func _gear_tex() -> ImageTexture:
+	var n := 24
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var mid := (n - 1) / 2.0
+	for x in n:
+		for y in n:
+			var d := Vector2(x - mid, y - mid)
+			var r := d.length()
+			var tooth := absf(fmod(d.angle() / TAU * 8.0 + 8.0, 1.0) - 0.5) < 0.27  # eight teeth round the rim
+			var body := r <= 7.4 or (r <= 10.8 and tooth)
+			if body and r > 3.6:
+				img.set_pixel(x, y, Palette.CHALK)
+	return ImageTexture.create_from_image(img)
+
+
 func _swatch_tex(color) -> ImageTexture:
 	var c: Color = Color("#" + color) if color is String else color
 	var key := c.to_html()
@@ -1303,6 +1345,9 @@ func _input(event: InputEvent) -> void:
 			_close_tools()
 		if event.pressed and _job_drop.visible and not _job_drop.get_global_rect().has_point(event.position) and not _job_anchor.has_point(event.position):
 			_close_job_drop()
+		if event.pressed and _maps_drop.visible and not _maps_drop.get_global_rect().has_point(event.position) and (not is_instance_valid(_maps_btn) or not _maps_btn.get_global_rect().has_point(event.position)):
+			_maps_open = false
+			_maps_drop.visible = false
 		if event.pressed and _loc_drop.visible and not _loc_drop.get_global_rect().has_point(event.position) and not _loc_anchor.has_point(event.position):
 			_close_loc_drop()
 		if event.pressed and _log_open and not _log_panel.get_global_rect().has_point(event.position) and not _log_btn.get_global_rect().has_point(event.position):
@@ -1312,6 +1357,10 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _job_drop.visible:
 		_close_job_drop()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _maps_drop.visible:
+		_maps_open = false
+		_maps_drop.visible = false
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _loc_drop.visible:
 		_close_loc_drop()
@@ -1364,10 +1413,13 @@ func _process(_delta: float) -> void:
 	_place_toasts()
 	var room: float = get_viewport().get_visible_rect().size.y - 150.0  # below the top bar, above the bottom edge
 	var want := minf(_sel.get_combined_minimum_size().y, maxf(120.0, room))
+	if _plan_panel.visible:  # the planner takes what's between the top bar and the toolbar, and scrolls past that
+		var avail := get_viewport().get_visible_rect().size.y - TOP_BAR_H - 8.0 - 16.0 - _toolbar_panel.size.y - 8.0 - 24.0
+		var plan_want := Vector2(_plan_box.get_combined_minimum_size().x, minf(_plan_box.get_combined_minimum_size().y, maxf(120.0, avail)))
+		if not _plan_scroll.custom_minimum_size.is_equal_approx(plan_want):
+			_plan_scroll.custom_minimum_size = plan_want
 	if not is_equal_approx(_sel_scroll.custom_minimum_size.y, want):
 		_sel_scroll.custom_minimum_size.y = want
-	if _board_panel.visible:
-		_board_panel.position = Vector2(_tally_panel.global_position.x, _tally_panel.get_global_rect().end.y + 8)
 	# The goals panel gives way to the jobs board, which sits over it, and to a selection panel tall
 	# enough to reach it (at a large interface size, issue #80): what's selected matters more.
 	# The stuck list gives way to the expedition planner the same way; the planner shows the board's
@@ -1435,8 +1487,9 @@ func _refresh_goals(sim: Sim) -> void:
 			c.add_child(l))
 
 
-## The village book (issue #198): the goals of both chapters with their whys, and one page for every
-## building the village knows of. A row of page buttons, the page below it.
+## The village book (issues #78, #198): Goals (the tutorial, both chapters with their whys), Jobs (who
+## does what), Residents (who needs a look), and one page for every building the village knows of. A row
+## of page tabs, the page below it. The Jobs and Residents pages are live containers the book borrows.
 func _refresh_book(sim: Sim) -> void:
 	_book_panel.visible = game.book_open
 	if not game.book_open:
@@ -1450,6 +1503,7 @@ func _refresh_book(sim: Sim) -> void:
 		sig += "1" if Goals.village_done(sim, i) else "0"
 	for p in pages:
 		sig += p.id
+	var live: Control = _board if game.book_page == "jobs" else (_roster if game.book_page == "residents" else null)
 	_rebuild(_book, sig, func(c: Container) -> void:
 		var head := HBoxContainer.new()
 		var title := _label("The village book", true, Palette.CHALK, Palette.HEADING)
@@ -1460,25 +1514,89 @@ func _refresh_book(sim: Sim) -> void:
 		var tabs := HFlowContainer.new()
 		tabs.add_theme_constant_override("h_separation", 2)
 		tabs.add_theme_constant_override("v_separation", 2)
-		for entry in [{"id": "goals", "title": "Goals"}] + pages:
+		for entry in [{"id": "goals", "title": "Goals"}, {"id": "jobs", "title": "Jobs"}, {"id": "residents", "title": "Residents"}] + pages:
 			var b := _button(entry.title, func(): game.open_book(entry.id))
+			b.set_meta("label", "Book: " + entry.title)
 			b.toggle_mode = true
 			b.set_pressed_no_signal(game.book_page == entry.id)
 			tabs.add_child(b)
 		c.add_child(tabs)
-		var scroll := ScrollContainer.new()
-		scroll.custom_minimum_size = Vector2(440, 330)
-		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		_book_scroll = ScrollContainer.new()
+		_book_scroll.custom_minimum_size = Vector2(440, 330)
+		_book_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		c.add_child(_book_scroll)
+		if live != null:
+			live.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			_book_scroll.add_child(live)
+			return
 		var body := VBoxContainer.new()
 		body.add_theme_constant_override("separation", 6)
 		body.custom_minimum_size.x = 430
-		scroll.add_child(body)
-		c.add_child(scroll)
+		_book_scroll.add_child(body)
 		var page := pages.filter(func(p): return p.id == game.book_page)
 		if page.is_empty():
 			_fill_book_goals(body, sim)
 		else:
-			_fill_book_page(body, page[0]))
+			_fill_book_page(body, page[0]),
+		func() -> void:  # the live pages outlive a rebuild: take them out before the old page is freed
+			for n in [_board, _roster]:
+				if n.get_parent() != null:
+					n.get_parent().remove_child(n))
+	if is_instance_valid(_book_scroll):  # the Jobs and Residents pages are as big as they are, up to the room there is
+		if live != null:
+			var room := get_viewport().get_visible_rect().size.y - TOP_BAR_H - 8.0 - 80.0 - 110.0
+			var want := Vector2(maxf(440.0, live.get_combined_minimum_size().x + 8.0), minf(live.get_combined_minimum_size().y, maxf(200.0, room)))
+			if not _book_scroll.custom_minimum_size.is_equal_approx(want):
+				_book_scroll.custom_minimum_size = want
+		elif not _book_scroll.custom_minimum_size.is_equal_approx(Vector2(440, 330)):
+			_book_scroll.custom_minimum_size = Vector2(440, 330)
+
+
+## The Residents page: who needs a look first (hurt or hungry), then who is idle, then everyone else, with what each
+## is doing. Click a name to select and centre on them (issue #300).
+func _refresh_roster(sim: Sim) -> void:
+	if not (game.book_open and game.book_page == "residents"):
+		return
+	var sig := "%s|" % [game.selection]
+	for r in sim.residents:
+		sig += "%d%s%s%d%d%s%s;" % [r.id, r.name, _status(sim, r), int(r.hunger / 5), r.get("hurt", 0), r.away, r.map]
+	_rebuild(_roster, sig, func(c: Container) -> void:
+		var rows: Array = sim.residents.duplicate()
+		var rank := func(r: Dictionary) -> int:
+			if r.get("hurt", 0) > 0 or r.hunger < Tuning.HUNGRY_BELOW:
+				return 0
+			return 1 if (r.job == null and not r.away) else 2
+		rows.sort_custom(func(a, b): return rank.call(a) < rank.call(b))
+		var head := HBoxContainer.new()
+		head.add_theme_constant_override("separation", 8)
+		for h in [["Resident", 128], ["Doing", 230], ["Food", 70], ["", 40]]:
+			var l := _label(h[0], true, Palette.CHALK_DIM, Palette.CAPTION)
+			l.custom_minimum_size.x = h[1]
+			head.add_child(l)
+		c.add_child(head)
+		for r in rows:
+			var line := HBoxContainer.new()
+			line.add_theme_constant_override("separation", 8)
+			var who := _button(r.name, func(): game.focus_on("res", r.id))
+			who.icon = _swatch_tex(r.shirt)
+			who.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			who.custom_minimum_size = Vector2(128, 0)
+			who.toggle_mode = true
+			who.set_pressed_no_signal(game.selection.get("ids", []).has(r.id))
+			who.set_meta("label", "Resident: " + r.name)
+			who.tooltip_text = "Select %s and centre on them" % r.name
+			line.add_child(who)
+			var idle: bool = r.job == null and not r.away
+			var what := _label(_status(sim, r), false, Palette.YELLOW if idle else Palette.CHALK_DIM, Palette.CAPTION, true)
+			what.custom_minimum_size.x = 230
+			line.add_child(what)
+			var food := _label(_mood(r), false, Palette.YELLOW if r.hunger < Tuning.HUNGRY_BELOW else Palette.CHALK_DIM, Palette.CAPTION)
+			food.custom_minimum_size.x = 70
+			line.add_child(food)
+			var hurt := _label("Hurt" if r.get("hurt", 0) > 0 else "", false, Palette.YELLOW, Palette.CAPTION)
+			hurt.custom_minimum_size.x = 40
+			line.add_child(hurt)
+			c.add_child(line))
 
 
 func _fill_book_goals(c: Container, sim: Sim) -> void:
@@ -2042,8 +2160,7 @@ static func _job_people(jb: String, n: int) -> String:
 ## column per job with their level in it and a tick of progress to the next level. Their own job's
 ## cell is lit. A column header counts who has the job, yellow when nobody does (Ada aside).
 func _refresh_board(sim: Sim) -> void:
-	_board_panel.visible = game.jobs_board_open
-	_jobs_btn.set_pressed_no_signal(game.jobs_board_open)
+	_jobs_btn.set_pressed_no_signal(game.book_open)
 	if not game.jobs_board_open:
 		return
 	var sig := "%s|%s|%d|%s" % [game.selection, _keys_sig, _job_for, _stations_sig(sim)]
@@ -3197,7 +3314,7 @@ func _add_site_report(c: Container, sim: Sim, dest: String) -> void:
 	var rep := sim.site_report(dest)
 	c.add_child(_row(rep.name, "about %d s walk each way" % roundi(rep.travel) if rep.travel >= 0.0 else "the road isn’t walked yet", false))
 	if rep.visited and rep.get("pattern", "") != "":
-		c.add_child(_label(rep.pattern, false, Palette.CHALK_DIM, Palette.CAPTION))
+		c.add_child(_label(rep.pattern if rep.get("biome", "") == "" else "%s · %s" % [rep.biome, rep.pattern], false, Palette.CHALK_DIM, Palette.CAPTION))
 	if not rep.visited:
 		c.add_child(_label("“%s”" % rep.told, false, Palette.CHALK_DIM, Palette.BODY, true))
 	for x in rep.resources:
@@ -3595,7 +3712,7 @@ func _fill_route(c: Container, sim: Sim) -> void:
 	if game.view_map != Road.ID:
 		c.add_child(_button("Show the road", func(): game.switch_map(Road.ID), "Secondary"))
 	if not sim.expedition_board().is_empty() and sim.expedition.is_empty():  # the old mine's adventure (issue #136)
-		c.add_child(_button("Plan a trip to the old mine", func(): game.open_adventure(OldMine.ID), "Secondary"))
+		c.add_child(_button("Plan a trip to the old caves", func(): game.open_adventure(OldMine.ID), "Secondary"))
 	# The work the road needs.
 	var seen: int = sim.road().seen
 	if sim.bridge().is_empty() and seen > Sim._seg_of("stream"):
@@ -3776,7 +3893,7 @@ func _board_status(sim: Sim) -> String:
 			return "Packing for the %s." % sim.get_map(ex.dest).name.to_lower()
 		"out":
 			return "The party is out at the %s." % sim.get_map(ex.dest).name.to_lower()
-	return "Plan an adventure here: the old mine or the meadow."
+	return "Plan an adventure here: the old caves or the meadow."
 
 
 # ---------------------------------------------------------------- the party at work, and choices (issues #109-#111)
