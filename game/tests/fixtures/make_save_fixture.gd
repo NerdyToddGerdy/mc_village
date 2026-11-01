@@ -394,6 +394,10 @@ func _initialize() -> void:
 		sim.freight.request = true
 	if SaveFormat.VERSION >= 59:  # a farm target of 12 wheat (#269)
 		sim.wheat_keep = 12
+	if SaveFormat.VERSION >= 61:  # the last trip packed for the meadow (#301)
+		var lp := sim.new_plan("meadow")
+		lp.meals = 5
+		sim.last_plans = {"meadow": lp}
 	var path := "res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION
 	var data := {"summary": Goals.progress_text(sim), "tick": sim.tick, "saved_at": 1792440000,
 		"state": sim.save_state(), "camera": camera, "speed": 1}

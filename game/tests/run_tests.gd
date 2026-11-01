@@ -104,6 +104,9 @@ func _init() -> void:
 		"test_the_door_down_and_back",
 		"test_cows_and_pigs",
 		"test_adventures_list",
+		"test_repeat_the_last_trip",
+
+
 		"test_the_adventures_registry",
 		"test_meadow_expedition",
 		"test_the_road_to_the_meadow",
@@ -2887,6 +2890,40 @@ func test_the_road_to_the_meadow() -> void:
 		if h.map == "village":
 			break
 	check(h.map == "village" and not h.away, "and comes home")
+
+
+## Issue #301: the board remembers the last trip packed for each place, and fills a new plan in from it in one go: the
+## same party, objective, list and meals. Anyone who can't go is replaced, and it says so.
+func test_repeat_the_last_trip() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	var mira := sim.add_resident("Mira", Sim.TRAVELERS[1][1], Sim.rcell(ada) + Vector2i(2, 0))
+	built_board(sim)
+	check(sim.repeat_plan(Meadow.ID).is_empty(), "no last trip, nothing to repeat")
+	var plan := sim.new_plan(Meadow.ID)
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 5
+	sim.aim_plan(plan, "leather", 4)
+	check(sim.plan_expedition(plan) == "", "a trip is planned")
+	check(sim.last_plans.has(Meadow.ID) and sim.last_plans[Meadow.ID].meals == 5, "and remembered")
+	sim.expeditions.overworld = {}  # the trip is over
+	var again: Dictionary = sim.repeat_plan(Meadow.ID)
+	var p: Dictionary = again.plan
+	check(p.party == [ada.id, tomas.id] and p.meals == 5 and p.target.item == "leather" and p.list[0].item == "leather" and again.changes.is_empty(), "the same party, meals and objective, nothing changed (%s)" % [again.changes])
+	tomas.hurt = 1  # hurt, resting
+	again = sim.repeat_plan(Meadow.ID)
+	check(again.plan.party == [ada.id, mira.id] and again.changes.size() == 1 and "Tomas" in again.changes[0] and "Mira" in again.changes[0], "a hurt member is replaced, and it says who and why (%s)" % [again.changes])
+	mira.hurt = 1
+	again = sim.repeat_plan(Meadow.ID)
+	check(again.plan.party == [ada.id] and again.changes.size() == 1 and "nobody can take their place" in again.changes[0], "with nobody to take their place, the party is smaller (%s)" % [again.changes])
+	check(sim.repeat_plan(OldMine.ID).is_empty(), "another place has its own last trip")
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.last_plans.has(Meadow.ID) and loaded.last_plans[Meadow.ID].meals == 5, "the last trips are saved")
+	var f61 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v61.save").data.state)
+	check(f61.last_plans.has("meadow") and f61.last_plans.meadow.meals == 5, "the v61 fixture keeps its last trip")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v60.save").data.state)
+	check(old.last_plans.is_empty(), "an older save has none")
 
 
 ## Issue #242: what each adventure is lives in one table (`Adventures`), and the places that used to ask "is it the

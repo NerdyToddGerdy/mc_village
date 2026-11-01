@@ -262,6 +262,8 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 
 **The Location dropdown.** Select the board and it opens on the place you last planned for (the first one the first time), with a **Location** dropdown in its header showing it and its walk, such as "Meadow · ~28 s each way". Open the dropdown to see everywhere the village knows of, one line each with its walk and whether anyone has been, and a flag where hazards are known; choose one to see its site report and planner. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open the board on it, or the old mine's for **Plan a trip to the old mine**. Only one expedition goes at a time, so while one is packing or out, the dropdown shows where the party is and the other places are listed but can't be chosen.
 
+**Repeat last trip.** Once a trip has been planned to a place, the board shows **Repeat last trip** above the planner: one click fills in the same party, objective, Bring-back list, meals and return policy as last time. If someone in that party can't go now (hurt, or away) the next free resident goes in their place, and a message says who and why. The pens' sticks and wheat are worked out afresh. Check the plan and press **Start packing** as usual.
+
 **The site report** (left) says what the village knows about the place: what it has been told, the walk there, and what can be gathered. Until someone has been, there are no estimates and no known hazards.
 
 **Planning:**

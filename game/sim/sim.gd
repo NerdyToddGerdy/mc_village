@@ -1420,6 +1420,7 @@ func _chest_job(r: Dictionary, c: Vector2i):
 
 ## Claims made so far: strips added to the village. Saved.
 var claims_made := 0
+var last_plans := {}                ## Destination -> the plan last packed for it, for "Repeat last trip" (issue #301).
 var cargo_lists := {}               ## Destination -> its last cargo priority list, for the next plan to start from (issue #185).
 
 
@@ -5169,6 +5170,47 @@ static func sync_target(plan: Dictionary) -> void:
 		plan.target = {"item": pick.item, "n": maxi(1, pick.n)}
 
 
+## The last trip packed for `dest`, as a new plan (issue #301): the same objective, list, meals, policy and party. A
+## member who can't go now is left out, and the next resident who can goes in their place; pens' sticks and wheat and
+## the Nether's building stock are worked out afresh, since what's needed has changed. Returns {plan, changes}, where
+## `changes` says in words what is not the same, or {} when there is no last trip.
+func repeat_plan(dest: String) -> Dictionary:
+	if not last_plans.has(dest):
+		return {}
+	var last: Dictionary = last_plans[dest]
+	var plan := new_plan(dest)
+	for k in last:
+		if not k in ["party", "sticks", "wheat", "shelter", "cobble", "planks", "stock"]:
+			plan[k] = last[k].duplicate(true) if last[k] is Dictionary or last[k] is Array else last[k]
+	var changes: Array = []
+	var party: Array = []
+	var left_out: Array = []
+	for id in last.party:
+		var r := resident(id)
+		if r.is_empty():
+			continue
+		var why := cant_join(r)
+		if why == "":
+			party.append(id)
+		else:
+			left_out.append("%s (%s)" % [r.name, why.to_lower()])
+	for name in left_out:
+		var sub: Dictionary = {}
+		for r in residents:
+			if cant_join(r) == "" and not party.has(r.id) and not last.party.has(r.id):
+				sub = r
+				break
+		if sub.is_empty():
+			changes.append("%s can't go, and nobody can take their place" % name)
+		else:
+			party.append(sub.id)
+			changes.append("%s can't go; %s goes instead" % [name, sub.name])
+	plan.party = party
+	if party.is_empty():
+		changes.append("nobody can go")
+	return {"plan": plan, "changes": changes}
+
+
 ## Sets a plan's (or an expedition's) list to one wanted item first, then everything else its place gives as much
 ## as fits: the old single objective, for plans made in code.
 func aim_plan(plan: Dictionary, item: String, n: int) -> void:
@@ -5419,6 +5461,8 @@ func plan_expedition(plan: Dictionary) -> String:
 		return problems[0]
 	if not plan.target.item in ["pens", "survey", "scout", "build", "trade", "fortress", "rescue", "line", "pline"]:  # each place keeps its last list (issue #185)
 		cargo_lists[plan.dest] = plan.get("list", []).map(func(r): return {"item": r.item, "on": r.on, "n": r.n})
+	if not plan.get("rescue", false):
+		last_plans[plan.dest] = plan.duplicate(true)
 	use_slot("rescue" if plan.get("rescue", false) else slot_of_dest(plan.dest))
 	expedition = plan.duplicate(true)
 	expedition.board = village_portal().id if in_nether() else expedition_board().id  # a Nether party packs at the portal (issue #148)
@@ -9464,7 +9508,7 @@ func save_state() -> Dictionary:
 	for id in maps:
 		maps_out[id] = maps[id].save()
 	return {"tick": tick, "next_id": next_id, "maps": maps_out, "residents": res_out,
-		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made, "cargo_lists": cargo_lists.duplicate(true),
+		"stats": stats.duplicate(true), "arrival_at": arrival_at, "arrived": arrived, "auto_craft": auto_craft, "claims_made": claims_made, "cargo_lists": cargo_lists.duplicate(true), "last_plans": last_plans.duplicate(true),
 		"herd_floor": herd_floor.duplicate(), "wheat_keep": wheat_keep, "rng_state": rng.state, "seed": seed,
 		"expeditions": expeditions.duplicate(true), "pending": pending.duplicate(true), "cart": cart.duplicate(true),
 		"portal_line": portal_line.duplicate(true), "freight": freight.duplicate(true), "wires": wires.duplicate(true)}
@@ -9489,6 +9533,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.auto_craft = d.auto_craft
 	s.claims_made = d.get("claims_made", 0)
 	s.cargo_lists = d.get("cargo_lists", {}).duplicate(true)
+	s.last_plans = d.get("last_plans", {}).duplicate(true)
 	s.herd_floor = d.herd_floor.duplicate()
 	s.wheat_keep = d.get("wheat_keep", Tuning.WHEAT_KEEP)
 	# Bushes added to older saves (v7) may sit where something now stands; drop those.

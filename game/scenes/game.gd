@@ -1458,6 +1458,18 @@ func open_adventure(id: String) -> void:
 	open_planner()
 
 
+## Fills the plan in from the last trip to this place (issue #301), and says what's not the same.
+func repeat_last_trip() -> void:
+	var r := sim.repeat_plan(plan.dest if not plan.is_empty() else adventure)
+	if r.is_empty():
+		return
+	plan = r.plan
+	var text := "Repeating the last trip to the %s." % sim.get_map(plan.dest).name.to_lower()
+	if not r.changes.is_empty():
+		text += " " + "; ".join(r.changes) + "."
+	_hud.add_toast({"text": text, "res_id": 0, "site_id": 0})
+
+
 func close_planner() -> void:
 	planner_open = false
 
