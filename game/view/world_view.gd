@@ -592,6 +592,8 @@ func _add_device(b_in: Batch, s: Dictionary) -> void:
 	if not done:
 		return
 	b.box(Vector3(o.x + 0.25, lift + 0.4, o.y + 0.25), Vector3(o.x + 0.75, lift + 0.46, o.y + 0.75), REDSTONE_ON if on else REDSTONE_OFF)
+	if on:  # a raised chalk stud as well as the brighter red, so on and off differ in shape and lightness, not hue alone (issue #302)
+		b.box(Vector3(o.x + 0.4, lift + 0.46, o.y + 0.62), Vector3(o.x + 0.6, lift + 0.56, o.y + 0.72), Palette.CHALK)
 	if Defs.TEMPLATES[s.tpl].device == "sensor":
 		b.box(Vector3(o.x + 0.42, lift + 0.46, o.y + 0.42), Vector3(o.x + 0.58, lift + 0.85, o.y + 0.58), Palette.STONE)
 		b.box(Vector3(o.x + 0.38, lift + 0.85, o.y + 0.38), Vector3(o.x + 0.62, lift + 0.95, o.y + 0.62), REDSTONE_ON if on else REDSTONE_OFF)
@@ -1519,10 +1521,15 @@ func _person_mat(color: Color, tunic: Color, finish := BlockTextures.PLAIN) -> M
 			var sm := StandardMaterial3D.new()
 			sm.albedo_color = color
 			sm.roughness = 1.0
+			sm.stencil_mode = BaseMaterial3D.STENCIL_MODE_CUSTOM  # marks where the body is seen, so the x-ray skips it (issue #237)
+			sm.stencil_flags = BaseMaterial3D.STENCIL_FLAG_WRITE
+			sm.stencil_compare = BaseMaterial3D.STENCIL_COMPARE_ALWAYS
+			sm.stencil_reference = 1
 			sm.next_pass = _xray_material(tunic)
 			m = sm
 		else:  # a pixel texture (issue #206, phase 4), through the blocks' shader
 			var shm := _block_material(false)
+			shm.shader = _person_shader(shm.shader)
 			shm.set_shader_parameter("from_instance", false)
 			shm.set_shader_parameter("local_uv", true)
 			shm.set_shader_parameter("tint", color)
@@ -1535,6 +1542,15 @@ func _person_mat(color: Color, tunic: Color, finish := BlockTextures.PLAIN) -> M
 
 var _xrays := {}
 var _tag_font: FontVariation
+var _person_shader_copy: Shader
+
+
+## The blocks' shader with a stencil mark, for people's textured parts: a copy, so the world's blocks don't mark it (issue #237).
+func _person_shader(base: Shader) -> Shader:
+	if _person_shader_copy == null:
+		_person_shader_copy = Shader.new()
+		_person_shader_copy.code = base.code.replace("shader_type spatial;", "shader_type spatial;\nstencil_mode write, compare_always, 1;")
+	return _person_shader_copy
 
 
 ## A faint silhouette shown only where something (a tree, a wall) is in front of a resident,
@@ -1546,6 +1562,7 @@ func _xray_material(tunic: Color) -> ShaderMaterial:
 		sh.code = """
 shader_type spatial;
 render_mode unshaded, depth_test_disabled, depth_draw_never, cull_back;
+stencil_mode read, compare_not_equal, 1;  // not where this body, or any body, is already drawn (issue #237)
 uniform vec4 tint : source_color;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 

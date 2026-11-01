@@ -3645,7 +3645,7 @@ func sign_for(dest: String) -> Vector2i:
 	if realm_of(dest) == "nether":  # a Nether party gathers in front of the portal (issue #148)
 		var p := village_portal()
 		return staging_cells(p)[1] if not p.is_empty() else route_sign()
-	return meadow_sign() if dest == Meadow.ID else route_sign()
+	return meadow_sign() if Adventures.def(dest).sign == "west" else route_sign()
 
 
 ## The village's finished portal, or {} (issue #148).
@@ -5127,10 +5127,10 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 			"list": cargo_list_for(dest) if NetherRoute.site_key(dest) != "" else [],
 			"shelter": build_it, "cobble": Tuning.SHELTER_COST.cobble if build_it else 0, "planks": Tuning.SHELTER_COST.plank if build_it else 0, "stock": 0,
 			"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": false, "clear": false, "fight": false}
-	var meadow := dest == Meadow.ID  # issue #137: wool, and no pickaxes, for the meadow
-	var sticks := fence_left() if meadow else 0  # issue #139: what the pens need
-	var wheat := wheat_wanted() if meadow else 0
-	var plan := {"dest": dest, "party": party, "target": {"item": "wool" if meadow else "coal", "n": 6 if meadow else 8}, "meals": 3, "picks": 0 if meadow else 1,
+	var ad := Adventures.def(dest)  # issue #137: wool, and no pickaxes, for the meadow
+	var sticks := fence_left() if ad.pens else 0  # issue #139: what the pens need
+	var wheat := wheat_wanted() if ad.pens else 0
+	var plan := {"dest": dest, "party": party, "target": {"item": ad.target[0], "n": ad.target[1]}, "meals": 3, "picks": ad.picks,
 		"sticks": sticks, "wheat": wheat,
 		"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": cart_adds_room(), "clear": false}
 	plan.list = cargo_list_for(dest)
@@ -5174,7 +5174,7 @@ static func sync_target(plan: Dictionary) -> void:
 func aim_plan(plan: Dictionary, item: String, n: int) -> void:
 	var rows: Array = [{"item": item, "on": true, "n": n}]
 	var known: Array = plan_targets(plan.dest).map(func(x): return x.item)
-	var others: Array = ["wool", "mutton", "leather", "beef", "porkchop"] if plan.dest == Meadow.ID else ["iron_ore", "coal", "cobble"]
+	var others: Array = Adventures.def(plan.dest).others
 	for o in others:
 		if o != item and known.has(o):
 			rows.append({"item": o, "on": true, "n": 0})
@@ -5192,7 +5192,7 @@ func cargo_list_for(dest: String) -> Array:
 		if known.has(r.item):
 			out.append({"item": r.item, "on": r.on, "n": r.n})
 	if kept.is_empty():  # never planned here: the defaults, in their order
-		for d in Tuning.CARGO_DEFAULTS["meadow" if dest == Meadow.ID else "mine"]:
+		for d in Tuning.CARGO_DEFAULTS[Adventures.def(dest).cargo]:
 			if known.has(d[0]):
 				out.append({"item": d[0], "on": true, "n": d[1]})
 	for item in known:
@@ -5715,7 +5715,8 @@ func route_sign() -> Vector2i:
 
 ## Seconds on the way to `to`, or home from it: the road to the meadow, or the road to the mine.
 func trip_time(to: String) -> float:
-	return MeadowRoad.walk_time() if to == Meadow.ID or (to == "village" and expedition.get("dest", "") == Meadow.ID) else route_walk_time()
+	var dest: String = expedition.get("dest", "") if to == "village" else to
+	return MeadowRoad.walk_time() if Adventures.road_of(dest) == MeadowRoad.ID else route_walk_time()
 
 
 ## Whether a party member is on their way: walking to the signpost to leave the village, or to the
@@ -5898,7 +5899,7 @@ func expedition_report(ex: Dictionary) -> Array:
 	for k in ex.get("provisions", {}):
 		meals_back += ex.provisions[k]
 	var name: String = maps[ex.dest].name.to_lower()
-	var lines: Array = ["Back from the %s: %s" % [name, ", ".join(got)] if not got.is_empty() else "Back from the %s with nothing %s" % [name, "hunted" if ex.dest == Meadow.ID else "mined"]]
+	var lines: Array = ["Back from the %s: %s" % [name, ", ".join(got)] if not got.is_empty() else "Back from the %s with nothing %s" % [name, Adventures.def(ex.dest).got]]
 	var meals_packed := 0
 	for k in ex.get("packed", {}):
 		if Defs.MEALS.has(k):
@@ -5938,7 +5939,7 @@ func on_road(r: Dictionary) -> bool:
 
 ## The road map a trip to `dest` walks: the meadow's strip, or the road to the mine.
 static func road_map_for(dest: String) -> String:
-	return MeadowRoad.ID if dest == Meadow.ID else Road.ID
+	return Adventures.road_of(dest)
 
 
 ## The two ends of the road map `id`: the village's and the site's.
@@ -8594,7 +8595,7 @@ func policy_met() -> String:
 			return "the pens are tended"
 		if ex.get("clear", false) and level_of(ex.dest) > 0:
 			return "the level is cleared"
-		return "nothing left to hunt" if m.id == Meadow.ID else "nothing left to mine"
+		return Adventures.def(m.id).left
 	return ""
 
 
@@ -9392,7 +9393,7 @@ func _landing_report() -> Dictionary:
 
 ## The destinations the expedition board offers, in order. A later one (the Nether, an outpost) is a
 ## new row here.
-const ADVENTURES := [OldMine.ID, Meadow.ID, NetherLanding.ID]
+const ADVENTURES := Adventures.IDS
 
 
 ## The adventures list: one row per known destination, with where it is, what's there, its hazards
