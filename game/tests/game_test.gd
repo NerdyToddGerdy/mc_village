@@ -186,6 +186,44 @@ func _test_headers(game: Game) -> void:
 	long.free()
 
 
+## The planner has "Repeat last trip" once there is a last trip to the place (issue #301).
+func _test_repeat_button(game: Game) -> void:
+	var hud: Hud = game._hud
+	var sim := game.sim
+	var saved: Dictionary = sim.last_plans.duplicate(true)
+	var made := false
+	if sim.expedition_board().is_empty():  # a board of our own, taken down again after
+		var spot := Vector2i(sim.w / 2 + 5, sim.h / 2 + 5)
+		var bs := sim.place_site("board", spot)
+		bs.stage = 1
+		bs.done = true
+		sim._on_site_done(bs)
+		made = true
+	game.open_adventure(Meadow.ID)
+	sim.last_plans.erase(Meadow.ID)
+	hud.refresh(sim)
+	await game.get_tree().process_frame
+	var buttons := func() -> Array: return _walk(hud._plan_box).filter(func(n): return n is Button and n.get_meta("label", "") == "Repeat last trip" and not n.is_queued_for_deletion())
+	check(buttons.call().is_empty(), "no Repeat button before there's a last trip")
+	var plan := sim.new_plan(Meadow.ID)
+	plan.meals = 4
+	sim.last_plans[Meadow.ID] = plan
+	hud._sigs.clear()
+	hud.refresh(sim)
+	await game.get_tree().process_frame
+	var b: Array = buttons.call()
+	check(b.size() == 1, "a Repeat button once there is one")
+	if b.size() == 1:
+		game.plan.meals = 1
+		b[0].pressed.emit()
+		check(game.plan.meals == 4, "pressing it fills the plan in from the last trip")
+	sim.last_plans = saved
+	game.close_planner()
+	if made:
+		sim.sites = sim.sites.filter(func(x): return x.tpl != "board")
+		sim.rev += 1
+
+
 ## Toasts are kept in a log that opens from a button, so a missed one can be read (issue #297).
 func _test_message_log(game: Game) -> void:
 	var hud: Hud = game._hud
@@ -1823,8 +1861,11 @@ func _initialize() -> void:
 	await _test_equip(game)
 	await _test_toasts(game)
 	_test_headers(game)
+
+
 	await _test_skip_ahead(game)
 	await _test_message_log(game)
+	await _test_repeat_button(game)
 	await _test_needs_you(game)
 	await _test_autosave(game)
 	_test_glyphs()
