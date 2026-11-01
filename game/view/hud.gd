@@ -34,6 +34,14 @@ var _job_anchor := Rect2()          ## The button it opened from, in global coor
 var _loc_drop: PanelContainer       ## The expedition board's location dropdown (issue #181), under its button.
 var _loc_list := VBoxContainer.new()
 var _loc_open := false
+## The message log (issue #297): the toasts so far, newest last, in a list that opens under its button.
+var _log: Array = []              ## {text, tick, res_id, site_id}
+var _log_unread := 0
+var _log_open := false
+var _log_btn: Button
+var _log_panel: PanelContainer
+var _log_list := VBoxContainer.new()
+const LOG_MAX := 60
 var _loc_anchor := Rect2()
 var _loc_button: Button  ## The button the location dropdown hangs from, so it follows it.
 var _tally_panel: PanelContainer
@@ -198,6 +206,11 @@ func _ready() -> void:
 	tr.add_child(_speed_panel)
 	_menu_panel = _panel(_menu_btn, Vector2.ZERO, 4)  # its own panel under the speed buttons, so the speed row stays narrow
 	tr.add_child(_menu_panel)
+	_log_btn = _button("Log", func(): _toggle_log())  # what the toasts said, for the ones that were missed (issue #297)
+	_log_btn.custom_minimum_size = Vector2(0, 44)
+	_log_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_log_btn.set_meta("label", "Log")
+	tr.add_child(_panel(_log_btn, Vector2.ZERO, 4))
 	_stuck_panel = _panel(_stuck, Vector2(250, 0))
 	tr.add_child(_stuck_panel)
 
@@ -257,6 +270,17 @@ func _ready() -> void:
 	_root.add_child(_book_panel)
 	_root.add_child(_job_drop)
 	_root.add_child(_loc_drop)
+	_log_list.add_theme_constant_override("separation", 4)
+	var log_scroll := ScrollContainer.new()
+	log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	log_scroll.custom_minimum_size = Vector2(430, 0)
+	log_scroll.add_child(_log_list)
+	_log_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_log_panel = _panel(log_scroll, Vector2(430, 0), 8)
+	_log_panel.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 8, Palette.SLATE_DEEP))
+	_log_panel.visible = false
+	_log_panel.top_level = true
+	_root.add_child(_log_panel)
 	get_viewport().size_changed.connect(func() -> void:  # a resized window must not strand an open list
 		if _loc_drop.visible and game != null and game.sim != null:
 			_refresh_loc_drop(game.sim))
@@ -893,6 +917,7 @@ func refresh(sim: Sim) -> void:
 	_refresh_selection(sim)
 	_refresh_job_drop(sim)
 	_refresh_loc_drop(sim)
+	_refresh_log()
 	_refresh_toolbar(sim)
 	_refresh_board(sim)
 	_refresh_craft(sim)
@@ -1236,6 +1261,8 @@ func _input(event: InputEvent) -> void:
 			_close_job_drop()
 		if event.pressed and _loc_drop.visible and not _loc_drop.get_global_rect().has_point(event.position) and not _loc_anchor.has_point(event.position):
 			_close_loc_drop()
+		if event.pressed and _log_open and not _log_panel.get_global_rect().has_point(event.position) and not _log_btn.get_global_rect().has_point(event.position):
+			_toggle_log()
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _tools_drop.visible:
 		_close_tools()
 		get_viewport().set_input_as_handled()
@@ -1244,6 +1271,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _loc_drop.visible:
 		_close_loc_drop()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _log_open:
+		_toggle_log()
 		get_viewport().set_input_as_handled()
 
 
@@ -1573,6 +1603,11 @@ func _place_toasts() -> void:
 
 
 func add_toast(ev: Dictionary) -> void:
+	_log.append({"text": ev.text, "tick": game.sim.tick if game.sim != null else 0, "res_id": ev.get("res_id", 0), "site_id": ev.get("site_id", 0)})
+	if _log.size() > LOG_MAX:
+		_log.pop_front()
+	if not _log_open:
+		_log_unread += 1
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 14)
 	var who: Dictionary = game.sim.resident(ev.res_id) if ev.res_id else {}
@@ -1589,6 +1624,52 @@ func add_toast(ev: Dictionary) -> void:
 	_toast_list.append({"node": p, "until": Time.get_ticks_msec() + 7000})
 	if _toast_list.size() > 3:
 		_toast_list.pop_front().node.queue_free()
+
+
+# ---------------------------------------------------------------- the message log (issue #297)
+
+func _toggle_log() -> void:
+	_log_open = not _log_open
+	if _log_open:
+		_log_unread = 0
+	_refresh_log()
+
+
+## "12:05": the game time a message was shown at.
+func _log_time(tick: int) -> String:
+	var secs := tick / Tuning.TPS
+	return "%d:%02d" % [secs / 60, secs % 60]
+
+
+## The button says how many are new; the list, newest first, is each message with when it was said and a way to the place.
+func _refresh_log() -> void:
+	_log_btn.text = "Log" if _log_unread == 0 else "Log  (%d new)" % _log_unread
+	_log_btn.tooltip_text = "What the messages said, newest first. Click one's button to go there."
+	_log_panel.visible = _log_open
+	if not _log_open:
+		return
+	_place_drop(_log_panel, Vector2(_log_btn.get_global_rect().end.x - 430.0 - 16.0, _log_btn.get_global_rect().end.y + 8.0))
+	var cap := get_viewport().get_visible_rect().size.y - _log_panel.position.y - 24.0
+	_log_panel.get_child(0).custom_minimum_size.y = clampf(cap, 80.0, 440.0)
+	_rebuild(_log_list, "%d" % _log.size() + str(_log.back().text if not _log.is_empty() else ""), func(c: Container) -> void:
+		if _log.is_empty():
+			c.add_child(_label("Nothing yet. The messages that pop up will be kept here.", false, Palette.CHALK_DIM, Palette.BODY, true))
+			return
+		for i in range(_log.size() - 1, -1, -1):
+			var e: Dictionary = _log[i]
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 10)
+			var t := _label(_log_time(e.tick), false, Palette.CHALK_DIM, Palette.CAPTION)
+			t.custom_minimum_size.x = 44
+			row.add_child(t)
+			var msg := _label(e.text, false, Palette.CHALK, Palette.BODY, true)
+			msg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(msg)
+			if e.res_id:
+				row.add_child(_button("Go", func(): game.focus_on("res", e.res_id), "Secondary"))
+			elif e.site_id:
+				row.add_child(_button("Show", func(): game.focus_on("site", e.site_id), "Secondary"))
+			c.add_child(row))
 
 
 # ---------------------------------------------------------------- selection panel
