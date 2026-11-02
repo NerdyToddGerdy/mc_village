@@ -3278,16 +3278,17 @@ func _claim(r: Dictionary) -> void:
 		if j != null:
 			r.job = j
 			return
-	# Nothing to do: after a while, go home and wait there (issue #345). Counted once an idle spell, so the check is cheap.
+	# Nothing to do: after a while, go home and wait there (issue #345). Asked once every ten seconds of an idle spell, so the check is cheap.
 	var idle: int = _idle_ticks.get(r.id, 0) + 1
 	_idle_ticks[r.id] = idle
-	if idle == int(Tuning.IDLE_HOME_AFTER * Tuning.TPS):
+	var after := int(Tuning.IDLE_HOME_AFTER * Tuning.TPS)
+	if idle >= after and (idle - after) % (10 * Tuning.TPS) == 0:
 		r.job = _home_job(r)
 
 
 ## A walk to the resident's own house, or null when they have none, are away from the village or are already by it (issue #345).
 func _home_job(r: Dictionary):
-	if map_id != "village" or r.away or r.get("hurt", 0) > 0:
+	if map_id != "village" or r.away or r.get("hurt", 0) > 0 or Goals.current(self) >= 0:  # the founding is the guided opening: nobody goes home till it's done
 		return null
 	for s in m.sites:
 		if s.tpl == "house" and s.done and s.owner == r.id:
@@ -3717,6 +3718,14 @@ func _step_resident(r: Dictionary) -> void:
 		_burn_step(r)
 	if r.hunger <= 0.0 and r.job != null and r.job.kind != "eat":
 		fail_job(r)  # starving: drop everything and go eat
+	if r.job != null and r.job.kind == "home":  # work that turns up takes them from the walk home at once (issue #345)
+		var walk: Job = r.job
+		r.job = null
+		_claim(r)
+		if r.job == null:
+			r.job = walk
+		else:
+			_idle_ticks.erase(r.id)
 	if r.job == null:
 		if r.arriving:
 			return

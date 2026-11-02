@@ -919,6 +919,14 @@ func test_idle_residents_go_home() -> void:
 	sim.zone.clear()
 	for t in sim.trees:
 		t.des = false
+	check(Goals.current(sim) >= 0, "the founding is under way")
+	run(sim, Tuning.IDLE_HOME_AFTER + 30.0)
+	var fh := home_gap(sim, tomas, house)
+	check(fh > Tuning.HOME_NEAR, "nobody goes home during the founding (%d cells off)" % fh)
+	_finish_founding(sim)
+	check(Goals.current(sim) < 0, "every founding step is done")
+	sim._idle_ticks.clear()  # a fresh idle spell
+	tomas.job = null
 	var away := home_gap(sim, tomas, house)
 	run(sim, Tuning.IDLE_HOME_AFTER - 2.0)
 	check(Sim.rcell(tomas) == sim.nearest_walkable(Sim.rcell(tomas)) and home_gap(sim, tomas, house) >= away - 1, "they don't go the moment there's no work")
@@ -943,6 +951,46 @@ func test_idle_residents_go_home() -> void:
 		if tomas.job != null and not kinds.has(tomas.job.kind):
 			kinds.append(tomas.job.kind)
 	check(kinds.has("haul") and not kinds.has("home"), "and new work takes them from there (%s)" % [kinds])
+	# And work that turns up on the way takes them off the walk.
+	tomas.arriving = true  # Tomas takes no more work either
+	var tomas2 := sim.add_resident("Mira", Sim.TRAVELERS[1][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-8, 8)))
+	var house2 := sim.place_site("house", sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-8, -8)))
+	house2.stage = 4
+	house2.done = true
+	house2.owner = tomas2.id
+	var walked := false
+	for i in int(40 * Tuning.TPS):
+		sim.step()
+		if tomas2.job != null and tomas2.job.kind == "home":
+			walked = true
+			break
+	check(walked, "Mira sets off for home")
+	sim.drop_items(sim.nearest_walkable(Sim.rcell(tomas2) + Vector2i(2, 0)), "log", 3)
+	var left := false
+	for i in 3 * Tuning.TPS:
+		sim.step()
+		if tomas2.job != null and tomas2.job.kind == "haul":
+			left = true
+			break
+	check(left, "and a stack to haul turns her off the walk")
+
+
+## Every founding goal done, as game_test.gd does it, so the village chapter is on.
+static func _finish_founding(sim: Sim) -> void:
+	sim.stats.felled = 1
+	sim.stats.pick_crafted = true
+	sim.stats.axe_crafted = true
+	sim.stats.meadow_wool = true
+	sim.stats.built = {"bench": true, "fireplace": true, "board": true, "chopping_block": true}
+	sim.stats.broken_boulders = 1
+	sim.stats.sheep_hunted = 1
+	sim.stats.houses = 2
+	sim.stats.traveler_home = true
+	sim.stats.division = true
+	sim.zone[sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(2, 2))] = true
+	var bench := sim.place_site("bench", sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(4, -3)))
+	bench.stage = 1
+	bench.done = true
 
 
 static func home_gap(sim: Sim, r: Dictionary, house: Dictionary) -> int:
@@ -3068,7 +3116,7 @@ func test_repeat_the_last_trip() -> void:
 	var f61 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v61.save").data.state)
 	check(f61.last_plans.has("meadow") and f61.last_plans.meadow.meals == 5, "the v61 fixture keeps its last trip")
 	var f63 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v63.save").data.state)
-	check(f63.stats.has("guide_seen") and Goals.new_pages(f63).is_empty(), "the v63 fixture knows which pages were seen")
+	check(f63.stats.has("guide_seen") and not f63.stats.guide_seen.is_empty(), "the v63 fixture knows which pages were seen")
 	var f62 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v62.save").data.state)
 	check(f62.bushes.all(func(b): return b.has("des") and b.claim == 0), "the v62 fixture's bushes can be marked")
 	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v60.save").data.state)

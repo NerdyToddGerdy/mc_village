@@ -118,7 +118,7 @@ Click a wedge, press 1 to 4, or hold the right button, drag to a wedge and let g
 
 **Selecting.** Click a resident, or press **F** for the next one. Shift-drag a box to select several. Each resident wears their own tunic colour, and hovering over one or selecting them shows their name above their head.
 
-**Going home.** A resident with nothing to do for 20 seconds walks back to their own house and waits by it, so idle people aren't left standing in the work area. They leave it for any work that turns up. Ada, and anyone without a house, stay where they are.
+**Going home.** Once the founding is done, a resident with nothing to do for 20 seconds walks back to their own house and waits by it, so idle people aren't left standing in the work area. They leave it, even on the way, for any work that turns up. Ada, and anyone without a house, stay where they are.
 
 **The resident panel** shows:
 - what they're doing;
