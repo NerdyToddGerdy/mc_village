@@ -2098,10 +2098,7 @@ func _screenshot_scene() -> void:
 		_target = Vector3(ada.pos.x + 2.0, 0, ada.pos.y + 0.5)
 		_place_camera()
 		_hud.waiting_open = true
-		if "--folded" in OS.get_cmdline_user_args():
-			sim.compute_stuck()
-			_hud.refresh(sim)  # what's stuck now counts as seen, so it stays folded
-			_hud.stuck_open = false
+		_hud.stuck_open = "--folded" not in OS.get_cmdline_user_args()  # the list opens under its tab, unless it's to show the tab alone
 	if "--move" in OS.get_cmdline_user_args():  # a finished building selected, with its Move button (issue #234); --storehouse for the storehouse's panel
 		var tpl := "storehouse" if "--storehouse" in OS.get_cmdline_user_args() else "bench"
 		var spot: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(4, 0))
