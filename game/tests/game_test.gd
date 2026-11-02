@@ -540,6 +540,29 @@ func _test_colours(game: Game) -> void:
 	game.set_colour_mode(before)
 
 
+## Issue #351: the village's ground keeps its own batch, rebuilt only when the map, its size or its worn paths change.
+func _test_ground_batch(game: Game) -> void:
+	var sim := game.sim
+	var world: WorldView = game._world
+	game.view_map = "village"
+	await process_frame
+	await process_frame
+	var sig: String = world._ground_sig
+	check(sig != "" and world._ground.multimesh.instance_count >= sim.w * sim.h * 2, "the village's ground is one batch of its own")
+	sim.rev += 1
+	await process_frame
+	await process_frame
+	check(world._ground_sig == sig, "a change to the world doesn't rebuild it")
+	sim.m.wear[Vector2i(1, 1)] = 3.0
+	sim.rev += 1
+	await process_frame
+	await process_frame
+	check(world._ground_sig != sig, "a change to the worn paths does")
+	sim.m.wear.erase(Vector2i(1, 1))
+	sim.rev += 1
+	await process_frame
+
+
 ## Issue #304: jumping to something blinks over it, and a held key sees through every tree.
 func _test_find_things(game: Game) -> void:
 	var sim := game.sim
@@ -2164,6 +2187,7 @@ func _initialize() -> void:
 	await _test_needs_you(game)
 	await _test_rebuild_height(game)
 	await _test_find_things(game)
+	await _test_ground_batch(game)
 	await _test_colours(game)
 	await _test_autosave(game)
 	_test_glyphs()
