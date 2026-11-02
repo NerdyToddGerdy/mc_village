@@ -483,6 +483,37 @@ func _test_toasts(game: Game) -> void:
 	game.jobs_board_open = false
 
 
+## Issue #343: a rebuilt panel is never double height for a frame, and with nothing selected a changing stuck reason doesn't rebuild the box.
+func _test_rebuild_height(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	game.set_speed(0)
+	game.selection = {"kind": "res", "ids": [sim.residents[0].id]}
+	hud.refresh(sim)
+	await process_frame
+	var before := hud._sel.get_child_count()
+	var scroll_h := hud._sel_scroll.custom_minimum_size.y
+	hud._sigs.erase(hud._sel.get_instance_id())  # force the rebuild
+	hud.refresh(sim)
+	var at_once := hud._sel.get_child_count()
+	await process_frame
+	check(before == at_once and at_once == hud._sel.get_child_count(), "a rebuild takes the old children out at once, so the panel never holds both (%d, %d, %d)" % [before, at_once, hud._sel.get_child_count()])
+	check(is_equal_approx(scroll_h, hud._sel_scroll.custom_minimum_size.y), "and the selection panel keeps its height")
+	game.selection = {}
+	hud.refresh(sim)
+	await process_frame
+	var kept: Array = sim.stuck.duplicate(true)
+	var entry := {"who": "House", "why": "Walls need 4 more planks", "map": "village", "cell": Vector2(5, 5), "height": 1.0, "focus_kind": "", "focus_id": 0, "hidden": false, "waiting": false, "decision": "", "key": "a", "since": 0}
+	sim.stuck = [entry]
+	hud.refresh(sim)
+	var sig_before: String = hud._sigs.get(hud._sel.get_instance_id(), "")
+	sim.stuck = [entry.merged({"why": "Walls need 3 more planks"})]
+	hud.refresh(sim)
+	check(hud._sigs.get(hud._sel.get_instance_id(), "") == sig_before, "with nothing selected a changing stuck reason doesn't rebuild the box")
+	sim.stuck = kept
+	hud.refresh(sim)
+
+
 ## Issue #234: a finished building's panel has a Move button; it picks the building up, and a click puts it down at once.
 func _test_move_building(game: Game) -> void:
 	var sim := game.sim
@@ -2065,6 +2096,7 @@ func _initialize() -> void:
 
 	await _test_repeat_button(game)
 	await _test_needs_you(game)
+	await _test_rebuild_height(game)
 	await _test_autosave(game)
 	_test_glyphs()
 	_test_tallies(game)

@@ -1961,8 +1961,9 @@ func _refresh_selection(sim: Sim) -> void:
 		sig += "%s" % [target]
 		if target.get("tpl", "") == "mason_bench":  # whether it can be dug out depends on the map's boulders and the bricks
 			sig += sim.shaft_check(target)
-	for s in sim.stuck:
-		sig += s.why
+	if not sel.is_empty():  # with nothing selected the panel shows no stuck reason, so a changing one needn't rebuild it (#343)
+		for s in sim.stuck:
+			sig += s.why
 	sig += game.tool + str(game.area_site)  # the Paint area button reads Done painting while it's on (issue #203)
 	sig += _keys_sig
 	_update_progress_bar(sim)
