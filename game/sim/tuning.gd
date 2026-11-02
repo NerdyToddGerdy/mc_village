@@ -55,6 +55,11 @@ const PATROL_RADIUS := 9              ## How far from the village's middle it wa
 const GUARD_DEFEND_RANGE := 14        ## How far a guard goes after a night mob.
 const FIGHT_BACK_RANGE := 2           ## How close a mob must be for anyone else to fight it.
 const FIGHT_BACK_SLOW := 2.2          ## Anyone but a guard takes this many times longer between blows.
+## The caves' creatures (issue #241): from Level 2, each biome with its own.
+const CAVE_MOBS_BASE := 2             ## Creatures on Level 2.
+const CAVE_MOBS_PER_LEVEL := 1        ## One more for each level deeper.
+const CAVE_MOBS_MAX := 7
+const CAVE_MOB_REGROW := 240.0        ## Seconds of nobody being there for one creature to come back.
 const IDLE_HOME_AFTER := 20.0              ## Seconds a resident with nothing to do waits before walking home (issue #345).
 const HOME_NEAR := 3                      ## Cells from their house door that count as home.
 const BUSH_DIG_TIME := 3.0               ## Seconds to dig up a marked berry bush.

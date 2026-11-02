@@ -60,6 +60,9 @@ static func site_report(sim: Sim, id: String) -> Dictionary:
 			res.append({"item": Defs.ORES[ore].item, "name": {"gold": "Gold", "obsidian": "Obsidian", "gravel": "Flint", "lapis": "Lapis", "redstone": "Redstone"}[ore],
 				"reserve": sim.ore_left(id, ore) * Tuning.ORE_YIELD[ore], "known": true})
 	var hazards: Array = []
+	if mp.level >= 2 and is_mine:  # what lives down here (issue #241)
+		var lives: String = Defs.CREATURES[Creatures.cave_species(mp.level)].name.to_lower() + "s"
+		hazards.append(("%s live here: they strike anyone near, and come back slowly once cleared" % lives.capitalize()) if mp.visited else "Something lives down there, they say")
 	if mp.visited and not mp.lava.is_empty():  # issue #149
 		hazards.append("Lava pools in the rock: someone beside one can be burned")
 	if mp.visited:
