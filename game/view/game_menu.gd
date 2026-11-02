@@ -121,6 +121,11 @@ func _render_main() -> void:
 		show_view("main"))
 	size.tooltip_text = "How big the panels and their text are drawn: 90, 100, 115 or 130%. Click for the next size."
 	_box.add_child(size)
+	var colours := _big_button("Colours: %s%s" % [game.colour_mode.capitalize(), "" if game.colour_mode == Palette.mode else "  (next launch)"], func():
+		game.set_colour_mode(game.next_colour_mode())
+		show_view("main"))
+	colours.tooltip_text = "Standard, colour-blind safe (hues a red-green colour-blind player can tell apart) or high contrast. Click for the next; it shows the next time the game starts."
+	_box.add_child(colours)
 	_box.add_child(_big_button("Start over", func(): _ask("Start a new game? Anything you haven’t saved will be lost.", "Start over", "restart")))
 	if not OS.has_feature("web"):  # a browser tab can't be quit from inside the game
 		_box.add_child(_big_button("Quit", func(): _ask("Quit Block Village? Anything you haven’t saved will be lost.", "Quit", "quit")))

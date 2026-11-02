@@ -514,6 +514,32 @@ func _test_rebuild_height(game: Game) -> void:
 	hud.refresh(sim)
 
 
+## Issue #302: a colour-blind safe palette and a high-contrast one, chosen on the menu and kept beside the interface size.
+func _test_colours(game: Game) -> void:
+	var red := Palette.RED
+	var dim := Palette.CHALK_DIM
+	Palette.apply("colour-blind safe")
+	check(Palette.RED != red and Palette.GREEN != Color("#8CC084"), "the colour-blind palette moves red and green")
+	Palette.apply("high contrast")
+	check(Palette.CHALK_DIM != dim and Palette.SLATE.a == 1.0, "high contrast brightens the dim chalk and makes the slate solid")
+	Palette.apply("standard")
+	check(Palette.RED == red and Palette.CHALK_DIM == dim, "standard puts them back")
+	var before := game.colour_mode
+	var path := game._ui_settings_path()
+	game.set_ui_scale(game.ui_scale)
+	game.set_colour_mode("high contrast")
+	game.set_ui_scale(game.ui_scale)
+	var cfg := ConfigFile.new()
+	cfg.load(path)
+	check(cfg.get_value("ui", "colours", "") == "high contrast", "the colour choice is saved, and the interface size doesn't wipe it")
+	game.open_menu("main")
+	await process_frame
+	var found := _walk(game._menu).any(func(n): return n is Button and n.text.begins_with("Colours: High Contrast"))
+	game.close_menu()
+	check(found, "the menu shows the choice")
+	game.set_colour_mode(before)
+
+
 ## Issue #304: jumping to something blinks over it, and a held key sees through every tree.
 func _test_find_things(game: Game) -> void:
 	var sim := game.sim
@@ -2138,6 +2164,7 @@ func _initialize() -> void:
 	await _test_needs_you(game)
 	await _test_rebuild_height(game)
 	await _test_find_things(game)
+	await _test_colours(game)
 	await _test_autosave(game)
 	_test_glyphs()
 	_test_tallies(game)

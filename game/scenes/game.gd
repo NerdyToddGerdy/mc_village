@@ -91,12 +91,42 @@ func _load_ui_scale() -> void:
 	get_window().content_scale_factor = ui_scale
 
 
+## The colour choice (issue #302), kept with the interface size. It's applied as the game starts, so a change shows at the next launch.
+var colour_mode := "standard"
+
+
+func _load_colours() -> void:
+	var cfg := ConfigFile.new()
+	var v = cfg.get_value("ui", "colours", "standard") if cfg.load(_ui_settings_path()) == OK else "standard"
+	colour_mode = v if v is String and Palette.COLOUR_MODES.has(v) else "standard"
+	for a in OS.get_cmdline_user_args():  # --colours=high-contrast or colour-blind, for checking the looks in screenshots
+		if a.begins_with("--colours="):
+			colour_mode = {"colour-blind": "colour-blind safe", "high-contrast": "high contrast"}.get(a.get_slice("=", 1), "standard")
+	Palette.apply(colour_mode)
+
+
+## Chooses the colours and saves the choice. Returns "" or a message for the player.
+func set_colour_mode(m: String) -> String:
+	colour_mode = m
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_ui_settings_path().get_base_dir()))
+	var cfg := ConfigFile.new()
+	cfg.load(_ui_settings_path())
+	cfg.set_value("ui", "colours", m)
+	return "" if cfg.save(_ui_settings_path()) == OK else "Couldn’t save the colours."
+
+
+func next_colour_mode() -> String:
+	var i := Palette.COLOUR_MODES.find(colour_mode)
+	return Palette.COLOUR_MODES[(i + 1) % Palette.COLOUR_MODES.size()]
+
+
 ## Sets the interface size and saves it. Returns "" or a message for the player.
 func set_ui_scale(v: float) -> String:
 	ui_scale = v
 	get_window().content_scale_factor = v
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_ui_settings_path().get_base_dir()))
 	var cfg := ConfigFile.new()
+	cfg.load(_ui_settings_path())  # keeps the colour choice beside it
 	cfg.set_value("ui", "scale", v)
 	return "" if cfg.save(_ui_settings_path()) == OK else "Couldn’t save the interface size."
 
@@ -110,6 +140,7 @@ func next_ui_scale() -> float:
 func _ready() -> void:
 	keys = KeyBindings.new(keys_path)
 	_load_ui_scale()
+	_load_colours()
 	sim = Sim.new_game()
 	_setup_scene()
 	_world.sim = sim

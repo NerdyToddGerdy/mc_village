@@ -14,6 +14,38 @@ static var YELLOW := Color("#E8C547")
 static var WHEAT := Color("#D8B65A")   ## Farm plots and the Farm order (issue #74); yellow stays for stuck.
 static var SKY := Color("#A9B8B0")
 
+## The colour choices on the menu (issue #302). "colour-blind safe" moves the HUD's red, green, blue, yellow and wheat
+## to hues a red-green colour-blind player can tell apart (the Okabe-Ito set); "high contrast" brightens the chalk and
+## darkens the slate. Applied once, as the game starts, before anything is drawn.
+const COLOUR_MODES := ["standard", "colour-blind safe", "high contrast"]
+static var mode := "standard"
+
+
+static func apply(m: String) -> void:
+	mode = m if COLOUR_MODES.has(m) else "standard"
+	SLATE = Color("#2F3B37", 0.93)
+	SLATE_DEEP = Color("#232C29")
+	CHALK = Color("#ECEAE2")
+	CHALK_DIM = Color("#B3B8AF")
+	RED = Color("#F25C54")
+	BLUE = Color("#6FA8DC")
+	GREEN = Color("#8CC084")
+	YELLOW = Color("#E8C547")
+	WHEAT = Color("#D8B65A")
+	match mode:
+		"colour-blind safe":
+			RED = Color("#D55E00")
+			GREEN = Color("#009E73")
+			BLUE = Color("#56B4E9")
+			YELLOW = Color("#F0E442")
+			WHEAT = Color("#E69F00")
+		"high contrast":
+			SLATE = Color("#1B2220", 1.0)
+			SLATE_DEEP = Color("#0E1311")
+			CHALK = Color("#FFFFFF")
+			CHALK_DIM = Color("#DCDFD8")
+
+
 # Type scale (issue #80): every HUD text size is one of these, and nothing is smaller than CAPTION.
 # Bricolage Grotesque's condensed shapes get hard to read below 13 px at 1280×720.
 const CAPTION := 13   ## Notes, hints, counts, keycaps
