@@ -254,6 +254,7 @@ static func new_game() -> Sim:
 	s.add_resident("Ada", ADA_TUNIC, OPENING_START + o)
 	s.auto_craft = true  # the bench makes a recipe's planks and sticks from the start (issue #182)
 	s._add_site_maps()
+	s.stats.day_zero = -int(Tuning.DUSK_SECONDS * Tuning.TPS)  # a game starts on a morning, just past the dawn light (issue #357)
 	Goals.seed_seen(s)  # the pages open from the start aren't "new" (issue #348)
 	return s
 
@@ -2687,7 +2688,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			r.pos = Vector2(rcell(r))
 			j.label = "Fighting the %s" % Defs.CREATURES[cr.species].name.to_lower()
 			st.t = st.get("t", 0.0) + Tuning.DT
-			if st.t >= Tuning.HIT_TIME / skill_speed(r, "guard"):
+			if st.t >= Tuning.HIT_TIME / skill_speed(r, "guard") * st.get("slow", 1.0):
 				st.t = 0.0
 				_strike(r, cr)
 			return not cr.alive
@@ -3225,6 +3226,11 @@ func _claim(r: Dictionary) -> void:
 			r.job = ej
 			return
 	var c := rcell(r)
+	if m.kind == "village" and not m.creatures.is_empty():
+		var dj = Night.defend_job(self, r, c)
+		if dj != null:
+			r.job = dj
+			return
 	if in_staging_party(r):  # the party packs, then gathers at the board (issue #107)
 		var pj = _pack_job(r, c)
 		if pj == null:
@@ -3605,6 +3611,8 @@ func _step_map() -> void:
 		_regrow_herds()
 	if not m.pens.is_empty():
 		_step_pens()
+	if m.kind == "village":
+		Night.step(self)  # dusk and dawn, the golem and the night's mobs (issues #357-#359)
 	if not m.creatures.is_empty():
 		_step_creatures()
 	for r in residents:
@@ -3718,6 +3726,11 @@ func _step_resident(r: Dictionary) -> void:
 		_burn_step(r)
 	if r.hunger <= 0.0 and r.job != null and r.job.kind != "eat":
 		fail_job(r)  # starving: drop everything and go eat
+	if r.job != null and m.kind == "village" and not m.creatures.is_empty() and not r.job.kind in ["fight", "eat", "rest", "hurt"]:
+		var dj = Night.defend_job(self, r, rcell(r))  # a mob near them turns them from their work (issue #360)
+		if dj != null:
+			fail_job(r)
+			r.job = dj
 	if r.job != null and r.job.kind == "home":  # work that turns up takes them from the walk home at once (issue #345)
 		var walk: Job = r.job
 		r.job = null
@@ -7020,6 +7033,8 @@ static func from_state(d: Dictionary) -> Sim:
 		if r.arriving:
 			s.walk_in(r)
 	s.use_map("village")
+	if not s.stats.has("day_zero"):  # an older save has no day: it starts on a morning when it loads (issue #357)
+		s.stats.day_zero = s.tick - int(Tuning.DUSK_SECONDS * Tuning.TPS)
 	if not s.stats.has("guide_seen"):  # an older save: every page it already knows counts as seen (issue #348)
 		Goals.seed_seen(s)
 	s.compute_stuck()

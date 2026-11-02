@@ -72,6 +72,7 @@ var _group_btns := {}           ## Tally group id -> its button in the tally bar
 var _pointer := Vector2(-1, -1)
 var _goals := VBoxContainer.new()
 var _speed_btns := {}
+var _clock_label: Label             ## "Day 3" and, at night, "· night" (issue #357).
 var _skip_btn: Button               ## Skip ahead until something needs the player (issue #299).
 var _menu_btn: Button                ## The on-screen button for the Esc menu (issue #216), beside the speed buttons.
 var _menu_panel: PanelContainer
@@ -233,6 +234,12 @@ func _ready() -> void:
 	var tr := _corner(Control.PRESET_TOP_RIGHT)
 	var speed := HBoxContainer.new()
 	speed.add_theme_constant_override("separation", 2)
+	_clock_label = _label("Day 1", false, Palette.CHALK_DIM, Palette.CAPTION)  # the day and whether it's night (issue #357)
+	_clock_label.custom_minimum_size = Vector2(96, 0)
+	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_clock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_clock_label.add_theme_constant_override("outline_size", 0)
+	speed.add_child(_clock_label)
 	for v in [0, 1, 2, 3]:
 		var b := _button("‖" if v == 0 else "%d×" % v, func(): game.set_speed(v))
 		b.custom_minimum_size = Vector2(44, 44)
@@ -1030,6 +1037,9 @@ func refresh(sim: Sim) -> void:
 	for v in _speed_btns:
 		_speed_btns[v].set_pressed_no_signal(game.speed == v and not game.skipping)
 	_skip_btn.set_pressed_no_signal(game.skipping)
+	var night := Night.is_night(sim)
+	_clock_label.text = "Day %d%s" % [Night.day_number(sim), "  · night" if night else ""]
+	_clock_label.add_theme_color_override("font_color", Palette.BLUE if night else Palette.CHALK_DIM)
 	_paused_label.visible = game.speed == 0 and sim.pending.is_empty()  # a choice says so itself
 	_refresh_stuck(sim)
 	_refresh_selection(sim)

@@ -2,6 +2,10 @@ extends SceneTree
 ## Shared helpers for the bot playtests (playtest.gd, playtest_village.gd, playtest_slice3.gd): input pushed into the
 ## game window the way a player's clicks and keys arrive, plus waiting by stepping the sim.
 
+func _init() -> void:
+	Night.enabled = false  # the bots play long stretches: a night wave would break into them
+
+
 var game: Game
 var _failures := 0
 var _mouse := Vector2.ZERO

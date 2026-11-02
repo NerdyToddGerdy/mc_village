@@ -114,6 +114,16 @@ Click a wedge, press 1 to 4, or hold the right button, drag to a wedge and let g
 
 **Order someone directly.** Select a resident and right-click the ground to send them there. **Shift + right-click** a tree, boulder or animal skips the ring and adds that order to the end of their list. Direct orders come before everything else, whatever their job. They still work while a Gather or Paint order is on.
 
+## Night
+
+A day lasts 8 minutes: about 5 of day and 3 of night. The top bar says "Day 3" and, at night, "· night". At night the light dims and turns blue; residents keep working, and nobody needs to sleep.
+
+Once the village has **3 residents**, two things start:
+- An **iron golem** appears by itself and patrols. It knocks out the night's mobs and never hurts anyone.
+- Each night a small **wave of mobs** comes in from the edge: zombies, skeletons and spiders. The wave grows a little with the residents and with each Guard. Mobs go for residents and can **injure** them, but nobody dies: an injured resident rests like after any fall.
+
+**Guards** (and Ada) go after mobs, and anyone else hits back, slowly, when one gets close. Mobs that are left slink away at dawn. What they drop (rotten flesh, bones, arrows, string) lies where they fell, and haulers carry it to a stockpile like anything else.
+
 ## Residents
 
 **Selecting.** Click a resident, or press **F** for the next one. Shift-drag a box to select several. Each resident wears their own tunic colour, and hovering over one or selecting them shows their name above their head.

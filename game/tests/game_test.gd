@@ -563,6 +563,35 @@ func _test_ground_batch(game: Game) -> void:
 	await process_frame
 
 
+## Issues #357-#360: the clock in the top bar, the light, and the night's creatures drawn.
+func _test_night_view(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	game.set_speed(0)
+	game.view_map = "village"
+	var zero: int = sim.stats.day_zero
+	sim.stats.day_zero = sim.tick - int(Tuning.NIGHT_AT + Tuning.DUSK_SECONDS + 5.0) * Tuning.TPS
+	hud.refresh(sim)
+	game._dark = -1.0
+	game._apply_daylight()
+	check(hud._clock_label.text.ends_with("night"), "the top bar says it's night (%s)" % hud._clock_label.text)
+	check(game._sun.light_energy < 0.4 and game._env.ambient_light_energy < 0.4, "and the light has dimmed")
+	sim.stats.day_zero = sim.tick - int(Tuning.DUSK_SECONDS * Tuning.TPS) - 10 * Tuning.TPS
+	hud.refresh(sim)
+	game._apply_daylight()
+	check(not hud._clock_label.text.ends_with("night") and game._sun.light_energy > 0.9, "and by day it's back")
+	var g := sim.spawn_creature("village", "golem", sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(3, 3)))
+	var z := sim.spawn_creature("village", "zombie", sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(5, 3)))
+	await process_frame
+	await process_frame
+	check(game._world._creature_nodes.has(g.id) and game._world._creature_nodes.has(z.id), "the golem and a zombie are drawn")
+	sim.m.creatures = sim.m.creatures.filter(func(x): return x.id != g.id and x.id != z.id)
+	sim.stats.day_zero = zero
+	game._dark = -1.0
+	game._apply_daylight()
+	await process_frame
+
+
 ## Issue #304: jumping to something blinks over it, and a held key sees through every tree.
 func _test_find_things(game: Game) -> void:
 	var sim := game.sim
@@ -2103,6 +2132,7 @@ func _walk(n: Node) -> Array:
 
 
 func _initialize() -> void:
+	Night.enabled = false
 	var game: Game = load("res://scenes/main.tscn").instantiate()
 	game.keys_path = "user://test_settings/game_test_keys.cfg"
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.keys_path))
@@ -2187,6 +2217,7 @@ func _initialize() -> void:
 	await _test_needs_you(game)
 	await _test_rebuild_height(game)
 	await _test_find_things(game)
+	await _test_night_view(game)
 	await _test_ground_batch(game)
 	await _test_colours(game)
 	await _test_autosave(game)

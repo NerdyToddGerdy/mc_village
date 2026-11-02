@@ -173,7 +173,9 @@ func _setup_scene() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
+	_env = env
 	var sun := DirectionalLight3D.new()
+	_sun = sun
 	sun.light_energy = 0.95
 	sun.shadow_enabled = true
 	add_child(sun)
@@ -204,8 +206,29 @@ func _place_camera() -> void:
 
 # ---------------------------------------------------------------- loop
 
+var _env: Environment
+var _sun: DirectionalLight3D
+var _dark := -1.0     ## How dark the light was last set, so it's only touched when it changes.
+
+
+## The light follows the day (issue #357): the village's night is dusk-blue and dimmer, and the mines, which have no sky, don't change.
+func _apply_daylight() -> void:
+	var mp: SimMap = sim.maps[view_map]
+	var lvl := Night.night_level(sim) if mp.kind != "site" or mp.id == Meadow.ID else 0.0
+	lvl = snappedf(lvl, 0.01)
+	if is_equal_approx(lvl, _dark):
+		return
+	_dark = lvl
+	_sun.light_energy = lerpf(0.95, 0.32, lvl)
+	_sun.light_color = Color.WHITE.lerp(Color(0.62, 0.72, 1.0), lvl)
+	_env.ambient_light_energy = lerpf(0.5, 0.34, lvl)
+	_env.ambient_light_color = Color(0.82, 0.86, 0.9).lerp(Color(0.5, 0.58, 0.82), lvl)
+	_env.background_color = Palette.SKY.lerp(Color("#1B2636"), lvl)
+
+
 func _process(delta: float) -> void:
 	_pan_with_keys(delta)
+	_apply_daylight()
 	_acc += minf(delta, 0.1) * (Tuning.SKIP_SPEED if skipping else float(speed))
 	var n := 0
 	while _acc >= Tuning.DT and n < 30:
@@ -2174,6 +2197,17 @@ func _screenshot_scene() -> void:
 		_place_camera()
 		_hud.waiting_open = true
 		_hud.stuck_open = "--folded" not in OS.get_cmdline_user_args()  # the list opens under its tab, unless it's to show the tab alone
+	if "--night" in OS.get_cmdline_user_args():  # a village at night: three residents, a wave of mobs and the golem (issues #357-#360)
+		var ada: Dictionary = sim.residents[0]
+		for k in 2:
+			var who: Array = Sim.TRAVELERS[k]
+			sim.add_resident(who[0], who[1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2 + k * 2, 1 - k)))
+		sim.stats.day_zero = sim.tick - int((Tuning.NIGHT_AT + Tuning.DUSK_SECONDS + 5.0) * Tuning.TPS)
+		for i in 4 * Tuning.TPS:
+			sim.step()
+		_target = Vector3(ada.pos.x + 0.5, 0, ada.pos.y + 0.5)
+		_cam.size = 13.0
+		_place_camera()
 	if "--guide" in OS.get_cmdline_user_args():  # the village book open on its Guide tab, with a page new (issue #348)
 		sim.stats.houses = 1
 		open_book("guide")

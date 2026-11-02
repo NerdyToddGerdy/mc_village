@@ -55,6 +55,9 @@ const BASE_ITEMS := {
 	"magma_cream": {"one": "magma cream", "many": "magma cream", "label": "Magma cream", "group": "ores"},
 	"bone": {"one": "bone", "many": "bones", "label": "Bones", "group": "ores"},
 	"blaze_rod": {"one": "blaze rod", "many": "blaze rods", "label": "Blaze rods", "group": "ores"},
+	# What the village's night mobs leave (issue #358).
+	"rotten_flesh": {"one": "rotten flesh", "many": "rotten flesh", "label": "Rotten flesh", "group": "ores"},
+	"arrow": {"one": "arrow", "many": "arrows", "label": "Arrows", "group": "ores"},
 	# The line to the mine (Slice 4, issue #120). A minecart is one big item: one to a cell, hauled like a tool.
 	"rail": {"one": "rail", "many": "rails", "label": "Rails", "group": "building"},
 	"minecart": {"one": "minecart", "many": "minecarts", "label": "Minecarts", "single": true, "group": "building"},
@@ -142,6 +145,10 @@ const CREATURES := {
 	"skeleton": {"name": "Skeleton", "hp": 6, "hit": 0.3, "serious": 0.2, "cool": 2.0, "reach": 4, "notice": 6, "drops": {"bone": 1}},
 	"piglin": {"name": "Piglin", "hp": 12, "hit": 0.5, "serious": 0.3, "cool": 1.4, "reach": 1, "notice": 0, "drops": {}},
 	"blaze": {"name": "Blaze", "hp": 10, "hit": 0.3, "serious": 0.3, "cool": 2.2, "reach": 5, "notice": 7, "drops": {"blaze_rod": 1}},
+	# The village's night (issues #358, #359): mobs that come for residents, and the golem that keeps them off.
+	"zombie": {"name": "Zombie", "hp": 8, "hit": 0.4, "serious": 0.15, "cool": 1.6, "reach": 1, "notice": 0, "drops": {"rotten_flesh": 1}},
+	"spider": {"name": "Spider", "hp": 6, "hit": 0.35, "serious": 0.1, "cool": 1.2, "reach": 1, "notice": 0, "drops": {"string": 1}},
+	"golem": {"name": "Iron golem", "hp": 100, "hit": 0.0, "serious": 0.0, "cool": 1.2, "reach": 1, "notice": 0, "drops": {}},
 }
 
 ## The piglins' fixed trade table (issue #156), in the order a trading party works down it: what they take, and what they give.
