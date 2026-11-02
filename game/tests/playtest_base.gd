@@ -3,7 +3,8 @@ extends SceneTree
 ## game window the way a player's clicks and keys arrive, plus waiting by stepping the sim.
 
 func _init() -> void:
-	Night.enabled = false  # the bots play long stretches: a night wave would break into them
+	Night.enabled = false
+	Creatures.cave_mobs = false  # the bots play long stretches: a night wave would break into them
 
 
 var game: Game

@@ -3611,6 +3611,8 @@ func _step_map() -> void:
 		_regrow_herds()
 	if not m.pens.is_empty():
 		_step_pens()
+	if m.kind == "site" and m.level >= 2:
+		Creatures.regrow_cave(self)
 	if m.kind == "village":
 		Night.step(self)  # dusk and dawn, the golem and the night's mobs (issues #357-#359)
 	if not m.creatures.is_empty():
@@ -6722,6 +6724,9 @@ func site_report(id: String) -> Dictionary:
 			res.append({"item": Defs.ORES[ore].item, "name": {"gold": "Gold", "obsidian": "Obsidian", "gravel": "Flint", "lapis": "Lapis", "redstone": "Redstone"}[ore],
 				"reserve": ore_left(id, ore) * Tuning.ORE_YIELD[ore], "known": true})
 	var hazards: Array = []
+	if mp.level >= 2:  # what lives down here (issue #241)
+		var lives: String = Defs.CREATURES[Creatures.cave_species(mp.level)].name.to_lower() + "s"
+		hazards.append(("%s live here: they strike anyone near, and come back slowly once cleared" % lives.capitalize()) if mp.visited else "Something lives down there, they say")
 	if mp.visited and not mp.lava.is_empty():  # issue #149
 		hazards.append("Lava pools in the rock: someone beside one can be burned")
 	if mp.visited:

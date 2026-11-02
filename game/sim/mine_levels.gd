@@ -222,6 +222,7 @@ static func build(s: Sim, n: int) -> SimMap:
 		if b.cell in lay.loose:
 			b.loose = true
 	m.ledges = lay.ledges
+	Creatures.populate_cave(s, m)  # Level 2 and deeper have creatures (issue #241)
 	return m
 
 
