@@ -204,6 +204,12 @@ func click_button(text: String, near := "", last := false) -> bool:
 	if b == null:
 		printerr("     (no visible button containing \"%s\")" % text)
 		return false
+	var holder := b.get_parent()
+	while holder != null:  # a button below the fold of a fixed-height panel: scroll it into view, as a player would
+		if holder is ScrollContainer:
+			holder.ensure_control_visible(b)
+		holder = holder.get_parent()
+	await frames(2)
 	if OS.get_environment("PLAYTEST_TRACE") != "":
 		print("     click \"%s\" -> button \"%s\" at %s (parent %s)" % [text, b.text.replace("\n", " / "), b.get_global_rect(), b.get_parent().get_parent().name])
 	await click(b.get_global_rect().get_center())

@@ -53,7 +53,7 @@ var _log_list := VBoxContainer.new()
 const LOG_MAX := 60
 var _loc_anchor := Rect2()
 var _loc_button: Button  ## The button the location dropdown hangs from, so it follows it.
-const SEL_H := 380.0  ## The selection panel's height when something is selected.
+const SEL_H := 400.0  ## The selection panel's height when something is selected; what doesn't fit scrolls.
 const GOALS_W := 340.0  ## The tutorial tab's width, and its dropdown's.
 const TOP_BAR_H := 60.0  ## The top bar's height: the screen's upper edge, as far as panels are concerned.
 var _topbar_row := HBoxContainer.new()

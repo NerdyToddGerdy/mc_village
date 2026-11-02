@@ -310,6 +310,9 @@ func _initialize() -> void:
 	check(seen("Back from the old caves: ") and seen("coal"), "a toast reports what came back")
 	check(ada.map == "village" and tomas.map == "village" and not ada.away, "Ada and Tomas are back in the village")
 	if true:  # room for the cargo: the stockpile is nearly full by now, so paint more, as a player would
+		game.planner_open = false  # the planner stands full height on the right now, over the ground the drag needs
+		game._hud.refresh(sim)
+		await frames(2)
 		await look_at(at(9, 9))
 		await key(KEY_Z)
 		await key(KEY_1)
