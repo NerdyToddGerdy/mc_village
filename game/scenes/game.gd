@@ -28,6 +28,9 @@ var jobs_board_open: bool:                ## The village book is open on its Job
 	get: return book_open and book_page == "jobs"
 	set(v): toggle_jobs_board(v)
 var book_open := false                  ## The village book (issue #198).
+const FLASH_MS := 1800                  ## How long a focused thing blinks (issue #304).
+var _flash_rect := Rect2i()
+var _flash_until := 0
 var guide_page := ""                    ## The Guide's chosen page, or "" for the first one (issue #348).
 var book_page := "goals"                ## Its open page: "goals", "jobs", "residents", or a page's id from Goals.PAGES.
 var planner_open := false               ## The expedition planner above the toolbar (issue #106).
@@ -88,12 +91,42 @@ func _load_ui_scale() -> void:
 	get_window().content_scale_factor = ui_scale
 
 
+## The colour choice (issue #302), kept with the interface size. It's applied as the game starts, so a change shows at the next launch.
+var colour_mode := "standard"
+
+
+func _load_colours() -> void:
+	var cfg := ConfigFile.new()
+	var v = cfg.get_value("ui", "colours", "standard") if cfg.load(_ui_settings_path()) == OK else "standard"
+	colour_mode = v if v is String and Palette.COLOUR_MODES.has(v) else "standard"
+	for a in OS.get_cmdline_user_args():  # --colours=high-contrast or colour-blind, for checking the looks in screenshots
+		if a.begins_with("--colours="):
+			colour_mode = {"colour-blind": "colour-blind safe", "high-contrast": "high contrast"}.get(a.get_slice("=", 1), "standard")
+	Palette.apply(colour_mode)
+
+
+## Chooses the colours and saves the choice. Returns "" or a message for the player.
+func set_colour_mode(m: String) -> String:
+	colour_mode = m
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_ui_settings_path().get_base_dir()))
+	var cfg := ConfigFile.new()
+	cfg.load(_ui_settings_path())
+	cfg.set_value("ui", "colours", m)
+	return "" if cfg.save(_ui_settings_path()) == OK else "Couldn’t save the colours."
+
+
+func next_colour_mode() -> String:
+	var i := Palette.COLOUR_MODES.find(colour_mode)
+	return Palette.COLOUR_MODES[(i + 1) % Palette.COLOUR_MODES.size()]
+
+
 ## Sets the interface size and saves it. Returns "" or a message for the player.
 func set_ui_scale(v: float) -> String:
 	ui_scale = v
 	get_window().content_scale_factor = v
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_ui_settings_path().get_base_dir()))
 	var cfg := ConfigFile.new()
+	cfg.load(_ui_settings_path())  # keeps the colour choice beside it
 	cfg.set_value("ui", "scale", v)
 	return "" if cfg.save(_ui_settings_path()) == OK else "Couldn’t save the interface size."
 
@@ -107,6 +140,7 @@ func next_ui_scale() -> float:
 func _ready() -> void:
 	keys = KeyBindings.new(keys_path)
 	_load_ui_scale()
+	_load_colours()
 	sim = Sim.new_game()
 	_setup_scene()
 	_world.sim = sim
@@ -214,6 +248,7 @@ func _process(delta: float) -> void:
 
 func _pan_with_keys(delta: float) -> void:
 	var v := Vector2.ZERO
+	_world.fade_all = keys.is_down("see_through") and not _menu.visible  # hold to see through every canopy (issue #304)
 	if _menu.visible:
 		return
 	if keys.is_down("pan_up"): v.y -= 1
@@ -316,6 +351,11 @@ func _update_live_overlays() -> void:
 			var name: String = tpl_def.name.to_lower()
 			var turning := "the door" if placing == "house" else "its %s plot" % tpl_def.get("plot", "")
 			hint = ("Move the %s here." if moving_id != 0 else "Place %s.") % name + (" %s turns %s." % [turn, turning] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
+	if tool == "" and Time.get_ticks_msec() < _flash_until and _flash_rect.size != Vector2i.ZERO:  # blinks over the canopy: where the camera just went
+		var on := (Time.get_ticks_msec() / 220) % 2 == 0
+		outlines.append({"rect": _flash_rect.grow(1), "h": 0.06, "color": Palette.YELLOW, "dashed": false})
+		if on:
+			fills.append({"rect": _flash_rect, "h": 0.05, "color": Color(Palette.YELLOW, 0.5)})
 	var sel = selected_entity()
 	if sel != null and sel.kind in ["tree", "boulder", "animal", "bush", "crop", "meadow", "route"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
@@ -1743,6 +1783,26 @@ func _focus_here(kind: String, id: int) -> void:
 			return
 	_target = at
 	_place_camera()
+	_flash_rect = _flash_target(kind, id)
+	_flash_until = Time.get_ticks_msec() + FLASH_MS
+
+
+## Where a focused thing stands, as a rect, for the flash that shows where the camera went (issue #304).
+func _flash_target(kind: String, id: int) -> Rect2i:
+	match kind:
+		"res":
+			var r := sim.resident(id)
+			if not r.is_empty():
+				return Rect2i(Sim.rcell(r), Vector2i.ONE)
+		"site":
+			var s := sim.site(id)
+			if not s.is_empty():
+				return Rect2i(s.origin, s.size)
+		"boulder":
+			for b in sim.boulders:
+				if b.id == id:
+					return Rect2i(b.cell, Vector2i.ONE)
+	return Rect2i()
 
 
 func _next_resident() -> void:

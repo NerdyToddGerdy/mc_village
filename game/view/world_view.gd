@@ -33,6 +33,9 @@ var _person_mats := {}
 
 ## Set by the game each frame.
 var live_outlines: Array = []   ## {rect: Rect2i, h: float, color: Color, dashed: bool}
+var fade_all := false           ## Every tree is see-through while the player holds the key (issue #304).
+var _ground: MultiMeshInstance3D  ## The village's ground, its own batch: rebuilt only when the map, its size or the worn paths change (issue #351).
+var _ground_sig := ""
 var live_fills: Array = []      ## {rect: Rect2i, h: float, color: Color}
 var selected_ids: Array = []    ## Resident ids with a selection ring.
 var hover_id := 0               ## The resident under the mouse, who shows a name tag; 0 for none.
@@ -80,6 +83,7 @@ func set_sim(s: Sim) -> void:
 	sim = s
 	_prev_pos.clear()
 	_built_rev = -1
+	_ground_sig = ""
 	_stuck_sig = "-"
 	for id in _people:
 		_people[id].queue_free()
@@ -93,6 +97,7 @@ func set_sim(s: Sim) -> void:
 func _ready() -> void:
 	_block_mat = _block_material(false)
 	_solid = _mm(_block_mat)
+	_ground = _mm(_block_mat)
 	_cart = _mm(_block_mat)
 	_trees = _mm(_block_mat)
 	_trees_faded = _mm(_block_material(true))
@@ -198,6 +203,9 @@ func _build_static() -> void:
 	var dark := Batch.new()
 	var col := Batch.new()
 	_grade_blocks(sim.m.kind == "site" and sim.m.id != Meadow.ID and not sim.m.id.begins_with("nether"), sim.m.id.begins_with("nether"))
+	if sim.m.kind != "village" and _ground_sig != "":  # another map's ground goes in the main batch: the village's is put away
+		_ground_sig = ""
+		Batch.new().apply(_ground)
 	if sim.m.id == Meadow.ID:
 		_add_meadow_ground(solid)
 	elif sim.m.kind == "site":
@@ -207,15 +215,20 @@ func _build_static() -> void:
 	elif sim.m.kind == "walk":
 		_add_walk_ground(solid)
 	else:
-		for x in sim.w:
-			for y in sim.h:
-				var v := 0.96 + _hash(x, y) * 0.08
-				solid.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT, BlockTextures.EARTH)
-				var stage := sim.path_stage(Vector2i(x, y))  # the ground packs down where residents walk (issue #196)
-				if stage >= 2:
-					solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (TRODDEN if stage == 2 else PACKED) * Color(v, v, v), BlockTextures.EARTH)
-				else:
-					solid.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (Palette.GRASS.lerp(TRODDEN, 0.35) if stage == 1 else Palette.GRASS) * Color(v, v, v), BlockTextures.GROUND)
+		var gsig := "%s|%d|%d|%d|%s" % [sim.m.id, sim.w, sim.h, sim.m.wear.hash(), Palette.mode]
+		if gsig != _ground_sig:  # the ground is the bulk of the boxes and changes rarely: it keeps its own batch
+			_ground_sig = gsig
+			var g := Batch.new()
+			for x in sim.w:
+				for y in sim.h:
+					var v := 0.96 + _hash(x, y) * 0.08
+					g.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT, BlockTextures.EARTH)
+					var stage := sim.path_stage(Vector2i(x, y))  # the ground packs down where residents walk (issue #196)
+					if stage >= 2:
+						g.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (TRODDEN if stage == 2 else PACKED) * Color(v, v, v), BlockTextures.EARTH)
+					else:
+						g.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (Palette.GRASS.lerp(TRODDEN, 0.35) if stage == 1 else Palette.GRASS) * Color(v, v, v), BlockTextures.GROUND)
+			g.apply(_ground)
 	for b in sim.boulders:
 		if b.alive and not b.get("hidden", false) and not _in_fog(b.cell):
 			var c: Vector2i = b.cell
@@ -1369,6 +1382,8 @@ static func _tree_boxes(c: Vector2i, stage := 2) -> Array:
 
 ## True when the tree stands between the camera and one of the focus points.
 func _tree_occludes(t: Dictionary) -> bool:
+	if fade_all:
+		return true
 	for f in focus_points:
 		if f[1] == t.id:
 			continue

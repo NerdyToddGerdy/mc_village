@@ -514,6 +514,73 @@ func _test_rebuild_height(game: Game) -> void:
 	hud.refresh(sim)
 
 
+## Issue #302: a colour-blind safe palette and a high-contrast one, chosen on the menu and kept beside the interface size.
+func _test_colours(game: Game) -> void:
+	var red := Palette.RED
+	var dim := Palette.CHALK_DIM
+	Palette.apply("colour-blind safe")
+	check(Palette.RED != red and Palette.GREEN != Color("#8CC084"), "the colour-blind palette moves red and green")
+	Palette.apply("high contrast")
+	check(Palette.CHALK_DIM != dim and Palette.SLATE.a == 1.0, "high contrast brightens the dim chalk and makes the slate solid")
+	Palette.apply("standard")
+	check(Palette.RED == red and Palette.CHALK_DIM == dim, "standard puts them back")
+	var before := game.colour_mode
+	var path := game._ui_settings_path()
+	game.set_ui_scale(game.ui_scale)
+	game.set_colour_mode("high contrast")
+	game.set_ui_scale(game.ui_scale)
+	var cfg := ConfigFile.new()
+	cfg.load(path)
+	check(cfg.get_value("ui", "colours", "") == "high contrast", "the colour choice is saved, and the interface size doesn't wipe it")
+	game.open_menu("main")
+	await process_frame
+	var found := _walk(game._menu).any(func(n): return n is Button and n.text.begins_with("Colours: High Contrast"))
+	game.close_menu()
+	check(found, "the menu shows the choice")
+	game.set_colour_mode(before)
+
+
+## Issue #351: the village's ground keeps its own batch, rebuilt only when the map, its size or its worn paths change.
+func _test_ground_batch(game: Game) -> void:
+	var sim := game.sim
+	var world: WorldView = game._world
+	game.view_map = "village"
+	await process_frame
+	await process_frame
+	var sig: String = world._ground_sig
+	check(sig != "" and world._ground.multimesh.instance_count >= sim.w * sim.h * 2, "the village's ground is one batch of its own")
+	sim.rev += 1
+	await process_frame
+	await process_frame
+	check(world._ground_sig == sig, "a change to the world doesn't rebuild it")
+	sim.m.wear[Vector2i(1, 1)] = 3.0
+	sim.rev += 1
+	await process_frame
+	await process_frame
+	check(world._ground_sig != sig, "a change to the worn paths does")
+	sim.m.wear.erase(Vector2i(1, 1))
+	sim.rev += 1
+	await process_frame
+
+
+## Issue #304: jumping to something blinks over it, and a held key sees through every tree.
+func _test_find_things(game: Game) -> void:
+	var sim := game.sim
+	var ada: Dictionary = sim.residents[0]
+	game.set_speed(0)
+	game.tool = ""
+	game.focus_on("res", ada.id)
+	game._update_live_overlays()
+	check(game._flash_rect == Rect2i(Sim.rcell(ada), Vector2i.ONE) and Time.get_ticks_msec() < game._flash_until, "going to a resident flashes their cell")
+	check(game._world.live_outlines.any(func(o): return o.color == Palette.YELLOW), "as a yellow outline drawn over everything")
+	var tree: Dictionary = Sim.nearest(sim.trees.filter(func(t): return t.alive), Sim.rcell(ada))
+	game._world.fade_all = false
+	game._world.fade_all = true
+	check(game._world._tree_occludes(tree), "while the see-through key is held every tree is see-through")
+	game._world.fade_all = false
+	check(KeyBindings.ACTIONS.any(func(a): return a[0] == "see_through"), "and the key can be rebound")
+
+
 ## Issue #234: a finished building's panel has a Move button; it picks the building up, and a click puts it down at once.
 func _test_move_building(game: Game) -> void:
 	var sim := game.sim
@@ -2119,6 +2186,9 @@ func _initialize() -> void:
 	await _test_repeat_button(game)
 	await _test_needs_you(game)
 	await _test_rebuild_height(game)
+	await _test_find_things(game)
+	await _test_ground_batch(game)
+	await _test_colours(game)
 	await _test_autosave(game)
 	_test_glyphs()
 	_test_tallies(game)

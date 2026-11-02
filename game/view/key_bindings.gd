@@ -45,6 +45,7 @@ const ACTIONS := [
 	["next_res", "Residents", "Select the next resident", [KEY_F]],
 	["jobs", "Residents", "Open the village jobs board", [KEY_J]],
 	["next_stuck", "Residents", "Go to the next stuck item", [KEY_N]],
+	["see_through", "Time and camera", "Hold to see through every tree", [KEY_Y]],
 	["map", "Time and camera", "Switch between the village and a site", [KEY_TAB]],
 	["pause", "Time and camera", "Pause", [KEY_QUOTELEFT, KEY_ASCIITILDE]],
 	["toggle_pause", "Time and camera", "Pause or resume", [KEY_SPACE]],
