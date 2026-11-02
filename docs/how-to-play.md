@@ -19,7 +19,7 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ Building 54 ▾  Food 6 meals ▾  Tools and armor 3 ▾  Jobs  ‖ 1× │
-│ The founding  3 of 11                         Stuck (2) ▴    │
+│ The founding  3 of 11                         Stuck 2 ▾     │
 │ Next step and a hint                          ⚑ House …      │
 │                                                              │
 │                     the clearing                             │
@@ -31,8 +31,8 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 ```
 
 - **The top bar** runs across the whole screen and counts as its upper edge: every other panel sits below it. On the left, what's in the village, in groups: **Building**, **Food**, **Tools and armor**, **Animal goods** and **Ores**. A group shows up once one of its items has. **Food** counts meals on hand and raw meat still to cook, and turns yellow, and says "low", when there are fewer meals than residents. A worn tool says "low" too, and a powered redstone device has a raised white stud as well as its brighter red, so none of these rely on colour alone. Hover over a group, or click it to keep it open, for a list of each item with how much is lying loose; **Tools and armor** lists everyone's tools, armor and the spares. **Pin** an item there (up to 4) to keep its count in the bar on its own; pins are saved with your key bindings. **Book** opens the village book (see below).
-- **Below that:** the **goals panel**, which walks you through the founding one step at a time. Once the founding is done, it folds to a small "Founding ✓".
-- **Top right of the bar:** pause and speed, then **Skip**, the **gear** (the menu) and the **Log** button, and the **stuck list**, which shows anything that can't go on and why. **Log** keeps the last 60 messages that popped up (arrivals, finds, a party's return), newest first with the game time, and says how many are new; a message about a person or place has a button to go there. Esc, a click elsewhere or the button closes it.
+- **Below that, at the left:** the **tutorial tab**, which names the chapter and the step you're on, such as "The founding · 4 Craft an axe and a pickaxe". Click it to drop down the step's hint and why, in a panel that's always the same size, with a **Book** button. It never opens by itself. Once both chapters are done the tab reads "The village ✓" and opens the village book.
+- **Top right of the bar:** pause and speed, then **Skip**, the **gear** (the menu) and the **Log** button, and the **Stuck** tab, which hangs below the bar and opens the list of anything that can't go on and why. **Log** keeps the last 60 messages that popped up (arrivals, finds, a party's return), newest first with the game time, and says how many are new; a message about a person or place has a button to go there. Esc, a click elsewhere or the button closes it.
 - **Bottom left:** whatever you've selected: a resident, a building, a tree, a farm plot.
 - **Bottom right:** the **orders toolbar**, and the Craft panel when it's open.
 
@@ -44,7 +44,7 @@ Marks drawn on the world show what's been ordered. Chalk-white means selected, r
 
 ## The founding, step by step
 
-The goals panel leads you through these steps. Each one unlocks the next.
+The tutorial tab leads you through these steps. Each one unlocks the next.
 
 1. **Chop a tree.** Choose **Gather → Mine** (or press **X**) and click a tree. Ada fells it by hand, slowly. A tree drops 4 to 6 logs.
 2. **Paint a stockpile.** The logs are lying loose. Choose **Paint → Stockpile** (Z, then 1) and drag over open ground. Residents carry what they gather there.
@@ -64,7 +64,7 @@ Each step shows a line under its hint saying **why** it matters.
 
 ### The village
 
-When the founding is done, a second chapter of goals follows in the same panel, each with a hint and a why:
+When the founding is done, a second chapter of goals follows in the same tab, each with a hint and a why:
 
 1. **Paint a farm plot.** **Paint → Farm plot**, on open grass. A farmer plants and harvests it: the village's steady food. Farmers stop once the village has 20 wheat, so it doesn't crowd the stockpiles: change that with − and + on the composter's panel or the jobs board. The stuck list shows "Farm: enough wheat" as a waiting reason, and the crop waits ripe on its plot.
 2. **Cook a meal.** Queue bread or cooked mutton at the fireplace. Cooked food fills a resident for much longer.
@@ -75,7 +75,7 @@ When both chapters are done the panel folds to a green **The village ✓** chip.
 
 ### The village book
 
-The goals panel's **Book** button (or the chip, once the chapters are done) opens the village book in its place. Its **Goals** page lists every step with its why. Every other page is a building or zone: what it's for, who works it, what it grows into and what goes wrong without it. A page shows once its building can be built (the expedition board once Ada's house is up, the pen once the board is built, the road once a party has been to the old caves). Select a building and click **? About the…** to jump to its page. Esc or **Close** shuts the book.
+The tutorial's **Book** button (or the tab itself, once the chapters are done) opens the village book under the tab. Its **Goals** page lists every step with its why. **Jobs** and **Residents** are the jobs board and the roster. The **Guide** tab holds a page for every building or zone: a list on the left in alphabetical order, the chosen page on the right: what it's for, who works it, what it grows into and what goes wrong without it. A page shows its name once its building can be built (the expedition board once Ada's house is up, the pen once the board is built, the road once a party has been to the old caves). Until then its row reads **???**, and choosing it gives a clue about what unlocks it. A page that has unlocked since you last looked is marked **new** in the list and on the Guide tab; clicking it clears the mark. Select a building and click **? About the…** to jump to its page. Esc or **Close** shuts the book.
 
 **Moving a building.** Select a finished building and click **Move** on its panel. It follows the pointer like a new blueprint (the rotate key turns it), red where it can't go, with the reason in the hint; a click puts it down at once, with its queue, its stored items, its worker or its family and its work area. Houses move too. Trees and boulders where it lands are marked to clear, as for a new building. **Move** is greyed out, with the reason, while someone is working at the building, a delivery is on its way, or the expedition is using the board. The portal, its station, the dispatcher and the freight loader can't move: they're placed relative to each other.
 
@@ -117,6 +117,8 @@ Click a wedge, press 1 to 4, or hold the right button, drag to a wedge and let g
 ## Residents
 
 **Selecting.** Click a resident, or press **F** for the next one. Shift-drag a box to select several. Each resident wears their own tunic colour, and hovering over one or selecting them shows their name above their head.
+
+**Going home.** Once the founding is done, a resident with nothing to do for 20 seconds walks back to their own house and waits by it, so idle people aren't left standing in the work area. They leave it, even on the way, for any work that turns up. Ada, and anyone without a house, stay where they are.
 
 **The resident panel** shows:
 - what they're doing;
@@ -227,7 +229,7 @@ Place a blueprint from the **Build** menu, and residents with **Build** on bring
 
 **Seeing what's being built.** The trees standing in front of a blueprint (up to 8 of them), or of a building that's stuck, fade to see-through on their own, as they do for whatever you've selected, so a site under a canopy isn't lost.
 
-**Clearing the ground.** Whatever lies where a building goes is cleared first. Trees are felled and boulders broken, berry bushes are dug up, and loose items are carried off to a stockpile by haulers; nothing is built until the ground is bare. The hint while placing says what it will clear ("Clears 2 trees, 6 logs and a bush"), and the blueprint's panel and the stuck list say what's left, including "no room in a stockpile" if there's nowhere to put it. With no stockpile yet, loose items are carried to open ground beside the building.
+**Clearing the ground.** Whatever lies where a building goes is cleared first. Trees are felled and boulders broken, berry bushes are dug up, and loose items are carried off to a stockpile by haulers; nothing is built until the ground is bare. The hint while placing says what it will clear ("Clears 2 trees, 6 logs and a bush"), and the blueprint's panel and the stuck list say what's left, including "no room in a stockpile" if there's nowhere to put it. With no stockpile yet, loose items are carried to open ground beside the building. To get a bush's ground back without building on it, select the bush and click **Dig up**: someone with the Chop job digs it up by hand and its berries are left to be carried off. **Cancel digging** unmarks it. Berries are early food, so a bush that's gone doesn't grow back.
 
 | Building | Stages and costs |
 |---|---|
@@ -379,11 +381,11 @@ A traveler arrives about 45 seconds after a house with a free bed is finished, o
 
 ## When something stalls
 
-Anything that can't go on gets a **yellow flag** on the map and an entry in the **stuck list** at the top right, with the reason in plain words, such as "Walls need 4 more planks", "Needs a pickaxe", "No one does Build" or "Starving: no food stored".
+Anything that can't go on gets a **yellow flag** on the map and an entry in the **stuck list**, with the reason in plain words, such as "Walls need 4 more planks", "Needs a pickaxe", "No one does Build" or "Starving: no food stored".
 - Click an entry, or press **N**, to go to it.
 - The entry that's been stuck longest is at the top.
 - A standing order that's only short of materials, like the toolsmith's spare, goes in a dim **waiting** line instead, without a flag. So does an expedition that's still packing. It's advice, not a blocker.
-- Click the **Stuck** header to fold the list into a small chip. It opens again when something new gets stuck.
+- The **Stuck** tab hangs below the top bar at the right and is always there. It shows a count, with a yellow flag when something can't go on, and blue when only a choice is waiting for you. Click it to open the list under it, and again to close it. The list never opens by itself, and it lies over the expedition planner and the other panels instead of pushing them aside.
 - A choice the game is waiting on you for, such as a loaded freight cart asking to leave, is not stuck. It gets its own **Needs you** section at the top of the list, with the buttons that answer it right there (**Approve departure**, **Decline**), in blue and with no flag on the map. The same line in the building's own panel is dim for the same reason.
 
 ## Controls

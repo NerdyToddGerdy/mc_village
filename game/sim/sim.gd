@@ -254,6 +254,7 @@ static func new_game() -> Sim:
 	s.add_resident("Ada", ADA_TUNIC, OPENING_START + o)
 	s.auto_craft = true  # the bench makes a recipe's planks and sticks from the start (issue #182)
 	s._add_site_maps()
+	Goals.seed_seen(s)  # the pages open from the start aren't "new" (issue #348)
 	return s
 
 
@@ -283,7 +284,7 @@ func _add_site_maps() -> void:
 
 
 func add_bush(cell: Vector2i) -> Dictionary:
-	var b := {"id": _id(), "kind": "bush", "cell": cell, "berries": Tuning.BUSH_MAX, "regrow": 0.0}
+	var b := {"id": _id(), "kind": "bush", "cell": cell, "berries": Tuning.BUSH_MAX, "regrow": 0.0, "des": false, "claim": 0}
 	m.bushes.append(b)
 	return b
 
@@ -748,6 +749,31 @@ func drop_items(c: Vector2i, type: String, n: int, uses := -1) -> void:
 	rev += 1
 
 
+## What an idle resident's search found about the items, kept while nothing changes (issue #351): a search that finds
+## nothing shouldn't walk hundreds of stacks again every tick. Valid for one map and one `rev`, and for a second at
+## most, so a change that doesn't bump `rev` is only late, not lost. A caller still checks what it takes from it.
+var _scans := {}
+var _scan_rev := -1
+var _scan_map := ""
+var _scan_tick := 0
+
+
+func _scans_fresh() -> void:
+	if _scan_rev != rev or _scan_map != m.id or tick - _scan_tick >= Tuning.TPS or tick < _scan_tick:
+		_scans.clear()
+		_scan_rev = rev
+		_scan_map = m.id
+		_scan_tick = tick
+
+
+## The stacks matching `pred`, worked out once while nothing changes, still in place when asked.
+func stacks_cached(key: String, pred: Callable) -> Array:
+	_scans_fresh()
+	if not _scans.has(key):
+		_scans[key] = stacks_where(pred)
+	return _scans[key].filter(func(s): return is_same(m.items.get(s.cell), s))
+
+
 func stacks_where(pred: Callable) -> Array:
 	var out: Array = []
 	for k in m.items:
@@ -771,7 +797,7 @@ func free_count(type: String) -> int:
 
 
 func tool_items(kind: String, min_tier: int) -> Array:
-	return stacks_where(func(s): return Defs.ITEMS[s.type].get("tool", "") == kind and Defs.ITEMS[s.type].tier > min_tier and avail(s) > 0)
+	return stacks_cached("tool_" + kind, func(s): return Defs.ITEMS[s.type].get("tool", "") == kind).filter(func(s): return Defs.ITEMS[s.type].tier > min_tier and avail(s) > 0)
 
 
 func in_zone(c: Vector2i) -> bool:
@@ -1938,6 +1964,38 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 	return j
 
 
+## The player has opened a page of the Guide: it's no longer new (issue #348).
+func see_page(id: String) -> void:
+	var seen: Dictionary = stats.get("guide_seen", {})
+	if not seen.has(id) and Goals.pages(self).any(func(p): return p.id == id):
+		seen[id] = true
+		stats.guide_seen = seen
+
+
+## Marks a berry bush to be dug up, or unmarks it (issue #344). The claimant stops if it's unmarked.
+func designate_bush(b: Dictionary) -> void:
+	if not m.bushes.any(func(o): return is_same(o, b)):
+		return
+	b.des = not b.des
+	if not b.des and b.claim != 0:
+		var r := resident(b.claim)
+		if not r.is_empty() and r.job != null and is_same(r.job.target, b):
+			fail_job(r)
+	rev += 1
+
+
+## A resident digs up a marked bush by hand and carries off the berries on it (issue #344).
+func _dig_bush_job(r: Dictionary, bush: Dictionary) -> Job:
+	var j := Job.new("gather", "Going to dig up a bush", "this bush")
+	j.work = "lumber"
+	j.target = bush
+	bush.claim = r.id
+	j.hold({"t": "claim", "ent": bush})
+	j.step(_goto([bush.cell], true))
+	j.step({"op": "work", "what": "dig_bush", "target": bush, "label": "Digging up a bush"})
+	return j
+
+
 ## Food lying around or stockpiled, nearest first: {kind:"stack", stack} or {kind:"bush", bush}, or {}.
 func _nearest_food(c: Vector2i) -> Dictionary:
 	var best := {}
@@ -2862,6 +2920,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.SHELTER_BUILD_TIME
 		"hunt":
 			return Tuning.HUNT_TIME
+		"dig_bush":
+			return Tuning.BUSH_DIG_TIME
 		"plant":
 			return Tuning.PLANT_TIME
 		"plant_tree":
@@ -3020,6 +3080,15 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				return "gone"
 			r.hunger = minf(100.0, r.hunger + Tuning.FOOD_VALUE.get(r.carry.type, 0.0))
 			r.carry = null
+		"dig_bush":
+			var dug: Dictionary = st.target
+			if not m.bushes.any(func(o): return is_same(o, dug)):
+				return "gone"
+			if dug.berries > 0:
+				drop_items(dug.cell, "berries", dug.berries)
+			m.bushes = m.bushes.filter(func(o): return not is_same(o, dug))
+			_occ_dirty = true
+			rev += 1
 		"graze":
 			var bush: Dictionary = st.target
 			if bush.berries <= 0 or not m.bushes.has(bush):
@@ -3209,6 +3278,29 @@ func _claim(r: Dictionary) -> void:
 		if j != null:
 			r.job = j
 			return
+	# Nothing to do: after a while, go home and wait there (issue #345). Asked once every ten seconds of an idle spell, so the check is cheap.
+	var idle: int = _idle_ticks.get(r.id, 0) + 1
+	_idle_ticks[r.id] = idle
+	var after := int(Tuning.IDLE_HOME_AFTER * Tuning.TPS)
+	if idle >= after and (idle - after) % (10 * Tuning.TPS) == 0:
+		r.job = _home_job(r)
+
+
+## A walk to the resident's own house, or null when they have none, are away from the village or are already by it (issue #345).
+func _home_job(r: Dictionary):
+	if map_id != "village" or r.away or r.get("hurt", 0) > 0 or Goals.current(self) >= 0:  # the founding is the guided opening: nobody goes home till it's done
+		return null
+	for s in m.sites:
+		if s.tpl == "house" and s.done and s.owner == r.id:
+			var near := 1 << 30
+			for hc in site_cells(s):
+				near = mini(near, manhattan(rcell(r), hc))
+			if near <= Tuning.HOME_NEAR:
+				return null
+			var j := Job.new("home", "Heading home", "their house")
+			j.step(_goto(site_cells(s), true))
+			return j
+	return null
 
 
 ## The kinds of work, in the order a resident looks for them. Hauling comes last, so a resident's
@@ -3262,6 +3354,9 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			var targets: Array = []
 			var can_gather: bool = r.get("hurt", 0) == 0  # the injured can't chop or mine (issue #110)
 			if jobs.has("lumber") and can_gather:
+				for b in m.bushes:  # a bush marked to be dug up (issue #344): by hand, no axe needed
+					if b.des and b.claim == 0:
+						targets.append(b)
 				if not r.broken.axe or not tool_items("axe", 0).is_empty():
 					for t in m.trees:
 						if t.alive and t.des and t.claim == 0 and not _cooling(t):
@@ -3277,6 +3372,8 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 						targets.append(sh)
 			if not targets.is_empty():
 				var t: Dictionary = nearest(targets, c)
+				if t.kind == "bush":
+					return _dig_bush_job(r, t)
 				return _tagged(_hunt_job(r, t), "hunt") if t.kind == "animal" else _gather_job(r, t)
 			var rj = _road_claim(r, "gather", jobs)
 			if rj != null:
@@ -3315,6 +3412,9 @@ func _tagged(j: Job, work: String) -> Job:
 
 ## The nearest loose stack that has room in a stockpile (unloaded cargo first), as {stack, dest, n}, or null.
 func _haul_source(c: Vector2i, carry := Tuning.CARRY):
+	_scans_fresh()
+	if _scans.get("haul_none", false):  # nothing could be carried anywhere a moment ago, and nothing has changed
+		return null
 	var piles := pile_map()
 	var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s, piles))
 	# Where a type can go is worked out once a type, not once a stack, and before sorting: an idle
@@ -3332,6 +3432,7 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 	var clearing := _clearing_cells()
 	var bare: bool = m.zone.is_empty() and piles.is_empty() and not m.sites.any(func(s): return s.tpl == "storehouse" and s.done)
 	if not anywhere and (not bare or clearing.is_empty() or not loose.any(func(s): return clearing.has(s.cell))):
+		_scans["haul_none"] = true
 		return null
 	# An expedition's unloaded cargo goes first (issue #112), then what lies on a blueprint's footprint
 	# (issue #205), then the nearest.
@@ -3457,7 +3558,7 @@ func step() -> void:
 	var kinds := {}
 	var working := 0
 	for r in residents:
-		if r.job != null and not (r.job.kind in ["move", "arrive", "stage", "road", "rest", "hurt", "commute", "unload"]):
+		if r.job != null and not (r.job.kind in ["move", "arrive", "stage", "road", "rest", "hurt", "commute", "unload", "home"]):
 			kinds[r.job.kind] = true
 			working += 1
 	if working >= 2 and kinds.size() >= 2:
@@ -3609,17 +3710,30 @@ func _step_sheep(sh: Dictionary) -> void:
 		sh.cell = Vector2i(roundi(sh.pos.x), roundi(sh.pos.y))
 
 
+var _idle_ticks := {}  ## Resident id -> ticks they've gone without work (issue #345); not saved.
+
+
 func _step_resident(r: Dictionary) -> void:
 	if r.get("burn", 0.0) > 0.0:
 		_burn_step(r)
 	if r.hunger <= 0.0 and r.job != null and r.job.kind != "eat":
 		fail_job(r)  # starving: drop everything and go eat
+	if r.job != null and r.job.kind == "home":  # work that turns up takes them from the walk home at once (issue #345)
+		var walk: Job = r.job
+		r.job = null
+		_claim(r)
+		if r.job == null:
+			r.job = walk
+		else:
+			_idle_ticks.erase(r.id)
 	if r.job == null:
 		if r.arriving:
 			return
 		_claim(r)
 		if r.job == null:
 			return
+		if r.job.kind != "home":
+			_idle_ticks.erase(r.id)
 	var j: Job = r.job
 	if j.i >= j.steps.size():
 		r.job = null
@@ -7194,5 +7308,7 @@ static func from_state(d: Dictionary) -> Sim:
 		if r.arriving:
 			s.walk_in(r)
 	s.use_map("village")
+	if not s.stats.has("guide_seen"):  # an older save: every page it already knows counts as seen (issue #348)
+		Goals.seed_seen(s)
 	s.compute_stuck()
 	return s

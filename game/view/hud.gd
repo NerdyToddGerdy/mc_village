@@ -53,12 +53,18 @@ var _log_list := VBoxContainer.new()
 const LOG_MAX := 60
 var _loc_anchor := Rect2()
 var _loc_button: Button  ## The button the location dropdown hangs from, so it follows it.
+const SEL_H := 400.0  ## The selection panel's height when something is selected; what doesn't fit scrolls.
+const GOALS_W := 340.0  ## The tutorial tab's width, and its dropdown's.
 const TOP_BAR_H := 60.0  ## The top bar's height: the screen's upper edge, as far as panels are concerned.
 var _topbar_row := HBoxContainer.new()
 var _tally_panel: PanelContainer
 var _tally_seen := {}           ## Item types that have turned up in this game; the rest stay hidden.
 var _tally_sim := 0             ## Which sim _tally_seen belongs to (it resets for a new or loaded game).
-var _goals_panel: PanelContainer
+var _goals_panel: PanelContainer    ## The tutorial's details, dropped down under its tab; a fixed size, so it never changes height as the steps do.
+var _goals_tab: Button              ## The tutorial's tab, hanging below the top bar: the chapter and the step in hand. It opens the details.
+var _goals_scroll := ScrollContainer.new()
+var goals_open := false             ## The tutorial's details are dropped down; it never opens by itself.
+var _goals_done := false            ## Both chapters are done: the tab then opens the village book instead.
 var _tools_list := VBoxContainer.new()
 var _drop_pinned := ""          ## The tally group whose dropdown a click pinned open, or "" (issue #141).
 var _drop_group := ""           ## The tally group whose dropdown is open, or "".
@@ -71,10 +77,9 @@ var _menu_btn: Button                ## The on-screen button for the Esc menu (i
 var _menu_panel: PanelContainer
 var _stuck_panel: PanelContainer
 var _stuck := VBoxContainer.new()
-var stuck_open := true          ## The stuck list shows its entries; false folds it to a chip (issue #77).
-var _stuck_gives_way := false   ## The expedition planner is tall enough to reach the stuck list, which steps aside.
+var _stuck_tab: Button           ## The tab that hangs below the top bar, always there; it opens the stuck list under it.
+var stuck_open := false         ## The stuck list is open under its tab (issue #77); it never opens by itself.
 var waiting_open := false       ## The Waiting tier's entries are shown.
-var _stuck_keys := {}           ## Blockers shown last refresh, to open the list when a new one appears.
 var _toasts := VBoxContainer.new()
 var _sel_panel: PanelContainer
 var _sel := VBoxContainer.new()
@@ -84,6 +89,7 @@ var _craft_panel: PanelContainer
 var _plan_panel: PanelContainer     ## The expedition planner (issues #105-#107).
 var _plan_box := VBoxContainer.new()
 var _plan_scroll := ScrollContainer.new()
+var _craft_scroll := ScrollContainer.new()  ## The craft panel scrolls inside the planner's fixed height.
 var _toolbar_panel: PanelContainer   ## The toolbar along the bottom, which the planner stands above.
 var _craft_box := VBoxContainer.new()
 var _craft_pick := {}           ## Station template -> the recipe its Craft panel shows (issue #95).
@@ -105,6 +111,7 @@ var _keys_sig := ""
 var _hint := Label.new()
 var _paused_label: PanelContainer
 var _sigs := {}
+var _locks := {}  ## container id -> what it showed when `_rebuild` last locked its size
 var _held := false            ## A mouse button is down; panels wait to rebuild until it's released.
 var _toast_list: Array = []
 var equip_kind := ""          ## "axe" or "pick" while the resident panel lists tools to equip, else "".
@@ -118,6 +125,16 @@ func _ready() -> void:
 	add_child(_root)
 
 	var tl := _corner(Control.PRESET_TOP_LEFT)
+	tl.offset_top = TOP_BAR_H  # the tab hangs straight off the top bar
+	_goals_tab = _button("The founding", func(): _goals_pressed())
+	_goals_tab.toggle_mode = true
+	_goals_tab.clip_text = true
+	_goals_tab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_goals_tab.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_goals_tab.custom_minimum_size = Vector2(GOALS_W, 34)  # one size whatever the step says
+	_goals_tab.set_meta("label", "Tutorial")
+	_style_tab(_goals_tab)
+	tl.add_child(_goals_tab)
 	var tally_row := HBoxContainer.new()
 	tally_row.add_theme_constant_override("separation", 18)
 	_tallies.add_theme_constant_override("separation", 18)
@@ -189,18 +206,29 @@ func _ready() -> void:
 	_job_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))  # opaque: it lies over other panels
 	_job_drop.visible = false
 	_job_drop.top_level = true
+	_job_drop.z_index = 3  # over the top bar (z 2), which they can reach
 	_loc_list.add_theme_constant_override("separation", 2)
 	_loc_drop = _panel(_loc_list, Vector2(330, 0), 6)
 	_loc_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))  # opaque: it lies over the planner
 	_loc_drop.visible = false
 	_loc_drop.top_level = true
+	_loc_drop.z_index = 3  # over the top bar (z 2), which they can reach
 	_maps_list.add_theme_constant_override("separation", 2)
 	_maps_drop = _panel(_maps_list, Vector2(200, 0), 6)
 	_maps_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))
 	_maps_drop.visible = false
 	_maps_drop.top_level = true
-	_goals_panel = _panel(_goals, Vector2(290, 0))
-	tl.add_child(_goals_panel)
+	_maps_drop.z_index = 3  # over the top bar (z 2), which they can reach
+	_goals_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_goals_scroll.custom_minimum_size = Vector2(GOALS_W - 24, 190)
+	_goals.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_goals_scroll.add_child(_goals)
+	_goals_panel = _panel(_goals_scroll, Vector2(GOALS_W, 0))
+	_goals_panel.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 12, Palette.SLATE_DEEP))  # opaque: it lies over other panels
+	_goals_panel.visible = false
+	_goals_panel.top_level = true
+	_goals_panel.z_index = 3
+	_root.add_child(_goals_panel)
 
 	var tr := _corner(Control.PRESET_TOP_RIGHT)
 	var speed := HBoxContainer.new()
@@ -234,8 +262,19 @@ func _ready() -> void:
 	_log_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_log_btn.set_meta("label", "Log")
 	_topbar_row.add_child(_log_btn)  # Log ends the bar, after the gear
+	tr.offset_top = TOP_BAR_H  # the tab hangs straight off the top bar
+	_stuck_tab = _button("Stuck", func(): stuck_open = not stuck_open)
+	_stuck_tab.toggle_mode = true
+	_stuck_tab.custom_minimum_size.y = 34  # the same height with or without its flag, so what hangs under it never shifts
+	_stuck_tab.set_meta("label", "Stuck")
+	_style_tab(_stuck_tab)
+	tr.add_child(_stuck_tab)
 	_stuck_panel = _panel(_stuck, Vector2(250, 0))
-	tr.add_child(_stuck_panel)
+	_stuck_panel.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 12, Palette.SLATE_DEEP))  # opaque: it lies over the other panels
+	_stuck_panel.visible = false
+	_stuck_panel.top_level = true
+	_stuck_panel.z_index = 3
+	_root.add_child(_stuck_panel)
 
 	_toasts.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_toasts)
@@ -263,7 +302,10 @@ func _ready() -> void:
 		br.add_child(mp)
 	_build_menu = _menu_panels.build
 	_craft_box.add_theme_constant_override("separation", 8)
-	_craft_panel = _panel(_craft_box, Vector2(400, 0))
+	_craft_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_craft_scroll.add_child(_craft_box)
+	_craft_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_craft_panel = _panel(_craft_scroll, Vector2(400, 0))
 	_craft_panel.visible = false
 	br.add_child(_craft_panel)
 	_plan_box.add_theme_constant_override("separation", 8)
@@ -289,6 +331,7 @@ func _ready() -> void:
 	_root.add_child(_tools_drop)
 	_book_panel = _panel(_book, Vector2(460, 0))
 	_book_panel.top_level = true
+	_book_panel.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 12, Palette.SLATE_DEEP))  # opaque: it lies over the selection panel
 	_book_panel.visible = false
 	_root.add_child(_book_panel)
 	_root.add_child(_job_drop)
@@ -593,6 +636,26 @@ func _label(text: String, bold := false, color := Palette.CHALK, size := Palette
 		l.add_theme_font_override("font", _bold)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wrap else TextServer.AUTOWRAP_OFF
 	return l
+
+
+## Gives the wrapping labels directly in `c` the panel's width. A label that wraps measures its height
+## at its own width, which is nothing when it's new, so for a pass it stands thousands of pixels tall
+## and the panel flashes across the screen.
+func _pin_wrap(c: Container, width: float) -> void:
+	for ch in c.get_children():
+		if ch is Label and ch.autowrap_mode != TextServer.AUTOWRAP_OFF and ch.custom_minimum_size.x == 0:
+			ch.custom_minimum_size.x = width
+
+
+## A tab that hangs off the top bar: square along the bar, rounded below, in the panels' slate.
+func _style_tab(b: Button) -> void:
+	for state in ["normal", "hover", "pressed", "hover_pressed", "focus"]:
+		var tab_box := _box(Color(Palette.SLATE, 1.0) if state != "hover" else Color(Palette.SLATE, 1.0).lightened(0.08), 8, 8, Palette.SLATE_DEEP)
+		tab_box.corner_radius_top_left = 0
+		tab_box.corner_radius_top_right = 0
+		tab_box.content_margin_left = 14
+		tab_box.content_margin_right = 14
+		b.add_theme_stylebox_override(state, tab_box)
 
 
 func _button(text: String, on_press: Callable, style := "") -> Button:
@@ -930,7 +993,10 @@ func _reason(text: String) -> Label:
 
 
 ## Replaces a container's children only when `sig` differs from last time.
-func _rebuild(c: Container, sig: String, fill: Callable, before := Callable()) -> void:
+## `lock` names what the container is showing (the selection, the tab): while it stays the same, the
+## container keeps the largest size it has had, so a panel whose numbers tick doesn't jitter in size.
+## A different `lock` lets it settle to its new content.
+func _rebuild(c: Container, sig: String, fill: Callable, before := Callable(), lock := "") -> void:
 	if _sigs.get(c.get_instance_id(), "") == sig:
 		return
 	# Rebuilding between a button's press and release would swallow the click (the press lands on
@@ -938,9 +1004,17 @@ func _rebuild(c: Container, sig: String, fill: Callable, before := Callable()) -
 	if _held and c.is_visible_in_tree() and c.get_global_rect().has_point(_pointer):
 		return
 	_sigs[c.get_instance_id()] = sig
+	if lock != "":
+		var id := c.get_instance_id()
+		if _locks.get(id, "") == lock:
+			c.custom_minimum_size = c.custom_minimum_size.max(c.size)
+		else:
+			_locks[id] = lock
+			c.custom_minimum_size = Vector2.ZERO
 	if before.is_valid():
 		before.call()
 	for ch in c.get_children():
+		c.remove_child(ch)  # out of the tree now, so the old and new children never share a layout pass
 		ch.queue_free()
 	fill.call(c)
 
@@ -1125,7 +1199,10 @@ func _refresh_maps(sim: Sim) -> void:
 		for id in ex.party:
 			var r := sim.resident(id)
 			sig += "%s%s%s%d" % [_status(sim, r), r.pick, r.get("hurt", 0), int(r.hunger / 10)]
-		_rebuild(_party_details, sig, func(c: Container) -> void: _fill_party(c, sim))
+		_rebuild(_party_details, sig, func(c: Container) -> void:
+			_fill_party(c, sim)
+			_pin_wrap(c, 300),
+			Callable(), "%d" % ex.party.size())
 	_party.tooltip_text = "Show the %s" % sim.get_map(_party.get_meta("map", "village")).name.to_lower() if line != "" and not here_site else ""
 
 
@@ -1412,22 +1489,22 @@ func _process(_delta: float) -> void:
 	_toasts.visible = not _overlay_open()  # no stray toast beside the menu's dialog (#314)
 	_place_toasts()
 	var room: float = get_viewport().get_visible_rect().size.y - 150.0  # below the top bar, above the bottom edge
-	var want := minf(_sel.get_combined_minimum_size().y, maxf(120.0, room))
-	if _plan_panel.visible:  # the planner takes what's between the top bar and the toolbar, and scrolls past that
-		var avail := get_viewport().get_visible_rect().size.y - TOP_BAR_H - 8.0 - 16.0 - _toolbar_panel.size.y - 8.0 - 24.0
-		var plan_want := Vector2(_plan_box.get_combined_minimum_size().x, minf(_plan_box.get_combined_minimum_size().y, maxf(120.0, avail)))
-		if not _plan_scroll.custom_minimum_size.is_equal_approx(plan_want):
-			_plan_scroll.custom_minimum_size = plan_want
+	# Whatever is selected, its panel is one height (what doesn't fit scrolls), so it never bounces between selections.
+	var want := minf(SEL_H if not game.selection.is_empty() else _sel.get_combined_minimum_size().y, maxf(120.0, room))
+	# The planner and every bench's craft panel are one fixed height: the top right under the Stuck tab, the bottom
+	# above the toolbar. It never grows or shrinks with what's in them; what doesn't fit scrolls.
+	var avail := get_viewport().get_visible_rect().size.y - (TOP_BAR_H + _stuck_tab.custom_minimum_size.y + 8.0) - 16.0 - _toolbar_panel.get_combined_minimum_size().y - 8.0 - 24.0
+	for pair in [[_plan_panel, _plan_scroll, _plan_box], [_craft_panel, _craft_scroll, _craft_box]]:
+		if pair[0].visible:
+			var fixed := Vector2(pair[2].get_combined_minimum_size().x, maxf(120.0, avail))
+			if not pair[1].custom_minimum_size.is_equal_approx(fixed):
+				pair[1].custom_minimum_size = fixed
 	if not is_equal_approx(_sel_scroll.custom_minimum_size.y, want):
 		_sel_scroll.custom_minimum_size.y = want
 	# The goals panel gives way to the jobs board, which sits over it, and to a selection panel tall
 	# enough to reach it (at a large interface size, issue #80): what's selected matters more.
 	# The stuck list gives way to the expedition planner the same way; the planner shows the board's
 	# own stuck reasons, and the list comes back when it closes.
-	_stuck_gives_way = _plan_panel.visible and _plan_panel.get_global_rect().position.y < _stuck_panel.get_global_rect().position.y + _stuck_panel.get_combined_minimum_size().y + 8
-	if _stuck_gives_way:
-		_stuck_panel.visible = false
-	_goals_panel.visible = not game.jobs_board_open and not game.book_open and (not _sel_panel.visible or _sel_panel.get_global_rect().position.y > _goals_panel.get_global_rect().position.y + _goals_panel.get_combined_minimum_size().y + 8)
 	var open := _drop_pinned
 	for g in _group_btns:
 		if open == "" and _group_btns[g].has_focus():
@@ -1449,6 +1526,16 @@ func _process(_delta: float) -> void:
 		_group_btns[g].set_pressed_no_signal(_drop_pinned == g)
 
 
+func _goals_pressed() -> void:
+	if _goals_done:
+		game.open_book()
+	else:
+		goals_open = not goals_open
+
+
+## The tutorial hangs off a tab below the top bar, left of the screen: the chapter and the step in hand.
+## Clicking it drops down the step's hint and why, in a panel of one fixed size. Once both chapters are
+## done the tab reads "The village √" and opens the village book instead (#81, #198).
 func _refresh_goals(sim: Sim) -> void:
 	var cur := Goals.current(sim)
 	var vcur := Goals.village_current(sim) if cur < 0 else 0
@@ -1457,21 +1544,21 @@ func _refresh_goals(sim: Sim) -> void:
 	var done_sig := ""
 	for i in chapter.size():
 		done_sig += "1" if (Goals.done(sim, i) if cur >= 0 else Goals.village_done(sim, i)) else "0"
-	# Once both chapters are done, the panel folds to a small chip that opens the book: it has nothing
-	# left to guide (#81, #198).
-	_goals_panel.custom_minimum_size.x = 0 if at < 0 else 290
+	_goals_done = at < 0
+	var name := "The founding" if cur >= 0 else "The village"
+	var tint: Color = Palette.GREEN if _goals_done else Palette.CHALK
+	_goals_tab.text = "%s  √" % name if _goals_done else "%s  ·  %d  %s" % [name, at + 1, chapter[at].t]
+	_goals_tab.tooltip_text = "Every founding and village step is done. Open the village book." if _goals_done else "Show this step's hint"
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		_goals_tab.add_theme_color_override(state, tint)
+	_goals_tab.set_pressed_no_signal(goals_open and not _goals_done)
+	_goals_panel.visible = goals_open and not _goals_done and not game.jobs_board_open and not game.book_open
+	if not _goals_panel.visible:
+		return
 	_rebuild(_goals, "%d%d%s" % [cur, at, done_sig], func(c: Container) -> void:
 		var n_done := done_sig.count("1")
-		if at < 0:
-			var chip := _button("The village  √", func(): game.open_book())
-			chip.flat = true
-			for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-				chip.add_theme_color_override(state, Palette.GREEN)
-			chip.tooltip_text = "Every founding and village step is done. Open the village book."
-			c.add_child(chip)
-			return
 		var head := HBoxContainer.new()
-		var title := _row("The founding" if cur >= 0 else "The village", "%d of %d" % [n_done, chapter.size()], false)
+		var title := _row(name, "%d of %d" % [n_done, chapter.size()], false)
 		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		head.add_child(title)
 		var book := _button("Book", func(): game.open_book())
@@ -1483,8 +1570,9 @@ func _refresh_goals(sim: Sim) -> void:
 		# hidden; otherwise they'd wrap at nothing, stand thousands of pixels tall and keep it hidden.
 		var g: Dictionary = chapter[at]
 		for l in [_label("%d  %s" % [at + 1, g.t], true, Palette.CHALK, Palette.BODY, true), _label(g.h, false, Palette.CHALK_DIM, Palette.CAPTION, true), _label(g.w, false, Palette.CHALK_DIM, Palette.CAPTION, true)]:
-			l.custom_minimum_size.x = 290 - 24
+			l.custom_minimum_size.x = GOALS_W - 24 - 8
 			c.add_child(l))
+	_place_drop(_goals_panel, Vector2(16, _goals_tab.get_global_rect().end.y + 2))
 
 
 ## The village book (issues #78, #198): Goals (the tutorial, both chapters with their whys), Jobs (who
@@ -1494,7 +1582,7 @@ func _refresh_book(sim: Sim) -> void:
 	_book_panel.visible = game.book_open
 	if not game.book_open:
 		return
-	_book_panel.position = Vector2(16, _tally_panel.get_global_rect().end.y + 8)
+	_book_panel.position = Vector2(16, _goals_tab.get_global_rect().end.y + 8)  # under the tutorial's tab
 	var pages := Goals.pages(sim)
 	var sig := "%s|" % game.book_page
 	for i in Goals.LIST.size():
@@ -1503,6 +1591,10 @@ func _refresh_book(sim: Sim) -> void:
 		sig += "1" if Goals.village_done(sim, i) else "0"
 	for p in pages:
 		sig += p.id
+	var rows := Goals.guide_rows(sim)
+	var fresh := Goals.new_pages(sim).map(func(p): return p.id)
+	var guide_sel: String = game.guide_page if rows.any(func(p): return p.id == game.guide_page) else rows[0].id
+	sig += "|%s|%s" % [fresh, guide_sel]
 	var live: Control = _board if game.book_page == "jobs" else (_roster if game.book_page == "residents" else null)
 	_rebuild(_book, sig, func(c: Container) -> void:
 		var head := HBoxContainer.new()
@@ -1514,8 +1606,8 @@ func _refresh_book(sim: Sim) -> void:
 		var tabs := HFlowContainer.new()
 		tabs.add_theme_constant_override("h_separation", 2)
 		tabs.add_theme_constant_override("v_separation", 2)
-		for entry in [{"id": "goals", "title": "Goals"}, {"id": "jobs", "title": "Jobs"}, {"id": "residents", "title": "Residents"}] + pages:
-			var b := _button(entry.title, func(): game.open_book(entry.id))
+		for entry in [{"id": "goals", "title": "Goals"}, {"id": "jobs", "title": "Jobs"}, {"id": "residents", "title": "Residents"}, {"id": "guide", "title": "Guide"}]:
+			var b := _button(entry.title + ("  new" if entry.id == "guide" and not fresh.is_empty() else ""), func(): game.open_book(entry.id))
 			b.set_meta("label", "Book: " + entry.title)
 			b.toggle_mode = true
 			b.set_pressed_no_signal(game.book_page == entry.id)
@@ -1524,7 +1616,32 @@ func _refresh_book(sim: Sim) -> void:
 		_book_scroll = ScrollContainer.new()
 		_book_scroll.custom_minimum_size = Vector2(440, 330)
 		_book_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		c.add_child(_book_scroll)
+		if game.book_page == "guide":  # a list of the pages on the left, the chosen one on the right (issue #348)
+			var split := HBoxContainer.new()
+			split.add_theme_constant_override("separation", 8)
+			c.add_child(split)
+			var list_scroll := ScrollContainer.new()
+			list_scroll.custom_minimum_size = Vector2(170, 330)
+			list_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+			split.add_child(list_scroll)
+			var list := VBoxContainer.new()
+			list.add_theme_constant_override("separation", 2)
+			list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			list_scroll.add_child(list)
+			for row in rows:
+				var known := Goals.page_known(sim, row)
+				var rb := _button("%s%s" % [row.title if known else "???", "  new" if fresh.has(row.id) else ""], func(): game.select_guide(row.id))
+				rb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+				rb.toggle_mode = true
+				rb.set_pressed_no_signal(row.id == guide_sel)
+				rb.set_meta("label", "Guide: " + (row.title if known else "???"))
+				if not known:
+					for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+						rb.add_theme_color_override(state, Palette.CHALK_DIM)
+				list.add_child(rb)
+			split.add_child(_book_scroll)
+		else:
+			c.add_child(_book_scroll)
 		if live != null:
 			live.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			_book_scroll.add_child(live)
@@ -1533,11 +1650,17 @@ func _refresh_book(sim: Sim) -> void:
 		body.add_theme_constant_override("separation", 6)
 		body.custom_minimum_size.x = 430
 		_book_scroll.add_child(body)
-		var page := pages.filter(func(p): return p.id == game.book_page)
-		if page.is_empty():
-			_fill_book_goals(body, sim)
+		if game.book_page == "guide":
+			var chosen: Dictionary = rows.filter(func(p): return p.id == guide_sel)[0]
+			if Goals.page_known(sim, chosen):
+				_fill_book_page(body, chosen)
+			else:
+				body.add_child(_label("???", true, Palette.CHALK, Palette.HEADING))
+				var clue := _label(chosen.get("clue", "Not found yet."), false, Palette.CHALK_DIM, Palette.BODY, true)
+				clue.custom_minimum_size.x = 420
+				body.add_child(clue)
 		else:
-			_fill_book_page(body, page[0]),
+			_fill_book_goals(body, sim),
 		func() -> void:  # the live pages outlive a rebuild: take them out before the old page is freed
 			for n in [_board, _roster]:
 				if n.get_parent() != null:
@@ -1623,28 +1746,35 @@ func _fill_book_page(c: Container, p: Dictionary) -> void:
 		c.add_child(l)
 
 
-## The stuck list (issue #77) has two tiers. Blockers, work that can't go on, get a yellow flag,
-## oldest first. Standing orders short of materials only wait: one dim line that opens on click.
-## The player can fold the blockers into a "Stuck n" chip; a new blocker opens it again.
+## The stuck list (issue #77) hangs off a tab below the top bar. The tab is always there, with a count and
+## a flag when something needs a look; the list opens under it only when the player clicks it. It has two
+## tiers. Blockers, work that can't go on, get a yellow flag, oldest first. Standing orders short of
+## materials only wait: one dim line that opens on click.
 func _refresh_stuck(sim: Sim) -> void:
 	var vis := sim.stuck.filter(func(s): return not s.hidden)
 	var need := vis.filter(func(s): return s.get("decision", "") != "")
 	var block := vis.filter(func(s): return not s.waiting)
 	var wait := vis.filter(func(s): return s.waiting and s.get("decision", "") == "")
 	block.sort_custom(func(a, b): return a.since < b.since or (a.since == b.since and vis.find(a) < vis.find(b)))
-	var keys := {}
-	for s in block:
-		keys[s.key] = true
-		if not _stuck_keys.has(s.key):
-			stuck_open = true
-	_stuck_keys = keys
-	_stuck_panel.visible = not vis.is_empty() and not _stuck_gives_way
-	var folded := not block.is_empty() and not stuck_open
-	_stuck_panel.custom_minimum_size.x = 0 if folded and need.is_empty() else 250
+	var n := need.size() + block.size()
+	var tint: Color = Palette.YELLOW if not block.is_empty() else (Palette.BLUE if not need.is_empty() else Palette.CHALK_DIM)
+	_stuck_tab.text = "Stuck" if n == 0 else "Stuck  %d" % n
+	_stuck_tab.icon = MarkTextures.flag() if not block.is_empty() else null
+	_stuck_tab.add_theme_constant_override("icon_max_width", 14)
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		_stuck_tab.add_theme_color_override(state, tint)
+	_stuck_tab.set_pressed_no_signal(stuck_open)
+	_stuck_tab.tooltip_text = "Show what’s stuck" if not stuck_open else "Hide the stuck list"
+	_stuck_panel.visible = stuck_open
+	if not stuck_open:
+		return
 	var sig := "%s%s" % [stuck_open, waiting_open]
 	for s in need + block + wait:
 		sig += s.who + s.why + ";"
 	_rebuild(_stuck, sig, func(c: Container) -> void:
+		if vis.is_empty():
+			c.add_child(_label("Nothing is stuck.", false, Palette.CHALK_DIM, Palette.BODY))
+			return
 		if not need.is_empty():  # choices waiting for the player, apart from what's wrong (issue #296)
 			var ask := _label("Needs you (%d)" % need.size(), true, Palette.BLUE, Palette.HEADING)
 			c.add_child(ask)
@@ -1653,26 +1783,15 @@ func _refresh_stuck(sim: Sim) -> void:
 			if not block.is_empty() or not wait.is_empty():
 				c.add_child(_rule())
 		if not block.is_empty():
-			var head := _button("Stuck (%d)   %s" % [block.size(), "↑" if stuck_open else "↓"], func(): stuck_open = not stuck_open)
-			head.icon = MarkTextures.flag() if folded else null
-			head.add_theme_constant_override("icon_max_width", 16)
-			head.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			head.add_theme_font_override("font", _bold)
-			head.add_theme_font_size_override("font_size", Palette.HEADING)
-			for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-				head.add_theme_color_override(state, Palette.YELLOW)
-			head.tooltip_text = "Hide the stuck list. It opens again when something new gets stuck." if stuck_open else "Show what’s stuck"
+			var head := _label("Stuck (%d)" % block.size(), true, Palette.YELLOW, Palette.HEADING)
 			c.add_child(head)
-			if folded:
-				return
 			for s in block:
 				c.add_child(_stuck_entry(sim, s, false))
 		if wait.is_empty():
 			return
 		if not block.is_empty():
 			c.add_child(_rule())
-		var n := wait.size()
-		var line := _button("%d waiting   %s" % [n, "↑" if waiting_open else "↓"], func(): waiting_open = not waiting_open)
+		var line := _button("%d waiting   %s" % [wait.size(), "↑" if waiting_open else "↓"], func(): waiting_open = not waiting_open)
 		line.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		for state in ["font_color", "font_focus_color"]:
 			line.add_theme_color_override(state, Palette.CHALK_DIM)
@@ -1680,7 +1799,9 @@ func _refresh_stuck(sim: Sim) -> void:
 		c.add_child(line)
 		if waiting_open:
 			for s in wait:
-				c.add_child(_stuck_entry(sim, s, true)))
+				c.add_child(_stuck_entry(sim, s, true)),
+		Callable(), "%d|%d|%d|%s" % [need.size(), block.size(), wait.size(), waiting_open])
+	_place_drop(_stuck_panel, Vector2(_stuck_tab.get_global_rect().end.x - _stuck_panel.get_combined_minimum_size().x, _stuck_tab.get_global_rect().end.y + 2))
 
 
 ## A choice waiting for the player (issue #296): what it is, and the buttons that answer it, so it needs no hunting for the panel.
@@ -1740,12 +1861,10 @@ func _refresh_toasts() -> void:
 func _place_toasts() -> void:
 	var view := _root.size
 	var left := 16.0
-	for p in [_goals_panel, _party_panel]:  # clear of the goals and the party's panel
+	for p in [_goals_tab, _party_panel]:  # clear of the tutorial's tab and the party's panel
 		if p.visible:
 			left = maxf(left, p.get_global_rect().end.x + 12)
-	var right := view.x - 16
-	if _stuck_panel.visible:
-		right = _stuck_panel.get_global_rect().position.x - 12
+	var right := _stuck_tab.get_global_rect().position.x - 12  # clear of the stuck tab
 	var width := maxf(right - left, 240.0)
 	_toasts.position = Vector2(left, _tally_panel.get_global_rect().end.y + 8)
 	_toasts.size = Vector2(width, 0)
@@ -1878,13 +1997,15 @@ func _refresh_selection(sim: Sim) -> void:
 		sig += "%s" % [target]
 		if target.get("tpl", "") == "mason_bench":  # whether it can be dug out depends on the map's boulders and the bricks
 			sig += sim.shaft_check(target)
-	for s in sim.stuck:
-		sig += s.why
+	if not sel.is_empty():  # with nothing selected the panel shows no stuck reason, so a changing one needn't rebuild it (#343)
+		for s in sim.stuck:
+			sig += s.why
 	sig += game.tool + str(game.area_site)  # the Paint area button reads Done painting while it's on (issue #203)
 	sig += _keys_sig
 	_update_progress_bar(sim)
 	_rebuild(_sel, sig, func(c: Container) -> void:
 		_fill_selection(c, sim, sel, target)
+		_pin_wrap(c, 330 - 24)
 		_register_panel_keys(c))
 
 
@@ -1957,6 +2078,9 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		"bush":
 			c.add_child(_head("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX]))
 			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, Palette.BODY, true))
+			var dig := _button("Cancel digging" if target.des else "Dig up", func(): game.toggle_dig_bush(target), "Secondary" if target.des else "Primary")
+			dig.tooltip_text = "A resident digs the bush up and carries its berries off. Berries are early food, so it's gone for good."
+			c.add_child(dig)
 		"meadow":  # the signpost to the meadow (issues #136, #137)
 			_fill_signpost(c, sim, Meadow.ID)
 		"route":
@@ -2036,7 +2160,9 @@ func _refresh_craft(sim: Sim) -> void:
 	_rebuild(_craft_box, sig, func(c: Container) -> void:
 		if list.size() > 1:
 			c.add_child(_station_tabs(sim, list, bench))
-		_fill_bench(c, sim, bench))
+		_fill_bench(c, sim, bench)
+		_pin_wrap(c, 400 - 24),
+		Callable(), "%s|%s|%s" % [bench.id, _craft_pick, list.size()])
 
 
 func _blocked_sites(sim: Sim) -> Array:
@@ -3117,7 +3243,11 @@ func _refresh_planner_slot(sim: Sim) -> void:
 	for r in sim.residents:
 		sig += "%d%s%s%s%d%d%s%s;" % [r.id, sim.cant_join(r), sim.at_board(r), r.pick, int(r.hunger / 10), ceili(sim.back_in(r)), r.map, r.away]
 		sig += r.job.label if r.job != null else "Idle"
-	_rebuild(_plan_box, sig, func(c: Container) -> void: _fill_planner(c, sim))
+	_rebuild(_plan_box, sig, func(c: Container) -> void:
+		_fill_planner(c, sim)
+		if not sim.expedition.is_empty():  # the packing view is a single 400-wide column (the panel's width less its margins)
+			_pin_wrap(c, 400 - 24),
+		Callable(), "%s|%s|%s" % [sim.expedition.get("state", ""), dest, game.adventure])
 
 
 func _fill_planner(c: Container, sim: Sim) -> void:

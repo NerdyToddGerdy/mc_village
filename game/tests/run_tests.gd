@@ -25,6 +25,10 @@ func _init() -> void:
 		"test_hunting_sheep",
 		"test_beds_and_free_bed_arrivals",
 		"test_hunger_and_eating",
+		"test_dig_up_bushes",
+		"test_guide_new_marks",
+		"test_many_loose_items_tick_cheaply",
+		"test_idle_residents_go_home",
 		"test_farm_plant_grow_harvest",
 		"test_farm_plots_need_open_grass",
 		"test_the_farm_stops_at_its_target",
@@ -899,6 +903,180 @@ func test_beds_and_free_bed_arrivals() -> void:
 	var raw = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v5.save"))
 	var up := SaveFormat.upgrade(raw)
 	check(up.data.state.maps.village.sites.filter(func(x): return x.tpl == "house" and x.done).all(func(x): return x.stage == 4), "older saves' finished houses get a finished bed")
+
+
+## Issue #345: a resident with nothing to do walks back to their own house and waits there; Ada, with no house, stays put.
+func test_idle_residents_go_home() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var house := sim.place_site("house", sim.nearest_walkable(Sim.rcell(ada) + Vector2i(8, 0)))
+	house.stage = 4
+	house.done = true
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-6, 6)))
+	house.owner = tomas.id
+	tomas.hunger = 100.0
+	ada.hunger = 100.0
+	sim.zone.clear()
+	for t in sim.trees:
+		t.des = false
+	check(Goals.current(sim) >= 0, "the founding is under way")
+	run(sim, Tuning.IDLE_HOME_AFTER + 30.0)
+	var fh := home_gap(sim, tomas, house)
+	check(fh > Tuning.HOME_NEAR, "nobody goes home during the founding (%d cells off)" % fh)
+	_finish_founding(sim)
+	check(Goals.current(sim) < 0, "every founding step is done")
+	sim._idle_ticks.clear()  # a fresh idle spell
+	tomas.job = null
+	var away := home_gap(sim, tomas, house)
+	run(sim, Tuning.IDLE_HOME_AFTER - 2.0)
+	check(Sim.rcell(tomas) == sim.nearest_walkable(Sim.rcell(tomas)) and home_gap(sim, tomas, house) >= away - 1, "they don't go the moment there's no work")
+	var labels: Array = []
+	for i in int(40 * Tuning.TPS):
+		sim.step()
+		if tomas.job != null and not labels.has(tomas.job.label):
+			labels.append(tomas.job.label)
+	check(labels.has("Heading home") and home_gap(sim, tomas, house) <= Tuning.HOME_NEAR + 1, "after a while Tomas walks home (%s, %d cells off)" % [labels, home_gap(sim, tomas, house)])
+	check(not labels.has("Heading home") or tomas.job == null, "and waits there")
+	var start := Sim.rcell(ada)
+	run(sim, Tuning.IDLE_HOME_AFTER + 10.0)
+	check(ada.job == null or ada.job.kind != "home", "Ada, with no house, isn't sent anywhere")
+	# New work takes a resident who's waiting at home: a loose stack to haul to a stockpile.
+	ada.arriving = true  # Ada takes no work, so it's Tomas's
+	var yard: Vector2i = sim.nearest_walkable(Sim.rcell(tomas) + Vector2i(3, 3))
+	sim.paint_zone(Rect2i(yard, Vector2i(2, 2)))
+	sim.drop_items(sim.nearest_walkable(Sim.rcell(tomas) + Vector2i(-3, -3)), "log", 3)
+	var kinds: Array = []
+	for i in 3 * Tuning.TPS:
+		sim.step()
+		if tomas.job != null and not kinds.has(tomas.job.kind):
+			kinds.append(tomas.job.kind)
+	check(kinds.has("haul") and not kinds.has("home"), "and new work takes them from there (%s)" % [kinds])
+	# And work that turns up on the way takes them off the walk.
+	tomas.arriving = true  # Tomas takes no more work either
+	var tomas2 := sim.add_resident("Mira", Sim.TRAVELERS[1][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-8, 8)))
+	var house2 := sim.place_site("house", sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-8, -8)))
+	house2.stage = 4
+	house2.done = true
+	house2.owner = tomas2.id
+	var walked := false
+	for i in int(40 * Tuning.TPS):
+		sim.step()
+		if tomas2.job != null and tomas2.job.kind == "home":
+			walked = true
+			break
+	check(walked, "Mira sets off for home")
+	sim.drop_items(sim.nearest_walkable(Sim.rcell(tomas2) + Vector2i(2, 0)), "log", 3)
+	var left := false
+	for i in 3 * Tuning.TPS:
+		sim.step()
+		if tomas2.job != null and tomas2.job.kind == "haul":
+			left = true
+			break
+	check(left, "and a stack to haul turns her off the walk")
+
+
+## Every founding goal done, as game_test.gd does it, so the village chapter is on.
+static func _finish_founding(sim: Sim) -> void:
+	sim.stats.felled = 1
+	sim.stats.pick_crafted = true
+	sim.stats.axe_crafted = true
+	sim.stats.meadow_wool = true
+	sim.stats.built = {"bench": true, "fireplace": true, "board": true, "chopping_block": true}
+	sim.stats.broken_boulders = 1
+	sim.stats.sheep_hunted = 1
+	sim.stats.houses = 2
+	sim.stats.traveler_home = true
+	sim.stats.division = true
+	sim.zone[sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(2, 2))] = true
+	var bench := sim.place_site("bench", sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(4, -3)))
+	bench.stage = 1
+	bench.done = true
+
+
+static func home_gap(sim: Sim, r: Dictionary, house: Dictionary) -> int:
+	var near := 1 << 30
+	for hc in sim.site_cells(house):
+		near = mini(near, absi(hc.x - Sim.rcell(r).x) + absi(hc.y - Sim.rcell(r).y))
+	return near
+
+
+## Issue #351: hundreds of loose stacks no longer make every idle resident's search walk them all each tick. The tick
+## with 600 stacks lying about may cost a few times the empty one (it was nearly ten), not more.
+func test_many_loose_items_tick_cheaply() -> void:
+	var times := []
+	for n in [0, 600]:
+		var sim := Sim.new_game()
+		var c := Sim.rcell(sim.residents[0])
+		var types := ["log", "cobble", "stick", "plank", "berries", "wheat"]
+		var placed := 0
+		var d := 3
+		while placed < n and d < 30:
+			for dx in range(-d, d + 1):
+				for dy in range(-d, d + 1):
+					var p := c + Vector2i(dx, dy)
+					if placed < n and sim.walkable(p) and not sim.items.has(p):
+						sim.drop_items(p, types[placed % types.size()], 3)
+						placed += 1
+			d += 1
+		var t0 := Time.get_ticks_usec()
+		for i in 400:
+			sim.step()
+		times.append(float(Time.get_ticks_usec() - t0))
+	check(times[1] < times[0] * 6.0, "600 loose stacks cost %.1f times the empty tick (%.0f ms against %.0f ms)" % [times[1] / times[0], times[1] / 1000.0, times[0] / 1000.0])
+
+
+## Issue #348: a page that unlocks is new until the player opens it; an older save counts every page it knows as seen.
+func test_guide_new_marks() -> void:
+	var sim := Sim.new_game()
+	check(Goals.new_pages(sim).is_empty(), "a new game's opening pages aren't new")
+	check(Goals.guide_rows(sim).size() == Goals.PAGES.size() and Goals.guide_rows(sim)[0].title < Goals.guide_rows(sim)[1].title, "the Guide lists every page, in alphabetical order")
+	check(Goals.PAGES.all(func(p): return p.get("unlock", "") == "" or p.get("clue", "") != ""), "every page that unlocks has a clue")
+	sim.stats.houses = 1
+	check(Goals.new_pages(sim).map(func(p): return p.id) == ["board"], "a page that unlocks is new")
+	sim.see_page("pen")
+	check(Goals.new_pages(sim).size() == 1, "opening a locked page clears nothing")
+	sim.see_page("board")
+	check(Goals.new_pages(sim).is_empty(), "opening the page clears its mark")
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.stats.guide_seen.has("board"), "which is saved")
+	var d: Dictionary = SaveFormat.read("res://tests/fixtures/save_v62.save").data.state.duplicate(true)
+	d.stats.erase("guide_seen")
+	var old := Sim.from_state(d)
+	check(Goals.new_pages(old).is_empty() and old.stats.guide_seen.has("bench"), "an older save counts every page it knows as seen")
+
+
+## Issue #344: a marked berry bush is dug up by hand and its berries carried off; unmarking it stops the work.
+func test_dig_up_bushes() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var bush: Dictionary = Sim.nearest(sim.bushes, Sim.rcell(ada))
+	var count := sim.bushes.size()
+	sim.designate_bush(bush)
+	check(bush.des, "a bush can be marked")
+	sim.designate_bush(bush)
+	check(not bush.des, "and unmarked by marking it again")
+	sim.designate_bush(bush)
+	var saw := false
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if ada.job != null and ada.job.label == "Digging up a bush":
+			saw = true
+		if sim.bushes.size() < count:
+			break
+	check(saw and sim.bushes.size() == count - 1 and not sim.bushes.any(func(b): return is_same(b, bush)), "Ada digs it up by hand (%d bushes left)" % sim.bushes.size())
+	var berries := 0
+	for k in sim.items:
+		if sim.items[k].type == "berries":
+			berries += sim.items[k].n
+	check(berries == Tuning.BUSH_MAX, "and its berries are left on the ground to be carried off (%d)" % berries)
+	# Unmarking while someone is on the way stops them.
+	var other: Dictionary = Sim.nearest(sim.bushes, Sim.rcell(ada))
+	sim.designate_bush(other)
+	for i in 5:
+		sim.step()
+	sim.designate_bush(other)
+	run(sim, 20)
+	check(sim.bushes.any(func(b): return is_same(b, other)) and other.claim == 0, "an unmarked bush is left alone")
 
 
 ## Issue #44: hunger drops, residents eat before they starve, and starving ones stop and recover.
@@ -2937,6 +3115,10 @@ func test_repeat_the_last_trip() -> void:
 	check(loaded.last_plans.has(Meadow.ID) and loaded.last_plans[Meadow.ID].meals == 5, "the last trips are saved")
 	var f61 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v61.save").data.state)
 	check(f61.last_plans.has("meadow") and f61.last_plans.meadow.meals == 5, "the v61 fixture keeps its last trip")
+	var f63 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v63.save").data.state)
+	check(f63.stats.has("guide_seen") and not f63.stats.guide_seen.is_empty(), "the v63 fixture knows which pages were seen")
+	var f62 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v62.save").data.state)
+	check(f62.bushes.all(func(b): return b.has("des") and b.claim == 0), "the v62 fixture's bushes can be marked")
 	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v60.save").data.state)
 	check(old.last_plans.is_empty(), "an older save has none")
 

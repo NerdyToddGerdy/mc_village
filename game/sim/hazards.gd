@@ -128,7 +128,7 @@ static func _arm_job(sim: Sim, r: Dictionary, c: Vector2i):
 static func _dress_job(sim: Sim, r: Dictionary, c: Vector2i):
 	if sim.map_id != "village":
 		return null
-	var pieces := sim.stacks_where(func(s): return Defs.is_armor(s.type) and Sim.avail(s) > 0 and r.get("armor", {}).get(Defs.ITEMS[s.type].armor) == null)
+	var pieces := sim.stacks_cached("armor", func(s): return Defs.is_armor(s.type)).filter(func(s): return Sim.avail(s) > 0 and r.get("armor", {}).get(Defs.ITEMS[s.type].armor) == null)
 	if pieces.is_empty():
 		return null
 	return _dress(sim, r, Sim.nearest(pieces, c))

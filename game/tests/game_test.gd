@@ -272,7 +272,8 @@ func _test_needs_you(game: Game) -> void:
 	var sim := game.sim
 	var hud: Hud = game._hud
 	game.set_speed(0)  # a tick would recompute the stuck list over the entries made here
-	game.planner_open = false  # the stuck list gives way to an open planner
+	game.planner_open = false
+	hud.stuck_open = true  # the list opens under its tab
 	game.open_book("goals", false)
 	var kept: Array = sim.stuck.duplicate(true)
 	var entry := func(who: String, why: String, waiting: bool, decision: String) -> Dictionary:
@@ -284,7 +285,7 @@ func _test_needs_you(game: Game) -> void:
 	var all := _walk(hud._stuck).filter(func(n): return not n.is_queued_for_deletion())
 	var heads: Array = all.filter(func(n): return n is Label and n.text.begins_with("Needs you")).map(func(n): return n.text)
 	check(heads == ["Needs you (1)"], "a \"Needs you\" heading counts the choices (%s)" % [heads])
-	var stuck_head: Array = all.filter(func(n): return n is Button and n.text.begins_with("Stuck ("))
+	var stuck_head: Array = all.filter(func(n): return n is Label and n.text.begins_with("Stuck ("))
 	check(stuck_head.size() == 1 and "(1)" in stuck_head[0].text, "the Stuck count has only the real problem")
 	var approve: Array = all.filter(func(n): return n is Button and n.get_meta("label", "") == "Needs you: Approve departure")
 	var decline: Array = all.filter(func(n): return n is Button and n.get_meta("label", "") == "Needs you: Decline")
@@ -294,7 +295,7 @@ func _test_needs_you(game: Game) -> void:
 	for i in all.size():
 		if pos_need < 0 and all[i] is Label and all[i].text.begins_with("Needs you"):
 			pos_need = i
-		if pos_stuck < 0 and all[i] is Button and all[i].text.begins_with("Stuck ("):
+		if pos_stuck < 0 and all[i] is Label and all[i].text.begins_with("Stuck ("):
 			pos_stuck = i
 	check(pos_need >= 0 and pos_need < pos_stuck, "and it comes first")
 	sim.stuck = [entry.call("Freight cart", "waiting for approval", true, "freight")]
@@ -461,7 +462,7 @@ func _test_toasts(game: Game) -> void:
 			continue
 		var r := (p as Control).get_global_rect()
 		inside = inside and view.encloses(r)
-		for other in [hud._tally_panel, hud._goals_panel, hud._stuck_panel]:
+		for other in [hud._tally_panel, hud._goals_tab, hud._stuck_tab, hud._party_panel]:
 			if (other as Control).visible and r.intersects((other as Control).get_global_rect()):
 				clear = false
 				overlaps.append("%s %s over %s %s" % [p.name, r, (other as Control).name, (other as Control).get_global_rect()])
@@ -480,6 +481,37 @@ func _test_toasts(game: Game) -> void:
 		await process_frame
 	check(hud._tally_panel.z_index > hud._book_panel.z_index, "the top bar, with the gear, draws above the book (#316)")
 	game.jobs_board_open = false
+
+
+## Issue #343: a rebuilt panel is never double height for a frame, and with nothing selected a changing stuck reason doesn't rebuild the box.
+func _test_rebuild_height(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	game.set_speed(0)
+	game.selection = {"kind": "res", "ids": [sim.residents[0].id]}
+	hud.refresh(sim)
+	await process_frame
+	var before := hud._sel.get_child_count()
+	var scroll_h := hud._sel_scroll.custom_minimum_size.y
+	hud._sigs.erase(hud._sel.get_instance_id())  # force the rebuild
+	hud.refresh(sim)
+	var at_once := hud._sel.get_child_count()
+	await process_frame
+	check(before == at_once and at_once == hud._sel.get_child_count(), "a rebuild takes the old children out at once, so the panel never holds both (%d, %d, %d)" % [before, at_once, hud._sel.get_child_count()])
+	check(is_equal_approx(scroll_h, hud._sel_scroll.custom_minimum_size.y), "and the selection panel keeps its height")
+	game.selection = {}
+	hud.refresh(sim)
+	await process_frame
+	var kept: Array = sim.stuck.duplicate(true)
+	var entry := {"who": "House", "why": "Walls need 4 more planks", "map": "village", "cell": Vector2(5, 5), "height": 1.0, "focus_kind": "", "focus_id": 0, "hidden": false, "waiting": false, "decision": "", "key": "a", "since": 0}
+	sim.stuck = [entry]
+	hud.refresh(sim)
+	var sig_before: String = hud._sigs.get(hud._sel.get_instance_id(), "")
+	sim.stuck = [entry.merged({"why": "Walls need 3 more planks"})]
+	hud.refresh(sim)
+	check(hud._sigs.get(hud._sel.get_instance_id(), "") == sig_before, "with nothing selected a changing stuck reason doesn't rebuild the box")
+	sim.stuck = kept
+	hud.refresh(sim)
 
 
 ## Issue #234: a finished building's panel has a Move button; it picks the building up, and a click puts it down at once.
@@ -1652,6 +1684,12 @@ func _test_stuck_list(game: Game) -> void:
 	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "cobble", 3)
 	for i in Tuning.TPS:
 		sim.step()
+	hud.stuck_open = false
+	hud.refresh(sim)
+	await _frames()
+	check(hud._stuck_tab.visible and hud._stuck_tab.text == "Stuck" and not hud._stuck_panel.visible, "the Stuck tab is always there, and the list waits to be opened")
+	check(hud._stuck_tab.get_global_rect().position.y >= hud._tally_panel.get_global_rect().end.y - 1.0, "the tab hangs below the top bar")
+	hud._stuck_tab.pressed.emit()
 	hud.refresh(sim)
 	await _frames()
 	var texts: Array = _stuck_buttons(hud).map(func(b): return b.text)
@@ -1679,23 +1717,27 @@ func _test_stuck_list(game: Game) -> void:
 	sim.compute_stuck()
 	hud.refresh(sim)
 	await _frames()
-	var heads: Array = _stuck_buttons(hud).filter(func(b): return b.text.begins_with("Stuck (1)"))
-	check(heads.size() == 1, "a blocker brings the Stuck header")
+	var heads: Array = _walk(hud._stuck).filter(func(n): return n is Label and n.text.begins_with("Stuck (1)") and not n.is_queued_for_deletion())
+	check(heads.size() == 1 and hud._stuck_tab.text == "Stuck  1", "a blocker brings the Stuck header and a count on the tab")
 	check(_stuck_buttons(hud).any(func(b): return "Walls need" in b.text and b.icon == MarkTextures.flag()), "a blocker's entry carries the yellow flag")
 	check(world._flags.get_child_count() == 1, "and one flag on the map")
-	heads[0].pressed.emit()
+	hud._stuck_tab.pressed.emit()
 	hud.refresh(sim)
 	await _frames()
-	check(not hud.stuck_open and _stuck_buttons(hud).size() == 1 and hud._stuck_panel.get_global_rect().size.x < 250, "the header folds the list into a small chip")
+	check(not hud.stuck_open and not hud._stuck_panel.visible and hud._stuck_tab.visible, "the tab closes the list and stays")
 	sim.compute_stuck()
 	hud.refresh(sim)
 	await _frames()
-	check(not hud.stuck_open, "it stays folded while nothing new gets stuck")
+	check(not hud.stuck_open, "it stays closed while nothing new gets stuck")
 	ada.note = {"text": "Can’t reach the stockpile", "until": sim.tick + 1000}
 	sim.compute_stuck()
 	hud.refresh(sim)
 	await _frames()
-	check(hud.stuck_open, "a new blocker opens it again")
+	check(not hud.stuck_open and hud._stuck_tab.text == "Stuck  2", "a new blocker never opens it, but the tab counts it")
+	hud._stuck_tab.pressed.emit()
+	hud.refresh(sim)
+	await _frames()
+	check(hud.stuck_open, "the tab opens it again")
 	var starving: Array = _stuck_buttons(hud).filter(func(b): return "Can’t reach" in b.text)
 	check(starving.size() == 1 and starving[0].icon == hud._swatch_tex(ada.shirt), "a resident's entry carries their tunic swatch")
 	# A site's entry made later goes below Ada's, though the sim lists sites before residents.
@@ -1758,7 +1800,12 @@ func _test_after_the_founding(game: Game) -> void:
 	var hud: Hud = game._hud
 	hud.refresh(sim)
 	await _frames()
-	check(_walk(hud._goals).any(func(n): return n is Label and n.text == "The founding"), "during the founding the goals panel shows the checklist")
+	check(hud._goals_tab.visible and hud._goals_tab.text.begins_with("The founding  ·  ") and not hud._goals_panel.visible, "the tutorial's tab shows the chapter and the step, and its details wait to be opened")
+	hud._goals_tab.pressed.emit()
+	hud.refresh(sim)
+	await _frames()
+	check(hud._goals_panel.visible and hud._goals_panel.get_global_rect().position.y >= hud._goals_tab.get_global_rect().end.y, "clicking it drops the details down under it")
+	check(_walk(hud._goals).any(func(n): return n is Label and n.text == "The founding"), "during the founding the details show the checklist")
 	var saved := sim.stats.duplicate(true)
 	sim.stats.felled = 1
 	sim.stats.pick_crafted = true
@@ -1777,6 +1824,7 @@ func _test_after_the_founding(game: Game) -> void:
 	check(Goals.current(sim) < 0, "every founding step is done")
 	hud.refresh(sim)
 	await _frames()
+	check(hud._goals_tab.text.begins_with("The village  ·  1  Paint a farm plot"), "the tab moves on to the village chapter")
 	var labels: Array = _walk(hud._goals).filter(func(n): return n is Label and not n.is_queued_for_deletion()).map(func(l): return l.text)
 	check(labels.size() == 5 and labels[0] == "The village" and labels[2] == "1  Paint a farm plot", "the village chapter follows the founding, with a why (%s)" % [labels])
 	# The book opens from the panel's Book button, shows a building's page, and the "?" on a bench opens it (issue #198).
@@ -1787,8 +1835,30 @@ func _test_after_the_founding(game: Game) -> void:
 	await _frames()
 	check(game.book_open and hud._book_panel.visible and not hud._goals_panel.visible, "it opens the book in the goals panel's place")
 	var tabs: Array = _walk(hud._book).filter(func(n): return n is Button and not n.is_queued_for_deletion()).map(func(b): return b.text)
-	check("Goals" in tabs and "Crafting bench" in tabs and "Fireplace" in tabs and "Expedition board" in tabs, "with a page for each building known (%s)" % [tabs])
-	check(not "The road" in tabs, "and none for the road before a party has been to the mine")
+	check(tabs.filter(func(t): return t.begins_with("Goals") or t.begins_with("Jobs") or t.begins_with("Residents") or t.begins_with("Guide")).size() == 4 and not "Crafting bench" in tabs, "the book's tab row is Goals, Jobs, Residents and Guide (%s)" % [tabs])
+	game.open_book("guide")
+	hud.refresh(sim)
+	await _frames()
+	var rows: Array = _walk(hud._book).filter(func(n): return n is Button and not n.is_queued_for_deletion()).map(func(b): return b.text.replace("  new", ""))
+	check("Crafting bench" in rows and "Fireplace" in rows and "Expedition board" in rows, "the Guide lists a page for each building known (%s)" % [rows])
+	check(not "The road" in rows and rows.has("???"), "and the road's page, not yet unlocked, shows as ???")
+	var alpha: Array = rows.filter(func(t): return t != "???" and t != "Close" and not t in ["Goals", "Jobs", "Residents", "Guide"])
+	var sorted_alpha := alpha.duplicate()
+	sorted_alpha.sort_custom(func(a, b): return a.to_lower() < b.to_lower())
+	check(alpha == sorted_alpha, "the known pages are in alphabetical order")
+	game.select_guide("road")
+	hud.refresh(sim)
+	await _frames()
+	var shown: Array = _walk(hud._book).filter(func(n): return n is Label and not n.is_queued_for_deletion()).map(func(l): return l.text)
+	check("???" in shown and shown.any(func(t): return t.begins_with("Something an expedition")), "a locked page shows its clue (%s)" % [shown])
+	Goals.seed_seen(sim)  # what this test has unlocked so far counts as seen
+	sim.stats.guide_seen.erase("bench")
+	hud.refresh(sim)
+	await _frames()
+	var guide_tab: Array = _walk(hud._book).filter(func(n): return n is Button and n.text.begins_with("Guide") and not n.is_queued_for_deletion())
+	check(guide_tab[0].text.ends_with("new") and Goals.new_pages(sim).size() == 1, "an unseen page marks the Guide tab and its row new")
+	game.select_guide("bench")
+	check(Goals.new_pages(sim).is_empty(), "choosing it clears the mark")
 	game.open_book("bench")
 	hud.refresh(sim)
 	await _frames()
@@ -1801,7 +1871,7 @@ func _test_after_the_founding(game: Game) -> void:
 	var about: Array = _walk(hud._sel).filter(func(n): return n is Button and n.text.begins_with("?") and not n.is_queued_for_deletion())
 	check(about.size() == 1, "a selected bench has a ? button")
 	about[0].pressed.emit()
-	check(game.book_open and game.book_page == "bench", "it opens the bench's page")
+	check(game.book_open and game.book_page == "guide" and game.guide_page == "bench", "it opens the bench's page in the Guide")
 	game.open_book("goals", false)
 	game.selection = {}
 	# Chapter two done: the chip.
@@ -1820,8 +1890,10 @@ func _test_after_the_founding(game: Game) -> void:
 	check(Goals.village_current(sim) < 0, "every village step is done")
 	hud.refresh(sim)
 	await _frames()
-	labels = _walk(hud._goals).filter(func(n): return n is Button and not n.is_queued_for_deletion()).map(func(l): return l.text)
-	check(labels == ["The village  √"] and hud._goals_panel.get_global_rect().size.x < 200, "afterwards it folds to a small chip that opens the book (%s)" % [labels])
+	check(hud._goals_tab.text == "The village  √" and not hud._goals_panel.visible, "afterwards the tab reads \"The village √\" and drops nothing down")
+	hud._goals_tab.pressed.emit()
+	check(game.book_open, "it opens the book instead")
+	game.open_book("goals", false)
 	check(Goals.progress_text(sim) == Goals.village_text(sim) and Goals.village_text(sim).begins_with("%d resident" % sim.residents.size()), "the save label is the village's facts: %s" % Goals.progress_text(sim))
 	check(game.save_slot(3) == "" and game.read_slots()[2].summary == Goals.village_text(sim), "a new save carries that label")
 	var old: Dictionary = SaveFormat.read(game._slot_path(3)).data
@@ -2046,6 +2118,7 @@ func _initialize() -> void:
 
 	await _test_repeat_button(game)
 	await _test_needs_you(game)
+	await _test_rebuild_height(game)
 	await _test_autosave(game)
 	_test_glyphs()
 	_test_tallies(game)
