@@ -33,6 +33,7 @@ var _person_mats := {}
 
 ## Set by the game each frame.
 var live_outlines: Array = []   ## {rect: Rect2i, h: float, color: Color, dashed: bool}
+var fade_all := false           ## Every tree is see-through while the player holds the key (issue #304).
 var live_fills: Array = []      ## {rect: Rect2i, h: float, color: Color}
 var selected_ids: Array = []    ## Resident ids with a selection ring.
 var hover_id := 0               ## The resident under the mouse, who shows a name tag; 0 for none.
@@ -1369,6 +1370,8 @@ static func _tree_boxes(c: Vector2i, stage := 2) -> Array:
 
 ## True when the tree stands between the camera and one of the focus points.
 func _tree_occludes(t: Dictionary) -> bool:
+	if fade_all:
+		return true
 	for f in focus_points:
 		if f[1] == t.id:
 			continue

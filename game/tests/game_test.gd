@@ -514,6 +514,24 @@ func _test_rebuild_height(game: Game) -> void:
 	hud.refresh(sim)
 
 
+## Issue #304: jumping to something blinks over it, and a held key sees through every tree.
+func _test_find_things(game: Game) -> void:
+	var sim := game.sim
+	var ada: Dictionary = sim.residents[0]
+	game.set_speed(0)
+	game.tool = ""
+	game.focus_on("res", ada.id)
+	game._update_live_overlays()
+	check(game._flash_rect == Rect2i(Sim.rcell(ada), Vector2i.ONE) and Time.get_ticks_msec() < game._flash_until, "going to a resident flashes their cell")
+	check(game._world.live_outlines.any(func(o): return o.color == Palette.YELLOW), "as a yellow outline drawn over everything")
+	var tree: Dictionary = Sim.nearest(sim.trees.filter(func(t): return t.alive), Sim.rcell(ada))
+	game._world.fade_all = false
+	game._world.fade_all = true
+	check(game._world._tree_occludes(tree), "while the see-through key is held every tree is see-through")
+	game._world.fade_all = false
+	check(KeyBindings.ACTIONS.any(func(a): return a[0] == "see_through"), "and the key can be rebound")
+
+
 ## Issue #234: a finished building's panel has a Move button; it picks the building up, and a click puts it down at once.
 func _test_move_building(game: Game) -> void:
 	var sim := game.sim
@@ -2119,6 +2137,7 @@ func _initialize() -> void:
 	await _test_repeat_button(game)
 	await _test_needs_you(game)
 	await _test_rebuild_height(game)
+	await _test_find_things(game)
 	await _test_autosave(game)
 	_test_glyphs()
 	_test_tallies(game)

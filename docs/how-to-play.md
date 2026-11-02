@@ -408,7 +408,8 @@ Every key can be changed on the menu's **Controls** page. Esc and the mouse can'
 | Right-click the ground | Walk the selected residents there |
 | Shift + right-click | Queue an order after their current one, skipping the ring |
 | J | Village book, on its Jobs page |
-| F / N | Next resident, next stuck item |
+| F / N | Next resident, next stuck item. The camera goes there and the spot blinks yellow for a moment, over any trees |
+| Y, held | See through every tree |
 | Tab | Switch between the village, the old caves (and its levels), the road to it and the meadow, once they're known |
 | Drag, W A S D, arrow keys | Pan |
 | Mouse wheel, + / − | Zoom |
