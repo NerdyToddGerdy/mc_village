@@ -25,6 +25,7 @@ func _init() -> void:
 		"test_hunting_sheep",
 		"test_beds_and_free_bed_arrivals",
 		"test_hunger_and_eating",
+		"test_dig_up_bushes",
 		"test_farm_plant_grow_harvest",
 		"test_farm_plots_need_open_grass",
 		"test_the_farm_stops_at_its_target",
@@ -899,6 +900,40 @@ func test_beds_and_free_bed_arrivals() -> void:
 	var raw = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v5.save"))
 	var up := SaveFormat.upgrade(raw)
 	check(up.data.state.maps.village.sites.filter(func(x): return x.tpl == "house" and x.done).all(func(x): return x.stage == 4), "older saves' finished houses get a finished bed")
+
+
+## Issue #344: a marked berry bush is dug up by hand and its berries carried off; unmarking it stops the work.
+func test_dig_up_bushes() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var bush: Dictionary = Sim.nearest(sim.bushes, Sim.rcell(ada))
+	var count := sim.bushes.size()
+	sim.designate_bush(bush)
+	check(bush.des, "a bush can be marked")
+	sim.designate_bush(bush)
+	check(not bush.des, "and unmarked by marking it again")
+	sim.designate_bush(bush)
+	var saw := false
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if ada.job != null and ada.job.label == "Digging up a bush":
+			saw = true
+		if sim.bushes.size() < count:
+			break
+	check(saw and sim.bushes.size() == count - 1 and not sim.bushes.any(func(b): return is_same(b, bush)), "Ada digs it up by hand (%d bushes left)" % sim.bushes.size())
+	var berries := 0
+	for k in sim.items:
+		if sim.items[k].type == "berries":
+			berries += sim.items[k].n
+	check(berries == Tuning.BUSH_MAX, "and its berries are left on the ground to be carried off (%d)" % berries)
+	# Unmarking while someone is on the way stops them.
+	var other: Dictionary = Sim.nearest(sim.bushes, Sim.rcell(ada))
+	sim.designate_bush(other)
+	for i in 5:
+		sim.step()
+	sim.designate_bush(other)
+	run(sim, 20)
+	check(sim.bushes.any(func(b): return is_same(b, other)) and other.claim == 0, "an unmarked bush is left alone")
 
 
 ## Issue #44: hunger drops, residents eat before they starve, and starving ones stop and recover.
@@ -2937,6 +2972,8 @@ func test_repeat_the_last_trip() -> void:
 	check(loaded.last_plans.has(Meadow.ID) and loaded.last_plans[Meadow.ID].meals == 5, "the last trips are saved")
 	var f61 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v61.save").data.state)
 	check(f61.last_plans.has("meadow") and f61.last_plans.meadow.meals == 5, "the v61 fixture keeps its last trip")
+	var f62 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v62.save").data.state)
+	check(f62.bushes.all(func(b): return b.has("des") and b.claim == 0), "the v62 fixture's bushes can be marked")
 	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v60.save").data.state)
 	check(old.last_plans.is_empty(), "an older save has none")
 

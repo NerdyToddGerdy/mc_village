@@ -1470,6 +1470,9 @@ func _build_marks() -> void:
 	for b in sim.boulders:
 		if b.alive and b.des:
 			_sprite(MarkTextures.cross(), Vector3(b.cell.x + 0.5, 0.7, b.cell.y + 0.5), 0.7, _marks)
+	for bu in sim.bushes:
+		if bu.des:
+			_sprite(MarkTextures.slash(), Vector3(bu.cell.x + 0.5, 0.9, bu.cell.y + 0.5), 0.6, _marks)
 	for o in sim.trees + sim.boulders:  # kept from gatherers' own work (issue #177)
 		if o.alive and o.get("keep", false) and not o.des:
 			_sprite(MarkTextures.keep(), Vector3(o.cell.x + 0.5, 1.6 if o.kind == "tree" else 0.7, o.cell.y + 0.5), 0.6, _marks)

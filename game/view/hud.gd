@@ -2042,6 +2042,9 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 		"bush":
 			c.add_child(_head("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX]))
 			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, Palette.BODY, true))
+			var dig := _button("Cancel digging" if target.des else "Dig up", func(): game.toggle_dig_bush(target), "Secondary" if target.des else "Primary")
+			dig.tooltip_text = "A resident digs the bush up and carries its berries off. Berries are early food, so it's gone for good."
+			c.add_child(dig)
 		"meadow":  # the signpost to the meadow (issues #136, #137)
 			_fill_signpost(c, sim, Meadow.ID)
 		"route":

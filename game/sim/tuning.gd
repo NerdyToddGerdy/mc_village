@@ -35,6 +35,7 @@ const EAT_TIME := 1.5                   ## Seconds to eat one food item or berry
 const FOOD_VALUE := {"berries": 15.0, "mutton": 20.0, "bread": 50.0, "cooked_mutton": 60.0,
 	"beef": 20.0, "porkchop": 20.0, "cooked_beef": 60.0, "cooked_porkchop": 60.0}
 const BUSH_MAX := 3                     ## Berries a bush holds.
+const BUSH_DIG_TIME := 3.0               ## Seconds to dig up a marked berry bush.
 const BUSH_REGROW := 45.0               ## Seconds for a bush to grow one berry back.
 # Farms (issue #45).
 const PLANT_TIME := 2.0                 ## Seconds to plant one farm cell (no seeds needed).

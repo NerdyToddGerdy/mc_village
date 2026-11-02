@@ -1653,6 +1653,11 @@ func toggle_mine(target: Dictionary) -> void:
 	_in_view(func(): sim.designate_mine(Rect2i(target.cell, Vector2i.ONE), target))
 
 
+## Marks a berry bush to be dug up, or unmarks it (issue #344).
+func toggle_dig_bush(target: Dictionary) -> void:
+	_in_view(func(): sim.designate_bush(target))
+
+
 ## Marks a tree or boulder Keep, or unmarks it (issue #177).
 func toggle_keep(target: Dictionary) -> void:
 	_in_view(func(): sim.designate_keep(Rect2i(target.cell, Vector2i.ONE), target))

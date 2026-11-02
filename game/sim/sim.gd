@@ -283,7 +283,7 @@ func _add_site_maps() -> void:
 
 
 func add_bush(cell: Vector2i) -> Dictionary:
-	var b := {"id": _id(), "kind": "bush", "cell": cell, "berries": Tuning.BUSH_MAX, "regrow": 0.0}
+	var b := {"id": _id(), "kind": "bush", "cell": cell, "berries": Tuning.BUSH_MAX, "regrow": 0.0, "des": false, "claim": 0}
 	m.bushes.append(b)
 	return b
 
@@ -1938,6 +1938,30 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 	return j
 
 
+## Marks a berry bush to be dug up, or unmarks it (issue #344). The claimant stops if it's unmarked.
+func designate_bush(b: Dictionary) -> void:
+	if not m.bushes.any(func(o): return is_same(o, b)):
+		return
+	b.des = not b.des
+	if not b.des and b.claim != 0:
+		var r := resident(b.claim)
+		if not r.is_empty() and r.job != null and is_same(r.job.target, b):
+			fail_job(r)
+	rev += 1
+
+
+## A resident digs up a marked bush by hand and carries off the berries on it (issue #344).
+func _dig_bush_job(r: Dictionary, bush: Dictionary) -> Job:
+	var j := Job.new("gather", "Going to dig up a bush", "this bush")
+	j.work = "lumber"
+	j.target = bush
+	bush.claim = r.id
+	j.hold({"t": "claim", "ent": bush})
+	j.step(_goto([bush.cell], true))
+	j.step({"op": "work", "what": "dig_bush", "target": bush, "label": "Digging up a bush"})
+	return j
+
+
 ## Food lying around or stockpiled, nearest first: {kind:"stack", stack} or {kind:"bush", bush}, or {}.
 func _nearest_food(c: Vector2i) -> Dictionary:
 	var best := {}
@@ -2862,6 +2886,8 @@ func _work_time(r: Dictionary, st: Dictionary) -> float:
 			return Tuning.SHELTER_BUILD_TIME
 		"hunt":
 			return Tuning.HUNT_TIME
+		"dig_bush":
+			return Tuning.BUSH_DIG_TIME
 		"plant":
 			return Tuning.PLANT_TIME
 		"plant_tree":
@@ -3020,6 +3046,15 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				return "gone"
 			r.hunger = minf(100.0, r.hunger + Tuning.FOOD_VALUE.get(r.carry.type, 0.0))
 			r.carry = null
+		"dig_bush":
+			var dug: Dictionary = st.target
+			if not m.bushes.any(func(o): return is_same(o, dug)):
+				return "gone"
+			if dug.berries > 0:
+				drop_items(dug.cell, "berries", dug.berries)
+			m.bushes = m.bushes.filter(func(o): return not is_same(o, dug))
+			_occ_dirty = true
+			rev += 1
 		"graze":
 			var bush: Dictionary = st.target
 			if bush.berries <= 0 or not m.bushes.has(bush):
@@ -3262,6 +3297,9 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 			var targets: Array = []
 			var can_gather: bool = r.get("hurt", 0) == 0  # the injured can't chop or mine (issue #110)
 			if jobs.has("lumber") and can_gather:
+				for b in m.bushes:  # a bush marked to be dug up (issue #344): by hand, no axe needed
+					if b.des and b.claim == 0:
+						targets.append(b)
 				if not r.broken.axe or not tool_items("axe", 0).is_empty():
 					for t in m.trees:
 						if t.alive and t.des and t.claim == 0 and not _cooling(t):
@@ -3277,6 +3315,8 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 						targets.append(sh)
 			if not targets.is_empty():
 				var t: Dictionary = nearest(targets, c)
+				if t.kind == "bush":
+					return _dig_bush_job(r, t)
 				return _tagged(_hunt_job(r, t), "hunt") if t.kind == "animal" else _gather_job(r, t)
 			var rj = _road_claim(r, "gather", jobs)
 			if rj != null:
