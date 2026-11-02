@@ -456,6 +456,7 @@ func _initialize() -> void:
 	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
 	await frames(2)
 	check(await click_button("Tutorial"), "the tutorial's tab names the village chapter's first step")
+	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
 	await frames(2)
 	check(visible_label("The village") and visible_label("1  Paint a farm plot") and not visible_label("Slice 1"), "its details drop down for the village chapter")
 	await click_button("Tutorial")  # and shut again
