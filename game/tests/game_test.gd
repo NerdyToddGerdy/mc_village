@@ -2133,6 +2133,7 @@ func _walk(n: Node) -> Array:
 
 func _initialize() -> void:
 	Night.enabled = false
+	Creatures.cave_mobs = false
 	var game: Game = load("res://scenes/main.tscn").instantiate()
 	game.keys_path = "user://test_settings/game_test_keys.cfg"
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.keys_path))

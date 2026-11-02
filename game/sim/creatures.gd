@@ -5,11 +5,86 @@ extends RefCounted
 
 ## Puts a creature of a species on a map, at a cell. Creatures live on one map and never leave it.
 static func spawn_creature(sim: Sim, id: String, species: String, cell: Vector2i) -> Dictionary:
-	var c := {"id": sim._id(), "kind": "creature", "species": species, "cell": cell, "pos": Vector2(cell), "alive": true,
-		"hp": Defs.CREATURES[species].hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0}
+	var c := make_creature(sim, species, cell)
 	sim.maps[id].creatures.append(c)
 	sim.rev += 1
 	return c
+
+
+static func make_creature(sim: Sim, species: String, cell: Vector2i) -> Dictionary:
+	return {"id": sim._id(), "kind": "creature", "species": species, "cell": cell, "pos": Vector2(cell), "alive": true,
+		"hp": Defs.CREATURES[species].hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0}
+
+
+# ---------------------------------------------------------------- the caves' creatures (issue #241)
+
+## Tests and the bots switch the caves' creatures off, so a trip down isn't broken into; their own tests switch them on.
+static var cave_mobs := true
+
+## Each biome's creature. Level 1 (the cave mouth) is safe: it teaches the first trip.
+const CAVE_SPECIES := {"dripstone": "slime", "flooded": "drowned", "deep": "husk"}
+
+
+static func cave_species(level: int) -> String:
+	return CAVE_SPECIES.get(MineLevels.biome(level), "")
+
+
+static func cave_target(level: int) -> int:
+	if cave_species(level) == "":
+		return 0
+	return mini(Tuning.CAVE_MOBS_MAX, Tuning.CAVE_MOBS_BASE + (level - 2) * Tuning.CAVE_MOBS_PER_LEVEL + 1)
+
+
+## Open floor well away from the way in, where a creature can stand.
+static func _cave_cells(m: SimMap) -> Array:
+	var blocked := {}
+	for b in m.boulders:
+		blocked[b.cell] = true
+	var out: Array = []
+	for x in m.w:
+		for y in m.h:
+			var c := Vector2i(x, y)
+			if m.rock.has(c) or m.water.has(c) or m.lava.has(c) or blocked.has(c) or c in m.ledges or Sim.manhattan(c, m.entrance) < 9:
+				continue
+			out.append(c)
+	return out
+
+
+## A new level starts with its biome's creatures, laid out by the game's seed so the same game meets the same ones.
+static func populate_cave(sim: Sim, m: SimMap) -> void:
+	var sp := cave_species(m.level)
+	if sp == "" or not cave_mobs:
+		return
+	var cells := _cave_cells(m)
+	if cells.is_empty():
+		return
+	var g := MineLevels._rng(sim.seed, 900 + m.level)
+	for i in cave_target(m.level):
+		var c: Vector2i = cells[g.randi_range(0, cells.size() - 1)]
+		if not m.creatures.any(func(o): return o.cell == c):
+			m.creatures.append(make_creature(sim, sp, c))
+
+
+## While nobody is down there a cleared level slowly fills again, one creature at a time.
+static func regrow_cave(sim: Sim) -> void:
+	var m: SimMap = sim.m
+	var sp := cave_species(m.level)
+	if sp == "" or not cave_mobs or sim.tick % Tuning.TPS != 0 or not sim.here().is_empty():
+		return
+	var alive := m.creatures.filter(func(x): return x.alive).size()
+	if alive >= cave_target(m.level):
+		m.regrow["mob"] = 0.0
+		return
+	m.regrow["mob"] = m.regrow.get("mob", 0.0) + 1.0
+	if m.regrow.mob < Tuning.CAVE_MOB_REGROW:
+		return
+	m.regrow["mob"] = 0.0
+	var cells := _cave_cells(m).filter(func(c): return not m.creatures.any(func(o): return o.alive and o.cell == c))
+	if cells.is_empty():
+		return
+	m.creatures = m.creatures.filter(func(x): return x.alive)
+	m.creatures.append(make_creature(sim, sp, cells[sim.rng.randi_range(0, cells.size() - 1)]))
+	sim.rev += 1
 
 
 ## Whether a creature is a danger to the party now: one that goes for people, or one that's been hit or has struck.
