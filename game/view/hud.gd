@@ -190,16 +190,19 @@ func _ready() -> void:
 	_job_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))  # opaque: it lies over other panels
 	_job_drop.visible = false
 	_job_drop.top_level = true
+	_job_drop.z_index = 3  # over the top bar (z 2), which they can reach
 	_loc_list.add_theme_constant_override("separation", 2)
 	_loc_drop = _panel(_loc_list, Vector2(330, 0), 6)
 	_loc_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))  # opaque: it lies over the planner
 	_loc_drop.visible = false
 	_loc_drop.top_level = true
+	_loc_drop.z_index = 3  # over the top bar (z 2), which they can reach
 	_maps_list.add_theme_constant_override("separation", 2)
 	_maps_drop = _panel(_maps_list, Vector2(200, 0), 6)
 	_maps_drop.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 6, Palette.SLATE_DEEP))
 	_maps_drop.visible = false
 	_maps_drop.top_level = true
+	_maps_drop.z_index = 3  # over the top bar (z 2), which they can reach
 	_goals_panel = _panel(_goals, Vector2(290, 0))
 	tl.add_child(_goals_panel)
 
@@ -3146,7 +3149,11 @@ func _refresh_planner_slot(sim: Sim) -> void:
 	for r in sim.residents:
 		sig += "%d%s%s%s%d%d%s%s;" % [r.id, sim.cant_join(r), sim.at_board(r), r.pick, int(r.hunger / 10), ceili(sim.back_in(r)), r.map, r.away]
 		sig += r.job.label if r.job != null else "Idle"
-	_rebuild(_plan_box, sig, func(c: Container) -> void: _fill_planner(c, sim))
+	_rebuild(_plan_box, sig, func(c: Container) -> void:
+		_fill_planner(c, sim)
+		if not sim.expedition.is_empty():  # the packing view is a single 400-wide column (the panel's width less its margins)
+			_pin_wrap(c, 400 - 24),
+		Callable(), "%s|%s|%s" % [sim.expedition.get("state", ""), dest, game.adventure])
 
 
 func _fill_planner(c: Container, sim: Sim) -> void:
