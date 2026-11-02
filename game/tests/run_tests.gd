@@ -26,6 +26,7 @@ func _init() -> void:
 		"test_beds_and_free_bed_arrivals",
 		"test_hunger_and_eating",
 		"test_dig_up_bushes",
+		"test_many_loose_items_tick_cheaply",
 		"test_idle_residents_go_home",
 		"test_farm_plant_grow_harvest",
 		"test_farm_plots_need_open_grass",
@@ -948,6 +949,31 @@ static func home_gap(sim: Sim, r: Dictionary, house: Dictionary) -> int:
 	for hc in sim.site_cells(house):
 		near = mini(near, absi(hc.x - Sim.rcell(r).x) + absi(hc.y - Sim.rcell(r).y))
 	return near
+
+
+## Issue #351: hundreds of loose stacks no longer make every idle resident's search walk them all each tick. The tick
+## with 600 stacks lying about may cost a few times the empty one (it was nearly ten), not more.
+func test_many_loose_items_tick_cheaply() -> void:
+	var times := []
+	for n in [0, 600]:
+		var sim := Sim.new_game()
+		var c := Sim.rcell(sim.residents[0])
+		var types := ["log", "cobble", "stick", "plank", "berries", "wheat"]
+		var placed := 0
+		var d := 3
+		while placed < n and d < 30:
+			for dx in range(-d, d + 1):
+				for dy in range(-d, d + 1):
+					var p := c + Vector2i(dx, dy)
+					if placed < n and sim.walkable(p) and not sim.items.has(p):
+						sim.drop_items(p, types[placed % types.size()], 3)
+						placed += 1
+			d += 1
+		var t0 := Time.get_ticks_usec()
+		for i in 400:
+			sim.step()
+		times.append(float(Time.get_ticks_usec() - t0))
+	check(times[1] < times[0] * 6.0, "600 loose stacks cost %.1f times the empty tick (%.0f ms against %.0f ms)" % [times[1] / times[0], times[1] / 1000.0, times[0] / 1000.0])
 
 
 ## Issue #344: a marked berry bush is dug up by hand and its berries carried off; unmarking it stops the work.

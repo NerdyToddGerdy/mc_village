@@ -748,6 +748,31 @@ func drop_items(c: Vector2i, type: String, n: int, uses := -1) -> void:
 	rev += 1
 
 
+## What an idle resident's search found about the items, kept while nothing changes (issue #351): a search that finds
+## nothing shouldn't walk hundreds of stacks again every tick. Valid for one map and one `rev`, and for a second at
+## most, so a change that doesn't bump `rev` is only late, not lost. A caller still checks what it takes from it.
+var _scans := {}
+var _scan_rev := -1
+var _scan_map := ""
+var _scan_tick := 0
+
+
+func _scans_fresh() -> void:
+	if _scan_rev != rev or _scan_map != m.id or tick - _scan_tick >= Tuning.TPS or tick < _scan_tick:
+		_scans.clear()
+		_scan_rev = rev
+		_scan_map = m.id
+		_scan_tick = tick
+
+
+## The stacks matching `pred`, worked out once while nothing changes, still in place when asked.
+func stacks_cached(key: String, pred: Callable) -> Array:
+	_scans_fresh()
+	if not _scans.has(key):
+		_scans[key] = stacks_where(pred)
+	return _scans[key].filter(func(s): return is_same(m.items.get(s.cell), s))
+
+
 func stacks_where(pred: Callable) -> Array:
 	var out: Array = []
 	for k in m.items:
@@ -771,7 +796,7 @@ func free_count(type: String) -> int:
 
 
 func tool_items(kind: String, min_tier: int) -> Array:
-	return stacks_where(func(s): return Defs.ITEMS[s.type].get("tool", "") == kind and Defs.ITEMS[s.type].tier > min_tier and avail(s) > 0)
+	return stacks_cached("tool_" + kind, func(s): return Defs.ITEMS[s.type].get("tool", "") == kind).filter(func(s): return Defs.ITEMS[s.type].tier > min_tier and avail(s) > 0)
 
 
 func in_zone(c: Vector2i) -> bool:
@@ -3377,6 +3402,9 @@ func _tagged(j: Job, work: String) -> Job:
 
 ## The nearest loose stack that has room in a stockpile (unloaded cargo first), as {stack, dest, n}, or null.
 func _haul_source(c: Vector2i, carry := Tuning.CARRY):
+	_scans_fresh()
+	if _scans.get("haul_none", false):  # nothing could be carried anywhere a moment ago, and nothing has changed
+		return null
 	var piles := pile_map()
 	var loose := stacks_where(func(s): return avail(s) > 0 and not stored(s, piles))
 	# Where a type can go is worked out once a type, not once a stack, and before sorting: an idle
@@ -3394,6 +3422,7 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 	var clearing := _clearing_cells()
 	var bare: bool = m.zone.is_empty() and piles.is_empty() and not m.sites.any(func(s): return s.tpl == "storehouse" and s.done)
 	if not anywhere and (not bare or clearing.is_empty() or not loose.any(func(s): return clearing.has(s.cell))):
+		_scans["haul_none"] = true
 		return null
 	# An expedition's unloaded cargo goes first (issue #112), then what lies on a blueprint's footprint
 	# (issue #205), then the nearest.
