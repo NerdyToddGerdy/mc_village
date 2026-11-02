@@ -840,12 +840,11 @@ static func plot_rect(tpl: String, origin: Vector2i, rot: int):
 		return null
 	if tpl == "portal":  # the frame, and two rows of staging area in front (issue #147)
 		return Rect2i(origin + Vector2i(-1, 0), Vector2i(6, 3))
-	if Defs.TEMPLATES[tpl].size == Vector2i(3, 3):  # the storehouse grows back from its door (issue #189)
-		match rot % 4:
-			0: return Rect2i(origin + Vector2i(0, -2), Vector2i(3, 5))
-			1: return Rect2i(origin + Vector2i(-2, 0), Vector2i(5, 3))
-			2: return Rect2i(origin, Vector2i(3, 5))
-			_: return Rect2i(origin, Vector2i(5, 3))
+	if Defs.TEMPLATES[tpl].size == Vector2i(3, 3):  # the storehouse widens to either side of its door's column (issue #318)
+		var more := Tuning.STORE_WIDTH_MAX - Tuning.STORE_WIDTH_MIN
+		if rot % 2 == 0:
+			return Rect2i(origin + Vector2i(-more, 0), Vector2i(3 + 2 * more, 3))
+		return Rect2i(origin + Vector2i(0, -more), Vector2i(3, 3 + 2 * more))
 	match rot % 4:
 		0: return Rect2i(origin + Vector2i(-1, 0), Vector2i(3, 3))
 		1: return Rect2i(origin + Vector2i(-2, -1), Vector2i(3, 3))
@@ -865,6 +864,11 @@ func reserved_at(c: Vector2i):
 func current_stage(s: Dictionary) -> Dictionary:
 	if s.get("upgrading", false):
 		return {"name": "Mineshaft", "verb": "needs", "cost": Tuning.SHAFT_COST}
+	if s.tpl == "store_room":  # a column costs the same however many go up together (issue #318)
+		var cost := {}
+		for k in Tuning.STORE_COLUMN_COST:
+			cost[k] = Tuning.STORE_COLUMN_COST[k] * s.cols
+		return {"name": "%d more %s" % [s.cols, "column" if s.cols == 1 else "columns"], "verb": "needs", "cost": cost}
 	return Defs.TEMPLATES[s.tpl].stages[s.stage]
 
 
@@ -949,6 +953,10 @@ func _clearing_cells() -> Dictionary:
 		if not s.done:
 			for c in site_cells(s):
 				out[c] = true
+	if m.zone.is_empty():  # with nowhere painted to keep things, wheat lying on a plot is carried clear so it can be replanted (issue #318)
+		for k in m.farm:
+			if m.items.has(k):
+				out[k] = true
 	return out
 
 
@@ -1070,12 +1078,17 @@ func _clear_footprint(s: Dictionary) -> void:
 
 
 func _on_site_done(s: Dictionary) -> void:
+	if s.tpl == "store_room":
+		_merge_store_room(s)
+		return
 	assign_workstations()
 	if s.tpl == "claim_stakes":  # the strip joins the village between ticks (issue #187), with its own toast
 		return
 	if not stats.has("built"):
 		stats.built = {}
 	stats.built[s.tpl] = true  # for the founding goals (issue #182)
+	if s.tpl == "composter":
+		_start_plots(s)  # a new composter starts with plots round it (issue #319)
 	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
 		var job: String = Defs.JOB_STATIONS.find_key(s.tpl)
 		var who := resident(s.get("worker", 0))
@@ -1350,8 +1363,37 @@ func store_of(c: Vector2i) -> Dictionary:
 	return site(-c.y)
 
 
-## The cell in front of a storehouse's door, where residents put things in and take them out.
+## The way a storehouse widens: along x when its door faces north or south, else along y (issue #318).
+static func store_axis(s: Dictionary) -> Vector2i:
+	return Vector2i(1, 0) if s.rot % 2 == 0 else Vector2i(0, 1)
+
+
+## How wide a storehouse is, in cells (3 to 7). Its depth is always 3.
+static func store_width(s: Dictionary) -> int:
+	return s.size.x if s.rot % 2 == 0 else s.size.y
+
+
+## Its chests: one in every cell but the door's column, which is the aisle (issue #318). A 3-wide holds 6.
+static func store_chest_cap(s: Dictionary) -> int:
+	return 3 * store_width(s) - 3
+
+
+## Which column of the building, counted along its width from the left in its own frame, is the door's.
+static func store_door_col(s: Dictionary) -> int:
+	var d := store_door(s)
+	var w := store_width(s)
+	match s.rot % 4:
+		0: return d.x - s.origin.x
+		1: return d.y - s.origin.y
+		2: return w - 1 - (d.x - s.origin.x)
+	return w - 1 - (d.y - s.origin.y)
+
+
+## The cell in front of a storehouse's door, where residents put things in and take them out. It stays put as
+## the building widens, so it's kept on the site once it has (issue #318).
 static func store_door(s: Dictionary) -> Vector2i:
+	if s.has("door"):
+		return s.door
 	match s.rot % 4:
 		0: return s.origin + Vector2i(1, 3)
 		1: return s.origin + Vector2i(3, 1)
@@ -1427,20 +1469,132 @@ func _store_put(k: Vector2i, type: String, n: int, uses := -1) -> void:
 func _set_chests() -> void:
 	for s in m.sites:
 		if s.tpl == "storehouse" and s.done and s.store.get("chest", 0) > 0:
-			s.chests = mini(Tuning.CHESTS, s.get("chests", 0) + s.store.chest)
+			s.chests = mini(store_chest_cap(s), s.get("chests", 0) + s.store.chest)
 			s.store.chest = 0
 			rev += 1
 
 
 ## A hauler's job carrying a chest into the nearest storehouse with room for one, or null.
 func _chest_job(r: Dictionary, c: Vector2i):
-	var want := m.sites.filter(func(s): return s.tpl == "storehouse" and s.done and not _cooling(s) and s.get("chests", 0) + s.store.get("chest", 0) + s.incoming.get("chest", 0) < Tuning.CHESTS)
+	var want := m.sites.filter(func(s): return s.tpl == "storehouse" and s.done and not _cooling(s) and s.get("chests", 0) + s.store.get("chest", 0) + s.incoming.get("chest", 0) < store_chest_cap(s))
 	if want.is_empty():
 		return null
 	var chests := stacks_where(func(st): return st.type == "chest" and avail(st) > 0)
 	if chests.is_empty():
 		return null
 	return _deliver_job(_nearest_site(want, c), "chest", 1, nearest(chests, c))
+
+
+## The cells of the next column to the left (-1) or the right (+1) of a storehouse, k columns out, in order away from the door's column.
+func store_column(s: Dictionary, side: int, k: int) -> Array:
+	var ax := store_axis(s)
+	var down := Vector2i(ax.y, ax.x)  # across the depth
+	var out: Array = []
+	var base: Vector2i = s.origin - ax * k if side < 0 else s.origin + ax * (store_width(s) + k - 1)
+	for i in 3:
+		out.append(base + down * i)
+	return out
+
+
+## Why painted cells can't be built as more room for a storehouse, or "" when they can, with `cols` the whole columns they make
+## on each side: {-1: n, 1: n} (issue #318). Only whole columns of three count, from the building's edge outward, and the
+## width stops at STORE_WIDTH_MAX.
+func store_room_check(s: Dictionary, painted: Dictionary) -> Dictionary:
+	var out := {"why": "", "cols": {-1: 0, 1: 0}}
+	if m.kind != "village" or s.tpl != "storehouse" or not s.done:
+		out.why = "Build the storehouse first"
+		return out
+	var going := 0
+	for x in m.sites:
+		if x.tpl == "store_room" and x.get("parent", 0) == s.id:
+			going += x.cols
+	var left: int = Tuning.STORE_WIDTH_MAX - store_width(s) - going
+	if left <= 0:
+		out.why = "It's as wide as it gets (%d)" % Tuning.STORE_WIDTH_MAX
+		return out
+	for side in [-1, 1]:
+		if m.sites.any(func(x): return x.tpl == "store_room" and x.get("parent", 0) == s.id and x.side == side):
+			continue  # one column going up at a time on a side
+		var k := 1
+		while out.cols[-1] + out.cols[1] < left:
+			var cells := store_column(s, side, k)
+			if not cells.all(func(c): return painted.has(c)):
+				break
+			var why := _room_cell_blocked(s, cells)
+			if why != "":
+				out.why = why
+				break
+			out.cols[side] += 1
+			k += 1
+	if out.cols[-1] + out.cols[1] == 0 and out.why == "":
+		out.why = "Paint a whole column of three beside the storehouse"
+	return out
+
+
+func _room_cell_blocked(s: Dictionary, cells: Array) -> String:
+	for c in cells:
+		if not m.in_bounds(c):
+			return "That's past the edge of the village"
+		if c == meadow_sign() or c == route_sign():
+			return "A signpost is in the way"
+		var other = site_at(c)
+		if other != null and other.id != s.id:
+			return "Another building is in the way"
+		var rs = reserved_at(c)
+		if rs != null and rs.id != s.id:
+			return "Another building has reserved that ground"
+	return ""
+
+
+## Marks cells beside a storehouse to be built as more room: each whole column, up to 7 wide, becomes a blueprint that builders
+## raise like any stage (2 cobblestone and 6 planks a column) and that joins the storehouse when it's done (issue #318).
+## Returns "" or why nothing was planned.
+func paint_store_room(s: Dictionary, rect: Rect2i) -> String:
+	if s.map != map_id:
+		return on_map(s.map, paint_store_room.bind(s, rect))
+	var painted := {}
+	for x in range(rect.position.x, rect.end.x):
+		for y in range(rect.position.y, rect.end.y):
+			painted[Vector2i(x, y)] = true
+	var chk := store_room_check(s, painted)
+	if chk.cols[-1] + chk.cols[1] == 0:
+		return chk.why
+	for side in [-1, 1]:
+		var n: int = chk.cols[side]
+		if n == 0:
+			continue
+		var ax := store_axis(s)
+		var first := store_column(s, side, 1)
+		var last := store_column(s, side, n)
+		var lo := Vector2i(mini(first[0].x, last[0].x), mini(first[0].y, last[0].y))
+		var size := Vector2i(n, 3) if ax.x == 1 else Vector2i(3, n)
+		var r := {"id": _id(), "kind": "site", "tpl": "store_room", "origin": lo, "size": size, "rot": s.rot, "stage": 0, "store": {}, "incoming": {},
+			"builder": 0, "crafter": 0, "crafting": "", "done": false, "owner": 0, "queue": [], "autoq": [], "unreach_until": 0, "plot": null,
+			"map": map_id, "worker": 0, "parent": s.id, "side": side, "cols": n}
+		m.sites.append(r)
+		for c in site_cells(r):
+			m.zone.erase(c)
+			_drop_crop(c)
+			_clear_wear(c)
+		_mark_obstacles(r)
+	_occ_dirty = true
+	rev += 1
+	return ""
+
+
+## A column of room is built: the storehouse takes it in and grows (issue #318).
+func _merge_store_room(r: Dictionary) -> void:
+	var s := site(r.get("parent", 0))
+	m.sites.erase(r)
+	_occ_dirty = true
+	rev += 1
+	if s.is_empty():
+		return
+	var ax := store_axis(s)
+	if r.side < 0:
+		s.origin -= ax * r.cols
+	s.size += Vector2i(ax.x, ax.y) * r.cols
+	_toast("The storehouse is %d wide now: room for %d chests." % [store_width(s), store_chest_cap(s)], 0, s.id)
 
 
 # ---------------------------------------------------------------- land claims (issue #187)
@@ -2079,7 +2233,7 @@ func _farm_work(c: Vector2i):
 	var empty: Array = []
 	for k in m.farm:
 		var crop: Dictionary = m.farm[k]
-		if crop.claim != 0 or _cooling(crop) or not walkable(crop.cell):
+		if crop.claim != 0 or _cooling(crop) or not walkable(crop.cell) or crop.has("dying"):
 			continue
 		if crop_ripe(crop):
 			ripe.append(crop)
@@ -3490,7 +3644,7 @@ func _clear_spot(c: Vector2i, clearing: Dictionary):
 				if maxi(absi(dx), absi(dy)) != d:
 					continue
 				var p := c + Vector2i(dx, dy)
-				if walkable(p) and not clearing.has(p) and not m.items.has(p) and not m.zone_res.has(p) and reserved_at(p) == null:
+				if walkable(p) and not clearing.has(p) and not m.farm.has(p) and not m.items.has(p) and not m.zone_res.has(p) and reserved_at(p) == null:
 					return p
 	return null
 
@@ -3589,9 +3743,11 @@ func _step_map() -> void:
 				b.regrow = 0.0
 				b.berries += 1
 				rev += 1
+	if m.kind == "village" and tick % Tuning.TPS == 0:
+		_step_plots()
 	for k in m.farm:
 		var crop: Dictionary = m.farm[k]
-		if crop.grow >= 0.0 and crop.grow < Tuning.WHEAT_GROW:
+		if crop.grow >= 0.0 and crop.grow < Tuning.WHEAT_GROW and not crop.has("dying"):
 			var before := crop_stage(crop)
 			crop.grow = minf(Tuning.WHEAT_GROW, crop.grow + Tuning.DT)
 			if crop_stage(crop) != before:
@@ -4478,6 +4634,127 @@ func paint_farm(rect: Rect2i) -> int:
 	return n
 
 
+# ---------------------------------------------------------------- a composter's plots (issue #319)
+
+## Whether a composter reaches cell `c`: within PLOT_REACH cells of it, either way (a square, not a circle).
+static func composter_reaches(s: Dictionary, c: Vector2i) -> bool:
+	return maxi(absi(c.x - s.origin.x), absi(c.y - s.origin.y)) <= Tuning.PLOT_REACH
+
+
+## The finished composters of this map.
+func composters() -> Array:
+	return m.sites.filter(func(s): return s.tpl == "composter" and s.done)
+
+
+## The plots a composter owns.
+func composter_plots(s: Dictionary) -> Array:
+	return m.farm.values().filter(func(c): return c.get("owner", 0) == s.id)
+
+
+## A plot nobody's composter reaches, or whose composter is gone, is drying out: 0 while it's looked after.
+static func plot_dying(crop: Dictionary) -> float:
+	return crop.get("dying", 0.0)
+
+
+## Paints plots round a composter, or takes them away when `erase` (issue #319). Cells must be open grass within its reach and
+## clear of its own reserved plot; a plot of another composter's that this one reaches moves over. Returns how many cells
+## were out of reach.
+func paint_plots(s: Dictionary, rect: Rect2i, erase := false) -> int:
+	if s.map != map_id:
+		return on_map(s.map, paint_plots.bind(s, rect, erase))
+	var far := 0
+	if m.kind != "village" or s.tpl != "composter" or not s.done:
+		return 0
+	for x in range(rect.position.x, rect.end.x):
+		for y in range(rect.position.y, rect.end.y):
+			var c := Vector2i(x, y)
+			if erase:
+				var own = m.farm.get(c)
+				if own != null and own.get("owner", 0) == s.id:
+					_drop_crop(c)
+				continue
+			if not composter_reaches(s, c):
+				far += 1
+				continue
+			var have = m.farm.get(c)
+			if have != null:
+				if have.get("owner", 0) != 0 and have.owner != s.id:  # one owner a cell: it moves over
+					have.owner = s.id
+					have.erase("dying")
+				continue
+			if farm_blocked(c) != "":
+				continue
+			m.farm[c] = {"id": _id(), "kind": "crop", "cell": c, "grow": -1.0, "claim": 0, "unreach_until": 0, "owner": s.id}
+			_clear_wear(c)
+	rev += 1
+	return far
+
+
+## A new composter starts with plots on the open ground round it, nearest first, so a farmer has work at once.
+func _start_plots(s: Dictionary) -> void:
+	var cells: Array = []
+	for d in range(1, Tuning.PLOT_REACH + 1):
+		for dx in range(-d, d + 1):
+			for dy in range(-d, d + 1):
+				if maxi(absi(dx), absi(dy)) == d:
+					cells.append(s.origin + Vector2i(dx, dy))
+	var n := 0
+	for c in cells:
+		if n >= Tuning.PLOT_START_MAX:
+			break
+		if m.in_bounds(c) and farm_blocked(c) == "" and not m.items.has(c):
+			m.farm[c] = {"id": _id(), "kind": "crop", "cell": c, "grow": -1.0, "claim": 0, "unreach_until": 0, "owner": s.id}
+			_clear_wear(c)
+			n += 1
+	if n > 0:
+		rev += 1
+
+
+## Once a second: an owned plot whose composter is gone or out of reach passes to another that reaches it, or, if there's none,
+## dries out, goes bare and turns back to grass over PLOT_DIE_SECONDS. A plot with no `owner` (one painted before this) is never touched.
+func _step_plots() -> void:
+	var ours := composters()
+	var changed := false
+	for k in m.farm.keys():
+		var crop: Dictionary = m.farm[k]
+		if not crop.has("owner"):
+			continue
+		var home := site(crop.owner)
+		if not home.is_empty() and home.done and composter_reaches(home, crop.cell):
+			if crop.has("dying"):
+				crop.erase("dying")
+				changed = true
+			continue
+		var heir = null
+		for o in ours:
+			if composter_reaches(o, crop.cell):
+				heir = o
+				break
+		if heir != null:
+			crop.owner = heir.id
+			crop.erase("dying")
+			changed = true
+			continue
+		var before: float = crop.get("dying", 0.0)
+		var now: float = before + 1.0
+		crop.dying = now
+		var third := Tuning.PLOT_DIE_SECONDS / 3.0
+		if before < third and now >= third:  # bare: whatever grew there is lost
+			crop.grow = -1.0
+			if crop.claim != 0:
+				var w := resident(crop.claim)
+				if not w.is_empty() and w.job != null and is_same(w.job.target, crop):
+					fail_job(w)
+			changed = true
+		if now >= Tuning.PLOT_DIE_SECONDS:
+			_drop_crop(k)
+			changed = true
+		elif int(before / 20.0) != int(now / 20.0):
+			changed = true
+	if changed:
+		rev += 1
+
+
 ## Removes farm plots in `rect`; anything growing there is lost.
 func clear_farm(rect: Rect2i) -> void:
 	for x in range(rect.position.x, rect.end.x):
@@ -4567,6 +4844,8 @@ func move_check(s: Dictionary, origin: Vector2i, rot := 0) -> String:
 		return on_map(s.map, move_check.bind(s, origin, rot))
 	if m.kind != "village":
 		return "Buildings are moved in the village"
+	if s.tpl == "storehouse" and store_width(s) > Tuning.STORE_WIDTH_MIN:
+		return "A storehouse that has grown can't be moved"
 	if not s.done:
 		return "Only a finished building can be moved"
 	if s.tpl in UNMOVABLE:
@@ -4597,6 +4876,8 @@ func move_site(s: Dictionary, origin: Vector2i, rot := 0) -> String:
 		s.area = shifted
 	s.origin = origin
 	s.rot = rot
+	if s.tpl == "storehouse":
+		s.erase("door")  # it moves only while 3 wide: the door is the formula's again (issue #318)
 	s.plot = plot_rect(s.tpl, origin, rot)
 	for c in site_cells(s):
 		m.zone.erase(c)
@@ -4622,6 +4903,8 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 		"plot": plot_rect(tpl, origin, rot), "map": map_id, "worker": 0}
 	if tpl == "fireplace":
 		s.keep_meals = true
+	if tpl == "storehouse":
+		s.door = store_door(s)  # fixed from here on: it widens round the door (issue #318)
 	if tpl == "portal":
 		s.lit = false
 	if Defs.TEMPLATES[tpl].has("device"):  # a redstone device (issue #170)
@@ -4695,6 +4978,9 @@ func cancel_site(s: Dictionary) -> void:
 		if s.store[k] > 0:
 			drop_items(s.origin + Vector2i(0, s.size.y), k, s.store[k])
 	m.sites.erase(s)
+	if s.tpl == "storehouse":  # the room going up beside it goes with it (issue #318)
+		for r in m.sites.filter(func(x): return x.tpl == "store_room" and x.get("parent", 0) == s.id):
+			cancel_site(r)
 	wires = wires.filter(func(w): return w.from != s.id and w.to != s.id)  # dust to a device that's gone (issue #170)
 	_occ_dirty = true
 	assign_workstations()  # its resident claims another free one, or hauls (issue #184)

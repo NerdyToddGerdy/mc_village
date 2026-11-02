@@ -592,6 +592,58 @@ func _test_night_view(game: Game) -> void:
 	await process_frame
 
 
+## Issues #318, #319: the storehouse's "Paint more room" and the composter's "Paint plots" start their tools, and a drag commits.
+func _test_paint_buttons(game: Game) -> void:
+	var sim := game.sim
+	var hud: Hud = game._hud
+	game.set_speed(0)
+	game.set_tool("")
+	var ada: Dictionary = sim.residents[0]
+	var spot := Vector2i(-1, -1)
+	for d in range(4, 14):  # open ground well inside the village for both buildings
+		for c in [Sim.rcell(ada) + Vector2i(-d, d), Sim.rcell(ada) + Vector2i(d, d), Sim.rcell(ada) + Vector2i(-d, -d), Sim.rcell(ada) + Vector2i(d, -d)]:
+			if spot.x < 0 and c.x >= 6 and c.y >= 6 and c.x < sim.w - 14 and c.y < sim.h - 14 and sim.placement_check("storehouse", c) == "":
+				spot = c
+	if spot.x < 0:
+		return
+	var yard := Rect2i(spot, Vector2i(3, 3)).grow(8)
+	sim.m.trees = sim.m.trees.filter(func(t): return not yard.has_point(t.cell))
+	sim.m.boulders = sim.m.boulders.filter(func(b): return not yard.has_point(b.cell))
+	sim.m.bushes = sim.m.bushes.filter(func(b): return not yard.has_point(b.cell))
+	var sh := sim.place_site("storehouse", spot)
+	if sh.is_empty():
+		return
+	sh.stage = 2
+	sh.done = true
+	game.selection = {"kind": "site", "id": sh.id}
+	hud.refresh(sim)
+	await process_frame
+	var buttons: Array = _walk(hud._sel).filter(func(n): return n is Button and not n.is_queued_for_deletion())
+	var room: Array = buttons.filter(func(b): return b.text == "Paint more room")
+	check(room.size() == 1, "a finished storehouse has a Paint more room button")
+	room[0].pressed.emit()
+	check(game.tool == "room" and game.area_site == sh.id, "it starts the room tool")
+	hud.refresh(sim)
+	await process_frame
+	check(_walk(hud._sel).any(func(n): return n is Button and n.text == "Done painting"), "and the button reads Done painting")
+	game.set_tool("")
+	var comp := sim.place_site("composter", spot + Vector2i(1, 8))
+	comp.stage = 1
+	comp.done = true
+	sim._on_site_done(comp)
+	game.selection = {"kind": "site", "id": comp.id}
+	hud.refresh(sim)
+	await process_frame
+	buttons = _walk(hud._sel).filter(func(n): return n is Button and not n.is_queued_for_deletion())
+	var plots: Array = buttons.filter(func(b): return b.text == "Paint plots")
+	check(plots.size() == 1, "a finished composter has a Paint plots button")
+	plots[0].pressed.emit()
+	check(game.tool == "plots" and game.area_site == comp.id, "it starts the plots tool")
+	game._update_live_overlays()
+	check(game._world.live_outlines.size() > 0, "and its reach is outlined")
+	game.set_tool("")
+
+
 ## Issue #304: jumping to something blinks over it, and a held key sees through every tree.
 func _test_find_things(game: Game) -> void:
 	var sim := game.sim
@@ -2217,6 +2269,7 @@ func _initialize() -> void:
 	await _test_needs_you(game)
 	await _test_rebuild_height(game)
 	await _test_find_things(game)
+	await _test_paint_buttons(game)
 	await _test_night_view(game)
 	await _test_ground_batch(game)
 	await _test_colours(game)

@@ -2765,7 +2765,7 @@ func _fill_storehouse(c: Container, sim: Sim, s: Dictionary) -> void:
 	var slots := Sim.store_slots(s)
 	var used := slots.filter(func(k): return sim.items.has(k)).size()
 	var chests: int = s.get("chests", 0)
-	c.add_child(_row("Chests", "%d / %d" % [chests, Tuning.CHESTS], false))
+	c.add_child(_row("Chests", "%d / %d" % [chests, Sim.store_chest_cap(s)], false))
 	if chests > 0:
 		c.add_child(_row("Stacks", "%d / %d" % [used, slots.size()], false))
 		c.add_child(_bar(float(used) / slots.size()))
@@ -2780,8 +2780,14 @@ func _fill_storehouse(c: Container, sim: Sim, s: Dictionary) -> void:
 			parts.append(Defs.words(t, held[t]))
 		c.add_child(_label("Holds " + ", ".join(parts) + ".", false, Palette.CHALK, Palette.BODY, true))
 	var more := "Haulers bring loose things here first; the stockpile takes what doesn't fit." if chests > 0 else "Craft a chest at the bench (8 planks): a hauler carries it in, and it holds %d stacks of anything." % Tuning.CHEST_STACKS
-	if chests > 0 and chests < Tuning.CHESTS:
-		more += " Each chest crafted at the bench adds %d stacks, up to %d chests." % [Tuning.CHEST_STACKS, Tuning.CHESTS]
+	var growing: bool = game.tool == "room" and game.area_site == s.id
+	var wide: int = Sim.store_width(s)
+	var room := _button("Done painting" if growing else "Paint more room", func(): game.start_room(s), "Primary" if growing else "Secondary")
+	room.disabled = wide >= Tuning.STORE_WIDTH_MAX and not growing
+	room.tooltip_text = "Drag over whole columns of three cells left or right of the door's column. %s a column; up to %d wide (it's %d now)." % [Defs.cost_text(Tuning.STORE_COLUMN_COST), Tuning.STORE_WIDTH_MAX, wide]
+	c.add_child(room)
+	if chests > 0 and chests < Sim.store_chest_cap(s):
+		more += " Each chest crafted at the bench adds %d stacks, up to %d chests." % [Tuning.CHEST_STACKS, Sim.store_chest_cap(s)]
 	c.add_child(_label(more, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
 		c.add_child(_reason(x.why))
@@ -2807,6 +2813,11 @@ func _fill_farm(c: Container, sim: Sim, s: Dictionary) -> void:
 	more.tooltip_text = "Keep %d more" % Tuning.KEEP_STEP
 	keep.add_child(more)
 	c.add_child(keep)
+	var plots := sim.composter_plots(s).size()
+	var painting: bool = game.tool == "plots" and game.area_site == s.id
+	var paint := _button("Done painting" if painting else "Paint plots", func(): game.start_plots(s), "Primary" if painting else "Secondary")
+	paint.tooltip_text = "Drag over open grass within %d cells of the composter. Start on one of its plots to take it away. It has %d now." % [Tuning.PLOT_REACH, plots]
+	c.add_child(paint)
 	c.add_child(_label("Farmers plant and harvest the painted plots until the village has this much wheat. The crop waits on the plot and is picked again once it falls below.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	for x in sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id):
 		c.add_child(_reason(x.why))

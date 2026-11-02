@@ -27,6 +27,8 @@ func _init() -> void:
 		"test_beds_and_free_bed_arrivals",
 		"test_hunger_and_eating",
 		"test_dig_up_bushes",
+		"test_storehouse_grows",
+		"test_composter_plots",
 		"test_day_and_night_clock",
 		"test_night_waves",
 		"test_the_iron_golem",
@@ -1203,6 +1205,112 @@ func test_village_combat() -> void:
 	Night.enabled = false
 
 
+## Issue #318: a storehouse widens as you paint beside it: whole columns of three, left or right of the door's column,
+## up to 7 wide, at 2 cobblestone and 6 planks a column; its door never moves and its chests are 3 x width - 3.
+func test_storehouse_grows() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var sh := place_done(sim, "storehouse", Sim.rcell(ada) + Vector2i(0, 8))
+	var yard := Rect2i(sh.origin, sh.size).grow(6)  # clear ground round it, so nothing waits on an axe or a pickaxe
+	sim.m.trees = sim.m.trees.filter(func(t): return not yard.has_point(t.cell))
+	sim.m.boulders = sim.m.boulders.filter(func(b): return not yard.has_point(b.cell))
+	sim.m.bushes = sim.m.bushes.filter(func(b): return not yard.has_point(b.cell))
+	var door: Vector2i = Sim.store_door(sh)
+	check(Sim.store_width(sh) == 3 and Sim.store_chest_cap(sh) == 6 and Sim.store_door_col(sh) == 1, "it starts 3 wide, with room for 6 chests and the door in the middle")
+	var o: Vector2i = sh.origin
+	var cell_rect := func(x0: int, x1: int) -> Rect2i: return Rect2i(Vector2i(o.x + x0, o.y), Vector2i(x1 - x0, 3))
+	check(sim.paint_store_room(sh, Rect2i(Vector2i(o.x + 3, o.y), Vector2i(1, 2))) != "", "a column that isn't whole is refused")
+	check(sim.paint_store_room(sh, Rect2i(Vector2i(o.x + 4, o.y), Vector2i(1, 3))) != "", "and so is one that doesn't touch the building")
+	check(sim.paint_store_room(sh, Rect2i(o + Vector2i(0, 3), Vector2i(3, 1))) != "", "nothing goes on the door's side")
+	check(sim.paint_store_room(sh, cell_rect.call(3, 4)) == "", "a whole column on the right is planned")
+	var rooms := sim.m.sites.filter(func(x): return x.tpl == "store_room")
+	check(rooms.size() == 1 and rooms[0].size == Vector2i(1, 3) and rooms[0].origin == o + Vector2i(3, 0), "as a blueprint beside it")
+	check(sim.current_stage(rooms[0]).cost == {"cobble": 2, "plank": 6}, "costing 2 cobblestone and 6 planks")
+	check(sim.paint_store_room(sh, cell_rect.call(3, 4)) != "", "and one column at a time on a side")
+	check(sim.paint_store_room(sh, cell_rect.call(-2, 0)) == "", "while the left can take two at once")
+	var left: Dictionary = sim.m.sites.filter(func(x): return x.tpl == "store_room" and x.side < 0)[0]
+	check(left.cols == 2 and sim.current_stage(left).cost == {"cobble": 4, "plank": 12}, "which cost twice (%s)" % [sim.current_stage(left).cost])
+	# Build them: deliver the materials and let builders raise them.
+	for r in sim.m.sites.filter(func(x): return x.tpl == "store_room"):
+		var c: Dictionary = sim.current_stage(r).cost
+		for k in c:
+			sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), k, c[k])
+	sim.drop_items(Sim.rcell(ada) + Vector2i(1, 1), "chest", 1)
+	for r in sim.residents:
+		r.hunger = 100.0
+	for i in 300 * Tuning.TPS:
+		sim.step()
+		if Sim.store_width(sh) == 6:
+			break
+	check(Sim.store_width(sh) == 6, "builders raise them, and the storehouse is 6 wide (%d)" % Sim.store_width(sh))
+	check(sim.m.sites.filter(func(x): return x.tpl == "store_room").is_empty(), "the blueprints join it")
+	check(Sim.store_door(sh) == door and Rect2i(sh.origin, sh.size).has_point(door - Vector2i(0, 1)), "its door stayed where it was")
+	check(Sim.store_chest_cap(sh) == 15 and Sim.store_door_col(sh) == 3, "it holds 15 chests now, the aisle being the door's column")
+	check(sim.paint_store_room(sh, Rect2i(Vector2i(sh.origin.x + 6, sh.origin.y), Vector2i(1, 3))) == "", "one more column makes it 7")
+	for r in sim.m.sites.filter(func(x): return x.tpl == "store_room"):
+		sim.cancel_site(r)
+	check(sim.m.sites.filter(func(x): return x.tpl == "store_room").is_empty() and Sim.store_width(sh) == 6, "cancelling a blueprint puts the ground back")
+	check(sim.move_check(sh, sh.origin + Vector2i(0, 3)) != "", "a storehouse that has grown can't be moved")
+	var more: String = sim.store_room_check(sh, {}).why
+	check(more != "", "nothing is planned from no painted cells (%s)" % more)
+	var loaded := Sim.from_state(sim.save_state())
+	var lsh: Dictionary = loaded.m.sites.filter(func(x): return x.tpl == "storehouse")[0]
+	check(Sim.store_width(lsh) == 6 and Sim.store_door(lsh) == door, "its width and door are saved")
+
+
+## Issue #319: a composter owns the plots within 3 cells of it, starts with some, and its plots die when nothing reaches them.
+func test_composter_plots() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var comp := place_done(sim, "composter", Sim.rcell(ada) + Vector2i(8, 8))
+	var yard := Rect2i(comp.origin, Vector2i.ONE).grow(8)
+	sim.m.trees = sim.m.trees.filter(func(t): return not yard.has_point(t.cell))
+	sim.m.boulders = sim.m.boulders.filter(func(b): return not yard.has_point(b.cell))
+	sim.m.bushes = sim.m.bushes.filter(func(b): return not yard.has_point(b.cell))
+	sim._on_site_done(comp)
+	var start := sim.composter_plots(comp)
+	check(start.size() > 0 and start.size() <= Tuning.PLOT_START_MAX, "a new composter starts with plots (%d)" % start.size())
+	check(start.all(func(c): return Sim.composter_reaches(comp, c.cell) and sim.reserved_at(c.cell) == null), "all within its reach, clear of its own reserved ground")
+	# Painting: within reach, over open grass, and the rest counted as out of reach.
+	var before := sim.composter_plots(comp).size()
+	var far := sim.paint_plots(comp, Rect2i(comp.origin + Vector2i(-6, -6), Vector2i(13, 13)))
+	var after := sim.composter_plots(comp).size()
+	check(after > before and far > 0 and sim.composter_plots(comp).all(func(c): return Sim.composter_reaches(comp, c.cell)), "painting adds plots within 3 cells and counts the rest (%d to %d, %d far)" % [before, after, far])
+	var legacy := sim.paint_farm(Rect2i(comp.origin + Vector2i(7, 0), Vector2i(2, 2)))
+	check(legacy > 0 and sim.farm.values().any(func(c): return not c.has("owner")), "a plot painted the old way has no owner")
+	var mine: Dictionary = sim.composter_plots(comp)[0]
+	sim.paint_plots(comp, Rect2i(mine.cell, Vector2i.ONE), true)
+	check(not sim.farm.has(mine.cell), "erasing takes one of its plots away")
+	# Nothing reaches a plot once its composter is gone: it dries, goes bare, then turns to grass; the old plots aren't touched.
+	var lost := sim.composter_plots(comp).size()
+	var a_plot: Dictionary = sim.composter_plots(comp)[0]
+	a_plot.grow = Tuning.WHEAT_GROW
+	sim.cancel_site(comp)
+	run(sim, 2.0)
+	check(Sim.plot_dying(a_plot) > 0.0, "with its composter gone a plot starts to dry out")
+	check(sim._farm_work(Sim.rcell(ada)) == null or sim._farm_work(Sim.rcell(ada)).get("dying") == null, "and nobody plants or harvests it")
+	run(sim, Tuning.PLOT_DIE_SECONDS / 3.0)
+	check(a_plot.grow < 0.0 and sim.farm.has(a_plot.cell), "it goes bare, the wheat lost")
+	run(sim, Tuning.PLOT_DIE_SECONDS)
+	check(sim.farm.values().all(func(c): return not c.has("owner")) and lost > 0, "and turns back to grass (%d plots left)" % sim.farm.size())
+	check(sim.farm.size() == legacy, "the plots painted the old way stay")
+	# A second composter reaching a plot takes it over, and a new one placed in time saves it.
+	var sim2 := Sim.new_game()
+	var c1 := place_done(sim2, "composter", Sim.rcell(sim2.residents[0]) + Vector2i(8, 8))
+	var yard2 := Rect2i(c1.origin, Vector2i.ONE).grow(10)
+	sim2.m.trees = sim2.m.trees.filter(func(t): return not yard2.has_point(t.cell))
+	sim2.m.boulders = sim2.m.boulders.filter(func(b): return not yard2.has_point(b.cell))
+	sim2.m.bushes = sim2.m.bushes.filter(func(b): return not yard2.has_point(b.cell))
+	sim2._on_site_done(c1)
+	var c2 := place_done(sim2, "composter", c1.origin + Vector2i(4, 0))
+	var shared: Array = sim2.composter_plots(c1).filter(func(c): return Sim.composter_reaches(c2, c.cell))
+	sim2.cancel_site(c1)
+	run(sim2, 3.0)
+	check(not shared.is_empty() and shared.all(func(c): return c.owner == c2.id and Sim.plot_dying(c) == 0.0), "a plot another composter reaches passes to it (%d)" % shared.size())
+	var loaded := Sim.from_state(sim2.save_state())
+	check(loaded.farm.values().any(func(c): return c.get("owner", 0) == c2.id), "owners are saved")
+
+
 ## Issue #344: a marked berry bush is dug up by hand and its berries carried off; unmarking it stops the work.
 func test_dig_up_bushes() -> void:
 	var sim := Sim.new_game()
@@ -1348,12 +1456,9 @@ func test_farm_plant_grow_harvest() -> void:
 	check(labels.has("Harvesting wheat"), "Ada harvests ripe wheat (%s)" % [labels])
 	check(sim.stats.get("harvested", 0) == 6, "all six cells harvested (%d)" % sim.stats.get("harvested", 0))
 	check(count(sim, "wheat") == 6 * Tuning.WHEAT_YIELD, "each harvest gives %d wheat (%d)" % [Tuning.WHEAT_YIELD, count(sim, "wheat")])
-	# The harvest is collected before a plot is replanted: with no stockpile, it waits and says why.
-	check(sim.stats.get("planted", 0) == 6, "plots with wheat lying on them aren't replanted")
-	check(stuck_text(sim).contains("Harvested wheat needs a stockpile"), "and the stuck list says why: " + stuck_text(sim))
-	sim.paint_zone(open_rect(sim, Vector2i(2, 1)))
+	# The harvest is collected before a plot is replanted: with nowhere to keep it, it's carried clear of the plots (issue #318).
 	run(sim, 60)
-	check(sim.farm.keys().all(func(k): return not sim.items.has(k)), "once there's a stockpile, the wheat is hauled off the plots")
+	check(sim.farm.keys().all(func(k): return not sim.items.has(k)), "with no stockpile the wheat is carried clear of the plots")
 	check(sim.stats.get("planted", 0) == 12, "and the empty plots are planted again (%d)" % sim.stats.get("planted", 0))
 	# Ripe wheat waits: with nobody to harvest it, it stays ripe and doesn't spoil.
 	var sim2 := Sim.new_game()
@@ -3833,7 +3938,7 @@ func test_storehouse_chests() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]
 	var sh := place_done(sim, "storehouse", Sim.rcell(ada) + Vector2i(0, 5))
-	check(not sh.is_empty() and sh.plot.size == Vector2i(3, 5), "a storehouse is 3×3, with its upgrade's plot behind it")
+	check(not sh.is_empty() and sh.size == Vector2i(3, 3) and sh.plot.size == Vector2i(11, 3), "a storehouse is 3×3, with the strip it can widen into on each side")
 	var houses_before: int = sim.stats.houses
 	sim._on_site_done(sh)
 	check(sim.stats.houses == houses_before and sh.owner == 0 and sim.events.any(func(ev): return ev.type == "toast" and ev.text.begins_with("The storehouse is built")), "finishing a storehouse isn't a house: it counts as none, has no owner, and says what to do next")

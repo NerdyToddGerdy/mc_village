@@ -323,6 +323,10 @@ const TEMPLATES := {
 		{"name": "Floor", "verb": "needs", "cost": {"cobble": 6}},
 		{"name": "Walls and roof", "verb": "needs", "cost": {"plank": 12, "log": 4}},
 	]},
+	# A column (or a few) going up beside a storehouse (issue #318): it joins the storehouse when it's built.
+	"store_room": {"name": "Storehouse room", "size": Vector2i(1, 3), "stages": [
+		{"name": "More room", "verb": "needs", "cost": {"cobble": 2, "plank": 6}},
+	]},
 	# The other jobs' workstations (issue #184). Small builds that reserve room for an upgrade; the
 	# toolsmith's grows into an anvil once there's iron.
 	"toolsmith_bench": {"name": "Toolsmith's bench", "size": Vector2i(1, 1), "plot": "anvil", "stages": [
