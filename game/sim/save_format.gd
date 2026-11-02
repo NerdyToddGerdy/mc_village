@@ -22,8 +22,9 @@ static func upgrades() -> Dictionary:
 
 ## v62: berry bushes can be marked to be dug up (issue #344). Each carries `des` and `claim`, like a tree; an older bush gets them off.
 static func _v61_to_v62(d: Dictionary) -> Dictionary:
-	for id in d.state.maps:
-		for b in d.state.maps[id].get("bushes", []):
+	var maps: Dictionary = d.get("state", {}).get("maps", {})
+	for id in maps:
+		for b in maps[id].get("bushes", []):
 			b.des = b.get("des", false)
 			b.claim = 0
 	return d

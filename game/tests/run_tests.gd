@@ -26,6 +26,7 @@ func _init() -> void:
 		"test_beds_and_free_bed_arrivals",
 		"test_hunger_and_eating",
 		"test_dig_up_bushes",
+		"test_idle_residents_go_home",
 		"test_farm_plant_grow_harvest",
 		"test_farm_plots_need_open_grass",
 		"test_the_farm_stops_at_its_target",
@@ -900,6 +901,53 @@ func test_beds_and_free_bed_arrivals() -> void:
 	var raw = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v5.save"))
 	var up := SaveFormat.upgrade(raw)
 	check(up.data.state.maps.village.sites.filter(func(x): return x.tpl == "house" and x.done).all(func(x): return x.stage == 4), "older saves' finished houses get a finished bed")
+
+
+## Issue #345: a resident with nothing to do walks back to their own house and waits there; Ada, with no house, stays put.
+func test_idle_residents_go_home() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var house := sim.place_site("house", sim.nearest_walkable(Sim.rcell(ada) + Vector2i(8, 0)))
+	house.stage = 4
+	house.done = true
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-6, 6)))
+	house.owner = tomas.id
+	tomas.hunger = 100.0
+	ada.hunger = 100.0
+	sim.zone.clear()
+	for t in sim.trees:
+		t.des = false
+	var away := home_gap(sim, tomas, house)
+	run(sim, Tuning.IDLE_HOME_AFTER - 2.0)
+	check(Sim.rcell(tomas) == sim.nearest_walkable(Sim.rcell(tomas)) and home_gap(sim, tomas, house) >= away - 1, "they don't go the moment there's no work")
+	var labels: Array = []
+	for i in int(40 * Tuning.TPS):
+		sim.step()
+		if tomas.job != null and not labels.has(tomas.job.label):
+			labels.append(tomas.job.label)
+	check(labels.has("Heading home") and home_gap(sim, tomas, house) <= Tuning.HOME_NEAR + 1, "after a while Tomas walks home (%s, %d cells off)" % [labels, home_gap(sim, tomas, house)])
+	check(not labels.has("Heading home") or tomas.job == null, "and waits there")
+	var start := Sim.rcell(ada)
+	run(sim, Tuning.IDLE_HOME_AFTER + 10.0)
+	check(ada.job == null or ada.job.kind != "home", "Ada, with no house, isn't sent anywhere")
+	# New work takes a resident who's waiting at home: a loose stack to haul to a stockpile.
+	ada.arriving = true  # Ada takes no work, so it's Tomas's
+	var yard: Vector2i = sim.nearest_walkable(Sim.rcell(tomas) + Vector2i(3, 3))
+	sim.paint_zone(Rect2i(yard, Vector2i(2, 2)))
+	sim.drop_items(sim.nearest_walkable(Sim.rcell(tomas) + Vector2i(-3, -3)), "log", 3)
+	var kinds: Array = []
+	for i in 3 * Tuning.TPS:
+		sim.step()
+		if tomas.job != null and not kinds.has(tomas.job.kind):
+			kinds.append(tomas.job.kind)
+	check(kinds.has("haul") and not kinds.has("home"), "and new work takes them from there (%s)" % [kinds])
+
+
+static func home_gap(sim: Sim, r: Dictionary, house: Dictionary) -> int:
+	var near := 1 << 30
+	for hc in sim.site_cells(house):
+		near = mini(near, absi(hc.x - Sim.rcell(r).x) + absi(hc.y - Sim.rcell(r).y))
+	return near
 
 
 ## Issue #344: a marked berry bush is dug up by hand and its berries carried off; unmarking it stops the work.

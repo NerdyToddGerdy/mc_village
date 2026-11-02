@@ -3244,6 +3244,28 @@ func _claim(r: Dictionary) -> void:
 		if j != null:
 			r.job = j
 			return
+	# Nothing to do: after a while, go home and wait there (issue #345). Counted once an idle spell, so the check is cheap.
+	var idle: int = _idle_ticks.get(r.id, 0) + 1
+	_idle_ticks[r.id] = idle
+	if idle == int(Tuning.IDLE_HOME_AFTER * Tuning.TPS):
+		r.job = _home_job(r)
+
+
+## A walk to the resident's own house, or null when they have none, are away from the village or are already by it (issue #345).
+func _home_job(r: Dictionary):
+	if map_id != "village" or r.away or r.get("hurt", 0) > 0:
+		return null
+	for s in m.sites:
+		if s.tpl == "house" and s.done and s.owner == r.id:
+			var near := 1 << 30
+			for hc in site_cells(s):
+				near = mini(near, manhattan(rcell(r), hc))
+			if near <= Tuning.HOME_NEAR:
+				return null
+			var j := Job.new("home", "Heading home", "their house")
+			j.step(_goto(site_cells(s), true))
+			return j
+	return null
 
 
 ## The kinds of work, in the order a resident looks for them. Hauling comes last, so a resident's
@@ -3497,7 +3519,7 @@ func step() -> void:
 	var kinds := {}
 	var working := 0
 	for r in residents:
-		if r.job != null and not (r.job.kind in ["move", "arrive", "stage", "road", "rest", "hurt", "commute", "unload"]):
+		if r.job != null and not (r.job.kind in ["move", "arrive", "stage", "road", "rest", "hurt", "commute", "unload", "home"]):
 			kinds[r.job.kind] = true
 			working += 1
 	if working >= 2 and kinds.size() >= 2:
@@ -3649,6 +3671,9 @@ func _step_sheep(sh: Dictionary) -> void:
 		sh.cell = Vector2i(roundi(sh.pos.x), roundi(sh.pos.y))
 
 
+var _idle_ticks := {}  ## Resident id -> ticks they've gone without work (issue #345); not saved.
+
+
 func _step_resident(r: Dictionary) -> void:
 	if r.get("burn", 0.0) > 0.0:
 		_burn_step(r)
@@ -3660,6 +3685,8 @@ func _step_resident(r: Dictionary) -> void:
 		_claim(r)
 		if r.job == null:
 			return
+		if r.job.kind != "home":
+			_idle_ticks.erase(r.id)
 	var j: Job = r.job
 	if j.i >= j.steps.size():
 		r.job = null
