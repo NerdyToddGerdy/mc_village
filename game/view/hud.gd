@@ -105,6 +105,7 @@ var _keys_sig := ""
 var _hint := Label.new()
 var _paused_label: PanelContainer
 var _sigs := {}
+var _locks := {}  ## container id -> what it showed when `_rebuild` last locked its size
 var _held := false            ## A mouse button is down; panels wait to rebuild until it's released.
 var _toast_list: Array = []
 var equip_kind := ""          ## "axe" or "pick" while the resident panel lists tools to equip, else "".
@@ -595,6 +596,15 @@ func _label(text: String, bold := false, color := Palette.CHALK, size := Palette
 	return l
 
 
+## Gives the wrapping labels directly in `c` the panel's width. A label that wraps measures its height
+## at its own width, which is nothing when it's new, so for a pass it stands thousands of pixels tall
+## and the panel flashes across the screen.
+func _pin_wrap(c: Container, width: float) -> void:
+	for ch in c.get_children():
+		if ch is Label and ch.autowrap_mode != TextServer.AUTOWRAP_OFF and ch.custom_minimum_size.x == 0:
+			ch.custom_minimum_size.x = width
+
+
 func _button(text: String, on_press: Callable, style := "") -> Button:
 	var b := Button.new()
 	b.text = text
@@ -930,7 +940,10 @@ func _reason(text: String) -> Label:
 
 
 ## Replaces a container's children only when `sig` differs from last time.
-func _rebuild(c: Container, sig: String, fill: Callable, before := Callable()) -> void:
+## `lock` names what the container is showing (the selection, the tab): while it stays the same, the
+## container keeps the largest size it has had, so a panel whose numbers tick doesn't jitter in size.
+## A different `lock` lets it settle to its new content.
+func _rebuild(c: Container, sig: String, fill: Callable, before := Callable(), lock := "") -> void:
 	if _sigs.get(c.get_instance_id(), "") == sig:
 		return
 	# Rebuilding between a button's press and release would swallow the click (the press lands on
@@ -938,9 +951,17 @@ func _rebuild(c: Container, sig: String, fill: Callable, before := Callable()) -
 	if _held and c.is_visible_in_tree() and c.get_global_rect().has_point(_pointer):
 		return
 	_sigs[c.get_instance_id()] = sig
+	if lock != "":
+		var id := c.get_instance_id()
+		if _locks.get(id, "") == lock:
+			c.custom_minimum_size = c.custom_minimum_size.max(c.size)
+		else:
+			_locks[id] = lock
+			c.custom_minimum_size = Vector2.ZERO
 	if before.is_valid():
 		before.call()
 	for ch in c.get_children():
+		c.remove_child(ch)  # out of the tree now, so the old and new children never share a layout pass
 		ch.queue_free()
 	fill.call(c)
 
@@ -1125,7 +1146,10 @@ func _refresh_maps(sim: Sim) -> void:
 		for id in ex.party:
 			var r := sim.resident(id)
 			sig += "%s%s%s%d" % [_status(sim, r), r.pick, r.get("hurt", 0), int(r.hunger / 10)]
-		_rebuild(_party_details, sig, func(c: Container) -> void: _fill_party(c, sim))
+		_rebuild(_party_details, sig, func(c: Container) -> void:
+			_fill_party(c, sim)
+			_pin_wrap(c, 300),
+			Callable(), "%d" % ex.party.size())
 	_party.tooltip_text = "Show the %s" % sim.get_map(_party.get_meta("map", "village")).name.to_lower() if line != "" and not here_site else ""
 
 
@@ -1484,7 +1508,8 @@ func _refresh_goals(sim: Sim) -> void:
 		var g: Dictionary = chapter[at]
 		for l in [_label("%d  %s" % [at + 1, g.t], true, Palette.CHALK, Palette.BODY, true), _label(g.h, false, Palette.CHALK_DIM, Palette.CAPTION, true), _label(g.w, false, Palette.CHALK_DIM, Palette.CAPTION, true)]:
 			l.custom_minimum_size.x = 290 - 24
-			c.add_child(l))
+			c.add_child(l),
+		Callable(), "%d/%d" % [cur, at])
 
 
 ## The village book (issues #78, #198): Goals (the tutorial, both chapters with their whys), Jobs (who
@@ -1680,7 +1705,8 @@ func _refresh_stuck(sim: Sim) -> void:
 		c.add_child(line)
 		if waiting_open:
 			for s in wait:
-				c.add_child(_stuck_entry(sim, s, true)))
+				c.add_child(_stuck_entry(sim, s, true)),
+		Callable(), "%d|%d|%d|%s|%s|%s" % [need.size(), block.size(), wait.size(), folded, stuck_open, waiting_open])
 
 
 ## A choice waiting for the player (issue #296): what it is, and the buttons that answer it, so it needs no hunting for the panel.
@@ -1885,7 +1911,9 @@ func _refresh_selection(sim: Sim) -> void:
 	_update_progress_bar(sim)
 	_rebuild(_sel, sig, func(c: Container) -> void:
 		_fill_selection(c, sim, sel, target)
-		_register_panel_keys(c))
+		_pin_wrap(c, 330 - 24)
+		_register_panel_keys(c),
+		Callable(), "%s" % [sel])
 
 
 func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
@@ -2036,7 +2064,8 @@ func _refresh_craft(sim: Sim) -> void:
 	_rebuild(_craft_box, sig, func(c: Container) -> void:
 		if list.size() > 1:
 			c.add_child(_station_tabs(sim, list, bench))
-		_fill_bench(c, sim, bench))
+		_fill_bench(c, sim, bench),
+		Callable(), "%s|%s|%s" % [bench.id, _craft_pick, list.size()])
 
 
 func _blocked_sites(sim: Sim) -> Array:
