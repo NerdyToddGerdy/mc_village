@@ -10,7 +10,12 @@ var sim: Sim
 var speed := 1
 var last_speed := 1
 var tool := ""                          ## "", a Gather or Paint order (OrderMenus.MARK_TOOLS) or "build"
-var placing := ""                       ## Template being placed while tool == "build".
+var moving_id := 0                      ## The building being picked up and put down elsewhere (issue #234), while placing.
+var placing := "":                      ## Template being placed while tool == "build".
+	set(v):
+		placing = v
+		if v == "":
+			moving_id = 0
 var rot := 0
 var area_site := 0                      ## The workstation whose work area is being painted, while tool == "area" (issue #203).
 var menu_open := ""                     ## The toolbar menu that's open: "", "gather", "paint" or "build".
@@ -291,7 +296,7 @@ func _update_live_overlays() -> void:
 	if tool == "build" and placing != "" and _hover != null:
 		var origin := _placement_origin()
 		var size: Vector2i = Defs.TEMPLATES[placing].size
-		var err := sim.placement_check(placing, origin, rot)
+		var err := sim.move_check(sim.site(moving_id), origin, rot) if moving_id != 0 else sim.placement_check(placing, origin, rot)
 		var plot = Sim.plot_rect(placing, origin, rot)
 		if plot != null:
 			outlines.append({"rect": plot, "h": 0.02, "color": Color(Palette.RED if err != "" else Palette.CHALK, 0.6), "dashed": true})
@@ -309,7 +314,7 @@ func _update_live_overlays() -> void:
 			var tpl_def: Dictionary = Defs.TEMPLATES[placing]
 			var name: String = tpl_def.name.to_lower()
 			var turning := "the door" if placing == "house" else "its %s plot" % tpl_def.get("plot", "")
-			hint = "Place %s." % name + (" %s turns %s." % [turn, turning] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
+			hint = ("Move the %s here." if moving_id != 0 else "Place %s.") % name + (" %s turns %s." % [turn, turning] if turn != "" else "") + (" Clears %s." % clr if clr != "" else "")
 	var sel = selected_entity()
 	if sel != null and sel.kind in ["tree", "boulder", "animal", "bush", "crop", "meadow", "route"]:
 		outlines.append({"rect": Rect2i(sel.cell, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
@@ -663,7 +668,14 @@ func _left_down(e: InputEventMouseButton) -> void:
 	if tool == "build":
 		if placing != "" and c != null:
 			var origin := _placement_origin()
-			if sim.placement_check(placing, origin, rot) == "":
+			if moving_id != 0:  # a finished building picked up (issue #234): it goes down at once, whole
+				var why := sim.move_site(sim.site(moving_id), origin, rot)
+				if why != "":
+					_hud.add_toast({"text": why + ".", "res_id": 0, "site_id": 0})
+				else:
+					selection = {"kind": "site", "id": moving_id}
+					set_tool("")
+			elif sim.placement_check(placing, origin, rot) == "":
 				var s := sim.place_site(placing, origin, rot)
 				selection = {"kind": "site", "id": s.id}
 				if not e.shift_pressed:
@@ -1276,10 +1288,20 @@ func _claim_edge() -> String:
 	return best
 
 
+## Picks up a finished building to put it down somewhere else (issue #234).
+func start_moving(s: Dictionary) -> void:
+	if view_map != "village":
+		return
+	start_placing(s.tpl)
+	moving_id = s.id  # after start_placing, which starts afresh
+	rot = s.rot
+
+
 func start_placing(tpl: String) -> void:
 	if view_map != "village":
 		return
 	tool = "build"
+	moving_id = 0
 	placing = tpl
 	menu_open = ""
 
@@ -2080,6 +2102,20 @@ func _screenshot_scene() -> void:
 			sim.compute_stuck()
 			_hud.refresh(sim)  # what's stuck now counts as seen, so it stays folded
 			_hud.stuck_open = false
+	if "--move" in OS.get_cmdline_user_args():  # a finished building selected, with its Move button (issue #234); --storehouse for the storehouse's panel
+		var tpl := "storehouse" if "--storehouse" in OS.get_cmdline_user_args() else "bench"
+		var spot: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(4, 0))
+		for d in range(0, 14):
+			if sim.placement_check(tpl, spot + Vector2i(d, 0)) == "":
+				spot += Vector2i(d, 0)
+				break
+		var built := sim.place_site(tpl, spot)
+		built.stage = Defs.TEMPLATES[tpl].stages.size()
+		built.done = true
+		sim._occ_dirty = true
+		selection = {"kind": "site", "id": built.id}
+		_target = Vector3(spot.x + 1.5, 0, spot.y + 1.5)
+		_place_camera()
 	if "--jobs" in OS.get_cmdline_user_args():  # the Village jobs board (issues #78, #134); add --village for more rows
 		sim.residents[0].jobs.mine.xp = 30
 		for i in range(1, sim.residents.size()):

@@ -77,6 +77,8 @@ When both chapters are done the panel folds to a green **The village ✓** chip.
 
 The goals panel's **Book** button (or the chip, once the chapters are done) opens the village book in its place. Its **Goals** page lists every step with its why. Every other page is a building or zone: what it's for, who works it, what it grows into and what goes wrong without it. A page shows once its building can be built (the expedition board once Ada's house is up, the pen once the board is built, the road once a party has been to the old caves). Select a building and click **? About the…** to jump to its page. Esc or **Close** shuts the book.
 
+**Moving a building.** Select a finished building and click **Move** on its panel. It follows the pointer like a new blueprint (the rotate key turns it), red where it can't go, with the reason in the hint; a click puts it down at once, with its queue, its stored items, its worker or its family and its work area. Houses move too. Trees and boulders where it lands are marked to clear, as for a new building. **Move** is greyed out, with the reason, while someone is working at the building, a delivery is on its way, or the expedition is using the board. The portal, its station, the dispatcher and the freight loader can't move: they're placed relative to each other.
+
 ## Paths
 
 The ground wears where residents walk. Busy routes turn to worn grass, then a dirt path, then a darker packed path, and residents walk faster on paths and choose them when they're not much longer. A path that nobody walks any more slowly grows back to grass. Buildings, stockpiles and farms don't wear, and putting one on a path clears it. Only the village has paths, not the mine or the road.

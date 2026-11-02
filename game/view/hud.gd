@@ -1991,6 +1991,13 @@ func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
 			_add_keep(c, sim, target)
 		"site":
 			_fill_site(c, sim, target)
+			if target.done and not target.tpl in Sim.UNMOVABLE and game.view_map == "village":  # pick a finished building up and put it down elsewhere (issue #234)
+				var why := sim.move_check(target, target.origin, target.rot)
+				var mv := _button("Move", func(): game.start_moving(target), "Secondary")
+				mv.set_meta("label", "Move building")
+				mv.disabled = why != ""
+				mv.tooltip_text = why if why != "" else "Pick it up and put it down somewhere else. Its queue and stored items go with it."
+				c.add_child(mv)
 			var page := Goals.page_for(target.tpl)
 			if not page.is_empty() and Goals.page_known(sim, page):  # the book's page for this building (issue #198)
 				var about := _button("?  About the %s" % Defs.TEMPLATES[target.tpl].name.to_lower(), func(): game.open_book(page.id))
