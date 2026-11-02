@@ -91,6 +91,7 @@ func _init() -> void:
 		"test_the_nether_line",
 		"test_nether_and_overworld_together",
 		"test_the_portal_goes_out",
+		"test_party_helps_prepare",
 		"test_expedition_slots",
 		"test_old_expedition_moves_to_the_overworld_slot",
 		"test_road_to_the_mine",
@@ -1883,7 +1884,7 @@ func test_staging_and_departure() -> void:
 		sim.step()
 		if tomas.job != null and tomas.job.kind == "deliver" and is_same(tomas.job.target, b):
 			tomas_packed = true
-		if ada.job != null and not (ada.job.kind in ["deliver", "stage", "eat"]):
+		if ada.job != null and not (ada.job.kind in ["deliver", "stage", "eat", "craft"]):  # "craft": helping make what's still short
 			ada_village_work = true
 		if i == 2 * Tuning.TPS:
 			check(stuck_text(sim).contains("Expedition: Waiting for"), "while packing, the wait shows: " + stuck_text(sim))
@@ -4597,6 +4598,55 @@ func test_diamonds_deep_in_the_mine() -> void:
 
 
 ## Two expeditions at once (issue #145): a slot for each realm.
+## The party helps prepare before it gathers at the board: with no meal yet but a loaf queued at the fireplace,
+## a member bakes it, carries it to the board, and only then waits there.
+func test_party_helps_prepare() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	var b := built_board(sim)
+	var fire := place_done(sim, "fireplace", Vector2i(10, 20))
+	fire.keep_meals = false
+	sim.drop_items(Sim.rcell(ada) + Vector2i(0, 2), "wheat", 6)
+	sim.queue_add(fire, "bread")
+	sim.queue_add(fire, "bread")
+	var plan := sim.new_plan()
+	plan.party = [ada.id, tomas.id]  # the whole village is in the party, so only the party can make the meals
+	plan.meals = 2
+	plan.picks = 0
+	sim.aim_plan(plan, plan.target.item, 6)
+	check(sim.plan_expedition(plan) == "", "planned, with no meal to pack yet")
+	var cooked := false
+	var carried := false
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		for r in [ada, tomas]:
+			if r.job != null and r.job.kind == "craft" and is_same(r.job.target, fire):
+				cooked = true
+			if r.job != null and r.job.kind == "deliver" and is_same(r.job.target, b):
+				carried = true
+	check(cooked, "a party member helps bake the meal the packs are short of")
+	check(carried or sim.packed().meals == 2, "then they're carried to the board (packed %s)" % [sim.packed()])
+	check(sim.at_board(ada) and sim.at_board(tomas), "and both wait at the board once the packing is done")
+	check(sim.depart_blocker() == "", "ready to depart: %s" % sim.depart_blocker())
+	# Waiting at the board, a member is called back when something to carry turns up.
+	var sim2 := Sim.new_game()
+	var ada2: Dictionary = sim2.residents[0]
+	var tomas2 := sim2.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada2) + Vector2i(1, 0))
+	var b2 := built_board(sim2)
+	var plan2 := sim2.new_plan()
+	plan2.party = [ada2.id, tomas2.id]
+	plan2.meals = 2
+	plan2.picks = 0
+	sim2.aim_plan(plan2, plan2.target.item, 6)
+	check(sim2.plan_expedition(plan2) == "", "a second trip is planned with nothing to pack")
+	run(sim2, 15)
+	check(sim2.at_board(ada2) and sim2.at_board(tomas2), "with nothing to carry or make, both wait at the board")
+	sim2.drop_items(Sim.rcell(ada2) + Vector2i(0, 3), "bread", 2)
+	run(sim2, 30)
+	check(sim2.packed().meals == 2 and sim2.depart_blocker() == "", "bread turns up, they carry it and wait again (%s)" % sim2.depart_blocker())
+
+
 func test_expedition_slots() -> void:
 	var sim := Sim.new_game()
 	var ada: Dictionary = sim.residents[0]

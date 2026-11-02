@@ -2796,6 +2796,8 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 				return true
 			if r.hunger < Tuning.EAT_BELOW and food_available():
 				return true  # goes to eat, then comes back
+			if tick % Tuning.TPS == 0 and _can_pack_more():
+				return true  # something to carry has turned up: pack it, then come back
 			j.label = "Waiting at the expedition board"
 			r.pos = Vector2(rcell(r))
 			return false
@@ -3156,6 +3158,8 @@ func _claim(r: Dictionary) -> void:
 	var c := rcell(r)
 	if in_staging_party(r):  # the party packs, then gathers at the board (issue #107)
 		var pj = _pack_job(r, c)
+		if pj == null:
+			pj = _prep_job(r, c)  # nothing to carry yet: help make what's missing, before waiting at the board
 		r.job = pj if pj != null else _stage_job()
 		return
 	if expedition.get("unloading", false) and expedition.party.has(r.id) and r.map == "village":
@@ -5461,6 +5465,51 @@ func _pack_job(r: Dictionary, c: Vector2i):
 				var st: Dictionary = nearest(src, c)
 				return _deliver_job(b, st.type, mini(mini(need[k[0]], carry_cap(r)), avail(st)), st)
 	return null
+
+
+## The jobs that make each kind of supply the packs are short of, for a party member to help with.
+const PREP_JOBS := {"meals": ["cook"], "picks": ["toolsmith", "craft"], "wheat": ["craft"], "sticks": ["craft"], "cobble": ["mason", "craft"],
+	"planks": ["lumber", "craft"], "gold": ["craft"], "rails": ["craft", "toolsmith"], "minecarts": ["craft", "toolsmith"]}
+
+
+## Help for a party that's still short of supplies, with nothing yet to carry: a member lends a hand at a
+## workstation with work queued for what's missing (a cook at the fireplace for meals, the toolsmith's bench
+## for spare pickaxes), so the party isn't idle at the board while others make it. Null when nothing's needed
+## or nothing's queued.
+func _prep_job(r: Dictionary, c: Vector2i):
+	if expedition.get("state", "") != "staging" or map_id != "village" or r.get("hurt", 0) > 0:
+		return null
+	var need := pack_needs()
+	var jobs: Array = []
+	for k in need:
+		if need[k] > 0:
+			for jb in PREP_JOBS.get(k, []):
+				if not jobs.has(jb):
+					jobs.append(jb)
+	if jobs.is_empty():
+		return null
+	keep_meals_stocked()
+	keep_made_stocked()
+	keep_tools_stocked()
+	return _claim_kind(r, c, "station", jobs)
+
+
+## Whether something that's still needed in the packs is lying ready to carry to the board.
+func _can_pack_more() -> bool:
+	if expedition.get("state", "") != "staging" or map_id != "village":
+		return false
+	var b := site(expedition.board)
+	if b.is_empty() or _cooling(b):
+		return false
+	var need := pack_needs()
+	if need.meals > 0 and not stacks_where(func(st): return Defs.MEALS.has(st.type) and avail(st) > 0).is_empty():
+		return true
+	if need.picks > 0 and not tool_items("pick", 0).is_empty():
+		return true
+	for k in SUPPLY_KINDS:
+		if need[k[0]] > 0 and not stacks_where(func(st): return st.type == k[1] and avail(st) > 0).is_empty():
+			return true
+	return false
 
 
 ## A party member walks to the board and waits there to leave.
