@@ -1826,7 +1826,7 @@ func _update_sheep() -> void:
 
 # ---------------------------------------------------------------- the Nether's creatures (issue #151)
 
-static var CREATURE_COLORS := {"magma_cube": Color("#C4501E"), "zombified_piglin": Color("#C98A83"), "skeleton": Color("#DCD7C5"), "blaze": Color("#F2B531")}
+static var CREATURE_COLORS := {"magma_cube": Color("#C4501E"), "zombified_piglin": Color("#C98A83"), "skeleton": Color("#DCD7C5"), "blaze": Color("#F2B531"), "zombie": Color("#6E9A5A"), "spider": Color("#3A3236"), "golem": Color("#B7B9B4")}
 var _creature_nodes := {}   ## Creature id -> its model.
 
 
@@ -1845,6 +1845,20 @@ func _make_creature(species: String) -> Node3D:
 			_part(body, Vector3(0.26, 0.3, 0.26), 0.0, Color("#4B4F5C"))
 			_part(body, Vector3(0.34, 0.44, 0.34), 0.3, Color("#6E8E58"))
 			_part(body, Vector3(0.32, 0.3, 0.32), 0.74, col)
+		"zombie":  # a green head over a torn blue shirt
+			_part(body, Vector3(0.24, 0.4, 0.2), 0.0, Color("#3B4A78"))
+			_part(body, Vector3(0.34, 0.4, 0.22), 0.4, Color("#4A7FA8"))
+			_part(body, Vector3(0.3, 0.3, 0.3), 0.8, col)
+		"spider":  # a low dark body with eight legs' worth of width
+			_part(body, Vector3(0.7, 0.08, 0.7), 0.1, col.darkened(0.3))
+			_part(body, Vector3(0.44, 0.24, 0.5), 0.12, col)
+			_part(body, Vector3(0.24, 0.2, 0.24), 0.2, Color("#8A2B2B")).position.z = 0.3
+		"golem":  # big and slow: legs, a broad iron chest and a small head
+			_part(body, Vector3(0.5, 0.55, 0.36), 0.0, col.darkened(0.2))
+			_part(body, Vector3(0.9, 0.6, 0.5), 0.55, col)
+			_part(body, Vector3(0.36, 0.34, 0.36), 1.15, col.lightened(0.08))
+			_part(body, Vector3(0.18, 0.7, 0.18), 0.45, col.darkened(0.12)).position.x = -0.55
+			_part(body, Vector3(0.18, 0.7, 0.18), 0.45, col.darkened(0.12)).position.x = 0.55
 		"skeleton":  # thin and pale
 			_part(body, Vector3(0.18, 0.4, 0.18), 0.0, col)
 			_part(body, Vector3(0.28, 0.4, 0.2), 0.4, col.darkened(0.08))

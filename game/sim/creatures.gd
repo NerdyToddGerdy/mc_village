@@ -24,13 +24,17 @@ static func _step_creatures(sim: Sim) -> void:
 	for x in sim.m.creatures:
 		if not x.alive:
 			continue
+		if x.species == "golem":  # the village's: it never goes for a resident (issue #359)
+			Night.step_golem(sim, x)
+			continue
 		x.cool = maxf(0.0, x.cool - Tuning.DT)
 		var sp: Dictionary = Defs.CREATURES[x.species]
+		var notice: int = Tuning.MOB_SIGHT if x.get("hunt", false) else sp.notice  # a night mob comes for anyone (issue #358)
 		var tgt = null
 		var best := 999
 		for r in folks:
 			var d := Sim.manhattan(x.cell, Sim.rcell(r))
-			if ((sp.notice > 0 and d <= sp.notice) or (x.angry and d <= 10)) and d < best:
+			if ((notice > 0 and d <= notice) or (x.angry and d <= 10)) and d < best:
 				best = d
 				tgt = r
 		if tgt == null:
@@ -78,16 +82,21 @@ static func _strike(sim: Sim, r: Dictionary, cr: Dictionary) -> void:
 	cr.angry = true
 	if cr.hp > 0:
 		return
+	_down(sim, cr)
+	sim.gain_xp(r, "guard")
+	sim._toast("%s brought down a %s." % [r.name, Defs.CREATURES[cr.species].name.to_lower()], r.id)
+
+
+## A creature goes down: it leaves its drops (a night mob's own, when it carries them), which are hauled like anything loose.
+static func _down(sim: Sim, cr: Dictionary) -> void:
 	cr.alive = false
 	sim.stats.creatures_beaten = sim.stats.get("creatures_beaten", 0) + 1
-	var sp: Dictionary = Defs.CREATURES[cr.species]
-	for k in sp.drops:
-		sim.drop_items(cr.cell, k, sp.drops[k])
+	var drops: Dictionary = cr.get("drops", Defs.CREATURES[cr.species].drops)
+	for k in drops:
+		sim.drop_items(cr.cell, k, drops[k])
 		if not sim.m.drops_known.has(k):
 			sim.m.drops_known.append(k)
-	sim.gain_xp(r, "guard")
 	sim.rev += 1
-	sim._toast("%s brought down a %s." % [r.name, sp.name.to_lower()], r.id)
 
 
 ## What a party member does about creatures (issue #151). A guard (or Ada) goes for what threatens the party, or, when the

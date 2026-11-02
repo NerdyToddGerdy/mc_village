@@ -14,6 +14,7 @@ const ROAD := 30.0
 
 
 func _init() -> void:
+	Night.enabled = false  # a long run isn't broken into by a night wave; the night's own tests switch it on
 	var tests := [
 		"test_full_opening",
 		"test_founding_goals",
@@ -26,6 +27,10 @@ func _init() -> void:
 		"test_beds_and_free_bed_arrivals",
 		"test_hunger_and_eating",
 		"test_dig_up_bushes",
+		"test_day_and_night_clock",
+		"test_night_waves",
+		"test_the_iron_golem",
+		"test_village_combat",
 		"test_guide_new_marks",
 		"test_many_loose_items_tick_cheaply",
 		"test_idle_residents_go_home",
@@ -1043,6 +1048,159 @@ func test_guide_new_marks() -> void:
 	d.stats.erase("guide_seen")
 	var old := Sim.from_state(d)
 	check(Goals.new_pages(old).is_empty() and old.stats.guide_seen.has("bench"), "an older save counts every page it knows as seen")
+
+
+## Issue #357: a day is 8 minutes, about 5 of day and 3 of night, and an older save starts on a morning.
+func test_day_and_night_clock() -> void:
+	var sim := Sim.new_game()
+	check(Night.day_number(sim) == 1 and not Night.is_night(sim) and Night.night_level(sim) == 0.0, "a game starts on a morning")
+	run(sim, Tuning.NIGHT_AT - Tuning.DUSK_SECONDS - 1.0)
+	check(not Night.is_night(sim) and Night.night_level(sim) == 0.0, "it's day for about five minutes")
+	run(sim, 2.0)
+	check(Night.is_night(sim) and Night.night_level(sim) > 0.0 and Night.night_level(sim) < 1.0, "then night falls gradually")
+	run(sim, Tuning.DUSK_SECONDS)
+	check(Night.night_level(sim) == 1.0, "to full night")
+	run(sim, Tuning.DAY_SECONDS - Tuning.NIGHT_AT - Tuning.DUSK_SECONDS + Tuning.DUSK_SECONDS + 1.0)
+	check(Night.day_number(sim) == 2 and not Night.is_night(sim), "and the next morning is day 2")
+	var d: Dictionary = SaveFormat.read("res://tests/fixtures/save_v63.save").data.state.duplicate(true)
+	d.stats.erase("day_zero")
+	var old := Sim.from_state(d)
+	check(Night.clock(old) < Tuning.DUSK_SECONDS + 1.0 and Night.day_number(old) == 1 and Night.night_level(old) == 0.0, "an older save starts on a morning, whatever its tick")
+	var again := Sim.from_state(sim.save_state())
+	check(is_equal_approx(Night.clock(again), Night.clock(sim)), "and the clock is saved")
+
+
+## Brings a village to three residents and runs it to just before the first night, with the mobs switched on.
+func _village_at_dusk(residents: int) -> Sim:
+	var sim := Sim.new_game()
+	for i in residents - 1:
+		sim.add_resident("Mate %d" % i, Sim.TRAVELERS[i % 3][1], sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(2 + i, 1)))
+	for r in sim.residents:
+		r.hunger = 100.0
+	run(sim, Tuning.NIGHT_AT - Tuning.DUSK_SECONDS - 2.0)
+	return sim
+
+
+## Issue #358: a small wave comes each night once there are three residents, and the dawn sends it off.
+func test_night_waves() -> void:
+	Night.enabled = true
+	var small := _village_at_dusk(2)
+	run(small, 4.0)
+	check(small.m.creatures.filter(func(x): return x.species != "golem").is_empty(), "with two residents no mobs come")
+	var sim := _village_at_dusk(3)
+	run(sim, 4.0)
+	var mobs: Array = sim.m.creatures.filter(func(x): return x.alive and x.species != "golem")
+	check(mobs.size() == Night.wave_size(sim) and mobs.size() >= Tuning.WAVE_BASE, "three residents bring a wave (%d)" % mobs.size())
+	check(mobs.all(func(x): return ["zombie", "skeleton", "spider"].has(x.species)), "of zombies, skeletons and spiders")
+	check(sim.events.any(func(e): return e.type == "toast" and e.text.begins_with("Night falls")), "and a toast says night has fallen")
+	var before := mobs.size()
+	for r in sim.residents:
+		r.hunger = 100.0
+	run(sim, 3.0)
+	check(sim.m.creatures.filter(func(x): return x.alive and x.species != "golem").size() >= 1 or before > 0, "they're after the residents")
+	var wave_day: int = sim.stats.wave_day
+	run(sim, Tuning.DAY_SECONDS - Tuning.NIGHT_AT + 2.0)
+	check(sim.m.creatures.filter(func(x): return x.species != "golem").is_empty(), "the dawn sends the rest away")
+	check(wave_day == 1 and sim.stats.wave_day == 1, "one wave a night")
+	var bigger := _village_at_dusk(7)
+	run(bigger, 4.0)
+	check(bigger.m.creatures.filter(func(x): return x.species != "golem").size() > mobs.size(), "more residents, a bigger wave")
+	var guarded := _village_at_dusk(3)
+	guarded.set_role(guarded.residents[1], "guard")
+	check(Night.wave_size(guarded) == Night.wave_size(sim) + 1, "and a guard makes it a little bigger")
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.stats.wave_day == sim.stats.wave_day, "the night's wave is saved")
+	Night.enabled = false
+
+
+## Issue #359: the iron golem appears by itself at three residents, patrols, and knocks mobs out without hurting anyone.
+func test_the_iron_golem() -> void:
+	Night.enabled = true
+	var two := Sim.new_game()
+	two.add_resident("Mate", Sim.TRAVELERS[0][1], two.nearest_walkable(Sim.rcell(two.residents[0]) + Vector2i(2, 1)))
+	run(two, 3.0)
+	check(not two.m.creatures.any(func(x): return x.species == "golem"), "no golem with two residents")
+	var sim := Sim.new_game()
+	for i in 2:
+		sim.add_resident("Mate %d" % i, Sim.TRAVELERS[i][1], sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(2 + i, 1)))
+	run(sim, 3.0)
+	var golems: Array = sim.m.creatures.filter(func(x): return x.species == "golem")
+	check(golems.size() == 1, "the golem appears at the third resident")
+	var g: Dictionary = golems[0]
+	var start: Vector2i = g.cell
+	run(sim, 30.0)
+	check(g.cell != start, "it patrols")
+	check(sim.m.creatures.filter(func(x): return x.species == "golem").size() == 1, "and there's only ever one")
+	var hp: int = g.hp
+	var zombie := sim.spawn_creature("village", "zombie", sim.nearest_walkable(g.cell + Vector2i(6, 0)))
+	zombie.hunt = true
+	for r in sim.residents:
+		r.hunger = 100.0
+	var down := false
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if not zombie.alive:
+			down = true
+			break
+	check(down, "it knocks a mob out")
+	check(sim.m.drops_known.has("rotten_flesh"), "and it leaves its drops, for haulers to carry")
+	check(g.hp == hp, "the golem takes no harm")
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.m.creatures.any(func(x): return x.species == "golem") and loaded.m.creatures.filter(func(x): return x.species == "golem").size() == 1, "the golem is saved")
+	var d: Dictionary = SaveFormat.read("res://tests/fixtures/save_v63.save").data.state.duplicate(true)
+	d.stats.erase("day_zero")
+	var old := Sim.from_state(d)
+	check(Night.clock(old) >= 0.0, "an older save loads")
+	var f64 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v64.save").data.state)
+	check(f64.stats.has("day_zero"), "the v64 fixture keeps its day's clock")
+	Night.enabled = false
+
+
+## Issue #360: at night mobs can injure residents, who fight back, guards best and the golem too; nobody dies.
+func test_village_combat() -> void:
+	Night.enabled = true
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var mate := sim.add_resident("Mate", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(3, 1)))
+	var guard := sim.add_resident("Warden", Sim.TRAVELERS[1][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(-3, 1)))
+	sim.set_role(guard, "guard")
+	for r in sim.residents:
+		r.hunger = 100.0
+	sim.m.creatures = sim.m.creatures.filter(func(x): return x.species != "golem")
+	# A mob next to a resident who isn't a guard: they hit back, slowly.
+	var zombie := sim.spawn_creature("village", "zombie", Sim.rcell(mate) + Vector2i(1, 0))
+	zombie.pos = Vector2(zombie.cell)
+	zombie.hunt = true
+	var kinds: Array = []
+	var hurt_seen := false
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		for r in [mate, guard, ada]:
+			if r.job != null and not kinds.has(r.job.kind):
+				kinds.append(r.job.kind)
+			if r.get("hurt", 0) > 0:
+				hurt_seen = true
+		if not zombie.alive:
+			break
+	check(not zombie.alive, "the village's defenders bring the mob down")
+	check(kinds.has("fight"), "residents fight it (%s)" % [kinds])
+	check(sim.residents.size() == 3, "nobody dies")
+	check(Night.defend_job(sim, mate, Sim.rcell(mate)) == null, "with no mob about nobody is sent after one")
+	# A mob in reach of a resident can injure them.
+	var hits := 0
+	var tomas := sim.add_resident("Far", Sim.TRAVELERS[2][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(8, 8)))
+	tomas.hunger = 100.0
+	for i in 20:
+		var z := sim.spawn_creature("village", "zombie", Sim.rcell(tomas))
+		z.hunt = true
+		z.cool = 0.0
+		sim.m.creatures.erase(z)
+		sim.m.creatures.append(z)
+		sim._hazard(tomas, 1.0, 0.0, "a zombie", "creature")
+		hits += 1 if tomas.get("hurt", 0) > 0 else 0
+		tomas.hurt = 0
+	check(hits > 0, "a mob's blow can injure a resident")
+	Night.enabled = false
 
 
 ## Issue #344: a marked berry bush is dug up by hand and its berries carried off; unmarking it stops the work.
@@ -5367,7 +5525,7 @@ func test_auto_combat() -> void:
 	var tomas: Dictionary = w.tomas
 	var mira: Dictionary = w.mira
 	var landing: SimMap = w.landing
-	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "blaze"], "five creatures")
+	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "blaze", "zombie", "spider", "golem"], "the Nether's five creatures, then the village's zombie, spider and golem")
 	# A guard defeats a magma cube, which leaves its cream.
 	var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Sim.rcell(tomas) + Vector2i(5, 0))
 	var xp: int = tomas.jobs.guard.xp

@@ -35,6 +35,24 @@ const EAT_TIME := 1.5                   ## Seconds to eat one food item or berry
 const FOOD_VALUE := {"berries": 15.0, "mutton": 20.0, "bread": 50.0, "cooked_mutton": 60.0,
 	"beef": 20.0, "porkchop": 20.0, "cooked_beef": 60.0, "cooked_porkchop": 60.0}
 const BUSH_MAX := 3                     ## Berries a bush holds.
+## Night at the village (issues #66, #357-#360).
+const DAY_SECONDS := 480.0            ## A whole day: about 5 minutes of day and 3 of night.
+const NIGHT_AT := 300.0               ## Seconds into the day when night falls.
+const DUSK_SECONDS := 20.0            ## How long the light takes to change at dusk and dawn.
+const NIGHT_FROM := 3                 ## Residents the village needs before mobs come at night.
+const GOLEM_AT := 3                   ## Residents the village needs before an iron golem appears.
+const WAVE_BASE := 2                  ## Mobs in the smallest night's wave.
+const WAVE_PER_RESIDENTS := 2         ## One more mob for every this many residents past the third.
+const WAVE_MAX := 9                   ## The most mobs a night brings.
+const MOB_SIGHT := 40                 ## How far a night mob notices a resident: anywhere in the village.
+const GOLEM_SPEED := 1.2              ## Cells the golem walks in a second.
+const GOLEM_DAMAGE := 4               ## A golem's blow.
+const GOLEM_HIT := 1.2                ## Seconds between its blows.
+const GOLEM_SIGHT := 30               ## How far it goes after a mob.
+const PATROL_RADIUS := 9              ## How far from the village's middle it wanders on patrol.
+const GUARD_DEFEND_RANGE := 14        ## How far a guard goes after a night mob.
+const FIGHT_BACK_RANGE := 2           ## How close a mob must be for anyone else to fight it.
+const FIGHT_BACK_SLOW := 2.2          ## Anyone but a guard takes this many times longer between blows.
 const IDLE_HOME_AFTER := 20.0              ## Seconds a resident with nothing to do waits before walking home (issue #345).
 const HOME_NEAR := 3                      ## Cells from their house door that count as home.
 const BUSH_DIG_TIME := 3.0               ## Seconds to dig up a marked berry bush.
