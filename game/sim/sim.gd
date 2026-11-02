@@ -254,6 +254,7 @@ static func new_game() -> Sim:
 	s.add_resident("Ada", ADA_TUNIC, OPENING_START + o)
 	s.auto_craft = true  # the bench makes a recipe's planks and sticks from the start (issue #182)
 	s._add_site_maps()
+	Goals.seed_seen(s)  # the pages open from the start aren't "new" (issue #348)
 	return s
 
 
@@ -1961,6 +1962,14 @@ func _gather_job(r: Dictionary, target: Dictionary) -> Job:
 	j.step({"op": "work", "what": "gather", "target": target, "tool": kind,
 		"label": "Chopping a tree" if is_tree else "Breaking a boulder"})
 	return j
+
+
+## The player has opened a page of the Guide: it's no longer new (issue #348).
+func see_page(id: String) -> void:
+	var seen: Dictionary = stats.get("guide_seen", {})
+	if not seen.has(id) and Goals.pages(self).any(func(p): return p.id == id):
+		seen[id] = true
+		stats.guide_seen = seen
 
 
 ## Marks a berry bush to be dug up, or unmarks it (issue #344). The claimant stops if it's unmarked.
@@ -7290,5 +7299,7 @@ static func from_state(d: Dictionary) -> Sim:
 		if r.arriving:
 			s.walk_in(r)
 	s.use_map("village")
+	if not s.stats.has("guide_seen"):  # an older save: every page it already knows counts as seen (issue #348)
+		Goals.seed_seen(s)
 	s.compute_stuck()
 	return s

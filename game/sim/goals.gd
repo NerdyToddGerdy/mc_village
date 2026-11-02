@@ -46,7 +46,7 @@ const PAGES := [
 		"what": "Open grass where wheat is planted, grown and harvested again and again.",
 		"grows": "The composter beside it reserves room to grow into a granary.",
 		"without": "Food comes only from berries and from hunting, and both run out."},
-	{"id": "pen", "title": "Pen", "unlock": "board", "who": "The expedition party builds it and leads animals in",
+	{"id": "pen", "clue": "Something the expedition board makes room for.", "title": "Pen", "unlock": "board", "who": "The expedition party builds it and leads animals in",
 		"what": "A fenced pen at the meadow where animals are kept and bred. Fed pairs have young.",
 		"grows": "More animals mean wool, leather and meat on every trip.",
 		"without": "Wool and leather depend on whatever the party finds wandering."},
@@ -90,39 +90,39 @@ const PAGES := [
 		"what": "The village's main storage. Chests carried in hold anything; stockpiles take the overflow.",
 		"grows": "Up to 4 chests, and room to grow into a warehouse.",
 		"without": "Everything sits loose in stockpiles, and runs out of room."},
-	{"id": "enchanting_workshop", "title": "Enchanting workshop", "tpl": "enchanting_workshop", "unlock": "enchanting", "who": "An Enchanter",
+	{"id": "enchanting_workshop", "clue": "Something an old book might teach.", "title": "Enchanting workshop", "tpl": "enchanting_workshop", "unlock": "enchanting", "who": "An Enchanter",
 		"what": "Obsidian and diamonds make a workshop where an Enchanter reads enchanted books, learning their recipes for good, and enchants tools, swords and armor.",
 		"grows": "Reserves a plot, and grows into a library.",
 		"without": "Enchanted books are only things to carry, and gear stays plain."},
-	{"id": "portal_station", "title": "Portal station", "tpl": "portal_station", "unlock": "portal_line", "who": "Builders; a Build party lays the Nether side",
+	{"id": "portal_station", "clue": "Something a lit portal leads to.", "title": "Portal station", "tpl": "portal_station", "unlock": "portal_line", "who": "Builders; a Build party lays the Nether side",
 		"what": "The village end of the portal line, beside the portal, with a landing station beside the shelter in the Nether. Carts and parties ride it.",
 		"grows": "Reserves a plot, and grows into a freight loader.",
 		"without": "Everything crosses the portal on foot."},
-	{"id": "devices", "title": "Redstone devices", "tpl": "cache_sensor", "unlock": "portal_line", "who": "Builders; a hauler lays the dust",
+	{"id": "devices", "clue": "Something a lit portal leads to.", "title": "Redstone devices", "tpl": "cache_sensor", "unlock": "portal_line", "who": "Builders; a hauler lays the dust",
 		"what": "Ready-made devices built from redstone dust, quartz and stone: a cache sensor reads the Nether cache, a condition passes a signal only while a fact holds. Dust lines you order join one's output to another's input. Each device says why it's on.",
 		"grows": "A freight loader on the portal station's plot and a dispatcher join them in the chain.",
 		"without": "A low cache is something to notice yourself."},
-	{"id": "condition", "title": "Condition", "tpl": "condition", "unlock": "portal_line", "who": "Builders",
+	{"id": "condition", "clue": "Something a lit portal leads to.", "title": "Condition", "tpl": "condition", "unlock": "portal_line", "who": "Builders",
 		"what": "Passes a signal along only while a fact holds: the portal is lit, the freight cart is home, or the loader is idle.",
 		"grows": "Nothing; it joins the sensor to the loader.",
 		"without": "A low cache would start the freight even with the portal out."},
-	{"id": "dispatcher", "title": "Dispatcher", "tpl": "dispatcher", "unlock": "portal_line", "who": "Builders",
+	{"id": "dispatcher", "clue": "Something a lit portal leads to.", "title": "Dispatcher", "tpl": "dispatcher", "unlock": "portal_line", "who": "Builders",
 		"what": "Stands beside the portal station. When powered and the freight cart is loaded, it asks you to approve the departure. The game keeps running; approve or decline from the station.",
 		"grows": "Nothing.",
 		"without": "You watch the cart yourself."},
-	{"id": "freight_loader", "title": "Freight loader", "tpl": "freight_loader", "unlock": "portal_line", "who": "Builders; haulers load the cart",
+	{"id": "freight_loader", "clue": "Something a lit portal leads to.", "title": "Freight loader", "tpl": "freight_loader", "unlock": "portal_line", "who": "Builders; haulers load the cart",
 		"what": "The loading-station upgrade on the portal station's plot. While powered, haulers carry its freight list from the stockpile onto the freight cart.",
 		"grows": "Nothing.",
 		"without": "The freight cart leaves empty."},
-	{"id": "portal", "title": "Nether portal", "tpl": "portal", "unlock": "portal", "who": "Builders carry the obsidian; anyone lights it",
+	{"id": "portal", "clue": "Something that only the deep stone can make.", "title": "Nether portal", "tpl": "portal", "unlock": "portal", "who": "Builders carry the obsidian; anyone lights it",
 		"what": "A frame of obsidian from the deep mine, lit with flint and steel. Parties bound for the Nether pack on the staging area in front of it.",
 		"grows": "Reserves a portal hall around it.",
 		"without": "There's no way to the Nether, and nothing it holds."},
-	{"id": "board", "title": "Expedition board", "tpl": "board", "unlock": "house", "who": "Whoever you send",
+	{"id": "board", "clue": "Something Ada's first house makes possible.", "title": "Expedition board", "tpl": "board", "unlock": "house", "who": "Whoever you send",
 		"what": "Plans trips off the map: pack the party, set a target, and Depart. The village waits while they're away.",
 		"grows": "Reserves a plot, and grows into a map room.",
 		"without": "Wool, ore and anything off the map stay out of reach."},
-	{"id": "road", "title": "The road", "unlock": "road", "who": "Builders, and the party",
+	{"id": "road", "clue": "Something an expedition to the old caves would find.", "title": "The road", "unlock": "road", "who": "Builders, and the party",
 		"what": "A bridge, a track and a station at each end: the way to the old caves, and a minecart to ride it.",
 		"grows": "A faster ride each way, but mining takes just as long.",
 		"without": "Every trip is a long walk, and the party carries everything it needs."},
@@ -132,6 +132,27 @@ const PAGES := [
 ## The pages that show now, in order.
 static func pages(sim: Sim) -> Array:
 	return PAGES.filter(func(p): return page_known(sim, p))
+
+
+## Every page, known or not, sorted by its real name, so a locked one sits where its name would (issue #348).
+static func guide_rows(sim: Sim) -> Array:
+	var rows: Array = PAGES.duplicate()
+	rows.sort_custom(func(a, b): return String(a.title).to_lower() < String(b.title).to_lower())
+	return rows
+
+
+## The known pages the player hasn't clicked since they unlocked (issue #348).
+static func new_pages(sim: Sim) -> Array:
+	var seen: Dictionary = sim.stats.get("guide_seen", {})
+	return pages(sim).filter(func(p): return not seen.has(p.id))
+
+
+## Marks every page known now as seen: a new game's opening pages, and an older save's whole book (issue #348).
+static func seed_seen(sim: Sim) -> void:
+	var seen: Dictionary = sim.stats.get("guide_seen", {})
+	for p in pages(sim):
+		seen[p.id] = true
+	sim.stats.guide_seen = seen
 
 
 static func page_known(sim: Sim, page: Dictionary) -> bool:

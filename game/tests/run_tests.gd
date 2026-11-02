@@ -26,6 +26,7 @@ func _init() -> void:
 		"test_beds_and_free_bed_arrivals",
 		"test_hunger_and_eating",
 		"test_dig_up_bushes",
+		"test_guide_new_marks",
 		"test_many_loose_items_tick_cheaply",
 		"test_idle_residents_go_home",
 		"test_farm_plant_grow_harvest",
@@ -974,6 +975,26 @@ func test_many_loose_items_tick_cheaply() -> void:
 			sim.step()
 		times.append(float(Time.get_ticks_usec() - t0))
 	check(times[1] < times[0] * 6.0, "600 loose stacks cost %.1f times the empty tick (%.0f ms against %.0f ms)" % [times[1] / times[0], times[1] / 1000.0, times[0] / 1000.0])
+
+
+## Issue #348: a page that unlocks is new until the player opens it; an older save counts every page it knows as seen.
+func test_guide_new_marks() -> void:
+	var sim := Sim.new_game()
+	check(Goals.new_pages(sim).is_empty(), "a new game's opening pages aren't new")
+	check(Goals.guide_rows(sim).size() == Goals.PAGES.size() and Goals.guide_rows(sim)[0].title < Goals.guide_rows(sim)[1].title, "the Guide lists every page, in alphabetical order")
+	check(Goals.PAGES.all(func(p): return p.get("unlock", "") == "" or p.get("clue", "") != ""), "every page that unlocks has a clue")
+	sim.stats.houses = 1
+	check(Goals.new_pages(sim).map(func(p): return p.id) == ["board"], "a page that unlocks is new")
+	sim.see_page("pen")
+	check(Goals.new_pages(sim).size() == 1, "opening a locked page clears nothing")
+	sim.see_page("board")
+	check(Goals.new_pages(sim).is_empty(), "opening the page clears its mark")
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.stats.guide_seen.has("board"), "which is saved")
+	var d: Dictionary = SaveFormat.read("res://tests/fixtures/save_v62.save").data.state.duplicate(true)
+	d.stats.erase("guide_seen")
+	var old := Sim.from_state(d)
+	check(Goals.new_pages(old).is_empty() and old.stats.guide_seen.has("bench"), "an older save counts every page it knows as seen")
 
 
 ## Issue #344: a marked berry bush is dug up by hand and its berries carried off; unmarking it stops the work.
@@ -3046,6 +3067,8 @@ func test_repeat_the_last_trip() -> void:
 	check(loaded.last_plans.has(Meadow.ID) and loaded.last_plans[Meadow.ID].meals == 5, "the last trips are saved")
 	var f61 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v61.save").data.state)
 	check(f61.last_plans.has("meadow") and f61.last_plans.meadow.meals == 5, "the v61 fixture keeps its last trip")
+	var f63 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v63.save").data.state)
+	check(f63.stats.has("guide_seen") and Goals.new_pages(f63).is_empty(), "the v63 fixture knows which pages were seen")
 	var f62 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v62.save").data.state)
 	check(f62.bushes.all(func(b): return b.has("des") and b.claim == 0), "the v62 fixture's bushes can be marked")
 	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v60.save").data.state)

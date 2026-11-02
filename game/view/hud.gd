@@ -331,6 +331,7 @@ func _ready() -> void:
 	_root.add_child(_tools_drop)
 	_book_panel = _panel(_book, Vector2(460, 0))
 	_book_panel.top_level = true
+	_book_panel.add_theme_stylebox_override("panel", _box(Color(Palette.SLATE, 1.0), 8, 12, Palette.SLATE_DEEP))  # opaque: it lies over the selection panel
 	_book_panel.visible = false
 	_root.add_child(_book_panel)
 	_root.add_child(_job_drop)
@@ -1590,6 +1591,10 @@ func _refresh_book(sim: Sim) -> void:
 		sig += "1" if Goals.village_done(sim, i) else "0"
 	for p in pages:
 		sig += p.id
+	var rows := Goals.guide_rows(sim)
+	var fresh := Goals.new_pages(sim).map(func(p): return p.id)
+	var guide_sel: String = game.guide_page if rows.any(func(p): return p.id == game.guide_page) else rows[0].id
+	sig += "|%s|%s" % [fresh, guide_sel]
 	var live: Control = _board if game.book_page == "jobs" else (_roster if game.book_page == "residents" else null)
 	_rebuild(_book, sig, func(c: Container) -> void:
 		var head := HBoxContainer.new()
@@ -1601,8 +1606,8 @@ func _refresh_book(sim: Sim) -> void:
 		var tabs := HFlowContainer.new()
 		tabs.add_theme_constant_override("h_separation", 2)
 		tabs.add_theme_constant_override("v_separation", 2)
-		for entry in [{"id": "goals", "title": "Goals"}, {"id": "jobs", "title": "Jobs"}, {"id": "residents", "title": "Residents"}] + pages:
-			var b := _button(entry.title, func(): game.open_book(entry.id))
+		for entry in [{"id": "goals", "title": "Goals"}, {"id": "jobs", "title": "Jobs"}, {"id": "residents", "title": "Residents"}, {"id": "guide", "title": "Guide"}]:
+			var b := _button(entry.title + ("  new" if entry.id == "guide" and not fresh.is_empty() else ""), func(): game.open_book(entry.id))
 			b.set_meta("label", "Book: " + entry.title)
 			b.toggle_mode = true
 			b.set_pressed_no_signal(game.book_page == entry.id)
@@ -1611,7 +1616,32 @@ func _refresh_book(sim: Sim) -> void:
 		_book_scroll = ScrollContainer.new()
 		_book_scroll.custom_minimum_size = Vector2(440, 330)
 		_book_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		c.add_child(_book_scroll)
+		if game.book_page == "guide":  # a list of the pages on the left, the chosen one on the right (issue #348)
+			var split := HBoxContainer.new()
+			split.add_theme_constant_override("separation", 8)
+			c.add_child(split)
+			var list_scroll := ScrollContainer.new()
+			list_scroll.custom_minimum_size = Vector2(170, 330)
+			list_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+			split.add_child(list_scroll)
+			var list := VBoxContainer.new()
+			list.add_theme_constant_override("separation", 2)
+			list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			list_scroll.add_child(list)
+			for row in rows:
+				var known := Goals.page_known(sim, row)
+				var rb := _button("%s%s" % [row.title if known else "???", "  new" if fresh.has(row.id) else ""], func(): game.select_guide(row.id))
+				rb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+				rb.toggle_mode = true
+				rb.set_pressed_no_signal(row.id == guide_sel)
+				rb.set_meta("label", "Guide: " + (row.title if known else "???"))
+				if not known:
+					for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+						rb.add_theme_color_override(state, Palette.CHALK_DIM)
+				list.add_child(rb)
+			split.add_child(_book_scroll)
+		else:
+			c.add_child(_book_scroll)
 		if live != null:
 			live.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			_book_scroll.add_child(live)
@@ -1620,11 +1650,17 @@ func _refresh_book(sim: Sim) -> void:
 		body.add_theme_constant_override("separation", 6)
 		body.custom_minimum_size.x = 430
 		_book_scroll.add_child(body)
-		var page := pages.filter(func(p): return p.id == game.book_page)
-		if page.is_empty():
-			_fill_book_goals(body, sim)
+		if game.book_page == "guide":
+			var chosen: Dictionary = rows.filter(func(p): return p.id == guide_sel)[0]
+			if Goals.page_known(sim, chosen):
+				_fill_book_page(body, chosen)
+			else:
+				body.add_child(_label("???", true, Palette.CHALK, Palette.HEADING))
+				var clue := _label(chosen.get("clue", "Not found yet."), false, Palette.CHALK_DIM, Palette.BODY, true)
+				clue.custom_minimum_size.x = 420
+				body.add_child(clue)
 		else:
-			_fill_book_page(body, page[0]),
+			_fill_book_goals(body, sim),
 		func() -> void:  # the live pages outlive a rebuild: take them out before the old page is freed
 			for n in [_board, _roster]:
 				if n.get_parent() != null:

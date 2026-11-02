@@ -28,6 +28,7 @@ var jobs_board_open: bool:                ## The village book is open on its Job
 	get: return book_open and book_page == "jobs"
 	set(v): toggle_jobs_board(v)
 var book_open := false                  ## The village book (issue #198).
+var guide_page := ""                    ## The Guide's chosen page, or "" for the first one (issue #348).
 var book_page := "goals"                ## Its open page: "goals", "jobs", "residents", or a page's id from Goals.PAGES.
 var planner_open := false               ## The expedition planner above the toolbar (issue #106).
 var line_preview := false                ## The route panel shows the line's cost before it's planned (issue #121).
@@ -1365,6 +1366,15 @@ func open_book(page := "goals", open := true) -> void:
 	book_open = open
 	if open:
 		book_page = page
+		if Goals.PAGES.any(func(p): return p.id == page):  # a building's page: the Guide tab, with that page chosen (issue #348)
+			select_guide(page)
+
+
+## Chooses a page of the Guide (issue #348). Opening a page that's known clears its "new" mark.
+func select_guide(id: String) -> void:
+	book_page = "guide"
+	guide_page = id
+	sim.see_page(id)
 
 
 func set_keep_meals(f: Dictionary, on: bool) -> void:
@@ -2104,6 +2114,9 @@ func _screenshot_scene() -> void:
 		_place_camera()
 		_hud.waiting_open = true
 		_hud.stuck_open = "--folded" not in OS.get_cmdline_user_args()  # the list opens under its tab, unless it's to show the tab alone
+	if "--guide" in OS.get_cmdline_user_args():  # the village book open on its Guide tab, with a page new (issue #348)
+		sim.stats.houses = 1
+		open_book("guide")
 	if "--move" in OS.get_cmdline_user_args():  # a finished building selected, with its Move button (issue #234); --storehouse for the storehouse's panel
 		var tpl := "storehouse" if "--storehouse" in OS.get_cmdline_user_args() else "bench"
 		var spot: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(4, 0))
