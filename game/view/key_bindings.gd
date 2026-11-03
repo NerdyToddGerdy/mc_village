@@ -15,8 +15,6 @@ const ACTIONS := [
 	["hunt", "Orders", "Hunt animals", [KEY_G]],
 	["lead", "Orders", "Lead animals to a pen", []],
 	["paint", "Orders", "Open the paint menu", [KEY_Z]],
-	["stock", "Orders", "Paint a stockpile", []],
-	["farm", "Orders", "Paint a farm plot", [KEY_P]],
 	["pen", "Orders", "Paint a pen, at the meadow", []],
 	["build", "Orders", "Open the build menu", [KEY_B]],
 	["craft", "Orders", "Open the craft menu", [KEY_C]],
@@ -116,10 +114,6 @@ func load_file() -> void:
 			keys[a[0]] = v.filter(func(k): return k is int)
 		else:
 			fresh.append(a[0])
-	# Issue #93 moved Z from Stockpile to the Paint menu. A file from before then that still has
-	# Stockpile on Z hands it over; any other default key the player already uses stays theirs.
-	if fresh.has("paint") and keys.stock == [KEY_Z]:
-		keys.stock = []
 	for id in fresh:
 		keys[id] = keys[id].filter(func(k): return not keys.keys().any(func(o): return o != id and not fresh.has(o) and keys[o].has(k) and not may_share(id, o)))
 	var pins = cfg.get_value("tally", "pinned", [])

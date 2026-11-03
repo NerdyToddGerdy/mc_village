@@ -3590,7 +3590,7 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 			stores[ls.type] = store_dest(ls.type, c) != null
 			anywhere = anywhere or dests[ls.type] != null or piled[ls.type] or stores[ls.type]
 	var clearing := _clearing_cells()
-	var bare: bool = m.zone.is_empty() and piles.is_empty() and not m.sites.any(func(s): return s.tpl == "storehouse" and s.done)
+	var bare: bool = m.zone.is_empty() and piles.is_empty() and not m.sites.any(func(s): return s.tpl == "storehouse" and s.done and s.get("chests", 0) > 0)  # a storehouse with no chest keeps nothing yet (issue #318)
 	if not anywhere and (not bare or clearing.is_empty() or not loose.any(func(s): return clearing.has(s.cell))):
 		_scans["haul_none"] = true
 		return null
@@ -3632,7 +3632,7 @@ func _haul_source(c: Vector2i, carry := Tuning.CARRY):
 func _stack_has_home(st: Dictionary) -> bool:
 	if zone_dest(st.type) != null or pile_dest(st.type, st.cell) != null or store_dest(st.type, st.cell) != null:
 		return true
-	return m.zone.is_empty() and pile_map().is_empty() and not m.sites.any(func(s): return s.tpl == "storehouse" and s.done)
+	return m.zone.is_empty() and pile_map().is_empty() and not m.sites.any(func(s): return s.tpl == "storehouse" and s.done and s.get("chests", 0) > 0)  # a storehouse with no chest keeps nothing yet (issue #318)
 
 
 ## The nearest open cell to `c` outside every footprint being cleared, for a stack that has no storage
@@ -3714,6 +3714,8 @@ func step() -> void:
 	_apply_claims()
 	if tick % 10 == 0:
 		assign_workstations()
+		if not stats.get("founding_done", false) and Goals.first_open(self) < 0:
+			stats.founding_done = true  # once the founding is done it stays done (issue #318)
 	use_map(prev)
 	var kinds := {}
 	var working := 0
@@ -7319,6 +7321,8 @@ static func from_state(d: Dictionary) -> Sim:
 		if r.arriving:
 			s.walk_in(r)
 	s.use_map("village")
+	if not s.stats.has("founding_done") and Goals.legacy_done(s):  # a village from before the composter and storehouse goals (issue #318)
+		s.stats.founding_done = true
 	if not s.stats.has("day_zero"):  # an older save has no day: it starts on a morning when it loads (issue #357)
 		s.stats.day_zero = s.tick - int(Tuning.DUSK_SECONDS * Tuning.TPS)
 	if not s.stats.has("guide_seen"):  # an older save: every page it already knows counts as seen (issue #348)

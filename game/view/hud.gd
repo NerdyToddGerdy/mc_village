@@ -807,7 +807,7 @@ func _refresh_key_labels() -> void:
 	if sig == _keys_sig:
 		return
 	_keys_sig = sig
-	var tips := {"gather": "Mine, chop, break and hunt", "paint": "Paint stockpiles and farm plots",
+	var tips := {"gather": "Mine, chop, break and hunt", "paint": "Paint pens at the meadow",
 		"build": "Place a building", "craft": "Queue crafts at the bench or the fireplace"}
 	for t in _tool_btns:
 		_tool_btns[t].tooltip_text = tips[t] + (" (%s)" % k.first(t) if k.first(t) != "" else "")
@@ -827,7 +827,7 @@ func _refresh_toolbar(sim: Sim) -> void:
 	var on_menu := OrderMenus.menu_of(game.tool)
 	var gather: Array = sim.on_map(game.view_map, OrderMenus.entries.bind("gather", sim))
 	var village: bool = game.view_map == "village"
-	_tool_btns.paint.visible = village or game.view_map == Meadow.ID  # stockpiles and farms in the village, pens at the meadow
+	_tool_btns.paint.visible = game.view_map == Meadow.ID  # pens at the meadow; the village's storage and farms are painted from their buildings (issues #318, #319)
 	_tool_btns.build.visible = village
 	var sig := "%s|%s|%s|%s|%s" % [game.tool, game.menu_open, _keys_sig, gather.size(), game.view_map]
 	if sig != _toolbar_sig:
@@ -862,7 +862,7 @@ func _refresh_toolbar(sim: Sim) -> void:
 func _button_mark(t: String) -> String:
 	if OrderMenus.menu_of(game.tool) == t and t != "build":
 		return OrderMenus.entry(game.tool).mark
-	return {"gather": "mine", "paint": "pen" if game.view_map == Meadow.ID else "stock"}.get(t, t)
+	return {"gather": "mine", "paint": "pen"}.get(t, t)
 
 
 ## A toolbar menu row: the order's mark, its name and a line about it, and on the right its number
@@ -1549,15 +1549,31 @@ func _goals_pressed() -> void:
 func _refresh_goals(sim: Sim) -> void:
 	var cur := Goals.current(sim)
 	var vcur := Goals.village_current(sim) if cur < 0 else 0
-	var chapter: Array = Goals.LIST if cur >= 0 else Goals.VILLAGE
-	var at := cur if cur >= 0 else vcur
+	var founding: bool = cur >= 0
+	var at := cur if founding else vcur
+	var ch: int = Goals.chapter_of(cur) if founding else 3
+	var g: Dictionary = {}
+	var step := 0   # which step of its chapter, counted from 1
+	var steps := 0
+	if at >= 0 and founding:
+		g = Goals.LIST[at]
+		var counts := Goals.chapter_count(sim, ch)
+		steps = counts[1]
+		for i in range(0, at + 1):
+			step += 1 if Goals.LIST[i].c == ch else 0
+	elif at >= 0:
+		g = Goals.VILLAGE[at]
+		steps = Goals.VILLAGE.size()
+		step = at + 1
 	var done_sig := ""
-	for i in chapter.size():
-		done_sig += "1" if (Goals.done(sim, i) if cur >= 0 else Goals.village_done(sim, i)) else "0"
+	for i in Goals.LIST.size():
+		done_sig += "1" if Goals.done(sim, i) else "0"
+	for i in Goals.VILLAGE.size():
+		done_sig += "1" if Goals.village_done(sim, i) else "0"
 	_goals_done = at < 0
-	var name := "The founding" if cur >= 0 else "The village"
+	var name: String = Goals.CHAPTERS[ch].name
 	var tint: Color = Palette.GREEN if _goals_done else Palette.CHALK
-	_goals_tab.text = "%s  √" % name if _goals_done else "%s  ·  %d  %s" % [name, at + 1, chapter[at].t]
+	_goals_tab.text = "The village  √" if _goals_done else "%s  ·  %d  %s" % [name, step, g.t]
 	_goals_tab.tooltip_text = "Every founding and village step is done. Open the village book." if _goals_done else "Show this step's hint"
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
 		_goals_tab.add_theme_color_override(state, tint)
@@ -1566,9 +1582,8 @@ func _refresh_goals(sim: Sim) -> void:
 	if not _goals_panel.visible:
 		return
 	_rebuild(_goals, "%d%d%s" % [cur, at, done_sig], func(c: Container) -> void:
-		var n_done := done_sig.count("1")
 		var head := HBoxContainer.new()
-		var title := _row(name, "%d of %d" % [n_done, chapter.size()], false)
+		var title := _row(name, "%d of %d" % [step - 1, steps], false)
 		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		head.add_child(title)
 		var book := _button("Book", func(): game.open_book())
@@ -1578,8 +1593,7 @@ func _refresh_goals(sim: Sim) -> void:
 		c.add_child(head)
 		# Wrapped at the panel's own width, so they measure right even when built while the panel is
 		# hidden; otherwise they'd wrap at nothing, stand thousands of pixels tall and keep it hidden.
-		var g: Dictionary = chapter[at]
-		for l in [_label("%d  %s" % [at + 1, g.t], true, Palette.CHALK, Palette.BODY, true), _label(g.h, false, Palette.CHALK_DIM, Palette.CAPTION, true), _label(g.w, false, Palette.CHALK_DIM, Palette.CAPTION, true)]:
+		for l in [_label("%d  %s" % [step, g.t], true, Palette.CHALK, Palette.BODY, true), _label(g.h, false, Palette.CHALK_DIM, Palette.CAPTION, true), _label(g.w, false, Palette.CHALK_DIM, Palette.CAPTION, true)]:
 			l.custom_minimum_size.x = GOALS_W - 24 - 8
 			c.add_child(l))
 	_place_drop(_goals_panel, Vector2(16, _goals_tab.get_global_rect().end.y + 2))
@@ -1733,18 +1747,33 @@ func _refresh_roster(sim: Sim) -> void:
 
 
 func _fill_book_goals(c: Container, sim: Sim) -> void:
-	var chapters := [["The founding", Goals.LIST, Goals.done], ["The village", Goals.VILLAGE, Goals.village_done]]
-	for ch in chapters:
-		c.add_child(_label(ch[0], true, Palette.CHALK, Palette.BODY))
-		for i in ch[1].size():
-			var g: Dictionary = ch[1][i]
-			var done: bool = ch[2].call(sim, i)
-			var t := _label("%s  %s" % ["√" if done else "·", g.t], true, Palette.GREEN if done else Palette.CHALK, Palette.BODY, true)
+	for ch in Goals.CHAPTERS.size():
+		var info: Dictionary = Goals.CHAPTERS[ch]
+		var rows: Array = []  # [goal, done]
+		if ch < 3:
+			for i in Goals.LIST.size():
+				if Goals.LIST[i].c == ch:
+					rows.append([Goals.LIST[i], Goals.done(sim, i)])
+		else:
+			for i in Goals.VILLAGE.size():
+				rows.append([Goals.VILLAGE[i], Goals.village_done(sim, i)])
+		var finished := rows.filter(func(r): return r[1]).size()
+		c.add_child(_label("%d  %s    %d of %d" % [ch + 1, info.name, finished, rows.size()], true, Palette.GREEN if finished == rows.size() else Palette.CHALK, Palette.BODY))
+		var why := _label(info.why, false, Palette.CHALK_DIM, Palette.CAPTION, true)
+		why.custom_minimum_size.x = 420
+		c.add_child(why)
+		for r in rows:
+			var g: Dictionary = r[0]
+			var t := _label("%s  %s" % ["√" if r[1] else "·", g.t], true, Palette.GREEN if r[1] else Palette.CHALK, Palette.BODY, true)
 			t.custom_minimum_size.x = 420
 			c.add_child(t)
 			var w := _label(g.w, false, Palette.CHALK_DIM, Palette.CAPTION, true)
 			w.custom_minimum_size.x = 420
 			c.add_child(w)
+		if finished == rows.size():
+			var note := _label(info.note, false, Palette.GREEN, Palette.CAPTION, true)
+			note.custom_minimum_size.x = 420
+			c.add_child(note)
 
 
 func _fill_book_page(c: Container, p: Dictionary) -> void:

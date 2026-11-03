@@ -212,13 +212,12 @@ func opening() -> Dictionary:
 	return out
 
 
-## Plays the founding moment the way a player would, end to end (issue #182): a stockpile, the bench,
-## an axe and a pickaxe, the clearing's sheep for Ada's bed, a fireplace for the trip's meals, the
-## board, the meadow for the second bed's wool, then the second house.
+## Plays the founding moment the way a player would, end to end (issues #182, #318): the bench, an axe and a
+## pickaxe, the clearing's sheep for Ada's bed, her house, a composter for the farm, a fireplace for the trip's
+## meals, a storehouse, the board, the meadow for the second bed's wool, then the second house.
 func play_opening(sim: Sim) -> Dictionary:
 	sim.designate_mine(area(0, 0, 10, 18))
 	sim.designate_hunt(whole_map())  # wool for Ada's bed
-	sim.paint_zone(area(10, 7, 4, 2))
 	var bench := sim.place_site("bench", at(8, 10))
 	run(sim, 120)
 	_goal_trace.append(Goals.current(sim))
@@ -230,15 +229,28 @@ func play_opening(sim: Sim) -> Dictionary:
 	run(sim, 150)
 	_goal_trace.append(Goals.current(sim))
 	var h1 := sim.place_site("house", at(11, 0))
+	for r in ["stone_pick", "stone_axe"]:  # her wooden tools wear out, now that nothing sorts the clearing's loose logs for her
+		sim.queue_add(bench, r)
 	for i in 8:
 		sim.queue_add(bench, "planks")
-	run(sim, 600)
+	run_until(sim, 1500, func(): return h1.done)
+	_goal_trace.append(Goals.current(sim))
+	var comp := sim.place_site("composter", spot(sim, "composter", at(13, 7)))
+	sim.queue_add(bench, "planks")
+	run_until(sim, 200, func(): return comp.done)
 	_goal_trace.append(Goals.current(sim))
 	var fire := sim.place_site("fireplace", spot(sim, "fireplace", at(6, 12)))
+	run_until(sim, 400, func(): return fire.done and sim.free_count("cooked_mutton") >= 3)
+	_goal_trace.append(Goals.current(sim))
+	var store := sim.place_site("storehouse", spot(sim, "storehouse", at(14, 13)))
+	for i in 6:  # its 12 planks
+		sim.queue_add(bench, "planks")
+	run_until(sim, 500, func(): return store.done)
+	_goal_trace.append(Goals.current(sim))
 	var board := sim.place_site("board", spot(sim, "board", at(4, 9)))
 	for r in ["sticks", "planks", "planks"]:  # the board's 4 sticks and 6 planks
 		sim.queue_add(bench, r)
-	run_until(sim, 400, func(): return board.done and fire.done and sim.free_count("cooked_mutton") >= 3)
+	run_until(sim, 400, func(): return board.done)
 	_goal_trace.append(Goals.current(sim))
 	var plan := sim.new_plan(Meadow.ID)
 	sim.plan_expedition(plan)
@@ -252,9 +264,9 @@ func play_opening(sim: Sim) -> Dictionary:
 		sim.queue_add(bench, "planks")
 	for r in ["stone_pick", "stone_axe"]:  # her wooden tools are worn out by now
 		sim.queue_add(bench, r)
-	run(sim, 900)
+	run_until(sim, 2500, func(): return h2.done and sim.stats.traveler_home)
 	_goal_trace.append(Goals.current(sim))
-	return {"bench": bench, "h1": h1, "h2": h2, "fire": fire, "board": board}
+	return {"bench": bench, "h1": h1, "h2": h2, "fire": fire, "board": board, "comp": comp, "store": store}
 
 
 ## Runs until `cond` holds, for at most `seconds`.
@@ -290,7 +302,7 @@ func test_founding_goals() -> void:
 	check(sim.sheep.size() == 3 and sim.auto_craft and Goals.current(sim) == 0, "a new game: 3 sheep, auto ingredients on, the first goal")
 	var s := opening()
 	check(_goal_trace.size() > 3 and range(_goal_trace.size() - 1).all(func(i): return _goal_trace[i] <= _goal_trace[i + 1]), "the founding's goals complete in order (%s)" % [_goal_trace])
-	check(_goal_trace.back() == Goals.LIST.size() - 1, "and it ends on the chopping block")
+	check(_goal_trace.back() == Goals.LIST.size() - 1, "and it ends on the chopping block (%s)" % [_goal_trace])
 	var town: Sim = s.sim
 	town.place_site("chopping_block", spot(town, "chopping_block", at(2, 14)))
 	run(town, 120)
@@ -467,7 +479,9 @@ func test_every_save_fixture_still_loads() -> void:
 		check(size == want, "v%d: map size is %s" % [v, size])
 		check(sim.residents.size() == (3 if v >= 15 else 2) and sim.residents[1].arriving, "v%d: Tomas is walking in again after loading" % v)
 		if v < 27:  # upgraded from before the founding's rework (issue #182): two houses cover the steps it added
-			check(Goals.current(sim) == Goals.LIST.size() - 2 and sim.auto_craft, "v%d: the founding lands on Welcome a traveler, with auto ingredients on (%s)" % [v, Goals.progress_text(sim)])
+			# Two houses cover the steps it added; the composter, fireplace and storehouse goals (issue #318) are still ahead of it.
+			check(Goals.current(sim) >= 0, "v%d: the founding picks up where it was (%s)" % [v, Goals.progress_text(sim)])
+			check(sim.auto_craft and Goals.done(sim, 11) and not Goals.done(sim, 12), "v%d: with auto ingredients on, two houses built and no traveler yet" % v)
 		var mine := sim.get_map(OldMine.ID)
 		if v >= 15:  # issues #100-#102: Mira at the old mine, with coal she's mined
 			var mira: Dictionary = sim.residents[2]
@@ -984,20 +998,8 @@ func test_idle_residents_go_home() -> void:
 
 ## Every founding goal done, as game_test.gd does it, so the village chapter is on.
 static func _finish_founding(sim: Sim) -> void:
-	sim.stats.felled = 1
-	sim.stats.pick_crafted = true
-	sim.stats.axe_crafted = true
-	sim.stats.meadow_wool = true
-	sim.stats.built = {"bench": true, "fireplace": true, "board": true, "chopping_block": true}
-	sim.stats.broken_boulders = 1
-	sim.stats.sheep_hunted = 1
-	sim.stats.houses = 2
-	sim.stats.traveler_home = true
-	sim.stats.division = true
+	sim.stats.founding_done = true  # the founding stays done once it is (issue #318)
 	sim.zone[sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(2, 2))] = true
-	var bench := sim.place_site("bench", sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(4, -3)))
-	bench.stage = 1
-	bench.done = true
 
 
 static func home_gap(sim: Sim, r: Dictionary, house: Dictionary) -> int:
@@ -4348,18 +4350,15 @@ func test_founding_book_chapter_and_pages() -> void:
 			check(not Goals.page_for(e.id).is_empty(), "the Build menu's %s has a page" % e.id)
 	# The chapter, in order.
 	var sim := Sim.new_game()
-	check(Goals.village_current(sim) == 0, "a new village starts at the farm")
-	sim.paint_farm(open_rect(sim, Vector2i(2, 2)))
-	check(Goals.village_current(sim) == 1, "a farm plot is goal 1")
-	sim.stats.meals_cooked = 1
-	check(Goals.village_current(sim) == 2, "a cooked meal is goal 2")
+	check(Goals.village_current(sim) == 0 and Goals.CHAPTERS.size() == 4 and Goals.chapter_of(Goals.LIST.size()) == 3, "a new village's chapter starts at the workstations")
+	check([0, 1, 2].all(func(ch): return Goals.chapter_count(sim, ch)[1] > 0) and Goals.chapter_count(sim, 0)[1] == 6 and Goals.chapter_count(sim, 1)[1] == 2, "Shelter has six goals and Food two")
 	var picked := 0
 	for tpl in ["chopping_block", "mason_bench"]:
 		var st := sim.place_site(tpl, open_cell_for(sim, Vector2i(1, 1)))
 		st.done = true
 		st.worker = sim.residents[0].id
 		picked += 1
-		check(Goals.village_current(sim) == (2 if picked < 2 else 3), "%d workstation(s) with a worker: goal %d" % [picked, Goals.village_current(sim)])
+		check(Goals.village_current(sim) == (0 if picked < 2 else 1), "%d workstation(s) with a worker: goal %d" % [picked, Goals.village_current(sim)])
 	sim.stats.ore_home = true
 	check(Goals.village_current(sim) == -1, "iron ore home finishes the chapter")
 	# Pages wait for their building.
@@ -4398,7 +4397,7 @@ func test_founding_book_save_upgrade() -> void:
 	var up := SaveFormat.upgrade(rich)
 	check(up.data.state.stats.meals_cooked == 1 and up.data.state.stats.ore_home == true, "a village with iron and bread on hand counts as having cooked and brought ore home")
 	var sim := Sim.from_state(up.data.state)
-	check(Goals.village_done(sim, 1) and Goals.village_done(sim, 3), "so those two chapter goals are done")
+	check(sim.stats.meals_cooked == 1 and Goals.village_done(sim, 1), "so the ore goal is done, and the meal counts for the fireplace goal")
 
 
 ## Issue #196: walking packs the village's ground into paths, which grow back when nobody walks them.
