@@ -36,6 +36,8 @@ var live_outlines: Array = []   ## {rect: Rect2i, h: float, color: Color, dashed
 var fade_all := false           ## Every tree is see-through while the player holds the key (issue #304).
 var _ground: MultiMeshInstance3D  ## The village's ground, its own batch: rebuilt only when the map, its size or the worn paths change (issue #351).
 var _ground_sig := ""
+var _items: MultiMeshInstance3D  ## The loose items, their own batch: rebuilt only when they change, not with every other change to the map (issue #351).
+var _items_sig := 0
 var live_fills: Array = []      ## {rect: Rect2i, h: float, color: Color}
 var selected_ids: Array = []    ## Resident ids with a selection ring.
 var hover_id := 0               ## The resident under the mouse, who shows a name tag; 0 for none.
@@ -84,6 +86,7 @@ func set_sim(s: Sim) -> void:
 	_prev_pos.clear()
 	_built_rev = -1
 	_ground_sig = ""
+	_items_sig = 0
 	_stuck_sig = "-"
 	for id in _people:
 		_people[id].queue_free()
@@ -98,6 +101,7 @@ func _ready() -> void:
 	_block_mat = _block_material(false)
 	_solid = _mm(_block_mat)
 	_ground = _mm(_block_mat)
+	_items = _mm(_block_mat)
 	_cart = _mm(_block_mat)
 	_trees = _mm(_block_mat)
 	_trees_faded = _mm(_block_material(true))
@@ -249,9 +253,14 @@ func _build_static() -> void:
 		_add_route_sign(solid, sim.route_sign())
 	for k in sim.farm:
 		_add_crop(solid, sim.farm[k])
-	for k in sim.items:
-		if not Sim.in_store(k):  # what's in a storehouse's chests shows on their lids
-			_add_item(solid, sim.items[k])
+	var isig := hash([sim.m.id, sim.items, sim.m.visited])
+	if isig != _items_sig:
+		_items_sig = isig
+		var ib := Batch.new()
+		for k in sim.items:
+			if not Sim.in_store(k):  # what's in a storehouse's chests shows on their lids
+				_add_item(ib, sim.items[k])
+		ib.apply(_items)
 	_ov_dark = dark
 	_ov_col = col
 	for s in sim.sites:
