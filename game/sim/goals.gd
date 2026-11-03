@@ -84,7 +84,7 @@ const PAGES := [
 		"what": "A hunter hunts animals on their own and brings the meat, wool and leather home.",
 		"grows": "Reserves a plot, and grows into a tannery.",
 		"without": "Hunting is something you mark by hand each time."},
-	{"id": "cartographer_table", "title": "Cartographer's table", "tpl": "cartographer_table", "who": "A cartographer", "unlock": "board",
+	{"id": "cartographer_table", "clue": "Something the expedition board makes room for.", "title": "Cartographer's table", "tpl": "cartographer_table", "who": "A cartographer", "unlock": "board",
 		"what": "A cartographer surveys the land round the village, one ring of one direction at a time, and finds the old caves, then a ruined portal.",
 		"grows": "Reserves a plot, and grows into a map room.",
 		"without": "Nothing beyond the clearing is known: the caves and the portal stay hidden."},
