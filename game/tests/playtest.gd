@@ -115,8 +115,8 @@ func _initialize() -> void:
 	await run(150)
 	check(bench.done, "Ada builds the bench")
 
-	# Ada does everything (issue #134). The checklist asks for a stockpile before the tools (issue #182)
-	check(Goals.LIST[Goals.current(sim)].t == "Paint a stockpile", "the checklist asks for a stockpile next (%s)" % Goals.progress_text(sim))
+	# Ada does everything (issue #134). The checklist asks for the tools next (issue #182)
+	check(Goals.LIST[Goals.current(sim)].t == "Craft an axe and a pickaxe", "the checklist asks for the tools next (%s)" % Goals.progress_text(sim))
 	await key(KEY_F)
 	check(game.selection.get("ids", []) == [ada.id], "F selects Ada")
 	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
@@ -143,28 +143,8 @@ func _initialize() -> void:
 	await run(200)
 	check(sim.stats.pick_crafted and sim.stats.axe_crafted, "a wooden axe and a wooden pickaxe are crafted")
 
-	# Stockpile and boulders
-	check(await click_button("Paint"), "click Paint in the toolbar")
-	check(game.menu_open == "paint", "Paint opens its menu")
-	check(await click_button("Stockpile"), "click Stockpile in the Paint menu")
-	check(game.tool == "stock" and game.menu_open == "", "Stockpile is on and the menu closes")
-	var zc := open_cell(at(12, 7), Vector2i(4, 2))
-	await look_at(zc)  # F centred the camera on Ada, wherever she happened to be
-	await drag(screen(zc), screen(zc + Vector2i(3, 1)))
-	check(sim.zone.size() >= 6, "dragging paints a stockpile (%d cells)" % sim.zone.size())
-	# A drag that starts on the stockpile erases instead (issue #63): take back its last column
-	var painted := sim.zone.size()
-	var col_a := screen(zc + Vector2i(3, 0))
-	var col_b := screen(zc + Vector2i(3, 1))
-	await move(col_a)
-	await press(col_a, true)
-	await move(col_a.lerp(col_b, 0.5))
-	await move(col_b)
-	await frames(2)
-	check(game._drag.get("erase", false) and game._world.live_fills.size() == 2, "dragging from a stockpile cell previews erasing 2 cells in red")
-	await press(col_b, false)
-	await frames(2)
-	check(sim.zone.size() == painted - 2 and not sim.in_zone(zc + Vector2i(3, 0)) and not sim.in_zone(zc + Vector2i(3, 1)), "releasing erases them (%d cells left)" % sim.zone.size())
+	# Boulders. There's no stockpile to paint: the village's storage is a storehouse (issue #318)
+	check(not game._hud._tool_btns.paint.visible, "the Paint button is for the meadow's pens: the village has none")
 	await key(KEY_X)
 	await look_at(at(17, 17))  # F centred the camera on Ada, wherever she happened to be
 	await drag(screen(at(6, 3)), screen(at(17, 17)))
@@ -211,6 +191,39 @@ func _initialize() -> void:
 	await run(700)
 	check(h1.done, "Ada builds her house")
 
+	# The composter (issue #319): Build, click open ground. It starts with plots, and its panel paints more
+	await key(KEY_B)
+	check(await click_button("Composter"), "the Build menu lists the composter")
+	var cp := build_spot("composter", at(13, 7))
+	check(cp.x >= 0, "open ground for the composter")
+	await look_at(cp)
+	await click(screen(cp))
+	var comp = sim.site_at(cp)
+	check(comp != null and comp.tpl == "composter", "the composter is placed")
+	if game.tool != "":
+		await key(KEY_ESCAPE)
+	check(await open_bench_panel(), "open the bench for the composter's planks")
+	await queue_recipe("Planks", 2)
+	await key(KEY_ESCAPE)
+	check(await play_until(300, func(): return comp != null and comp.done), "Ada builds the composter")
+	var started := sim.composter_plots(comp).size()
+	check(started > 0 and started <= Tuning.PLOT_START_MAX, "it starts with plots round it (%d)" % started)
+	game.selection = {"kind": "site", "id": comp.id}
+	check(await click_button("Paint plots"), "click Paint plots on the composter's panel")
+	check(game.tool == "plots", "it switches the plots tool on")
+	var pr := open_rect_on_screen(comp.origin + Vector2i(0, -2), 3, 1, func(c): return sim.farm_blocked(c) == "" and Sim.composter_reaches(comp, c))
+	if pr.position.x >= 0:
+		await look_at(pr.position)
+		await drag(screen(pr.position), screen(pr.end - Vector2i.ONE))
+		check(sim.composter_plots(comp).size() > started, "dragging paints more plots within its reach (%d)" % sim.composter_plots(comp).size())
+	await key(KEY_ESCAPE)
+	game.selection = {}
+	for i in 60:
+		await run(1)
+		if sim.stats.get("planted", 0) > 0:
+			break
+	check(sim.stats.get("planted", 0) > 0, "residents plant wheat on its plots")
+
 	# Fireplace (issue #46): K, click open ground; it's built, and cooks the hunted mutton
 	await key(KEY_K)
 	check(game.placing == "fireplace", "K picks Fireplace")
@@ -228,6 +241,27 @@ func _initialize() -> void:
 			break
 	check(fire != null and fire.done, "the fireplace is built")
 	check(cooked, "and its standing order cooks the hunted mutton")
+
+	# The storehouse (issue #318): Build, click open ground, a chest from the bench, and its panel paints more room
+	check(await open_bench_panel(), "open the bench for the storehouse's planks")
+	await queue_recipe("Planks", 6)
+	await key(KEY_ESCAPE)
+	await key(KEY_B)
+	check(await click_button("Storehouse"), "the Build menu lists the storehouse")
+	var sp := build_spot("storehouse", at(14, 13))
+	check(sp.x >= 0, "open ground for the storehouse")
+	await look_at(sp)
+	await click(screen(sp + Vector2i(1, 1)))
+	var store = sim.site_at(sp + Vector2i(1, 1))
+	check(store != null and store.tpl == "storehouse", "the storehouse is placed")
+	if game.tool != "":
+		await key(KEY_ESCAPE)
+	check(await play_until(500, func(): return store != null and store.done), "Ada builds the storehouse")
+	game.selection = {"kind": "site", "id": store.id}
+	check(await click_button("Paint more room"), "its panel has Paint more room")
+	check(game.tool == "room", "it switches the room tool on")
+	await key(KEY_ESCAPE)
+	game.selection = {}
 
 	# The meadow (issue #182): the second bed needs more wool than the clearing's 3 sheep gave, so Ada
 	# builds the expedition board and fetches it, with the fireplace's mutton for the walk home
@@ -458,23 +492,9 @@ func _initialize() -> void:
 	check(await click_button("Tutorial"), "the tutorial's tab names the village chapter's first step")
 	game._hud.refresh(sim)  # the HUD refreshes on a timer; don't race it
 	await frames(2)
-	check(visible_label("The village") and visible_label("1  Paint a farm plot") and not visible_label("Slice 1"), "its details drop down for the village chapter")
+	check(visible_label("The village") and visible_label("1  Give a second resident a workstation") and not visible_label("Slice 1"), "its details drop down for the village chapter")
 	await click_button("Tutorial")  # and shut again
 	check(Goals.progress_text(sim).ends_with("meals") and "residents" in Goals.progress_text(sim), "saves are labelled with the village's facts: %s" % Goals.progress_text(sim))
-
-	# Farm plots (issue #45): P, drag over open grass, and residents plant wheat
-	await key(KEY_P)
-	check(game.tool == "farm", "P picks Farm")
-	var fc := open_cell(at(12, 12), Vector2i(3, 2))
-	await look_at(fc)
-	await drag(screen(fc), screen(fc + Vector2i(2, 1)))
-	check(sim.farm.size() >= 4, "dragging paints farm plots (%d)" % sim.farm.size())
-	await key(KEY_ESCAPE)
-	for i in 40:
-		await run(1)
-		if sim.stats.get("planted", 0) > 0:
-			break
-	check(sim.stats.get("planted", 0) > 0, "residents plant wheat on the new farm")
 
 	# Jobs (issue #134): Tomas's one job, chosen from the dropdown on his panel, then on the board
 	game.selection = {"kind": "res", "ids": [tomas.id]}

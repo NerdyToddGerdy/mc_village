@@ -44,10 +44,10 @@ In short: choose **Play** on the main menu, and the goals panel at the top left 
 
 1. **Chop trees** (X, or Gather → Mine). Ada fells them by hand, slowly.
 2. **Build a crafting bench** (T, or Build → Crafting bench).
-3. **Make Ada the toolsmith** on the jobs board (J), then queue planks, sticks and a wooden pickaxe at the bench (C).
-4. **Paint a stockpile** (Z, then 1) and **break boulders** for cobblestone.
-5. **Hunt sheep** (G) for the wool the beds need, then **build two houses** (H).
-6. A traveler, **Tomas**, arrives for the spare bed. From there, keep the village fed with farms, the fireplace and trips to the sheep meadow, and give each resident the jobs they're best at.
+3. **Queue an axe and a pickaxe** at the bench (C), then **break boulders** for cobblestone.
+4. **Hunt sheep** (G) for the wool the bed needs, then **build Ada's house** (H).
+5. **Build a composter** and paint its plots, a **fireplace**, and a **storehouse**, then the expedition board for trips to the sheep meadow.
+6. A traveler, **Tomas**, arrives for the spare bed. From there, give each resident the jobs they're best at.
 
 If something is stuck, a yellow flag appears over it and in the **Stuck** list at the top right, with the reason. Click an entry to go there.
 

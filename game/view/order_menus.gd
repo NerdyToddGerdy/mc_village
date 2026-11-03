@@ -21,8 +21,6 @@ const MENUS := {
 		{"id": "lead", "name": "Lead to a pen", "sub": "Animals the party walks into a pen with room", "mark": "lead", "unlock": "pens"},
 	]},
 	"paint": {"name": "Paint", "entries": [
-		{"id": "stock", "name": "Stockpile", "sub": "Where residents store what they gather", "mark": "stock", "unlock": "village"},
-		{"id": "farm", "name": "Farm plot", "sub": "Open grass where residents grow wheat", "mark": "farm", "unlock": "village"},
 		{"id": "pen", "name": "Pen", "sub": "A fenced pen for animals. The party builds it, a stick a fence", "mark": "pen", "unlock": "meadow"},
 	]},
 	"build": {"name": "Build", "entries": [
@@ -49,7 +47,7 @@ const MENUS := {
 }
 
 ## The tools a Gather or Paint entry switches on: they mark or paint by dragging over the map.
-const MARK_TOOLS := ["mine", "chop", "break", "keep", "hunt", "lead", "stock", "farm", "pen", "area", "room", "plots"]
+const MARK_TOOLS := ["mine", "chop", "break", "keep", "hunt", "lead", "pen", "area", "room", "plots"]
 
 
 ## The menu an order tool belongs to, or "".

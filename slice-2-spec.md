@@ -46,23 +46,26 @@ Slice 2 is done when, from a fresh start, a player can:
 - **The clearing starts with 3 sheep**, enough wool for Ada's bed. The second bed's wool comes from the meadow (#182, below). Saved games keep their sheep.
 - **Arrivals need a free bed** (§7). Tomas comes once the second house, bed included, is finished.
 - **Ada's house** is hers when its bed is finished, not when its roof is.
-- **The founding (reworked in #182)** teaches the stockpile first, both tools together, a first trip to the meadow, and the chopping block:
+- **The founding (reworked in #182, and again in #318 and #319)** teaches the tools, a house, a farm and a fire, a storehouse, a first trip to the meadow, and the chopping block, in three chapters (Shelter 1 to 6, Food 7 and 8, Expanding 9 to 14), with the old "The village" chapter staying as a fourth:
 
   | # | Goal | Done when |
   |---|---|---|
   | 1 | Chop a tree | a tree is felled |
-  | 2 | Paint a stockpile | a stockpile is painted |
-  | 3 | Build a crafting bench | a bench is finished |
-  | 4 | Craft an axe and a pickaxe | both have been crafted |
-  | 5 | Break a boulder | a boulder is broken |
-  | 6 | Hunt sheep for wool | a sheep is hunted (or Ada's house is finished, in saves from before sheep) |
-  | 7 | Build Ada's house | a house is finished |
-  | 8 | Build a fireplace | a fireplace is finished. It cooks the clearing's mutton, the trip's meals |
-  | 9 | Build an expedition board | a board is finished |
-  | 10 | Fetch wool from the meadow | a meadow trip comes home with wool |
-  | 11 | Build a second house | two houses are finished |
-  | 12 | Welcome a traveler | the traveler has moved in |
-  | 13 | Build Tomas a chopping block | a chopping block is finished |
+  | 2 | Build a crafting bench | a bench is finished |
+  | 3 | Craft an axe and a pickaxe | both have been crafted |
+  | 4 | Break a boulder | a boulder is broken |
+  | 5 | Hunt sheep for wool | a sheep is hunted (or Ada's house is finished, in saves from before sheep) |
+  | 6 | Build Ada's house | a house is finished |
+  | 7 | Build a composter and paint its plots | a composter is finished (or a farm plot was painted the old way) |
+  | 8 | Build a fireplace and cook a meal | a fireplace is finished and a meal cooked |
+  | 9 | Build a storehouse | a storehouse is finished (or a stockpile was painted the old way) |
+  | 10 | Build an expedition board | a board is finished |
+  | 11 | Fetch wool from the meadow | a meadow trip comes home with wool |
+  | 12 | Build a second house | two houses are finished |
+  | 13 | Welcome a traveler | the traveler has moved in |
+  | 14 | Build Tomas a chopping block | a chopping block is finished |
+
+  `stats.founding_done` is set once the founding is done and stays, and a save that finished the old founding gets it when it loads (v65), so a village from before is never sent back. There is no painted stockpile or free farm plot any more: the village's storage is the storehouse, and farm plots belong to a composter (#318, #319). Old stockpile cells and plots keep working.
 
   - **Automatic ingredients from the start:** the bench queues a recipe's planks and sticks in a new game, marked **A**. The first house no longer unlocks it.
   - **The board** shows in the Build menu once Ada's house is finished, rather than after the founding.

@@ -1166,14 +1166,11 @@ func _test_order_menus(game: Game) -> void:
 	check(hud._tool_btns.gather.text == "Gather  →" and hud._tool_btns.paint.text == "Paint  →", "with no order on, the menu buttons say so with →")
 	_key(game, KEY_Z)
 	hud.refresh(sim)
-	check(game.menu_open == "paint" and hud._menu_panels.paint.visible, "Z opens the Paint menu")
-	var rows: Array = hud._menus.paint.get_children().filter(func(n): return not n.is_queued_for_deletion())
-	check(rows.map(func(r): return r.get_meta("label", "")) == ["Stockpile", "Farm plot"], "it lists Stockpile and Farm plot")
-	_key(game, KEY_1)
-	check(game.tool == "stock" and game.menu_open == "", "1 picks Stockpile and closes the menu")
+	check(game.menu_open == "" and not hud._tool_btns.paint.visible, "in the village there's no Paint menu: storage and farms are painted from their buildings (#318, #319)")
+	check(OrderMenus.MENUS.paint.entries.map(func(e): return e.id) == ["pen"], "its only entry is the meadow's pen")
 	_key(game, KEY_E)
 	hud.refresh(sim)
-	check(game.menu_open == "gather" and game.tool == "stock", "E opens the Gather menu, leaving Stockpile on until you pick")
+	check(game.menu_open == "gather", "E opens the Gather menu")
 	var names: Array = hud._menus.gather.get_children().filter(func(n): return not n.is_queued_for_deletion()).map(func(b): return b.get_meta("label", ""))
 	var sheep := sim.sheep.any(func(sh): return sh.alive)
 	check(names.slice(0, 3) == ["Mine", "Chop trees", "Break boulders"] and names.has("Hunt") == sheep, "Gather lists Mine, Chop trees, Break boulders, and Hunt while there are sheep (%s)" % [names])
@@ -1196,25 +1193,6 @@ func _test_order_menus(game: Game) -> void:
 	_key(game, KEY_Z)
 	_key(game, KEY_ESCAPE)
 	check(game.menu_open == "", "Esc closes an open menu")
-	# A drag that starts on a farm plot erases plots instead of painting (issue #93, like #63's stockpile).
-	var spot := Vector2i(-1, -1)
-	for c in sim.farm:
-		spot = c
-		break
-	if spot.x < 0:
-		for d in range(2, 12):
-			var c: Vector2i = Sim.rcell(sim.residents[0]) + Vector2i(d, d)
-			if sim.farm_blocked(c) == "":
-				sim.paint_farm(Rect2i(c, Vector2i.ONE))
-				spot = c
-				break
-	game.pick_order("paint", "farm")
-	var at: Vector2 = game._cam.unproject_position(Vector3(spot.x + 0.5, 0.0, spot.y + 0.5))
-	_mouse(game, "move", at)
-	_mouse(game, "down", at)
-	check(game._drag.get("erase", false), "starting a Farm drag on a plot erases")
-	_mouse(game, "up", at)
-	check(not sim.farm.has(spot), "and releasing removes the plot")
 	game.set_tool("")
 
 
@@ -1230,7 +1208,7 @@ func _test_key_migration() -> void:
 	cfg.set_value("keys", "next_res", [KEY_E])
 	cfg.save(path)
 	var k := KeyBindings.new(path)
-	check(k.keys.paint == [KEY_Z] and k.keys.stock.is_empty(), "an old settings file hands Z from Stockpile to Paint")
+	check(k.keys.paint == [KEY_Z] and not k.keys.has("stock") and not k.keys.has("farm"), "an old settings file keeps Z on Paint, and the Stockpile and Farm plot keys are gone (#318, #319)")
 	check(k.keys.gather.is_empty() and k.keys.next_res == [KEY_E], "a player's own use of E keeps it; Gather goes without a key")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
@@ -1256,16 +1234,16 @@ func _test_rebinding(game: Game) -> void:
 	check(_menu_caps(game, "gather", "Mine") == ["1", "Q"], "the Gather menu's Mine row shows the new key (%s)" % [_menu_caps(game, "gather", "Mine")])
 	game.set_tool("")
 	game.open_menu("keys")
-	menu._listen("stock")
+	menu._listen("chopping_block")
 	_key(game, KEY_Q)
 	check(not menu._confirm.is_empty() and "Mine trees and boulders" in menu._confirm.text, "taking Mine's key asks first")
-	check(game.keys.keys.stock.is_empty(), "nothing changes until you confirm")
+	check(game.keys.keys.chopping_block.is_empty(), "nothing changes until you confirm")
 	menu._do_confirmed()
-	check(game.keys.keys.stock == [KEY_Q] and game.keys.keys.mine.is_empty(), "confirming moves Q to Stockpile and leaves Mine without a key")
+	check(game.keys.keys.chopping_block == [KEY_Q] and game.keys.keys.mine.is_empty(), "confirming moves Q to the chopping block and leaves Mine without a key")
 	game._hud.refresh(game.sim)
-	game.set_tool("paint")
+	game.set_tool("build")
 	game._hud.refresh(game.sim)
-	check(_menu_caps(game, "paint", "Stockpile") == ["1", "Q"], "Stockpile's row shows Q (%s)" % [_menu_caps(game, "paint", "Stockpile")])
+	check(_menu_caps(game, "build", "Chopping block").has("Q"), "the chopping block's row shows Q (%s)" % [_menu_caps(game, "build", "Chopping block")])
 	game.set_tool("gather")
 	game._hud.refresh(game.sim)
 	check(_menu_caps(game, "gather", "Mine") == ["1"], "Mine's row has only its number now")
@@ -1278,7 +1256,7 @@ func _test_rebinding(game: Game) -> void:
 	_key(game, KEY_ESCAPE)
 	check(menu.listening == "" and game.keys.keys.speed1 == [KEY_1], "Esc cancels waiting for a key")
 	menu._reset_keys()
-	check(game.keys.keys.mine == [KEY_X] and game.keys.keys.paint == [KEY_Z] and game.keys.keys.stock.is_empty(), "Reset to defaults restores every key")
+	check(game.keys.keys.mine == [KEY_X] and game.keys.keys.paint == [KEY_Z] and game.keys.keys.chopping_block.is_empty(), "Reset to defaults restores every key")
 	check(KeyBindings.new(game.keys_path).keys.mine == [KEY_X], "the reset is saved too")
 	game.close_menu()
 	_key(game, KEY_SLASH, true)
@@ -1411,28 +1389,29 @@ func _test_farm_tool(game: Game) -> void:
 	var hud: Hud = game._hud
 	var start := Sim.rcell(sim.residents[0])
 	var rect := Rect2i()
-	for d in range(2, 10):
-		for c in [start + Vector2i(d, 0), start + Vector2i(0, d), start - Vector2i(d, 0), start - Vector2i(0, d)]:
-			var r := Rect2i(c, Vector2i(2, 2))
-			if [r.position, r.position + Vector2i(1, 0), r.position + Vector2i(0, 1), r.end - Vector2i.ONE].all(func(x): return sim.farm_blocked(x) == ""):
+	var comp := {}
+	for d in range(3, 10):  # a composter with open grass in its reach, on the side away from its own reserved ground
+		for c in [start + Vector2i(d, 4), start + Vector2i(4, d), start - Vector2i(d, -4), start - Vector2i(4, -d)]:
+			var r := Rect2i(c + Vector2i(-1, -3), Vector2i(2, 2))
+			if comp.is_empty() and sim.placement_check("composter", c) == "" and [r.position, r.position + Vector2i(1, 0), r.position + Vector2i(0, 1), r.end - Vector2i.ONE].all(func(x): return sim.farm_blocked(x) == "" and sim.m.in_bounds(x)):
+				comp = sim.place_site("composter", c)
 				rect = r
-				break
-		if rect.size != Vector2i.ZERO:
-			break
-	check(rect.size != Vector2i.ZERO, "open grass near Ada for a farm")
-	_key(game, KEY_P)
-	check(game.tool == "farm", "P picks the Farm tool")
+	check(not comp.is_empty(), "open grass near Ada for a composter and its plots")
+	comp.stage = 1
+	comp.done = true
+	game.selection = {"kind": "site", "id": comp.id}
+	game.start_plots(comp)
+	check(game.tool == "plots", "a composter's Paint plots picks the plots tool")
 	hud.refresh(sim)
-	check(hud._tool_btns.paint.button_pressed and hud._tool_btns.paint.text == "Paint: Farm plot", "and the Paint button shows Farm plot is on")
 	var a: Vector2 = game._cam.unproject_position(Vector3(rect.position.x + 0.5, 0.0, rect.position.y + 0.5))
 	var b: Vector2 = game._cam.unproject_position(Vector3(rect.end.x - 0.5, 0.0, rect.end.y - 0.5))
 	_mouse(game, "move", a)
 	_mouse(game, "down", a)
 	_mouse(game, "move", b)
 	_mouse(game, "up", b)
-	check(sim.farm.size() == 4, "dragging paints a 2×2 farm (%d plots)" % sim.farm.size())
+	check(sim.farm.size() == 4 and sim.composter_plots(comp).size() == 4, "dragging paints a 2×2 farm, owned by the composter (%d plots)" % sim.farm.size())
 	_key(game, KEY_ESCAPE)
-	check(game.tool == "", "Esc puts the Farm tool away")
+	check(game.tool == "", "Esc puts the plots tool away")
 	var crop: Dictionary = sim.farm[rect.position]
 	crop.grow = Tuning.WHEAT_GROW * 0.5
 	game._select(game._pick(a))
@@ -1948,18 +1927,19 @@ func _test_after_the_founding(game: Game) -> void:
 	var hud: Hud = game._hud
 	hud.refresh(sim)
 	await _frames()
-	check(hud._goals_tab.visible and hud._goals_tab.text.begins_with("The founding  ·  ") and not hud._goals_panel.visible, "the tutorial's tab shows the chapter and the step, and its details wait to be opened")
+	check(hud._goals_tab.visible and hud._goals_tab.text.begins_with("Shelter  ·  ") and not hud._goals_panel.visible, "the tutorial's tab shows the chapter and the step, and its details wait to be opened")
 	hud._goals_tab.pressed.emit()
 	hud.refresh(sim)
 	await _frames()
 	check(hud._goals_panel.visible and hud._goals_panel.get_global_rect().position.y >= hud._goals_tab.get_global_rect().end.y, "clicking it drops the details down under it")
-	check(_walk(hud._goals).any(func(n): return n is Label and n.text == "The founding"), "during the founding the details show the checklist")
+	check(_walk(hud._goals).any(func(n): return n is Label and n.text == "Shelter"), "during the founding the details show the checklist")
 	var saved := sim.stats.duplicate(true)
 	sim.stats.felled = 1
 	sim.stats.pick_crafted = true
 	sim.stats.axe_crafted = true
 	sim.stats.meadow_wool = true
-	sim.stats.built = {"bench": true, "fireplace": true, "board": true, "chopping_block": true}
+	sim.stats.built = {"bench": true, "fireplace": true, "board": true, "chopping_block": true, "composter": true, "storehouse": true}
+	sim.stats.meals_cooked = 1
 	sim.stats.broken_boulders = 1
 	sim.stats.sheep_hunted = 1
 	sim.stats.houses = 2
@@ -1972,9 +1952,9 @@ func _test_after_the_founding(game: Game) -> void:
 	check(Goals.current(sim) < 0, "every founding step is done")
 	hud.refresh(sim)
 	await _frames()
-	check(hud._goals_tab.text.begins_with("The village  ·  1  Paint a farm plot"), "the tab moves on to the village chapter")
+	check(hud._goals_tab.text.begins_with("The village  ·  1  Give a second resident a workstation"), "the tab moves on to the village chapter")
 	var labels: Array = _walk(hud._goals).filter(func(n): return n is Label and not n.is_queued_for_deletion()).map(func(l): return l.text)
-	check(labels.size() == 5 and labels[0] == "The village" and labels[2] == "1  Paint a farm plot", "the village chapter follows the founding, with a why (%s)" % [labels])
+	check(labels.size() == 5 and labels[0] == "The village" and labels[2] == "1  Give a second resident a workstation", "the village chapter follows the founding, with a why (%s)" % [labels])
 	# The book opens from the panel's Book button, shows a building's page, and the "?" on a bench opens it (issue #198).
 	var book_btn: Array = _walk(hud._goals).filter(func(n): return n is Button and n.text == "Book" and not n.is_queued_for_deletion())
 	check(book_btn.size() == 1, "the goals panel has a Book button")
@@ -2123,8 +2103,8 @@ func _test_maps(game: Game) -> void:
 	hud.refresh(sim)
 	check(game._world._built_map == OldMine.ID, "the world view draws the mine")
 	check(not hud._tool_btns.paint.visible and not hud._tool_btns.build.visible and hud._tool_btns.gather.visible, "on the mine, the toolbar offers Gather but not Paint or Build")
-	game.set_tool("stock")
-	check(game.tool == "", "stockpile painting is for the village")
+	game.set_tool("plots")
+	check(game.tool == "", "painting plots is for the village")
 	game._target = Vector3(9, 0, 9)
 	game._place_camera()
 	var mine_cam: Vector3 = game._target

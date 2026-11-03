@@ -300,20 +300,21 @@ func _update_live_overlays() -> void:
 	var hint_col := Palette.CHALK
 	if not _drag.is_empty() and _drag.kind == "rect":
 		if _drag.get("erase", false):  # erasing a zone: a red outline, and a red fill on each cell that goes
-			var cells: Dictionary = sim.farm if tool in ["farm", "plots"] else (_area_cells() if tool == "area" else sim.zone)
+			var cells: Dictionary = sim.farm if tool == "plots" else (_area_cells() if tool == "area" else {})
 			outlines.append({"rect": _drag.rect, "h": 0.03, "color": Palette.RED, "dashed": true})
 			for x in range(_drag.rect.position.x, _drag.rect.end.x):
 				for y in range(_drag.rect.position.y, _drag.rect.end.y):
 					if cells.has(Vector2i(x, y)):
 						fills.append({"rect": Rect2i(x, y, 1, 1), "h": 0.02, "color": Color(Palette.RED, 0.45)})
-			hint = "Release to erase these farm plots. Anything growing on them is lost." if tool == "farm" else "Release to erase these stockpile cells. Anything on them stays and is hauled to the rest."
+			if tool == "plots":
+				hint = "Release to take these plots away. Anything growing on them is lost."
 			if tool == "area":
 				hint = "Release to take these cells out of the work area."
 			if tool == "pen":
 				hint = "Release to take this pen down. Its fences come down and its animals go free."
 			hint_col = Palette.RED
 		else:
-			var col: Color = {"stock": Palette.GREEN, "farm": Palette.WHEAT, "plots": Palette.WHEAT, "room": Palette.BLUE, "lead": Palette.BLUE, "pen": Palette.BLUE, "area": Palette.CHALK}.get(tool, Palette.RED)
+			var col: Color = {"plots": Palette.WHEAT, "room": Palette.BLUE, "lead": Palette.BLUE, "pen": Palette.BLUE, "area": Palette.CHALK}.get(tool, Palette.RED)
 			if tool == "area":
 				var site := sim.site(area_site)
 				if not site.is_empty():
@@ -416,8 +417,6 @@ func _update_live_overlays() -> void:
 			hint = "Marking trees only" if kinds[0] == "tree" else "Marking boulders only"
 		elif _drag.is_empty():
 			hint = "Drag to mark trees and boulders. Shift: trees only. Alt/Option: boulders only."
-	if hint == "" and tool == "stock" and _hover != null and _drag.is_empty():
-		hint = "Click or drag from a stockpile cell to erase." if sim.zone.has(_hover) else "Drag over open ground to paint a stockpile. Start on a stockpile to erase instead."
 	if tool == "plots" and _drag.is_empty():  # the composter's reach, so the player sees where plots can go
 		var psite := sim.site(area_site)
 		if not psite.is_empty():
@@ -437,15 +436,6 @@ func _update_live_overlays() -> void:
 		hint = "Click or drag over animals for the party to lead into a pen with room."
 	if hint == "" and tool == "pen" and _hover != null and _drag.is_empty():
 		hint = "Click or drag from a pen to take it down." if sim.pen_at(_hover) != null else "Drag out a pen, fences included: %d×%d to %d×%d." % [Tuning.PEN_MIN, Tuning.PEN_MIN, Tuning.PEN_MAX, Tuning.PEN_MAX]
-	if hint == "" and tool == "farm" and _hover != null and _drag.is_empty():
-		var why := sim.farm_blocked(_hover)
-		if sim.farm.has(_hover):
-			hint = "Click or drag from a farm plot to erase. Anything growing there is lost."
-		elif why != "":
-			hint = "Farms go on open grass, not on %s." % why
-			hint_col = Palette.YELLOW
-		else:
-			hint = "Drag over open grass to paint a farm. Start on a farm plot to erase instead."
 	if not radial.is_empty():  # issue #176
 		var hv: int = radial.hover
 		if hv >= 0:
@@ -775,7 +765,7 @@ func _left_down(e: InputEventMouseButton) -> void:
 		return
 	if tool in OrderMenus.MARK_TOOLS and c != null:
 		# A drag that starts on a painted cell erases that zone instead (issues #63, #93).
-		var erase: bool = (tool == "plots" and sim.farm.has(c) and sim.farm[c].get("owner", 0) == area_site) or (tool == "stock" and sim.zone.has(c)) or (tool == "farm" and sim.farm.has(c)) or (tool == "pen" and sim.pen_at(c) != null) or (tool == "area" and sim.site(area_site).has("area") and Sim.in_area(sim.site(area_site), c))
+		var erase: bool = (tool == "plots" and sim.farm.has(c) and sim.farm[c].get("owner", 0) == area_site) or (tool == "pen" and sim.pen_at(c) != null) or (tool == "area" and sim.site(area_site).has("area") and Sim.in_area(sim.site(area_site), c))
 		_drag = {"kind": "rect", "a": c, "rect": Rect2i(c, Vector2i.ONE), "start": e.position, "erase": erase}
 		return
 	# Shift-drag box-selects residents; a plain drag pans the map; a click selects.
@@ -793,15 +783,7 @@ func _left_up(e: InputEventMouseButton) -> void:
 		"press":
 			_select(_pick(e.position))
 		"rect":
-			if tool == "stock" and d.get("erase", false):
-				sim.erase_zone(d.rect)
-			elif tool == "stock":
-				sim.paint_zone(d.rect)
-			elif tool == "farm" and d.get("erase", false):
-				sim.clear_farm(d.rect)
-			elif tool == "farm":
-				sim.paint_farm(d.rect)
-			elif tool == "area":
+			if tool == "area":
 				var site := sim.site(area_site)
 				if not site.is_empty():
 					sim.paint_work_area(site, d.rect, d.get("erase", false))
@@ -921,8 +903,6 @@ func _key(e: InputEventKey) -> void:
 		"jobs": toggle_jobs_board()
 		"hunt": set_tool("hunt")
 		"lead": set_tool("lead")
-		"stock": set_tool("stock")
-		"farm": set_tool("farm")
 		"pen": set_tool("pen")
 		"gather": set_tool("gather")
 		"paint": set_tool("paint")
@@ -1238,15 +1218,15 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
+const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
 
 ## Whether an order or menu can be used on a map.
 static func tool_fits(t: String, map: String) -> bool:
-	if t == "paint":
-		return map in ["village", Meadow.ID]
+	if t == "paint":  # pens at the meadow; the village's storage and farms are painted from their buildings (issues #318, #319)
+		return map == Meadow.ID
 	if t in VILLAGE_ONLY:
 		return map == "village"
 	if t in MEADOW_ONLY:
@@ -2115,7 +2095,6 @@ func _screenshot_scene() -> void:
 		var crop = sim.farm.get(fa.position + Vector2i(1, 1))
 		if crop != null:
 			selection = {"kind": "crop", "id": crop.id}
-		tool = "farm"
 		_target = Vector3(fa.get_center().x, 0, fa.get_center().y)
 		_place_camera()
 	if "--fireplace" in OS.get_cmdline_user_args():
@@ -2218,13 +2197,6 @@ func _screenshot_scene() -> void:
 		sim.drop_items(Sim.rcell(ada) + Vector2i(-1, 2), "wood_axe", 1, 4)
 		selection = {"kind": "res", "ids": [ada.id]}
 		_hud.equip_kind = "axe"
-	if "--erase" in OS.get_cmdline_user_args():  # mid-drag, erasing half the stockpile (issue #63)
-		var z := area(10, 7, 4, 2)
-		set_tool("stock")
-		_drag = {"kind": "rect", "a": z.position, "rect": Rect2i(z.position + Vector2i(2, 0), Vector2i(3, 2)), "start": Vector2.ZERO, "erase": true}
-		_target = Vector3(z.get_center().x, 0, z.get_center().y)
-		_place_camera()
-		selection = {}
 	if "--items" in OS.get_cmdline_user_args():  # every common loose item, in stacks of 1 and 16, for the item shapes (issue #206)
 		var spots: Array[Vector2i] = []
 		var from := Sim.rcell(sim.residents[0])
@@ -2250,10 +2222,6 @@ func _screenshot_scene() -> void:
 	if "--gather" in OS.get_cmdline_user_args():  # the Gather menu open (issue #94)
 		selection = {}
 		set_tool("gather")
-	if "--paint" in OS.get_cmdline_user_args():  # Farm plot on, and the Paint menu open (issue #93)
-		selection = {}
-		pick_order("paint", "farm")
-		menu_open = "paint"
 	if "--village" in OS.get_cmdline_user_args():  # Tomas and Mira beside Ada, Tomas selected (issues #77, #79)
 		var ada: Dictionary = sim.residents[0]
 		for k in 2:

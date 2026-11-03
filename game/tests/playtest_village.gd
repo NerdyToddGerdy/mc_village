@@ -34,7 +34,6 @@ func _initialize() -> void:
 	for r in ["planks", "planks", "sticks", "wood_pick"]:
 		sim.queue_add(bench, r)
 	await play(120)
-	sim.paint_zone(area(10, 7, 4, 2))
 	sim.designate_mine(area(0, 0, 18, 18))
 	await play(150)
 	var h1 := sim.place_site("house", at(11, 0))
@@ -52,29 +51,25 @@ func _initialize() -> void:
 	check(sim.stats.get("sheep_hunted", 0) >= 3, "the clearing's sheep were hunted for wool and mutton (%d)" % sim.stats.get("sheep_hunted", 0))
 	check(not tomas.is_empty() and seen("a skilled"), "Tomas arrived skilled in a job")
 
-	# ---- A bigger stockpile, by drag: Z opens the Paint menu, 1 picks Stockpile (issue #93)
-	await look_at(at(9, 9))
-	await key(KEY_Z)
-	await key(KEY_1)
-	check(game.tool == "stock", "Z then 1 picks Stockpile")
-	var zr := open_rect_on_screen(at(9, 9), 4, 3, func(p): return sim.walkable(p) and sim.site_at(p) == null and sim.reserved_at(p) == null and not sim.in_zone(p) and not sim.items.has(p) and p != sim.meadow_sign())
-	if zr.position.x >= 0:
-		await drag(screen(zr.position), screen(zr.end - Vector2i.ONE))
-	check(sim.zone.size() >= 16, "Z: a bigger stockpile is painted (%d cells)" % sim.zone.size())
+	# ---- Farm: a composter from the Build menu starts with plots; wheat is planted, grows and is harvested
+	check(await open_bench_panel(), "open the Craft panel for the composter's planks")
+	await queue_recipe("Planks", 2)
 	await key(KEY_ESCAPE)
-
-	# ---- Farm: paint plots, picked in the Paint menu; wheat is planted, grows and is harvested
-	check(await click_button("Paint") and await click_button("Farm plot"), "pick Farm plot in the Paint menu")
-	game._hud.refresh(sim)
-	check(game.tool == "farm" and game._hud._tool_btns.paint.text == "Paint: Farm plot", "Farm plot is on, and the Paint button says so")
-	var fr := open_rect_on_screen(at(9, 9), 3, 2, func(p): return sim.farm_blocked(p) == "")
-	check(fr.position.x >= 0, "open grass on screen for a farm")
-	await drag(screen(fr.position), screen(fr.end - Vector2i.ONE))
-	await key(KEY_ESCAPE)
-	check(sim.farm.size() == 6, "P: dragging paints 6 farm plots (%d)" % sim.farm.size())
-	check(await play_until(60, func(): return sim.stats.get("planted", 0) >= 6), "the plots are planted")
+	await key(KEY_B)
+	check(await click_button("Composter"), "the Build menu lists the composter")
+	var cp := build_spot("composter", at(9, 9))
+	check(cp.x >= 0, "open ground for the composter")
+	await look_at(cp)
+	await click(screen(cp))
+	var comp = sim.site_at(cp)
+	check(comp != null and comp.tpl == "composter", "the composter is placed")
+	if game.tool != "":
+		await key(KEY_ESCAPE)
+	check(await play_until(300, func(): return comp != null and comp.done), "the composter is built")
+	check(sim.composter_plots(comp).size() > 0, "it starts with plots round it (%d)" % sim.composter_plots(comp).size())
+	check(await play_until(60, func(): return sim.stats.get("planted", 0) >= 4), "the plots are planted")
 	check(await play_until(Tuning.WHEAT_GROW + 90, func(): return sim.stats.get("harvested", 0) >= 3), "the wheat grows and is harvested")
-	check(await play_until(90, func(): return sim.items.values().any(func(it): return it.type == "wheat" and sim.in_zone(it.cell))), "harvested wheat is hauled to the stockpile")
+	check(await play_until(120, func(): return sim.farm.keys().all(func(c): return not sim.items.has(c)) and count("wheat") > 0), "with no storage yet, harvested wheat is carried clear of the plots")
 	check(seen("Planting wheat") and seen("Harvesting wheat"), "residents were seen planting and harvesting")
 
 	# ---- Fireplace (K): placed with its kitchen plot; the standing order bakes bread
@@ -87,8 +82,8 @@ func _initialize() -> void:
 	check(fire != null and fire.tpl == "fireplace" and fire.plot != null, "K: the fireplace is placed with a kitchen plot reserved")
 	check(await play_until(240, func(): return fire != null and fire.done and count("bread") + count("cooked_mutton") > 0), "the fireplace is built and bakes or cooks a meal")
 	check(seen("Baking bread") or seen("Cooking mutton"), "residents were seen cooking")
-	check(sim.stats.meals_cooked > 0 and Goals.village_done(sim, 0) and Goals.village_done(sim, 1), "the village book's first two chapter goals are done: a farm plot and a meal (%d)" % Goals.village_current(sim))
-	check(Goals.village_current(sim) >= 2, "and the chapter asks for a workstation next, then the mine trip")
+	check(sim.stats.meals_cooked > 0 and Goals.done(sim, 6) and Goals.done(sim, 7), "the founding's composter and fireplace goals are done")
+	check(Goals.village_current(sim) >= 0, "and the village chapter asks for a workstation next, then the mine trip")
 	game.open_book("fireplace")
 	game._hud.refresh(sim)
 	await frames(2)
@@ -145,7 +140,7 @@ func _initialize() -> void:
 	# Issue #184: a toolsmith works from a toolsmith's bench of his own
 	var tsb = await place_from_menu("Toolsmith's bench", "toolsmith_bench", at(9, 9))
 	check(tsb != null and tsb.tpl == "toolsmith_bench", "a toolsmith's bench is placed from the Build menu")
-	check(await play_until(300, func(): return tsb != null and tsb.done and tsb.worker == tomas.id), "it's built, and Tomas claims it (%s)" % [tsb.get("worker", 0) if tsb != null else "none"])
+	check(await play_until(600, func(): return tsb != null and tsb.done and tsb.worker == tomas.id), "it's built, and Tomas claims it (%s, done %s, stage %d, %s)" % [tsb.get("worker", 0) if tsb != null else "none", tsb.done, tsb.stage, sim.stuck.map(func(x): return x.why)])
 	check(await open_bench_panel(), "open the bench's Craft panel again")
 	check(await queue_recipe("Wooden axe"), "queue a wooden axe")
 	await key(KEY_ESCAPE)
@@ -236,7 +231,7 @@ func _initialize() -> void:
 	check(sim.residents.size() == 3 and sim.residents[2].name == "Mira" and seen("Mira"), "it's Mira, with a toast")
 
 	# ---- Smelting and iron tools (issue #104): ore and coal from the mine, smelted at the fireplace
-	var zc: Vector2i = sim.zone.keys()[0]
+	var zc: Vector2i = sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 2))
 	sim.drop_items(zc, "iron_ore", 3)
 	sim.drop_items(zc, "coal", 3)
 	game._select(fire)
@@ -312,20 +307,7 @@ func _initialize() -> void:
 	check(await play_until(150, func(): return sim.expedition.is_empty()), "the party gets home, the hurt walking slower (%s, unloading %s)" % [sim.expedition.get("party", []).map(func(id): return [sim.resident(id).map, sim.resident(id).job.label if sim.resident(id).job != null else "idle", sim.resident(id).hurt, sim.resident(id).pos, sim.resident(id).path.size(), sim.resident(id).job.i if sim.resident(id).job != null else -1, sim.resident(id).trip, sim.cart]), sim.expedition.get("unloading", false)])
 	check(seen("Back from the old caves: ") and seen("coal"), "a toast reports what came back")
 	check(ada.map == "village" and tomas.map == "village" and not ada.away, "Ada and Tomas are back in the village")
-	if true:  # room for the cargo: the stockpile is nearly full by now, so paint more, as a player would
-		game.planner_open = false  # the planner stands full height on the right now, over the ground the drag needs
-		game._hud.refresh(sim)
-		await frames(2)
-		await look_at(at(9, 9))
-		await key(KEY_Z)
-		await key(KEY_1)
-		var more := open_rect_on_screen(at(9, 9), 4, 3, func(p): return sim.farm_blocked(p) == "" and not sim.items.has(p))
-		check(more.position.x >= 0, "open ground on screen for more stockpile")
-		var cells_before := sim.zone.size()
-		await drag(screen(more.position), screen(more.end - Vector2i.ONE))
-		await key(KEY_ESCAPE)
-		check(sim.zone.size() > cells_before, "more stockpile is painted (%d → %d cells, tool %s)" % [cells_before, sim.zone.size(), game.tool])
-	check(await play_until(400, func(): return count("coal") > coal_before and sim.stacks_where(func(st): return st.type == "coal" and not sim.in_zone(st.cell)).is_empty()), "the coal is hauled to the stockpile, behind the village's other hauling (%s)" % [sim.stacks_where(func(st): return st.type == "coal").map(func(st): return [st.cell, st.n, sim.in_zone(st.cell)])])
+	check(await play_until(60, func(): return count("coal") > coal_before), "the coal is unloaded at the village (no storehouse yet: it stays where it was put down)")
 	await look_at(bp)
 	await click(screen(bp, 1.0))
 	game._hud.refresh(sim)

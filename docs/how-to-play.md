@@ -6,7 +6,7 @@ You don't steer anyone's every swing. You **mark work** (trees to chop, sheep to
 
 This guide covers the game as it plays today, from the founding to the Nether, enchanting and the freight chain. Every number in it is provisional and may change as the game is balanced.
 
-**Your first hour:** follow the goals panel through [the founding](#the-founding-step-by-step) (a stockpile, tools, two houses, a traveler), then the [village](#the-village) goals, then plan a first trip at the [expedition board](#expeditions). When something stalls, [the stuck list](#when-something-stalls) says why.
+**Your first hour:** follow the goals panel through [the founding](#the-founding-step-by-step) (tools, a house, a farm and a fire, a storehouse, a second house, a traveler), then the [village](#the-village) goals, then plan a first trip at the [expedition board](#expeditions). When something stalls, [the stuck list](#when-something-stalls) says why.
 
 **Contents:** [Starting the game](#starting-the-game) · [The screen](#the-screen) · [The founding](#the-founding-step-by-step) · [Paths](#paths) · [Giving orders](#giving-orders) · [Residents](#residents) · [Lumberjacks and stonemasons](#lumberjacks-stonemasons-and-their-workstations) · [Materials and stockpiles](#materials-and-stockpiles) · [Crafting and tools](#crafting-and-tools) · [Building](#building) · [Food](#food) · [Expeditions](#expeditions) · [The meadow](#the-meadow) · [The road to the mine](#the-road-to-the-mine) · [The Nether](#the-nether) · [Enchanting](#enchanting) · [The portal line and the redstone chain](#the-portal-line-and-the-redstone-chain) · [New residents](#new-residents) · [When something stalls](#when-something-stalls) · [Controls](#controls) · [Saving and settings](#saving-and-settings)
 
@@ -46,32 +46,43 @@ Marks drawn on the world show what's been ordered. Chalk-white means selected, r
 
 The tutorial tab leads you through these steps. Each one unlocks the next.
 
-1. **Chop a tree.** Choose **Gather → Mine** (or press **X**) and click a tree. Ada fells it by hand, slowly. A tree drops 4 to 6 logs.
-2. **Paint a stockpile.** The logs are lying loose. Choose **Paint → Stockpile** (Z, then 1) and drag over open ground. Residents carry what they gather there.
-3. **Build a crafting bench.** Choose **Build → Crafting bench** (or press **T**) and click open ground. It takes 4 logs.
-4. **Craft an axe and a pickaxe.** Open the bench (click it, or press **C**) and queue a wooden axe and a wooden pickaxe. The bench queues their planks and sticks first by itself, marked **A**. An axe chops 2.5× faster than bare hands.
-5. **Break a boulder.** With a pickaxe, Ada can mine boulders for cobblestone. Each one gives 6.
-6. **Hunt sheep for wool.** Choose **Gather → Hunt** (or press **G**) and mark sheep. Each one gives 1 wool and 1 raw mutton. The clearing's 3 sheep give the 3 wool a bed needs.
-7. **Build Ada's house.** Choose **Build → House** (or press **H**), and press **R** to turn the door. The house goes up in stages as materials arrive, and its bed is the last stage.
-8. **Build a fireplace.** Choose **Build → Fireplace** (or press **K**). It costs 6 cobblestone, and cooks the mutton into meals: a trip off the map needs one for the walk home.
-9. **Build an expedition board.** It's in the Build menu once Ada's house is up. The second bed needs more wool than the clearing has, and the board plans trips off the map.
-10. **Fetch wool from the meadow.** Click the meadow's signpost on the west edge, or the board. Send Ada for wool, take as many meals as the fireplace has made, click **Start packing**, then **Depart**. The village waits while she's away.
-11. **Build a second house.** Its bed is what brings a traveler.
-12. **Welcome a traveler.** Tomas, a lumberjack, arrives a little while after the second bed is ready.
-13. **Build Tomas a chopping block.** Choose **Build → Chopping block** near trees. Tomas fells the trees around it on his own, while Ada does everything else.
+The founding has three chapters, **Shelter**, **Food** and **Expanding**, and the tab names the chapter and the step you're on.
+
+**Shelter**
+
+1. **Chop a tree.** Choose **Gather → Mine** (or press **X**) and click a tree. Ada fells it by hand, slowly. A tree drops 4 to 6 logs. The logs lie where they fall: there's nothing to paint, and builders fetch them from the ground.
+2. **Build a crafting bench.** Choose **Build → Crafting bench** (or press **T**) and click open ground. It takes 4 logs.
+3. **Craft an axe and a pickaxe.** Open the bench (click it, or press **C**) and queue a wooden axe and a wooden pickaxe. The bench queues their planks and sticks first by itself, marked **A**. An axe chops 2.5× faster than bare hands.
+4. **Break a boulder.** With a pickaxe, Ada can mine boulders for cobblestone. Each one gives 6.
+5. **Hunt sheep for wool.** Choose **Gather → Hunt** (or press **G**) and mark sheep. Each one gives 1 wool and 1 raw mutton. The clearing's 3 sheep give the 3 wool a bed needs.
+6. **Build Ada's house.** Choose **Build → House** (or press **H**), and press **R** to turn the door. The house goes up in stages as materials arrive, and its bed is the last stage.
+
+**Food**
+
+7. **Build a composter and paint its plots.** Choose **Build → Composter** (4 planks). It starts with farm plots round it; select it and click **Paint plots** to drag more within 3 cells. A farmer plants and harvests them: the village's steady food.
+8. **Build a fireplace and cook a meal.** Choose **Build → Fireplace** (or press **K**). It costs 6 cobblestone. Queue bread or cooked mutton: a trip off the map needs a meal for the walk home.
+
+**Expanding**
+
+9. **Build a storehouse.** Choose **Build → Storehouse**, craft a chest at the bench (8 planks) and a hauler carries it in. Select it and **Paint more room** to widen it.
+10. **Build an expedition board.** It's in the Build menu once Ada's house is up. The second bed needs more wool than the clearing has, and the board plans trips off the map.
+11. **Fetch wool from the meadow.** Click the meadow's signpost on the west edge, or the board. Send Ada for wool, take as many meals as the fireplace has made, click **Start packing**, then **Depart**. The village waits while she's away.
+12. **Build a second house.** Its bed is what brings a traveler.
+13. **Welcome a traveler.** Tomas, a lumberjack, arrives a little while after the second bed is ready.
+14. **Build Tomas a chopping block.** Choose **Build → Chopping block** near trees. Tomas fells the trees around it on his own, while Ada does everything else.
 
 Each step shows a line under its hint saying **why** it matters.
 
 ### The village
 
-When the founding is done, a second chapter of goals follows in the same tab, each with a hint and a why:
+When the founding is done, a fourth chapter, **The village**, follows in the same tab, each goal with a hint and a why:
 
-1. **Paint a farm plot.** **Paint → Farm plot**, on open grass. A farmer plants and harvests it: the village's steady food. Farmers stop once the village has 20 wheat, so it doesn't crowd the stockpiles: change that with − and + on the composter's panel or the jobs board. The stuck list shows "Farm: enough wheat" as a waiting reason, and the crop waits ripe on its plot.
-2. **Cook a meal.** Queue bread or cooked mutton at the fireplace. Cooked food fills a resident for much longer.
-3. **Give a second resident a workstation.** Build another workstation (a mason's bench, composter and so on) and give someone that job from the Jobs board. Tomas's chopping block was the first.
-4. **Bring iron ore home from the old caves.** Plan a trip at the expedition board. Smelted with coal at the fireplace's furnace, iron makes tools that last more than twice as long as stone.
+1. **Give a second resident a workstation.** Build another workstation (a mason's bench, a toolsmith's bench and so on) and give someone that job from the Jobs board. Tomas's chopping block was the first.
+2. **Bring iron ore home from the old caves.** Plan a trip at the expedition board. Smelted with coal at the fireplace's furnace, iron makes tools that last more than twice as long as stone.
 
-When both chapters are done the panel folds to a green **The village ✓** chip.
+Each chapter ends with a short note in the book of what the village can do now. A village saved before the composter and storehouse became goals counts its founding as done, and its old stockpile and farm plots keep working.
+
+When every chapter is done the tab reads **The village ✓**.
 
 ### The village book
 
@@ -96,14 +107,13 @@ There are two ways to get work done.
 | | Break boulders | Boulders only. Breaking them needs a pickaxe |
 | | Keep | Trees and boulders lumberjacks and stonemasons leave alone on their own rounds (a green ring). They're still worked if you mark them |
 | | Hunt (G) | Sheep, cows and pigs. Shift-drag marks only the kind you start on. Shows while there are animals about |
-| **Paint** (Z) | Stockpile | Ground where residents store what they gather |
-| | Farm plot (P) | Open grass where residents grow wheat |
+| **Paint** (Z) | Pen | At the meadow only: a fenced pen for animals. In the village, storage and farms are painted from their buildings: a storehouse's **Paint more room** and a composter's **Paint plots** |
 | **Build** (B) | Crafting bench (T), House (H), Fireplace (K), and each job's workstation | Place a blueprint. R turns it |
 | **Craft** (C) | | Opens the Craft panel for your benches and fireplace |
 
-While a toolbar menu is open, **1 to 9** pick its rows, so Z then 1 paints a stockpile. The Gather and Paint buttons show the order that's on, such as "Gather: Hunt". Esc puts the order away.
+While a toolbar menu is open, **1 to 9** pick its rows, so at the meadow Z then 1 paints a pen. The Gather and Paint buttons show the order that's on, such as "Gather: Hunt". Esc puts the order away.
 
-**To erase** stockpile cells or farm plots, switch that Paint order on and start a drag on a painted cell. The cells that will go show in red. Items on an erased stockpile cell stay where they are and get carried to the rest of the stockpile. Wheat growing on an erased farm plot is lost.
+**To erase** a composter's plots, switch its **Paint plots** on and start a drag on one of its plots. The cells that will go show in red, and wheat growing on them is lost. Stockpile cells and plots painted in a village from before the storehouse and the composter are still there, and still work.
 
 **Right-click a tree, boulder or animal** for a ring of its orders, with or without anyone selected:
 - **Chop**, **Break** or **Hunt** marks it for anyone (**Cancel** once it's marked).
@@ -198,7 +208,7 @@ The workstation's panel and the stuck list say what's holding it up: "No trees i
 
 Everything is carried. Felled trees drop logs where they stood, and broken boulders drop cobblestone. Residents carry up to 4 of one thing at a time.
 
-Until you paint a stockpile, items stay where they fell, and builders fetch them from the ground. Once there's a stockpile, residents with **Haul** on carry loose items to it. Each cell holds up to 16. If the stockpile is full, the stuck list says so.
+Items stay where they fell until the village has a storehouse with a chest, and builders fetch them from the ground; anything lying on a blueprint or a farm plot is carried clear. Once there's a storehouse, residents with **Haul** on carry loose items into its chests. If it's full, the stuck list says so. (A village saved with painted stockpile cells keeps them: each cell holds up to 16.)
 
 **The storehouse** (Build menu: 6 cobblestone, 12 planks and 4 logs) is the main storage once you have one. It holds nothing until you add chests. Craft a **chest** at the bench (8 planks) and a hauler carries it in. Each chest holds 9 stacks of anything. A storehouse starts 3 wide and holds 6 chests; a chest sits in every cell but the door's column, which is the aisle. Haulers fill the nearest storehouse with room first, and stockpiles take what doesn't fit. Residents fetch what's stored at its door, and its panel lists what's inside. The squares on each chest's lid show what it holds.
 
@@ -270,7 +280,7 @@ Residents get hungry. A full resident empties in about 6 minutes of game time.
 | Bread | 50 | The fireplace, from 3 wheat |
 | Cooked mutton, beef or porkchop | 60 | The fireplace, from 1 raw meat and 1 log of fuel |
 
-**Farming.** Paint farm plots over open grass. Residents with **Farm** on plant each cell, the wheat ripens in 2 minutes, and a harvest gives 2 wheat. A plot is replanted only after its wheat has been carried away, so a farm needs a stockpile.
+**Farming.** A composter's plots are farmed by residents with **Farm** on: they plant each cell, the wheat ripens in 2 minutes, and a harvest gives 2 wheat. A plot is replanted once its wheat has been carried away: to a chest if there's a storehouse, else just clear of the plot.
 
 **The fireplace** cooks whatever you queue. It also smelts: **Smelt iron** turns 1 iron ore and 1 coal into an iron ingot, for iron tools. It also has a standing order, **Keep 6 meals in stock**, which is on by default: while fewer than 6 bread and cooked meats are stored, cooks make whatever the wheat, raw meat and logs allow.
 
