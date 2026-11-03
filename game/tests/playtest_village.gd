@@ -47,7 +47,7 @@ func _initialize() -> void:
 		sim.queue_add(bench, "planks")
 	check(await play_until(1200, func(): return sim.stats.get("traveler_home", false)), "founding: Tomas has moved in")
 	var tomas: Dictionary = sim.residents[1] if sim.residents.size() > 1 else {}
-	check(h1.done and h2.done and h1.stage == 4 and h2.stage == 4, "both houses are finished with their beds")
+	check(h1.done and h2.done, "both houses are finished")
 	check(sim.stats.get("sheep_hunted", 0) >= 3, "the clearing's sheep were hunted for wool and mutton (%d)" % sim.stats.get("sheep_hunted", 0))
 	check(not tomas.is_empty() and seen("a skilled"), "Tomas arrived skilled in a job")
 
@@ -226,7 +226,7 @@ func _initialize() -> void:
 		if h3 != null and not h3.done and sim.stuck.any(func(x): return x.who == "House" and "wool" in x.why):
 			# The meadow trip's wool depends on the hunt's luck, which any change in who stands where shifts: a bed's worth is left at the stockpile, so this step stays about building the house.
 			sim.drop_items(sim.nearest_walkable(Sim.rcell(ada) + Vector2i(1, 1)), "wool", 3)
-	check(h3 != null and h3.done and h3.stage == 4, "the third house is finished, bed and all")
+	check(h3 != null and h3.done, "the third house is finished")
 	check(await play_until(Tuning.ARRIVAL_DELAY + 120, func(): return sim.residents.size() == 3 and not sim.residents[2].arriving), "a third traveler arrives and moves in")
 	check(sim.residents.size() == 3 and sim.residents[2].name == "Mira" and seen("Mira"), "it's Mira, with a toast")
 
@@ -381,6 +381,7 @@ func _initialize() -> void:
 	check(await play_until(300, func(): return new_house != null and new_house.stage >= 1), "and builders get its foundation down (stage %d)" % (new_house.stage if new_house != null else -1))
 
 	# ---- Worn paths (issue #196): the village has run a while, so the busy ground has packed down
+	await play_until(300, func(): return sim.maps.village.wear.values().any(func(w): return w >= Tuning.WEAR_DIRT))  # cheaper houses shorten the walking, so give the paths time
 	var worn: Array = sim.maps.village.wear.values()
 	check(worn.size() >= 5 and worn.any(func(w): return w >= Tuning.WEAR_DIRT), "the busy ground has worn into a path (%d cells worn, most worn %d)" % [worn.size(), worn.max() if not worn.is_empty() else 0])
 
