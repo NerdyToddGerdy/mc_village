@@ -335,6 +335,10 @@ const TEMPLATES := {
 	"composter": {"name": "Composter", "size": Vector2i(1, 1), "plot": "granary", "stages": [
 		{"name": "Composter", "verb": "needs", "cost": {"plank": 4}},
 	]},
+	# A pen in the village (issue #355): builders raise it from sticks, and it becomes a pen with fences and a gate.
+	"village_pen": {"name": "Pen", "size": Vector2i(4, 4), "stages": [
+		{"name": "Pen", "verb": "needs", "cost": {"stick": 12}},
+	]},
 	"lodge": {"name": "Hunter's lodge", "size": Vector2i(1, 1), "plot": "tannery", "stages": [
 		{"name": "Hunter's lodge", "verb": "needs", "cost": {"log": 6, "plank": 2}},
 	]},

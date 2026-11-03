@@ -2109,6 +2109,16 @@ func _screenshot_scene() -> void:
 		sim.maps[Meadow.ID].known = true
 		sim.maps[OldMine.ID].known = true
 		world_map_open = true
+	if "--village-pen" in OS.get_cmdline_user_args():  # a finished village pen with led animals in it, for a screenshot (issue #355)
+		var pen_site := sim.place_site("village_pen", house.origin + Vector2i(8, 0))
+		pen_site.store = {"stick": 12}
+		sim._complete_stage(pen_site)
+		var pen: Dictionary = sim.m.pens[-1]
+		for k in 3:
+			var a := sim.add_animal(Pens.pen_inside(pen).position + Vector2i(k % 2, k / 2), ["sheep", "cow", "pig"][k])
+			a.pen = pen.id
+		_look_at_first_resident()
+		_target = Vector3(pen.rect.position.x + 2, 0, pen.rect.position.y + 2)
 	if "--tools" in OS.get_cmdline_user_args():
 		_hud._drop_pinned = "tools"
 	if "--mark-sheep" in OS.get_cmdline_user_args():

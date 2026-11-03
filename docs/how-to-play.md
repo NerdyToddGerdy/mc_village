@@ -295,6 +295,10 @@ Residents get hungry. A full resident empties in about 6 minutes of game time.
 
 The **expedition board** is where expeditions are planned. Once it's built, the village has word of a **meadow** a short walk west, with sheep, cows and pigs. The **old caves** a short walk east, with stone and coal, have to be found first: see [The Cartographer](#the-cartographer). A village saved before surveys already knows everything it had.
 
+### Leading animals home
+
+Once the board is up, the Build menu offers a **hunter's lodge** and a **pen**. A pen is a 4×4 blueprint of fences, 12 sticks, raised by builders like any building; when it's done it's a pen with a gate and room for four animals. At the meadow, mark animals with the **Lead to a pen** order. A hunter who works a finished lodge goes to the meadow on their own whenever a village pen has room and animals are marked, takes up to three on a lead, walks home along the road (the walk there and back) and pens them. The village herd doesn't regrow: it's restocked from the meadow.
+
 ### The world map
 
 The **corner map** is always in the bottom right (**I** hides it), and moves left when the Craft panel or the planner opens so it never sits on them. Press **P** or choose it in the controls to open the **world map**: the village at the centre, the land round it in eight sectors and three rings with fog over what hasn't been surveyed, the coast in blue and the places found as pins. The game pauses while it's open. Click a pin and **Plan a trip** closes the map and opens the expedition board on that place, where you pack; click a ring and **Send the Cartographer** surveys it. Esc closes it and the speed comes back.

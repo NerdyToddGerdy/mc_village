@@ -249,6 +249,8 @@ func _build_static() -> void:
 	for bush in sim.bushes:
 		_add_bush(solid, bush)
 	if sim.m.kind == "village":
+		_add_fences(solid, sim.m)  # the village's pens (issue #355)
+	if sim.m.kind == "village":
 		_add_signpost(solid, sim.meadow_sign())
 		_add_route_sign(solid, sim.route_sign())
 	for k in sim.farm:
@@ -404,6 +406,22 @@ func _add_packs(b: Batch, mp: SimMap, at: Vector2, dir: float) -> void:
 		b.box(Vector3(px - 0.135, py + 0.1, pz - 0.135), Vector3(px + 0.135, py + 0.14, pz + 0.135), Palette.LOG, BlockTextures.LOG)
 
 
+## Posts and rails for a map's fences, and its gates: the meadow's old fences, and the pens in either map (issue #355).
+func _add_fences(b: Batch, mp: SimMap) -> void:
+	for c in mp.fences:
+		var x: float = c.x + 0.5
+		var z: float = c.y + 0.5
+		b.box(Vector3(x - 0.07, 0, z - 0.07), Vector3(x + 0.07, 0.75, z + 0.07), Palette.LOG, BlockTextures.LOG)
+		for d in Sim.DIRS:  # rails toward each neighbouring fence or gate
+			if mp.fences.has(c + d) or mp.gates.has(c + d):
+				var lo := Vector3(x + minf(0.0, d.x * 0.5), 0.0, z + minf(0.0, d.y * 0.5))
+				var hi := Vector3(x + maxf(0.0, d.x * 0.5), 0.0, z + maxf(0.0, d.y * 0.5))
+				for y in [0.3, 0.58]:
+					b.box(Vector3(lo.x - 0.04, y, lo.z - 0.04), Vector3(hi.x + 0.04, y + 0.08, hi.z + 0.04), Palette.LOG.lightened(0.1))
+	for c in mp.gates:
+		_add_gate(b, c, mp.fences.has(c + Vector2i(1, 0)) or mp.fences.has(c - Vector2i(1, 0)))
+
+
 ## The meadow (issue #137): bright open grass, the pond set below its muddy bank, and old fences of
 ## posts and rails. A signpost by the entrance on the east edge points home, with the party's packs.
 func _add_meadow_ground(b: Batch) -> void:
@@ -419,18 +437,7 @@ func _add_meadow_ground(b: Batch) -> void:
 			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT, BlockTextures.EARTH)
 			var top := MUD * Color(v, v, v) if c in mp.banks else MEADOW_GRASS * Color(v, v, v)
 			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), top, BlockTextures.EARTH if c in mp.banks else BlockTextures.GROUND)
-	for c in mp.fences:
-		var x: float = c.x + 0.5
-		var z: float = c.y + 0.5
-		b.box(Vector3(x - 0.07, 0, z - 0.07), Vector3(x + 0.07, 0.75, z + 0.07), Palette.LOG, BlockTextures.LOG)
-		for d in Sim.DIRS:  # rails toward each neighbouring fence or gate
-			if mp.fences.has(c + d) or mp.gates.has(c + d):
-				var lo := Vector3(x + minf(0.0, d.x * 0.5), 0.0, z + minf(0.0, d.y * 0.5))
-				var hi := Vector3(x + maxf(0.0, d.x * 0.5), 0.0, z + maxf(0.0, d.y * 0.5))
-				for y in [0.3, 0.58]:
-					b.box(Vector3(lo.x - 0.04, y, lo.z - 0.04), Vector3(hi.x + 0.04, y + 0.08, hi.z + 0.04), Palette.LOG.lightened(0.1))
-	for c in mp.gates:
-		_add_gate(b, c, mp.fences.has(c + Vector2i(1, 0)) or mp.fences.has(c - Vector2i(1, 0)))
+	_add_fences(b, mp)
 	var e := mp.entrance
 	_add_end_sign(b, e + Vector2i(0, -1), 1.0, Palette.GRASS)
 	_add_packs(b, mp, Vector2(e.x - 1.2, e.y + 0.17), -1.0)
