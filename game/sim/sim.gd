@@ -59,7 +59,7 @@ var seed := Tuning.SEED      ## The game's seed: the old mine's deeper levels ar
 var residents: Array = []    ## Everyone, on every map; each has the `map` they're on.
 var stats := {"felled": 0, "broken_boulders": 0, "tools_broken": 0, "pick_crafted": false, "axe_crafted": false,
 	"houses": 0, "traveler_home": false, "division": false, "built": {}, "meadow_wool": false,
-	"meals_cooked": 0, "ore_home": false}
+	"meals_cooked": 0, "ore_home": false, "found": {}, "surveyed": {}}
 var arrival_at := -1
 var arrived := false
 var auto_craft := false      ## Unlocked when the first house is finished.
@@ -1157,7 +1157,7 @@ func _on_site_done(s: Dictionary) -> void:
 	stats.built[s.tpl] = true  # for the founding goals (issue #182)
 	if s.tpl == "composter":
 		_start_plots(s)  # a new composter starts with plots round it (issue #319)
-	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
+	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table"]:
 		var job: String = Defs.JOB_STATIONS.find_key(s.tpl)
 		var who := resident(s.get("worker", 0))
 		_toast("The %s is ready. %s" % [Defs.TEMPLATES[s.tpl].name.to_lower(),
@@ -1206,11 +1206,12 @@ func _on_site_done(s: Dictionary) -> void:
 		_toast("The enchanting workshop is built. An Enchanter carries enchanted books to it, and it learns their recipes for good.", 0, s.id)
 		return
 	if s.tpl == "board":  # it has word of the old mine and the meadow, which the map switcher now shows (issues #105, #136)
-		maps[OldMine.ID].known = true
-		road().known = true
+		if not Survey.enabled or Survey.found(self, "old_mine"):  # otherwise the Cartographer finds the caves (issue #321)
+			maps[OldMine.ID].known = true
+			road().known = true
 		maps[Meadow.ID].known = true
 		maps[MeadowRoad.ID].known = true
-		_toast("The expedition board is up, with word of some old caves to the east and a meadow to the west. Select it to plan an adventure.", 0, s.id)
+		_toast("The expedition board is up, with word of a meadow to the west%s. Select it to plan an adventure." % (" and some old caves to the east" if maps[OldMine.ID].known else ""), 0, s.id)
 		return
 	if s.tpl != "house":  # only a house is a home: anything else without its own case above does nothing more
 		return
@@ -2402,7 +2403,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher"]:
+	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher"]:
 		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
@@ -3847,7 +3848,9 @@ func _step_map() -> void:
 		use_slot(slot_of(r))
 		if r.away:
 			if tick >= r.back_at:
-				if r.trip == "village":
+				if r.trip == "survey":  # the Cartographer's survey (issue #321)
+					Survey.arrive(self, r)
+				elif r.trip == "village":
 					_arrive_home(r)
 				else:
 					_arrive_at_site(r)
@@ -4562,6 +4565,12 @@ func site_height(s: Dictionary) -> float:
 
 # ---------------------------------------------------------------- commands
 
+## Sends the Cartographer to survey a sector's ring (issue #321). Returns whether they went.
+func start_survey(sector: String, ring: int) -> bool:
+	return Survey.start(self, sector, ring)
+
+
+
 ## Marks every tree and boulder in `rect` to be mined; `kinds` can limit it to "tree" or "boulder"
 ## (issue #7). A single click on an already-marked one (pass it as `single`) unmarks it instead.
 func designate_mine(rect: Rect2i, single = null, kinds := ["tree", "boulder"]) -> void:
@@ -4852,6 +4861,8 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0, ignore := 0) -> St
 		return "Buildings go in the village"
 	if tpl == "portal":
 		rot = 0
+		if Survey.enabled and not Survey.found(self, "ruined_portal"):
+			return "Find the ruined portal first: send a Cartographer to survey"
 	var size: Vector2i = Defs.TEMPLATES[tpl].size
 	var foot := Rect2i(origin, size)
 	if origin.x < 0 or origin.y < 0 or origin.x + size.x > w or origin.y + size.y > h:
@@ -7391,6 +7402,8 @@ static func from_state(d: Dictionary) -> Sim:
 		if r.arriving:
 			s.walk_in(r)
 	s.use_map("village")
+	if not s.stats.has("found"):  # a village from before surveys has found everything it has (issue #321)
+		s.stats.found = {"old_mine": true, "ruined_portal": true}
 	if not s.stats.has("founding_done") and Goals.legacy_done(s):  # a village from before the composter and storehouse goals (issue #318)
 		s.stats.founding_done = true
 	if not s.stats.has("day_zero"):  # an older save has no day: it starts on a morning when it loads (issue #357)

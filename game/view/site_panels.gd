@@ -264,3 +264,36 @@ func fill_workstation(c: Container, sim: Sim, s: Dictionary, reasons: Array) -> 
 	c.add_child(hud._make_keep_row(sim, s))
 	if not game.craft_menu_open:
 		c.add_child(hud._button("Open the craft menu", func(): game.open_craft_menu(s), "Secondary"))
+
+
+## A finished cartographer's table (issue #321): who works it, what's been found, and the survey: a ring of each sector to send them to.
+func fill_cartographer(c: Container, sim: Sim, s: Dictionary) -> void:
+	c.add_child(hud._label("Cartographer's table", true, Palette.CHALK, Palette.TITLE))
+	var who := Survey.cartographer(sim)
+	c.add_child(hud._row("Cartographer", who.name if not who.is_empty() else "none (give someone the job)", false))
+	var sv: Dictionary = sim.stats.get("survey", {})
+	if not sv.is_empty():
+		var left := maxf(0.0, float(who.back_at - sim.tick) / Tuning.TPS)
+		c.add_child(hud._label("%s is surveying the %s ring to the %s: back in %d s." % [who.name, Survey.ring_name(sv.ring), sv.sector, int(ceil(left))], false, Palette.CHALK, Palette.BODY, true))
+	var next := Survey.next_find(sim)
+	var found: Array = Survey.FINDS.filter(func(id): return Survey.found(sim, id)).map(func(id): return Survey.FIND_NAMES[id])
+	c.add_child(hud._label("Found: %s." % (", ".join(found) if not found.is_empty() else "nothing yet"), false, Palette.CHALK_DIM, Palette.BODY, true))
+	if next == "":
+		c.add_child(hud._label("There's nothing more to find on foot yet.", false, Palette.CHALK_DIM, Palette.BODY, true))
+	c.add_child(hud._label("Survey", true))
+	for sector in Survey.SECTORS:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		var name := hud._label(sector.capitalize(), false, Palette.CHALK_DIM)
+		name.custom_minimum_size = Vector2(92, 0)
+		row.add_child(name)
+		for ring in range(1, 4):
+			var done := Survey.surveyed(sim, sector, ring)
+			var why := Survey.check(sim, sector, ring)
+			var label := "%s √" % Survey.ring_name(ring).capitalize() if done else Survey.ring_name(ring).capitalize()
+			var b: Button = hud._button(label, func(): game.start_survey(sector, ring), "Secondary")
+			b.set_meta("label", "Survey %s %d" % [sector, ring])
+			b.disabled = why != ""
+			b.tooltip_text = why if why != "" else "%d s there and back, %d%% chance of being driven back" % [int(Survey.seconds(sim, ring)), int(Survey.danger(sim, ring) * 100)]
+			row.add_child(b)
+		c.add_child(row)

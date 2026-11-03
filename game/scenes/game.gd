@@ -921,7 +921,7 @@ func _key(e: InputEventKey) -> void:
 		"minimap": _hud.toggle_minimap()
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
-		"toolsmith_bench", "composter", "lodge", "builder_table": start_placing(keys.action_for(e))
+		"toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table": start_placing(keys.action_for(e))
 		"rotate":
 			if tool == "build":
 				rot = (rot + 1) % 4
@@ -1218,7 +1218,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
+const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -1801,6 +1801,10 @@ func set_herd_floor(species: String, n: int) -> void:
 	sim.set_herd_floor(species, n)
 
 
+func start_survey(sector: String, ring: int) -> void:
+	sim.start_survey(sector, ring)
+
+
 func upgrade_house(s: Dictionary) -> void:
 	sim.upgrade_house(s)
 
@@ -2129,7 +2133,7 @@ func _screenshot_scene() -> void:
 		house.stage = 4
 		house.done = true
 		var near := at(6, 12)
-		for tpl in ["chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "fireplace", "board", "portal"]:
+		for tpl in ["chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "fireplace", "board", "portal"]:
 			var spot = null
 			for d in 12:
 				for dx in range(-d, d + 1):

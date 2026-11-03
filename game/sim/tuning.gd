@@ -237,3 +237,7 @@ const DIAMOND_PICK_TIER := 3            ## The pickaxe tier diamond ore needs: i
 
 ## Emeralds (issue #346): a resident earns one for each level gained from level 2 up, and spends them on their home's upgrades.
 const EMERALD_COSTS := [3, 6]  ## tent to 3x3 house, then 3x3 house to the 5x5 building
+
+## Surveys (issue #321), by ring out: how long there and back, in seconds, and how likely mobs drive the surveyor back before armor.
+const SURVEY_SECONDS := [90.0, 180.0, 300.0]
+const SURVEY_DANGER := [0.1, 0.25, 0.4]

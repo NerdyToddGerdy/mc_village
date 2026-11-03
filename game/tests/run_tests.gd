@@ -15,6 +15,7 @@ const ROAD := 30.0
 
 func _init() -> void:
 	Night.enabled = false  # a long run isn't broken into by a night wave; the night's own tests switch it on
+	Survey.enabled = false  # the old board names the caves; the survey tests switch it on (#321)
 	var tests := [
 		"test_full_opening",
 		"test_founding_goals",
@@ -35,6 +36,7 @@ func _init() -> void:
 		"test_village_combat",
 		"test_emeralds",
 		"test_house_tiers",
+		"test_survey",
 		"test_guide_new_marks",
 		"test_many_loose_items_tick_cheaply",
 		"test_idle_residents_go_home",
@@ -1220,6 +1222,55 @@ func test_house_tiers() -> void:
 	old.stage = 4
 	old.done = true
 	check(Sim.house_tier(old) == 3 and sim.house_upgrade_check(old) != "", "a house from before tiers is the building")
+
+
+## Issue #321: a Cartographer's survey finds the old caves, then a ruined portal, and can fail; the portal waits for the ruin.
+func test_survey() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	var board := sim.place_site("board", at(2, 2))
+	board.stage = 1
+	board.done = true
+	sim._on_site_done(board)
+	check(not sim.get_map(OldMine.ID).known and sim.get_map(Meadow.ID).known, "the board names the meadow, but the old caves are hidden")
+	check(sim.adventures().all(func(a): return a.id != OldMine.ID), "and the board doesn't list them")
+	check(sim.placement_check("portal", at(14, 14)).contains("ruined portal"), "the village can't build a portal before the ruin is found")
+	check(Survey.check(sim, "north", 1) == "Build a cartographer's table first", "a survey needs the table")
+	var t := sim.place_site("cartographer_table", at(6, 6))
+	t.stage = 1
+	t.done = true
+	sim._occ_dirty = true
+	check(Survey.check(sim, "north", 1) == "Give someone the Cartographer job", "and someone with the job")
+	sim.set_role(tomas, "cartographer")
+	run(sim, 5)
+	check(t.worker == tomas.id and Survey.check(sim, "north", 2) == "Survey the near ring first", "Tomas claims the table; a far ring waits for the near one")
+	check(Survey.check(sim, "south", 1) == "The sea: it needs a boat", "the coast can't be surveyed on foot")
+	var heal_hp: float = Survey.danger(sim, 1)
+	check(heal_hp > 0.0 and Survey.seconds(sim, 2) > Survey.seconds(sim, 1), "a ring further out takes longer and is more dangerous")
+	check(sim.start_survey("north", 1) and tomas.away and not sim.start_survey("east", 1), "Tomas sets out, and only one survey is out")
+	run(sim, Survey.seconds(sim, 1) + 5.0)
+	check(not tomas.away, "he comes back")
+	if tomas.get("hurt", 0) > 0:
+		check(not Survey.surveyed(sim, "north", 1) and not sim.get_map(OldMine.ID).known, "driven back: the ring is still unsurveyed, nothing found")
+		tomas.hurt = 0
+		Survey.reveal(sim, "old_mine")
+	else:
+		check(Survey.surveyed(sim, "north", 1) and Survey.found(sim, "old_mine") and sim.get_map(OldMine.ID).known and sim.road().known, "the survey found the old caves")
+	check(sim.adventures().any(func(a): return a.id == OldMine.ID), "the board lists them now")
+	Survey.reveal(sim, "ruined_portal")
+	check(not sim.placement_check("portal", at(14, 14)).contains("ruined portal"), "the ruined portal found, the village may build its own")
+	var d := Survey.danger(sim, 3)
+	tomas.armor = {"head": {"type": "leather_cap", "dur": 10}}
+	check(Survey.danger(sim, 3) <= d, "armor turns attacks aside")
+	var loaded := Sim.from_state(sim.save_state())
+	check(Survey.found(loaded, "old_mine") and Survey.found(loaded, "ruined_portal"), "what's found is saved")
+	var old = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v65.save"))
+	var up: Dictionary = SaveFormat.upgrade(old)
+	var old_sim := Sim.from_state(up.data.state)
+	check(Survey.found(old_sim, "old_mine") and Survey.found(old_sim, "ruined_portal") and old_sim.residents.all(func(r): return r.jobs.has("cartographer")), "an older village has found everything it has")
+	Survey.enabled = false
 
 
 ## Issue #360: at night mobs can injure residents, who fight back, guards best and the golem too; nobody dies.
@@ -4421,6 +4472,9 @@ func test_founding_book_chapter_and_pages() -> void:
 		st.worker = sim.residents[0].id
 		picked += 1
 		check(Goals.village_current(sim) == (0 if picked < 2 else 1), "%d workstation(s) with a worker: goal %d" % [picked, Goals.village_current(sim)])
+	check(Goals.village_current(sim) == 1 and Goals.VILLAGE[1].t.contains("Cartographer"), "then the Cartographer's survey")
+	sim.stats.found = {"old_mine": true}
+	check(Goals.village_current(sim) == 2, "the caves found, iron ore is next")
 	sim.stats.ore_home = true
 	check(Goals.village_current(sim) == -1, "iron ore home finishes the chapter")
 	# Pages wait for their building.

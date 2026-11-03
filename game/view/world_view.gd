@@ -1022,7 +1022,7 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "mason_bench":
 		_add_mason_bench(solid if s.done else ghost, s)
 		return
-	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
+	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table"]:
 		_add_small_station(solid if s.done else ghost, s)
 		return
 	if s.tpl == "portal":
@@ -1427,6 +1427,12 @@ func _add_small_station(b: Batch, s: Dictionary) -> void:
 			for k in [0.15, 0.75]:
 				b.box(Vector3(x + k, 0, z + 0.15), Vector3(x + k + 0.1, 1.0, z + 0.25), Palette.LOG, BlockTextures.LOG)
 			b.box(Vector3(x + 0.2, 0.35, z + 0.17), Vector3(x + 0.8, 0.95, z + 0.23), Palette.ITEM_COLORS.leather, BlockTextures.FLEECE)
+		"cartographer_table":  # a slanted desk with a sheet of paper on it
+			for k in [0.12, 0.78]:
+				b.box(Vector3(x + k, 0, z + 0.2), Vector3(x + k + 0.1, 0.55, z + 0.8), Palette.LOG, BlockTextures.LOG)
+			b.box(Vector3(x + 0.05, 0.55, z + 0.15), Vector3(x + 0.95, 0.64, z + 0.85), Palette.PLANK, BlockTextures.BOARD)
+			b.box(Vector3(x + 0.2, 0.64, z + 0.25), Vector3(x + 0.8, 0.67, z + 0.75), Color("#EFE6CC"))
+			b.box(Vector3(x + 0.3, 0.67, z + 0.35), Vector3(x + 0.45, 0.68, z + 0.5), Palette.BLUE)
 		"builder_table":  # a sawhorse and a trestle with a plank across them
 			for k in [0.12, 0.78]:
 				b.box(Vector3(x + k, 0, z + 0.2), Vector3(x + k + 0.1, 0.5, z + 0.8), Palette.LOG, BlockTextures.LOG)

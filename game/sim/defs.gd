@@ -263,19 +263,19 @@ const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
 ## Lumberjack and Stonemason replaced Mine in issue #177.
-const JOBS := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt", "guard", "enchant"]
+const JOBS := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt", "guard", "enchant", "cartographer"]
 ## The jobs a traveler can arrive skilled in: the Guard is trained in the village, not arrived with (issue #150).
 const SKILL_POOL := ["lumber", "mason", "haul", "build", "craft", "toolsmith", "farm", "cook", "hunt"]
 const JOB_NAMES := {"lumber": "Lumberjack", "mason": "Stonemason", "haul": "Haul", "build": "Build", "craft": "Craft", "toolsmith": "Toolsmith",
-	"farm": "Farm", "cook": "Cook", "hunt": "Hunt", "guard": "Guard", "enchant": "Enchanter"}
+	"farm": "Farm", "cook": "Cook", "hunt": "Hunt", "guard": "Guard", "enchant": "Enchanter", "cartographer": "Cartographer"}
 ## "Tomas is a skilled farmer."
 const JOB_SKILLED := {"lumber": "lumberjack", "mason": "stonemason", "haul": "hauler", "build": "builder", "craft": "crafter", "toolsmith": "toolsmith",
-	"farm": "farmer", "cook": "cook", "hunt": "hunter", "guard": "guard", "enchant": "enchanter"}
+	"farm": "farmer", "cook": "cook", "hunt": "hunter", "guard": "guard", "enchant": "enchanter", "cartographer": "cartographer"}
 
 ## Each job's workstation (issue #184): a resident works their job only once they've claimed a finished
 ## one, one resident to each. Haul needs none.
 const JOB_STATIONS := {"lumber": "chopping_block", "mason": "mason_bench", "build": "builder_table", "craft": "bench",
-	"toolsmith": "toolsmith_bench", "farm": "composter", "cook": "fireplace", "hunt": "lodge", "enchant": "enchanting_workshop"}
+	"toolsmith": "toolsmith_bench", "farm": "composter", "cook": "fireplace", "hunt": "lodge", "enchant": "enchanting_workshop", "cartographer": "cartographer_table"}
 
 ## Meals the fireplace's standing order keeps in stock.
 const MEALS := ["bread", "cooked_mutton", "cooked_beef", "cooked_porkchop"]
@@ -340,6 +340,10 @@ const TEMPLATES := {
 	]},
 	"builder_table": {"name": "Builder's table", "size": Vector2i(1, 1), "plot": "builder's yard", "stages": [
 		{"name": "Builder's table", "verb": "needs", "cost": {"plank": 4, "log": 2}},
+	]},
+	# Where the Cartographer plans surveys of the land round the village (issue #321). It grows into a map room.
+	"cartographer_table": {"name": "Cartographer's table", "size": Vector2i(1, 1), "plot": "map room", "stages": [
+		{"name": "Cartographer's table", "verb": "needs", "cost": {"plank": 6}},
 	]},
 	# Where expeditions are planned and packed (issue #105). It grows into the map room.
 	"board": {"name": "Expedition board", "size": Vector2i(1, 1), "plot": "map room", "stages": [

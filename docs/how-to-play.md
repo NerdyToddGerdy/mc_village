@@ -78,7 +78,8 @@ Each step shows a line under its hint saying **why** it matters.
 When the founding is done, a fourth chapter, **The village**, follows in the same tab, each goal with a hint and a why:
 
 1. **Give a second resident a workstation.** Build another workstation (a mason's bench, a toolsmith's bench and so on) and give someone that job from the Jobs board. Tomas's chopping block was the first.
-2. **Bring iron ore home from the old caves.** Plan a trip at the expedition board. Smelted with coal at the fireplace's furnace, iron makes tools that last more than twice as long as stone.
+2. **Send a Cartographer to find the old caves.** See [The Cartographer](#the-cartographer).
+3. **Bring iron ore home from the old caves.** Plan a trip at the expedition board. Smelted with coal at the fireplace's furnace, iron makes tools that last more than twice as long as stone.
 
 Each chapter ends with a short note in the book of what the village can do now. A village saved before the composter and storehouse became goals counts its founding as done, and its old stockpile and farm plots keep working.
 
@@ -292,7 +293,11 @@ Residents get hungry. A full resident empties in about 6 minutes of game time.
 
 ## Expeditions
 
-The **expedition board** is where expeditions are planned. Once it's built, the village has word of some **old caves** a short walk east, with stone and coal, and a **meadow** a short walk west, with sheep, cows and pigs.
+The **expedition board** is where expeditions are planned. Once it's built, the village has word of a **meadow** a short walk west, with sheep, cows and pigs. The **old caves** a short walk east, with stone and coal, have to be found first: see [The Cartographer](#the-cartographer). A village saved before surveys already knows everything it had.
+
+### The Cartographer
+
+Build a **cartographer's table** (Build menu once the board is up: 6 planks) and give someone the **Cartographer** job from the Jobs board. Select the table and choose a **Survey**: the land round the village is eight sectors (the compass points) in three rings, near, middle and far. The Cartographer leaves for a time that grows with the ring (90, 180 and 300 seconds, quicker as they level) and is away from village work. Each survey that succeeds finds the next place: first the **old caves**, then a **ruined portal**, which the village needs found before it can build its own portal. Mobs can drive the surveyor back (10%, 25% or 40% by ring, less with armor): they come home hurt, the trip is lost and the ring stays unsurveyed. The south and south-west are the coast, which needs a boat. Far rings need the ring inside them surveyed first.
 
 **The Location dropdown.** Select the board and it opens on the place you last planned for (the first one the first time), with a **Location** dropdown in its header showing it and its walk, such as "Meadow · ~28 s each way". Open the dropdown to see everywhere the village knows of, one line each with its walk and whether anyone has been, and a flag where hazards are known; choose one to see its site report and planner. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open the board on it, or the old caves' for **Plan a trip to the old caves**. Only one expedition goes at a time, so while one is packing or out, the dropdown shows where the party is and the other places are listed but can't be chosen.
 
