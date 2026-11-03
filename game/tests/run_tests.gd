@@ -33,6 +33,7 @@ func _init() -> void:
 		"test_night_waves",
 		"test_the_iron_golem",
 		"test_village_combat",
+		"test_emeralds",
 		"test_guide_new_marks",
 		"test_many_loose_items_tick_cheaply",
 		"test_idle_residents_go_home",
@@ -1158,6 +1159,28 @@ func test_the_iron_golem() -> void:
 	var f64 := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v64.save").data.state)
 	check(f64.stats.has("day_zero"), "the v64 fixture keeps its day's clock")
 	Night.enabled = false
+
+
+## Issue #346: a resident earns an emerald with each level gained from level 2 up; an older save gives one per level already passed.
+func test_emeralds() -> void:
+	var sim := Sim.new_game()
+	var r: Dictionary = sim.residents[0]
+	check(r.emeralds == 0, "a new resident has no emeralds")
+	r.jobs.lumber.xp = Tuning.SKILL_LEVELS[0] - 1
+	sim.gain_xp(r, "lumber")
+	check(Sim.level(r, "lumber") == 2 and r.emeralds == 1, "level 2 brings one emerald (%d)" % r.emeralds)
+	r.jobs.mason.xp = Tuning.SKILL_LEVELS[0] - 1
+	sim.gain_xp(r, "mason")
+	check(r.emeralds == 2, "a level in another job brings another (%d)" % r.emeralds)
+	sim.gain_xp(r, "mason")
+	check(r.emeralds == 2, "experience without a level brings none")
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.residents[0].emeralds == 2, "emeralds are saved")
+	var data = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v65.save"))
+	for res in data.state.residents:
+		res.jobs.lumber.xp = Tuning.SKILL_LEVELS[1]  # level 3
+	var up: Dictionary = SaveFormat.upgrade(data)
+	check(up.has("data") and up.data.state.residents.all(func(x): return x.emeralds >= 2), "an older save is given an emerald for each level passed")
 
 
 ## Issue #360: at night mobs can injure residents, who fight back, guards best and the golem too; nobody dies.
