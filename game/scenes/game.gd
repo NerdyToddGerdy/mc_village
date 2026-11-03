@@ -300,7 +300,7 @@ func _update_live_overlays() -> void:
 	var hint_col := Palette.CHALK
 	if not _drag.is_empty() and _drag.kind == "rect":
 		if _drag.get("erase", false):  # erasing a zone: a red outline, and a red fill on each cell that goes
-			var cells: Dictionary = sim.farm if tool == "farm" else (_area_cells() if tool == "area" else sim.zone)
+			var cells: Dictionary = sim.farm if tool in ["farm", "plots"] else (_area_cells() if tool == "area" else sim.zone)
 			outlines.append({"rect": _drag.rect, "h": 0.03, "color": Palette.RED, "dashed": true})
 			for x in range(_drag.rect.position.x, _drag.rect.end.x):
 				for y in range(_drag.rect.position.y, _drag.rect.end.y):
@@ -313,13 +313,33 @@ func _update_live_overlays() -> void:
 				hint = "Release to take this pen down. Its fences come down and its animals go free."
 			hint_col = Palette.RED
 		else:
-			var col: Color = {"stock": Palette.GREEN, "farm": Palette.WHEAT, "lead": Palette.BLUE, "pen": Palette.BLUE, "area": Palette.CHALK}.get(tool, Palette.RED)
+			var col: Color = {"stock": Palette.GREEN, "farm": Palette.WHEAT, "plots": Palette.WHEAT, "room": Palette.BLUE, "lead": Palette.BLUE, "pen": Palette.BLUE, "area": Palette.CHALK}.get(tool, Palette.RED)
 			if tool == "area":
 				var site := sim.site(area_site)
 				if not site.is_empty():
 					var far := _cells_out_of_reach(site, _drag.rect)
 					hint = "Release to add these cells to the work area." if far == 0 else "%d of these cells are more than %d cells from it, and stay unpainted." % [far, int(Tuning.WORK_REACH)]
 					hint_col = Palette.CHALK if far == 0 else Palette.YELLOW
+			if tool == "plots":
+				var psite := sim.site(area_site)
+				if not psite.is_empty():
+					outlines.append({"rect": Rect2i(psite.origin - Vector2i(Tuning.PLOT_REACH, Tuning.PLOT_REACH), Vector2i.ONE * (2 * Tuning.PLOT_REACH + 1)), "h": 0.02, "color": Color(Palette.WHEAT, 0.6), "dashed": true})
+					hint = "Release to paint plots here."
+			if tool == "room":
+				var site := sim.site(area_site)
+				if not site.is_empty():
+					var painted := {}
+					for x in range(_drag.rect.position.x, _drag.rect.end.x):
+						for y in range(_drag.rect.position.y, _drag.rect.end.y):
+							painted[Vector2i(x, y)] = true
+					var chk := sim.store_room_check(site, painted)
+					var n: int = chk.cols[-1] + chk.cols[1]
+					hint = ("Release to build %d more %s (%s)." % [n, "column" if n == 1 else "columns", Defs.cost_text({"cobble": 2 * n, "plank": 6 * n})]) if n > 0 else chk.why + "."
+					hint_col = Palette.CHALK if n > 0 else Palette.YELLOW
+					for side in [-1, 1]:
+						for k in range(1, chk.cols[side] + 1):
+							for cell in sim.store_column(site, side, k):
+								fills.append({"rect": Rect2i(cell, Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.5)})
 			if tool == "pen":  # issue #139: red, with the reason, where a pen can't go
 				var why := sim.pen_check(_drag.rect)
 				if why != "":
@@ -398,6 +418,14 @@ func _update_live_overlays() -> void:
 			hint = "Drag to mark trees and boulders. Shift: trees only. Alt/Option: boulders only."
 	if hint == "" and tool == "stock" and _hover != null and _drag.is_empty():
 		hint = "Click or drag from a stockpile cell to erase." if sim.zone.has(_hover) else "Drag over open ground to paint a stockpile. Start on a stockpile to erase instead."
+	if tool == "plots" and _drag.is_empty():  # the composter's reach, so the player sees where plots can go
+		var psite := sim.site(area_site)
+		if not psite.is_empty():
+			outlines.append({"rect": Rect2i(psite.origin - Vector2i(Tuning.PLOT_REACH, Tuning.PLOT_REACH), Vector2i.ONE * (2 * Tuning.PLOT_REACH + 1)), "h": 0.02, "color": Color(Palette.WHEAT, 0.6), "dashed": true})
+			if hint == "" and _hover != null:
+				hint = "Drag over open grass within %d cells of the composter. Start on one of its plots to take it away." % Tuning.PLOT_REACH
+	if hint == "" and tool == "room" and _hover != null and _drag.is_empty():
+		hint = "Drag over whole columns of three cells beside the storehouse, left or right of its door's column. Each column costs %s." % Defs.cost_text(Tuning.STORE_COLUMN_COST)
 	if hint == "" and tool == "area" and _hover != null and _drag.is_empty():
 		var site := sim.site(area_site)
 		hint = "Drag to paint the ground it works. Start on a painted cell to erase. Cells more than %d from it stay unpainted." % int(Tuning.WORK_REACH) if site.is_empty() or not site.has("area") or not Sim.in_area(site, _hover) else "Click or drag from a painted cell to erase."
@@ -747,7 +775,7 @@ func _left_down(e: InputEventMouseButton) -> void:
 		return
 	if tool in OrderMenus.MARK_TOOLS and c != null:
 		# A drag that starts on a painted cell erases that zone instead (issues #63, #93).
-		var erase: bool = (tool == "stock" and sim.zone.has(c)) or (tool == "farm" and sim.farm.has(c)) or (tool == "pen" and sim.pen_at(c) != null) or (tool == "area" and sim.site(area_site).has("area") and Sim.in_area(sim.site(area_site), c))
+		var erase: bool = (tool == "plots" and sim.farm.has(c) and sim.farm[c].get("owner", 0) == area_site) or (tool == "stock" and sim.zone.has(c)) or (tool == "farm" and sim.farm.has(c)) or (tool == "pen" and sim.pen_at(c) != null) or (tool == "area" and sim.site(area_site).has("area") and Sim.in_area(sim.site(area_site), c))
 		_drag = {"kind": "rect", "a": c, "rect": Rect2i(c, Vector2i.ONE), "start": e.position, "erase": erase}
 		return
 	# Shift-drag box-selects residents; a plain drag pans the map; a click selects.
@@ -777,6 +805,20 @@ func _left_up(e: InputEventMouseButton) -> void:
 				var site := sim.site(area_site)
 				if not site.is_empty():
 					sim.paint_work_area(site, d.rect, d.get("erase", false))
+			elif tool == "plots":  # a composter's plots (issue #319)
+				var site := sim.site(area_site)
+				if not site.is_empty():
+					var far := sim.paint_plots(site, d.rect, d.get("erase", false))
+					if far > 0:
+						_hud.add_toast({"text": "%d of those cells are more than %d from the composter." % [far, Tuning.PLOT_REACH], "res_id": 0, "site_id": site.id})
+			elif tool == "room":  # more room beside a storehouse (issue #318)
+				var site := sim.site(area_site)
+				if not site.is_empty():
+					var why := sim.paint_store_room(site, d.rect)
+					if why != "":
+						_hud.add_toast({"text": why + ".", "res_id": 0, "site_id": site.id})
+					elif not e.shift_pressed:
+						set_tool("")
 			elif tool == "pen" and d.get("erase", false):
 				var p = sim.pen_at(d.a)
 				if p != null:
@@ -1196,7 +1238,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["stock", "farm", "area", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
+const VILLAGE_ONLY := ["stock", "farm", "area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -1251,6 +1293,32 @@ func start_area(site: Dictionary) -> void:
 	craft_menu_open = false
 	placing = ""
 	tool = "area"
+	area_site = site.id
+	_drag = {}
+
+
+## Paints a composter's plots (issue #319): drag over open grass within its reach, start on one of its plots to take it away.
+func start_plots(site: Dictionary) -> void:
+	if tool == "plots" and area_site == site.id:
+		set_tool("")
+		return
+	menu_open = ""
+	craft_menu_open = false
+	placing = ""
+	tool = "plots"
+	area_site = site.id
+	_drag = {}
+
+
+## Paints more room beside a storehouse (issue #318): drag over whole columns of three, left or right of its door's column.
+func start_room(site: Dictionary) -> void:
+	if tool == "room" and area_site == site.id:
+		set_tool("")
+		return
+	menu_open = ""
+	craft_menu_open = false
+	placing = ""
+	tool = "room"
 	area_site = site.id
 	_drag = {}
 
@@ -2211,6 +2279,54 @@ func _screenshot_scene() -> void:
 	if "--guide" in OS.get_cmdline_user_args():  # the village book open on its Guide tab, with a page new (issue #348)
 		sim.stats.houses = 1
 		open_book("guide")
+	if "--composter" in OS.get_cmdline_user_args():  # a composter with its plots, one going dry, selected (issue #319)
+		var ada: Dictionary = sim.residents[0]
+		var spot: Vector2i = sim.nearest_walkable(Sim.rcell(ada) + Vector2i(0, 5))
+		var comp := sim.place_site("composter", spot)
+		comp.stage = 1
+		comp.done = true
+		sim.m.trees = sim.m.trees.filter(func(t): return not Rect2i(spot, Vector2i.ONE).grow(6).has_point(t.cell))
+		sim.m.boulders = sim.m.boulders.filter(func(b): return not Rect2i(spot, Vector2i.ONE).grow(6).has_point(b.cell))
+		sim.m.bushes = sim.m.bushes.filter(func(b): return not Rect2i(spot, Vector2i.ONE).grow(6).has_point(b.cell))
+		sim._on_site_done(comp)
+		sim.paint_plots(comp, Rect2i(spot + Vector2i(-3, 3), Vector2i(7, 1)))
+		var n := 0
+		for c in sim.composter_plots(comp):
+			c.grow = Tuning.WHEAT_GROW * (0.3 + 0.1 * (n % 7))
+			n += 1
+		var odd := sim.paint_farm(Rect2i(spot + Vector2i(5, 1), Vector2i(2, 2)))  # painted the old way, then one with no composter near
+		for c in sim.farm.values():
+			if not c.has("owner") and odd > 0:
+				c.owner = 9999
+				c.dying = 70.0
+				break
+		selection = {"kind": "site", "id": comp.id}
+		start_plots(comp)
+		_target = Vector3(spot.x + 0.5, 0, spot.y + 1.5)
+		_cam.size = 9.0
+		_place_camera()
+	if "--store-wide" in OS.get_cmdline_user_args():  # a storehouse grown to 7 wide with chests, selected, and a column going up (issue #318)
+		var ada: Dictionary = sim.residents[0]
+		var spot: Vector2i = sim.nearest_walkable(Sim.rcell(ada) + Vector2i(0, 5))
+		var sh := sim.place_site("storehouse", spot)
+		sh.stage = 2
+		sh.done = true
+		sim.m.trees = sim.m.trees.filter(func(t): return not Rect2i(sh.origin, sh.size).grow(7).has_point(t.cell))
+		sim.m.boulders = sim.m.boulders.filter(func(b): return not Rect2i(sh.origin, sh.size).grow(7).has_point(b.cell))
+		for side in [-1, 1]:
+			var ax := Sim.store_axis(sh)
+			sh.size += ax * 2
+			if side < 0:
+				sh.origin -= ax * 2
+		sh.chests = 11
+		sim.drop_items(sim.nearest_walkable(spot + Vector2i(0, 5)), "cobble", 4)
+		sim._store_put(Sim.store_slots(sh)[0], "plank", 16)
+		sim._store_put(Sim.store_slots(sh)[9], "cobble", 30)
+		sim._store_put(Sim.store_slots(sh)[18], "log", 12)
+		selection = {"kind": "site", "id": sh.id}
+		_target = Vector3(sh.origin.x + 2.5, 0, sh.origin.y + 1.5)
+		_cam.size = 9.0
+		_place_camera()
 	if "--move" in OS.get_cmdline_user_args():  # a finished building selected, with its Move button (issue #234); --storehouse for the storehouse's panel
 		var tpl := "storehouse" if "--storehouse" in OS.get_cmdline_user_args() else "bench"
 		var spot: Vector2i = sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(4, 0))

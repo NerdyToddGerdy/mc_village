@@ -150,10 +150,10 @@ static func _stuck_on_map(sim: Sim) -> void:
 			elif r.map == NetherLanding.ID and sim.shelter_site().get("done", false):  # issue #152
 				why = "%s, resting at the shelter (%d s)" % [word if r.hurt == 1 else "Seriously " + ("burned" if burned else "hurt"), ceili(r.heal / Tuning.HEAL_NO_BED)]
 			sim._add_stuck(r.name, why, at, 1.6, "res", r.id, false, true)
-	if sim.m.zone.is_empty():
-		for k in sim.m.farm:
-			if sim.m.farm[k].grow < 0.0 and sim.m.items.has(k):
-				sim._add_stuck("Farm", "Harvested wheat needs a stockpile before replanting", Vector2(k) + Vector2(0.5, 0.5), 0.6, "crop", sim.m.farm[k].id)
+	if sim.m.zone.is_empty() and not sim.m.sites.any(func(s): return s.tpl == "storehouse" and s.done):
+		for k in sim.m.farm:  # nowhere to keep it: it's carried clear, and the plot waits for that (issue #318)
+			if sim.m.farm[k].grow < 0.0 and sim.m.items.has(k) and sim._clear_spot(k, sim._clearing_cells()) == null:
+				sim._add_stuck("Farm", "Harvested wheat has no open ground to be carried to before replanting", Vector2(k) + Vector2(0.5, 0.5), 0.6, "crop", sim.m.farm[k].id)
 				break
 	var stores := sim.m.sites.filter(func(s): return s.tpl == "storehouse" and s.done)
 	for s in stores:  # issue #189

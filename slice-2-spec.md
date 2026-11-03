@@ -357,6 +357,8 @@ A bench placed in Slice 1 (in older saves) has no reserved plot. It can be upgra
 - **Fetching:** residents reach what's in a storehouse at its door. Crafting, cooking, building, equipping, eating and packing take from the chests as from a stockpile.
 - **Its panel** shows its chests, how many of their stacks are full, and what they hold.
 - **Before any storage:** the founding's first logs stay where they were dropped, as before.
+- **It grows by painting (#318):** 3 wide to 7, whole columns of three left or right of the door's column, 2 cobblestone and 6 planks a column, built as a blueprint that joins the building; chests are 3 × width − 3; the door and the aisle never move; it can't be moved once grown. Tuning: `STORE_WIDTH_MIN` 3, `STORE_WIDTH_MAX` 7, `STORE_COLUMN_COST` {cobble 2, plank 6}.
+- **A composter owns its plots (#319):** plots within `PLOT_REACH` (3) cells of it, a new composter starts with up to `PLOT_START_MAX` (12), and a plot with no composter reaching it goes dry, then bare, then grass over `PLOT_DIE_SECONDS` (180); another composter's reach takes it over. A plot with no `owner` (painted the old way) is never touched, so old saves load unchanged: no save-format step.
 - **Later (each its own issue):** more chests or a bigger building, storehouses marked for food or crafting, a granary or pantry, and a loading dock by the village station.
 
 **Clearing the footprint (#205).** Whatever lies where a building goes is carried off before building starts, so nothing is left lying under or inside it, and nothing teleports.

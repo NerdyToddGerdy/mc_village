@@ -845,6 +845,13 @@ func _add_crop(b: Batch, crop: Dictionary) -> void:
 	var z: float = crop.cell.y
 	b.box(Vector3(x + 0.04, 0, z + 0.04), Vector3(x + 0.96, 0.03, z + 0.96), SOIL, BlockTextures.TILLED)
 	var stage := Sim.crop_stage(crop)
+	var dying := Sim.plot_dying(crop)
+	if dying > 0.0:  # no composter reaches it: it dries out, goes bare, then turns back to grass (issue #319)
+		var dry := dying < Tuning.PLOT_DIE_SECONDS / 3.0
+		b.box(Vector3(x + 0.04, 0.03, z + 0.04), Vector3(x + 0.96, 0.045, z + 0.96), SOIL.lerp(Color("#B8A77A"), 0.75 if dry else 0.45).lerp(Palette.GRASS, 0.0 if dry else clampf((dying - Tuning.PLOT_DIE_SECONDS / 3.0) / (Tuning.PLOT_DIE_SECONDS * 2.0 / 3.0), 0.0, 1.0)), BlockTextures.TILLED)
+		if dry and stage > 0:
+			b.box(Vector3(x + 0.2, 0.03, z + 0.3), Vector3(x + 0.8, 0.2, z + 0.7), WHEAT_RIPE.darkened(0.35))
+		return
 	for row in 2:
 		var rz := z + 0.27 + row * 0.46
 		b.box(Vector3(x + 0.1, 0.03, rz - 0.09), Vector3(x + 0.9, 0.06, rz + 0.09), SOIL.darkened(0.18), BlockTextures.TILLED)
@@ -1021,6 +1028,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "storehouse":
 		_add_storehouse(solid if s.stage >= 1 else ghost, s)
 		return
+	if s.tpl == "store_room":  # more room going up beside a storehouse (issue #318): a blue floor till it's built
+		ghost.box(Vector3(o.x, 0, o.y), Vector3(o.x + s.size.x, 0.15, o.y + s.size.y), Color(Palette.BLUE, 0.4))
+		return
 	if s.tpl == "claim_stakes":
 		_add_claim_stakes(solid if s.done else ghost, s)
 		return
@@ -1081,8 +1091,8 @@ func _add_claim_stakes(b: Batch, s: Dictionary) -> void:
 		b.box(Vector3(c.x + 0.3, 0.8, c.y + 0.3), Vector3(c.x + 0.7, 0.95, c.y + 0.7), Palette.RED if s.done else col)
 
 
-## A box in a 3×3 building's own frame (x and z from 0 to 3, its door on the far side, +z), turned
-## to face the way the building does.
+## A box in a building's own frame (x along its width, z from 0 to 3 with its door on the far side, +z), turned
+## to face the way the building does. `s.size` gives the width; a 3×3 building's is 3.
 func _box_turned(b: Batch, s: Dictionary, lo: Vector3, hi: Vector3, col: Color) -> void:
 	var a := _turn(s, Vector2(lo.x, lo.z))
 	var c := _turn(s, Vector2(hi.x, hi.z))
@@ -1091,29 +1101,38 @@ func _box_turned(b: Batch, s: Dictionary, lo: Vector3, hi: Vector3, col: Color) 
 
 
 static func _turn(s: Dictionary, p: Vector2) -> Vector2:
+	var wide: float = float(s.size.x if s.rot % 2 == 0 else s.size.y)  # the building's width, along its own x
 	match s.rot % 4:
 		1: return Vector2(3.0 - p.y, p.x)
-		2: return Vector2(3.0 - p.x, 3.0 - p.y)
-		3: return Vector2(p.y, 3.0 - p.x)
+		2: return Vector2(wide - p.x, 3.0 - p.y)
+		3: return Vector2(p.y, wide - p.x)
 	return p
 
 
-## The storehouse (issue #189): a cobblestone floor inside low plank walls, open at the door so its
-## chests show. Each chest's lid carries a square of the first few kinds of thing in it.
+## The storehouse (issues #189, #318): a cobblestone floor inside low plank walls, open at the door so its chests show, any
+## width from 3 to 7. A chest sits on the back half of every cell but the door's column, which is the aisle. Each chest's
+## lid carries a square of the first few kinds of thing in it.
 func _add_storehouse(b: Batch, s: Dictionary) -> void:
 	var done: bool = s.done
 	var ghost := Color(Palette.BLUE, 0.45)
-	_box_turned(b, s, Vector3(0, 0, 0), Vector3(3, 0.15, 3), Palette.COBBLE if s.stage >= 1 else ghost)
+	var wide: float = float(Sim.store_width(s))
+	var dc: float = float(Sim.store_door_col(s))
+	_box_turned(b, s, Vector3(0, 0, 0), Vector3(wide, 0.15, 3), Palette.COBBLE if s.stage >= 1 else ghost)
 	if not done:
 		return
 	var wall := Palette.PLANK
-	var walls := [[Vector3(0, 0.15, 0), Vector3(3, 1.0, 0.18)], [Vector3(0, 0.15, 0), Vector3(0.18, 1.0, 3)], [Vector3(2.82, 0.15, 0), Vector3(3, 1.0, 3)],
-		[Vector3(0, 0.15, 2.82), Vector3(1.0, 1.0, 3)], [Vector3(2.0, 0.15, 2.82), Vector3(3, 1.0, 3)]]
+	var walls := [[Vector3(0, 0.15, 0), Vector3(wide, 1.0, 0.18)], [Vector3(0, 0.15, 0), Vector3(0.18, 1.0, 3)], [Vector3(wide - 0.18, 0.15, 0), Vector3(wide, 1.0, 3)],
+		[Vector3(0, 0.15, 2.82), Vector3(dc, 1.0, 3)], [Vector3(dc + 1.0, 0.15, 2.82), Vector3(wide, 1.0, 3)]]
 	for w in walls:
-		_box_turned(b, s, w[0], w[1], wall)
-	for p in [Vector2(0.18, 0.18), Vector2(2.82, 0.18), Vector2(0.18, 2.82), Vector2(2.82, 2.82)]:  # corner posts
+		if w[1].x > w[0].x:
+			_box_turned(b, s, w[0], w[1], wall)
+	for p in [Vector2(0.18, 0.18), Vector2(wide - 0.18, 0.18), Vector2(0.18, 2.82), Vector2(wide - 0.18, 2.82)]:  # corner posts
 		_box_turned(b, s, Vector3(p.x - 0.12, 0.15, p.y - 0.12), Vector3(p.x + 0.12, 1.15, p.y + 0.12), Palette.LOG)
-	var spots := [Vector2(0.3, 0.3), Vector2(1.95, 0.3), Vector2(0.3, 1.45), Vector2(1.95, 1.45)]  # clear of the path from the door
+	var spots: Array = []
+	for row in 3:  # every cell but the aisle, row by row from the back
+		for col in int(wide):
+			if col != int(dc):
+				spots.append(Vector2(col + 0.12, row + 0.1))
 	var slots := Sim.store_slots(s)
 	for i in mini(s.get("chests", 0), spots.size()):
 		var p: Vector2 = spots[i]
@@ -1326,6 +1345,7 @@ func _add_small_station(b: Batch, s: Dictionary) -> void:
 		"composter":  # a plank bin full of dark compost
 			b.box(Vector3(x + 0.12, 0, z + 0.12), Vector3(x + 0.88, 0.7, z + 0.88), Palette.PLANK, BlockTextures.BOARD)
 			b.box(Vector3(x + 0.2, 0.2, z + 0.2), Vector3(x + 0.8, 0.72, z + 0.8), COMPOST, BlockTextures.EARTH)
+			b.box(Vector3(x + 0.5, 0.72, z + 0.2), Vector3(x + 0.8, 0.8, z + 0.8), Color("#3E7FB5"))  # a water block, for looks only (issue #319)
 		"lodge":  # a lean-to of logs with a hide stretched on its frame
 			b.box(Vector3(x + 0.1, 0, z + 0.1), Vector3(x + 0.9, 0.15, z + 0.9), Palette.LOG, BlockTextures.LOG)
 			for k in [0.15, 0.75]:
