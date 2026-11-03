@@ -234,3 +234,6 @@ const FIRE_PROTECTION_CUT := 0.5      ## Cut in the chance of a burn from fire o
 const ENCHANT_TIME := 12.0            ## Seconds an Enchanter works an enchantment, at level 1 (issue #166).
 const FLINT_STEEL_USES := 8           ## Times a flint and steel lights something before it's spent (issues #146, #147).
 const DIAMOND_PICK_TIER := 3            ## The pickaxe tier diamond ore needs: iron (issue #186).
+
+## Emeralds (issue #346): a resident earns one for each level gained from level 2 up, and spends them on their home's upgrades.
+const EMERALD_COSTS := [3, 6]  ## tent to 3x3 house, then 3x3 house to the 5x5 building

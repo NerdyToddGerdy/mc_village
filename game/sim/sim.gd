@@ -312,7 +312,7 @@ func add_resident(rname: String, shirt: String, cell: Vector2i) -> Dictionary:
 		"path": [], "job": null, "direct": null, "carry": null, "axe": null, "pick": null, "sword": null,
 		"broken": {"axe": false, "pick": false, "sword": false}, "progress": -1.0, "note": null, "arriving": false,
 		"orders": [], "hunger": 100.0, "role": "all" if residents.is_empty() else "none", "jobs": default_jobs(), "kept": {"axe": false, "pick": false, "sword": false},
-		"away": false, "back_at": 0, "trip": "", "map": map_id, "hurt": 0, "heal": 0.0, "armor": {}}
+		"away": false, "back_at": 0, "trip": "", "map": map_id, "hurt": 0, "heal": 0.0, "armor": {}, "emeralds": 0}
 	residents.append(r)
 	return r
 
@@ -456,6 +456,7 @@ func gain_xp(r: Dictionary, job: String) -> void:
 	r.jobs[job].xp = r.jobs[job].get("xp", 0) + 1
 	var after := level(r, job)
 	if after > before:
+		r.emeralds = r.get("emeralds", 0) + after - before  # an emerald for each level from 2 up (issue #346)
 		_toast("%s is now level %d at %s." % [r.name, after, Defs.JOB_NAMES[job]], r.id)
 		rev += 1
 

@@ -2239,6 +2239,10 @@ func _add_jobs_summary(c: Container, sim: Sim, r: Dictionary) -> void:
 	line.add_child(_label("Job", false, Palette.CHALK_DIM))
 	line.add_child(_job_picker(sim, r))
 	c.add_child(line)
+	var em: int = r.get("emeralds", 0)
+	var el := _label("Emeralds  %d" % em, false, Palette.CHALK_DIM)
+	el.tooltip_text = "%s earns an emerald with each level gained in any job, from level 2. They're spent on upgrading %s home." % [r.name, "their"]
+	c.add_child(el)
 	if r.role == "all":
 		c.add_child(_label("%s founded the village and does any work that's waiting." % r.name, false, Palette.CHALK_DIM, Palette.CAPTION, true))
 	var key: String = game.keys.first("jobs")
