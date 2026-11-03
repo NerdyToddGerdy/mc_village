@@ -926,7 +926,7 @@ func _key(e: InputEventKey) -> void:
 		"worldmap": toggle_world_map()
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
-		"toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table": start_placing(keys.action_for(e))
+		"toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "village_pen": start_placing(keys.action_for(e))
 		"rotate":
 			if tool == "build":
 				rot = (rot + 1) % 4
@@ -1223,7 +1223,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
+const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "village_pen", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
