@@ -926,7 +926,7 @@ func _key(e: InputEventKey) -> void:
 		"worldmap": toggle_world_map()
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
-		"toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table": start_placing(keys.action_for(e))
+		"toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "village_pen": start_placing(keys.action_for(e))
 		"rotate":
 			if tool == "build":
 				rot = (rot + 1) % 4
@@ -1223,7 +1223,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
+const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "village_pen", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -2109,6 +2109,16 @@ func _screenshot_scene() -> void:
 		sim.maps[Meadow.ID].known = true
 		sim.maps[OldMine.ID].known = true
 		world_map_open = true
+	if "--village-pen" in OS.get_cmdline_user_args():  # a finished village pen with led animals in it, for a screenshot (issue #355)
+		var pen_site := sim.place_site("village_pen", house.origin + Vector2i(8, 0))
+		pen_site.store = {"stick": 12}
+		sim._complete_stage(pen_site)
+		var pen: Dictionary = sim.m.pens[-1]
+		for k in 3:
+			var a := sim.add_animal(Pens.pen_inside(pen).position + Vector2i(k % 2, k / 2), ["sheep", "cow", "pig"][k])
+			a.pen = pen.id
+		_look_at_first_resident()
+		_target = Vector3(pen.rect.position.x + 2, 0, pen.rect.position.y + 2)
 	if "--tools" in OS.get_cmdline_user_args():
 		_hud._drop_pinned = "tools"
 	if "--mark-sheep" in OS.get_cmdline_user_args():
