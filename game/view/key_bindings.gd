@@ -33,6 +33,7 @@ const ACTIONS := [
 	["dispatcher", "Orders", "Place a dispatcher", []],
 	["redstone_overlay", "Time and camera", "Show or hide the redstone overlay", [KEY_O]],
 	["minimap", "Time and camera", "Show or hide the minimap", [KEY_I]],
+	["worldmap", "Time and camera", "Open the world map", [KEY_P]],
 	["claim", "Orders", "Claim land", []],
 	["mason_bench", "Orders", "Place a mason's bench", []],
 	["toolsmith_bench", "Orders", "Place a toolsmith's bench", []],
