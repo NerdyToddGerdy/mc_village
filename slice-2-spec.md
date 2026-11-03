@@ -550,5 +550,5 @@ Rest and sleep, happiness, shears, the inn, travelers' requests, food variety ef
 Owner decisions that change this slice's systems later (see the brief, "Decided for later building"):
 - **Skills past level 5 (#236):** an open tail with a soft-capped speed gain and a reward every five levels. Levels 1 to 5 and `Tuning.SKILL_LEVELS` stay as they are.
 - **Wheat (#269):** a keep-stock target on the farm, default 20, counting collected wheat.
-- **Houses and upgrades (#270, #272):** a 2×3 tent, a 3×3 house and the 5×5 building, reserving one tier ahead; one bed per home.
+- **Houses and upgrades (#270, #272, #285, #346):** a 2×3 tent, a 3×3 house and the 5×5 building; the plot is 5×5 from the first placement and decor fills it. One bed per home. Each upgrade costs the resident emeralds (3, then 6; one earned per level gained from level 2) and is built as a stage (`Defs.HOUSE_STAGES`). A house with no `tier` is the old building. Built: the tiers and emeralds. Not built yet: the entrance rule, blueprint old buildings and the Update button (#356).
 - **The hunter's lodge (#275):** leads animals home from the meadow into village pens.

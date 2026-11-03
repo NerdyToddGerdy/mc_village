@@ -2686,9 +2686,12 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		return
 	if not s.done:
 		var st := sim.current_stage(s)
-		var stage_line: String = "Stage %d of %d: %s" % [s.stage + 1, tpl.stages.size(), st.name.to_lower()] if tpl.stages.size() > 1 else "Blueprint"
+		var stages := Sim.stages_of(s)
+		var stage_line: String = "Stage %d of %d: %s" % [s.stage + 1, stages.size(), st.name.to_lower()] if stages.size() > 1 else "Blueprint"
 		if s.get("upgrading", false):
 			stage_line = "Digging it out"
+		elif s.get("grow", false):
+			stage_line = "Growing into a %s" % Defs.HOUSE_TIER_NAMES[s.tier - 1].to_lower()
 		c.add_child(_head(Sim.station_name(s), stage_line))
 		if not sim.footprint_clear(s):
 			c.add_child(_label("Clearing the ground first: %s." % Sim.clearing_text(sim.site_obstacles(s)), false, Palette.CHALK, Palette.BODY, true))
@@ -2700,10 +2703,11 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 			c.add_child(_reason(x.why))
 		if s.builder:
 			c.add_child(_label("%s is building." % sim.resident(s.builder).name, false, Palette.CHALK_DIM))
-		if s.stage + 1 < tpl.stages.size():
-			var nxt: Dictionary = tpl.stages[s.stage + 1]
+		if s.stage + 1 < Sim.stages_of(s).size():
+			var nxt: Dictionary = Sim.stages_of(s)[s.stage + 1]
 			c.add_child(_label("%s next: %s." % [nxt.name, Defs.cost_text(nxt.cost)], false, Palette.CHALK_DIM, Palette.BODY, true))
-		c.add_child(_destructive("Cancel blueprint", "Click again to cancel the blueprint", "site:%d" % s.id, func(): game.cancel_site(s)))
+		if not s.get("grow", false):  # a house that is growing keeps what it has
+			c.add_child(_destructive("Cancel blueprint", "Click again to cancel the blueprint", "site:%d" % s.id, func(): game.cancel_site(s)))
 		return
 	if s.tpl == "storehouse":  # issue #189
 		_fill_storehouse(c, sim, s)
@@ -2717,8 +2721,18 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	if s.tpl == "house":
 		var owner := sim.resident(s.owner)
 		var line := "Home of %s." % owner.name if not owner.is_empty() else ("Empty. A traveler should arrive soon." if sim.arrival_at >= 0 else "Empty.")
-		c.add_child(_label("House", true, Palette.CHALK, Palette.TITLE))
+		var tier := Sim.house_tier(s)
+		c.add_child(_label(Defs.HOUSE_TIER_NAMES[tier - 1] if tier >= 1 else "House", true, Palette.CHALK, Palette.TITLE))
 		c.add_child(_label(line, false, Palette.CHALK_DIM, Palette.BODY, true))
+		if s.has("tier") and s.tier < 3 and not owner.is_empty():
+			var need: int = Tuning.EMERALD_COSTS[s.tier - 1]
+			var next: String = Defs.HOUSE_TIER_NAMES[s.tier].to_lower()
+			c.add_child(_row("Emeralds", "%d / %d" % [owner.get("emeralds", 0), need], false))
+			c.add_child(_label("Upgrading to a %s costs %d emeralds from %s, then %s." % [next, need, owner.name, Defs.cost_text(Defs.house_cost(s.tier + 1))], false, Palette.CHALK_DIM, Palette.CAPTION, true))
+			var up := _button("Upgrade to a %s" % next, func(): game.upgrade_house(s), "Primary")
+			up.disabled = sim.house_upgrade_check(s) != ""
+			up.tooltip_text = sim.house_upgrade_check(s)
+			c.add_child(up)
 		return
 	if s.tpl == "board":  # its planner opens above the toolbar (issue #106)
 		c.add_child(_label(tpl.name, true, Palette.CHALK, Palette.TITLE))

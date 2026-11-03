@@ -492,7 +492,7 @@ func _update_focus(sel) -> void:
 	if sel != null and sel.kind == "site" and sel.tpl == "house":
 		roofs.append(sel.id)
 	for s in sim.sites:
-		if s.tpl == "house" and s.stage == 3 and not s.done and not roofs.has(s.id):
+		if s.tpl == "house" and not s.has("tier") and s.stage == 3 and not s.done and not roofs.has(s.id):
 			roofs.append(s.id)  # watch the bed go in while its stage is being built
 	if _hover != null:
 		var h = sim.site_at(_hover)
@@ -1801,6 +1801,10 @@ func set_herd_floor(species: String, n: int) -> void:
 	sim.set_herd_floor(species, n)
 
 
+func upgrade_house(s: Dictionary) -> void:
+	sim.upgrade_house(s)
+
+
 func cancel_site(s: Dictionary) -> void:
 	sim.cancel_site(s)
 	selection = {}
@@ -2053,6 +2057,17 @@ func _screenshot_scene() -> void:
 	for i in 210 * Tuning.TPS:
 		sim.step()
 	sim.events.clear()
+	for a in OS.get_cmdline_user_args():  # --house-tier=N: the house grown to a tier, for a screenshot (issue #285)
+		if a.begins_with("--house-tier="):
+			if not house.done:
+				house.store = Defs.house_cost(1).duplicate()
+				sim._complete_stage(house)
+			while Sim.house_tier(house) < int(a.get_slice("=", 1)):
+				sim.residents[0].emeralds = 99
+				sim.upgrade_house(house)
+				for i in Sim.stages_of(house).size():
+					house.store = sim.current_stage(house).cost.duplicate()
+					sim._complete_stage(house)
 	selection = {"kind": "site", "id": house.id}
 	if "--tools" in OS.get_cmdline_user_args():
 		_hud._drop_pinned = "tools"

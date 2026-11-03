@@ -398,6 +398,25 @@ const TEMPLATES := {
 }
 
 
+## A house's tiers (issue #285), by the tier being built. A house is placed as a tent; each upgrade is built like any stage once its resident
+## has spent the emeralds (`Tuning.EMERALD_COSTS`). A house with no `tier` (placed before tiers) is the 5x5 building, built from the template's stages.
+const HOUSE_STAGES := {
+	1: [{"name": "Tent", "verb": "needs", "cost": {"plank": 6, "wool": 3}}],
+	2: [{"name": "House", "verb": "needs", "cost": {"cobble": 4, "plank": 10, "log": 2}}],
+	3: [{"name": "Walls", "verb": "need", "cost": {"cobble": 4, "plank": 12, "log": 2}}, {"name": "Roof", "verb": "needs", "cost": {"plank": 12}}],
+}
+const HOUSE_TIER_NAMES := ["Tent", "House", "Building"]
+
+
+## What building a house's tier takes in all, over its stages.
+static func house_cost(tier: int) -> Dictionary:
+	var out := {}
+	for st in HOUSE_STAGES[tier]:
+		for k in st.cost:
+			out[k] = out.get(k, 0) + st.cost[k]
+	return out
+
+
 static func recipe(id: String) -> Dictionary:
 	for r in RECIPES:
 		if r.id == id:
