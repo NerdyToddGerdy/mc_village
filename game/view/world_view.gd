@@ -1108,18 +1108,33 @@ func _add_house_walls(solid: Batch, ghost: Batch, s: Dictionary, r: Rect2i, stag
 		_add_bed(solid, r, false)
 
 
-## The tent: a wool wedge, three wide and two deep, with a dark flap where the door is.
+## The tent: an A-frame of stepped cloth slabs, three wide and two deep, with its ridge running toward the door and the door end open,
+## so the dark inside shows through a stepped arch.
 func _add_tent(b: Batch, s: Dictionary, r: Rect2i) -> void:
 	var cloth := Color("#D9B777")
-	var x0 := float(r.position.x)
-	var z0 := float(r.position.y)
-	var w := float(r.size.x)
-	var d := float(r.size.y)
-	b.box(Vector3(x0 + 0.1, 0, z0 + 0.1), Vector3(x0 + w - 0.1, 0.18, z0 + d - 0.1), Palette.PLANK, BlockTextures.BOARD)
-	b.box(Vector3(x0 + 0.15, 0.18, z0 + 0.15), Vector3(x0 + w - 0.15, 0.7, z0 + d - 0.15), cloth, BlockTextures.FLEECE)
-	b.box(Vector3(x0 + 0.4, 0.7, z0 + 0.3), Vector3(x0 + w - 0.4, 1.1, z0 + d - 0.3), cloth.darkened(0.06), BlockTextures.FLEECE)
-	var door := sim.door_cell(s.origin, s.rot)
-	b.box(Vector3(door.x + 0.3, 0.18, door.y + 0.3), Vector3(door.x + 0.7, 0.62, door.y + 0.7), Color("#4A4338"))
+	var dark := Color("#3A332A")
+	var w := float(r.size.x if s.rot % 2 == 0 else r.size.y)  # across the tent
+	var d := float(r.size.y if s.rot % 2 == 0 else r.size.x)  # from the back to the door
+	var tent := func(u0: float, u1: float, y0: float, y1: float, t0: float, t1: float, col: Color, tex = null) -> void:
+		# u across (0 to w), t from the back (0) to the door (d): turned to the way the door faces
+		var x0 := float(r.position.x)
+		var z0 := float(r.position.y)
+		var lo: Vector2
+		var hi: Vector2
+		match s.rot % 4:
+			0: lo = Vector2(x0 + u0, z0 + t0); hi = Vector2(x0 + u1, z0 + t1)
+			1: lo = Vector2(x0 + t0, z0 + u0); hi = Vector2(x0 + t1, z0 + u1)
+			2: lo = Vector2(x0 + u0, z0 + d - t1); hi = Vector2(x0 + u1, z0 + d - t0)
+			_: lo = Vector2(x0 + d - t1, z0 + u0); hi = Vector2(x0 + d - t0, z0 + u1)
+		b.box(Vector3(lo.x, y0, lo.y), Vector3(hi.x, y1, hi.y), col, tex if tex != null else BlockTextures.PLAIN)
+	var m := 0.1
+	tent.call(m, w - m, 0, 0.1, m, d - m, dark)  # the floor
+	tent.call(m, 0.8, 0.1, 0.6, m, d - m, cloth, BlockTextures.FLEECE)  # the lowest slabs, at each side
+	tent.call(w - 0.8, w - m, 0.1, 0.6, m, d - m, cloth, BlockTextures.FLEECE)
+	tent.call(0.8, w - 0.8, 0.1, 0.6, m, m + 0.1, dark)  # the back, seen through the opening
+	tent.call(0.5, 1.2, 0.6, 1.1, m, d - m, cloth.darkened(0.04), BlockTextures.FLEECE)
+	tent.call(w - 1.2, w - 0.5, 0.6, 1.1, m, d - m, cloth.darkened(0.04), BlockTextures.FLEECE)
+	tent.call(1.1, w - 1.1, 1.1, 1.5, m, d - m, cloth.darkened(0.08), BlockTextures.FLEECE)  # the ridge
 
 
 ## What fills the rest of the plot until the house grows into it: a campfire ring, a crate and a sapling.

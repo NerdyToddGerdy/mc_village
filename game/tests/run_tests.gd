@@ -4717,8 +4717,11 @@ func test_a_finished_building_moves() -> void:
 	check(sim.move_site(other, block.origin, 0) == "Overlaps another building", "it can't go on another building (%s)" % sim.move_site(other, block.origin, 0))
 	var blueprint := sim.place_site("house", Vector2i(4, 4))
 	check(sim.move_check(blueprint, Vector2i(5, 5), 0) == "Only a finished building can be moved", "a blueprint is cancelled, not moved")
+	block.builder = 99
+	check(sim.move_check(block, spot + Vector2i(1, 0), 1) == "It's in use right now", "a building being built stays put")
+	block.builder = 0
 	block.crafter = 99
-	check(sim.move_check(block, spot + Vector2i(1, 0), 1) == "It's in use right now", "a building in use stays put")
+	check(sim.move_check(block, block.origin, block.rot) == "", "work at a building does not stop its move (%s)" % sim.move_check(block, block.origin, block.rot))
 	block.crafter = 0
 	check(sim.move_site(block, Vector2i(-3, 0), 1) == "Too close to the edge", "it can't go off the edge")
 	# Houses move too, and keep their occupant.

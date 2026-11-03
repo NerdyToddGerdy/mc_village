@@ -4920,7 +4920,7 @@ func move_check(s: Dictionary, origin: Vector2i, rot := 0) -> String:
 		return "Only a finished building can be moved"
 	if s.tpl in UNMOVABLE:
 		return "The %s stands by the portal and can't be moved" % Defs.TEMPLATES[s.tpl].name.to_lower()
-	if s.crafter != 0 or s.builder != 0 or not s.incoming.is_empty() or residents.any(func(r): return r.job != null and is_same(r.job.target, s)):
+	if s.builder != 0:  # work in progress at it is stopped by the move, but a builder's stage isn't
 		return "It's in use right now"
 	if expedition.get("board", 0) == s.id and expedition.get("state", "") != "":
 		return "The expedition is using the board"
@@ -4936,6 +4936,11 @@ func move_site(s: Dictionary, origin: Vector2i, rot := 0) -> String:
 	var why := move_check(s, origin, rot)
 	if why != "":
 		return why
+	for r in residents:  # whoever was working at it or carrying to it drops that and looks again
+		if r.job != null and is_same(r.job.target, s):
+			fail_job(r)
+	s.crafter = 0
+	s.incoming = {}
 	var delta: Vector2i = origin - s.origin
 	if s.has("area"):
 		var shifted := {}
