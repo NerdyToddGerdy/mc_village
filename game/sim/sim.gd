@@ -458,6 +458,9 @@ func gain_xp(r: Dictionary, job: String) -> void:
 	if after > before:
 		r.emeralds = r.get("emeralds", 0) + after - before  # an emerald for each level from 2 up (issue #346)
 		_toast("%s is now level %d at %s." % [r.name, after, Defs.JOB_NAMES[job]], r.id)
+		for h in m.sites:  # their home can grow now (issue #285)
+			if h.tpl == "house" and h.owner == r.id and h.get("tier", 3) < 3 and h.done and r.emeralds == Tuning.EMERALD_COSTS[h.tier - 1]:
+				_toast("%s has enough emeralds to upgrade their home. Select the house." % r.name, 0, h.id)
 		rev += 1
 
 
@@ -819,7 +822,7 @@ func site_cells(s: Dictionary) -> Array:
 func site_blocks(s: Dictionary) -> bool:
 	if Defs.TEMPLATES[s.tpl].get("walk", false):  # the bridge and track are walked over
 		return false
-	return s.done or (s.tpl == "house" and s.stage >= 1)
+	return s.done or (s.tpl == "house" and (s.stage >= 1 or s.get("grow", false)))
 
 
 func site_at(c: Vector2i):
@@ -870,7 +873,67 @@ func current_stage(s: Dictionary) -> Dictionary:
 		for k in Tuning.STORE_COLUMN_COST:
 			cost[k] = Tuning.STORE_COLUMN_COST[k] * s.cols
 		return {"name": "%d more %s" % [s.cols, "column" if s.cols == 1 else "columns"], "verb": "needs", "cost": cost}
-	return Defs.TEMPLATES[s.tpl].stages[s.stage]
+	return stages_of(s)[s.stage]
+
+
+## A site's stage list: a tiered house's current tier, else its template's (issue #285).
+static func stages_of(s: Dictionary) -> Array:
+	if s.tpl == "house" and s.has("tier"):
+		return Defs.HOUSE_STAGES[s.tier]
+	return Defs.TEMPLATES[s.tpl].stages
+
+
+## The tier a house has been built to (1 tent, 2 house, 3 building), or 0 before it's finished. A house placed before tiers is the building.
+static func house_tier(s: Dictionary) -> int:
+	if not s.has("tier"):
+		return 3
+	return s.tier - 1 if s.get("grow", false) or not s.done else s.tier
+
+
+## The part of a house's 5x5 plot that tier `tier` builds on (issue #285): 3 wide and 2 deep for the tent, 3x3 for the house and the whole
+## plot for the building, against the side its door is on, centred across it.
+static func house_rect(s: Dictionary, tier: int) -> Rect2i:
+	var lat := 5 if tier >= 3 else 3
+	var depth := 2 if tier <= 1 else (3 if tier == 2 else 5)
+	var o: Vector2i = s.origin
+	var off := (5 - lat) / 2
+	match s.rot % 4:
+		0: return Rect2i(o + Vector2i(off, 5 - depth), Vector2i(lat, depth))
+		1: return Rect2i(o + Vector2i(5 - depth, off), Vector2i(depth, lat))
+		2: return Rect2i(o + Vector2i(off, 0), Vector2i(lat, depth))
+	return Rect2i(o + Vector2i(0, off), Vector2i(depth, lat))
+
+
+## Why a finished house can't be upgraded, or "" when it can: the tiers, its resident and their emeralds (issue #285).
+func house_upgrade_check(s: Dictionary) -> String:
+	if s.tpl != "house" or not s.has("tier") or not s.done:
+		return "Only a finished house can be upgraded"
+	if s.tier >= 3:
+		return "It's the finished building"
+	var who := resident(s.owner)
+	if who.is_empty():
+		return "Nobody lives here yet"
+	var need: int = Tuning.EMERALD_COSTS[s.tier - 1]
+	if who.get("emeralds", 0) < need:
+		return "%s needs %d emeralds (has %d)" % [who.name, need, who.get("emeralds", 0)]
+	return ""
+
+
+## Starts a house's next tier: its resident spends the emeralds and builders bring the materials like any stage. Returns whether it began.
+func upgrade_house(s: Dictionary) -> bool:
+	if house_upgrade_check(s) != "":
+		return false
+	resident(s.owner).emeralds -= Tuning.EMERALD_COSTS[s.tier - 1]
+	s.tier += 1
+	s.grow = true
+	s.done = false
+	s.stage = 0
+	s.store = {}
+	s.incoming = {}
+	s.builder = 0
+	_occ_dirty = true
+	rev += 1
+	return true
 
 
 func door_cell(origin: Vector2i, rot: int) -> Vector2i:
@@ -1040,7 +1103,7 @@ func _complete_stage(s: Dictionary) -> void:
 	if s.get("upgrading", false):  # the bench has become a mineshaft (issue #204)
 		s.upgrading = false
 		s.shaft = true
-		s.stage = Defs.TEMPLATES[s.tpl].stages.size()
+		s.stage = stages_of(s).size()
 		s.done = true
 		s.store = {}
 		s.incoming = {}
@@ -1051,11 +1114,15 @@ func _complete_stage(s: Dictionary) -> void:
 	s.stage += 1
 	_occ_dirty = true
 	rev += 1
-	if s.stage >= Defs.TEMPLATES[s.tpl].stages.size():
+	if s.stage >= stages_of(s).size():
 		s.done = true
 		s.store = {}
 		s.incoming = {}
-		_on_site_done(s)
+		if s.get("grow", false):  # a house has grown a tier (issue #285): it's no new home
+			s.grow = false
+			_toast("%s's home is now a %s." % [resident(s.owner).name, Defs.HOUSE_TIER_NAMES[s.tier - 1].to_lower()], 0, s.id)
+		else:
+			_on_site_done(s)
 	if site_blocks(s):
 		_clear_footprint(s)
 
@@ -4904,6 +4971,8 @@ func place_site(tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
 		"rot": rot, "stage": 0, "store": {}, "incoming": {}, "builder": 0, "crafter": 0, "crafting": "",
 		"done": false, "owner": 0, "queue": [], "autoq": [], "unreach_until": 0,
 		"plot": plot_rect(tpl, origin, rot), "map": map_id, "worker": 0}
+	if tpl == "house":
+		s.tier = 1  # a tent to begin with (issue #285)
 	if tpl == "fireplace":
 		s.keep_meals = true
 	if tpl == "storehouse":

@@ -766,7 +766,8 @@ func _test_fading(game: Game) -> void:
 	check(not world.faded_trees.has(tree.id), "the tree turns solid again when nothing behind it is focused")
 	sim.cancel_site(bench)
 	var house := sim.place_site("house", at(11, 0))
-	house.stage = 4
+	house.tier = 2  # a finished 3x3 house has a roof
+	house.stage = 1
 	house.done = true
 	sim.rev += 1
 	await process_frame
@@ -1840,6 +1841,7 @@ func _test_stuck_list(game: Game) -> void:
 				if open:
 					spot = c
 	var house := sim.place_site("house", spot)
+	house.erase("tier")  # a house from before tiers has walls to build
 	house.stage = 1
 	sim.compute_stuck()
 	hud.refresh(sim)

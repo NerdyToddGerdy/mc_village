@@ -23,7 +23,7 @@ static func upgrades() -> Dictionary:
 ## v66: residents own emeralds (issue #346), one for each level they've gained from level 2 up. A resident in an older save is given one for
 ## every level they have already passed, in any job.
 static func _v65_to_v66(d: Dictionary) -> Dictionary:
-	for r in d.state.residents:
+	for r in d.state.get("residents", []):
 		if not r.has("emeralds"):
 			var n := 0
 			for jb in r.jobs:

@@ -25,7 +25,7 @@ const MENUS := {
 	]},
 	"build": {"name": "Build", "entries": [
 		{"id": "bench", "name": "Crafting bench", "sub": "4 logs. Reserves room for a workshop", "mark": "build"},
-		{"id": "house", "name": "House", "sub": "8 cobblestone, then 16 planks and 4 logs, then 12 planks, then a bed", "mark": "build"},
+		{"id": "house", "name": "House", "sub": "6 planks and 3 wool: a tent that grows into a house and a building", "mark": "build"},
 		{"id": "fireplace", "name": "Fireplace", "sub": "6 cobblestone. Reserves room for a kitchen", "mark": "build"},
 		{"id": "chopping_block", "name": "Chopping block", "sub": "4 planks. Lumberjacks fell the trees around it and pile the logs. Reserves room for a sawmill", "mark": "build"},
 		{"id": "mason_bench", "name": "Mason's bench", "sub": "2 planks and 4 cobblestone. Stonemasons break the boulders around it. Reserves room for a mineshaft", "mark": "build"},

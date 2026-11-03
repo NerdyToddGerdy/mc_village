@@ -34,6 +34,7 @@ func _init() -> void:
 		"test_the_iron_golem",
 		"test_village_combat",
 		"test_emeralds",
+		"test_house_tiers",
 		"test_guide_new_marks",
 		"test_many_loose_items_tick_cheaply",
 		"test_idle_residents_go_home",
@@ -345,6 +346,7 @@ func test_bench_skips_blocked_recipes_and_comes_before_building() -> void:
 	run(sim, 120)
 	check(bench.done, "bench built")
 	var house := sim.place_site("house", at(11, 4))
+	house.erase("tier")  # a house from before tiers has the four stages
 	house.stage = 1  # foundation already down, so the house wants planks and logs
 	sim._occ_dirty = true
 	for r in ["wood_axe", "planks", "planks", "sticks"]:
@@ -671,6 +673,7 @@ func test_standing_orders_wait_rather_than_block() -> void:
 	var spare: Array = sim.stuck.filter(func(s): return s.focus_kind == "site" and s.focus_id == bench.id)  # the spare's sticks, waiting on a log
 	check(spare.size() == 1 and spare[0].waiting, "the toolsmith's spare waits: " + stuck_text(sim))
 	var house := sim.place_site("house", open_rect(sim, Vector2i(7, 7)).position + Vector2i(1, 1))
+	house.erase("tier")  # a house from before tiers has the four stages
 	house.stage = 1  # walls, with no planks anywhere
 	sim.compute_stuck()
 	var walls: Array = sim.stuck.filter(func(s): return s.focus_kind == "site" and s.focus_id == house.id)
@@ -686,6 +689,7 @@ func test_standing_orders_wait_rather_than_block() -> void:
 	house.done = true
 	run(sim, 1)
 	house.done = false
+	house.erase("tier")  # a house from before tiers has the four stages
 	house.stage = 1
 	sim.compute_stuck()
 	walls = sim.stuck.filter(func(s): return s.focus_kind == "site" and s.focus_id == house.id)
@@ -897,7 +901,7 @@ func test_hunting_sheep() -> void:
 func test_beds_and_free_bed_arrivals() -> void:
 	var s := opening()
 	var sim: Sim = s.sim
-	check(s.h1.stage == 4 and s.h2.stage == 4, "both opening houses got their beds")
+	check(s.h1.done and s.h2.done, "both opening houses are finished, bed and all")
 	check(sim.stats.get("sheep_hunted", 0) >= 3 and sim.sheep.all(func(x): return not x.alive), "the clearing's three sheep were hunted for wool, and more at the meadow (%d)" % sim.stats.get("sheep_hunted", 0))
 	var wool: int = Goals.LIST.map(func(g): return g.t).find("Hunt sheep for wool")
 	check(wool >= 0 and Goals.done(sim, wool), "the founding goals include hunting for wool")
@@ -911,13 +915,13 @@ func test_beds_and_free_bed_arrivals() -> void:
 		sim.queue_add(bench, "planks")
 	sim.designate_mine(whole_map())
 	run(sim, 900)
-	check(h3.stage == 3 and not h3.done, "without wool the third house stops at its bed stage (stage %d)" % h3.stage)
-	check(stuck_text(sim).contains("House needs a bed: 3 more wool"), "it says why: " + stuck_text(sim))
+	check(h3.stage == 0 and not h3.done, "without wool the third house, a tent, isn't finished (stage %d)" % h3.stage)
+	check(stuck_text(sim).contains("Tent needs 3 more wool"), "it says why: " + stuck_text(sim))
 	check(sim.residents.size() == 2, "no free bed, no arrival")
 	# Wool arrives (as from the meadow, #50): the bed gets built and a third resident comes.
 	sim.drop_items(Sim.rcell(sim.residents[0]), "wool", 3)
 	run(sim, 200)
-	check(h3.done, "with wool the bed is built")
+	check(h3.done, "with wool the tent is finished")
 	check(sim.residents.size() == 3 and sim.residents[2].name == "Mira", "a third traveler, Mira, arrives for the free bed")
 	run(sim, 60)
 	check(h3.owner == sim.residents[2].id, "and moves into it")
@@ -1181,6 +1185,41 @@ func test_emeralds() -> void:
 		res.jobs.lumber.xp = Tuning.SKILL_LEVELS[1]  # level 3
 	var up: Dictionary = SaveFormat.upgrade(data)
 	check(up.has("data") and up.data.state.residents.all(func(x): return x.emeralds >= 2), "an older save is given an emerald for each level passed")
+
+
+## Issue #285: a house is a tent, then a house, then the building. Each upgrade costs its resident emeralds and is built like any stage.
+func test_house_tiers() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var h := sim.place_site("house", at(11, 0))
+	check(h.tier == 1 and h.size == Vector2i(5, 5) and Sim.house_tier(h) == 0, "a new house is a tent blueprint on a 5x5 plot")
+	h.store = Defs.house_cost(1).duplicate()
+	sim._complete_stage(h)
+	check(h.done and Sim.house_tier(h) == 1 and sim.stats.houses == 1 and h.owner == ada.id, "the tent is a finished home for Ada")
+	check(sim.house_upgrade_check(h).contains("needs 3 emeralds"), "without emeralds it can't grow: " + sim.house_upgrade_check(h))
+	check(not sim.upgrade_house(h), "and upgrade_house refuses")
+	ada.emeralds = 4
+	check(sim.upgrade_house(h) and ada.emeralds == 1, "three emeralds are spent on the house")
+	check(not h.done and h.grow and sim.site_blocks(h) and Sim.house_tier(h) == 1, "it's a tent still, and solid, while the house goes up")
+	check(sim.current_stage(h).cost == Defs.HOUSE_STAGES[2][0].cost, "the stage is the house's")
+	h.store = Defs.house_cost(2).duplicate()
+	sim._complete_stage(h)
+	check(h.done and not h.grow and Sim.house_tier(h) == 2 and sim.stats.houses == 1, "the house is built and is no new home")
+	check(Sim.house_rect(h, 2).size == Vector2i(3, 3) and Rect2i(h.origin, h.size).encloses(Sim.house_rect(h, 2)), "a 3x3 sits inside the plot")
+	check(sim.house_upgrade_check(h).contains("needs 6 emeralds"), "the building costs six")
+	ada.emeralds = 6
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.upgrade_house(loaded.site_at(h.origin)), "the tier is saved and a loaded house can grow")
+	check(sim.upgrade_house(h) and Defs.HOUSE_STAGES[3].size() == 2, "the building has two stages")
+	for i in 2:
+		h.store = sim.current_stage(h).cost.duplicate()
+		sim._complete_stage(h)
+	check(h.done and Sim.house_tier(h) == 3 and sim.house_upgrade_check(h) != "", "the building is the top tier")
+	var old := sim.place_site("house", at(11, 8))
+	old.erase("tier")
+	old.stage = 4
+	old.done = true
+	check(Sim.house_tier(old) == 3 and sim.house_upgrade_check(old) != "", "a house from before tiers is the building")
 
 
 ## Issue #360: at night mobs can injure residents, who fight back, guards best and the golem too; nobody dies.

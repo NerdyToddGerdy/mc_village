@@ -1046,35 +1046,102 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "station" or s.tpl == "portal_station":
 		_add_station(solid if s.done else ghost, s)
 		return
-	var stage: int = s.stage
+	_add_house(solid, ghost, s)
+
+
+## A house (issue #285): the 5x5 plot is reserved from the start, but only the tier built so far is drawn, against the side its door is on,
+## with decor filling the rest. A house from before tiers is the whole 5x5 building. While it grows, the next tier's floor shows in blue.
+func _add_house(solid: Batch, ghost: Batch, s: Dictionary) -> void:
+	var tier := Sim.house_tier(s)
 	var gcol := Color(Palette.BLUE, 0.4)
-	for x in range(o.x, o.x + 5):
-		for y in range(o.y, o.y + 5):
+	if not s.has("tier"):
+		_add_house_walls(solid, ghost, s, Rect2i(s.origin, Vector2i(5, 5)), s.stage)
+		return
+	if tier == 0:  # the first blueprint: the tent's floor
+		var r := Sim.house_rect(s, 1)
+		for x in range(r.position.x, r.end.x):
+			for y in range(r.position.y, r.end.y):
+				ghost.box(Vector3(x, 0, y), Vector3(x + 1, 0.15, y + 1), gcol)
+		return
+	if tier == 1:
+		_add_tent(solid, s, Sim.house_rect(s, 1))
+	else:
+		_add_house_walls(solid, ghost, s, Sim.house_rect(s, tier), 4)
+	if tier < 3:
+		_add_house_decor(solid, s, Sim.house_rect(s, tier))
+	if s.get("grow", false):
+		var n := Sim.house_rect(s, tier + 1)
+		for x in range(n.position.x, n.end.x):
+			for y in range(n.position.y, n.end.y):
+				ghost.box(Vector3(x, 0, y), Vector3(x + 1, 0.2, y + 1), gcol)
+
+
+## The walls, floor and bed of a house of any size inside its plot. `stage` is the old four-stage build: 1 foundation, 2 walls, 3 roof, 4 bed.
+func _add_house_walls(solid: Batch, ghost: Batch, s: Dictionary, r: Rect2i, stage: int) -> void:
+	var gcol := Color(Palette.BLUE, 0.4)
+	for x in range(r.position.x, r.end.x):
+		for y in range(r.position.y, r.end.y):
 			if stage >= 1:
 				solid.box(Vector3(x, 0, y), Vector3(x + 1, 0.5, y + 1), Palette.COBBLE, BlockTextures.COBBLES)
 			else:
 				ghost.box(Vector3(x, 0, y), Vector3(x + 1, 0.5, y + 1), gcol)
 	if stage < 1:
 		return
-	var door := sim.door_cell(o, s.rot)
-	for x in range(o.x, o.x + 5):
-		for y in range(o.y, o.y + 5):
-			var edge := x == o.x or x == o.x + 4 or y == o.y or y == o.y + 4
+	var door := sim.door_cell(s.origin, s.rot)
+	for x in range(r.position.x, r.end.x):
+		for y in range(r.position.y, r.end.y):
+			var edge := x == r.position.x or x == r.end.x - 1 or y == r.position.y or y == r.end.y - 1
 			if not edge:
 				continue
-			var corner := (x == o.x or x == o.x + 4) and (y == o.y or y == o.y + 4)
+			var corner := (x == r.position.x or x == r.end.x - 1) and (y == r.position.y or y == r.end.y - 1)
 			var c := Palette.LOG if corner else Palette.PLANK
 			var b := ghost if stage == 1 else solid
 			var cc := gcol if stage == 1 else c
 			var lo := 1.7 if Vector2i(x, y) == door else 0.5
 			b.box(Vector3(x, lo, y), Vector3(x + 1, 2.5, y + 1), cc, BlockTextures.LOG if corner else BlockTextures.BOARD)
 	if stage == 2:
-		_add_roof(ghost, o, gcol)
+		_add_roof(ghost, r, gcol)
 	# A finished roof is drawn by _build_occluders, so it can be cut away.
 	if stage == 3:
-		_add_bed(ghost, o, true)
+		_add_bed(ghost, r, true)
 	elif stage >= 4:
-		_add_bed(solid, o, false)
+		_add_bed(solid, r, false)
+
+
+## The tent: a wool wedge, three wide and two deep, with a dark flap where the door is.
+func _add_tent(b: Batch, s: Dictionary, r: Rect2i) -> void:
+	var cloth := Color("#D9B777")
+	var x0 := float(r.position.x)
+	var z0 := float(r.position.y)
+	var w := float(r.size.x)
+	var d := float(r.size.y)
+	b.box(Vector3(x0 + 0.1, 0, z0 + 0.1), Vector3(x0 + w - 0.1, 0.18, z0 + d - 0.1), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(x0 + 0.15, 0.18, z0 + 0.15), Vector3(x0 + w - 0.15, 0.7, z0 + d - 0.15), cloth, BlockTextures.FLEECE)
+	b.box(Vector3(x0 + 0.4, 0.7, z0 + 0.3), Vector3(x0 + w - 0.4, 1.1, z0 + d - 0.3), cloth.darkened(0.06), BlockTextures.FLEECE)
+	var door := sim.door_cell(s.origin, s.rot)
+	b.box(Vector3(door.x + 0.3, 0.18, door.y + 0.3), Vector3(door.x + 0.7, 0.62, door.y + 0.7), Color("#4A4338"))
+
+
+## What fills the rest of the plot until the house grows into it: a campfire ring, a crate and a sapling.
+func _add_house_decor(b: Batch, s: Dictionary, r: Rect2i) -> void:
+	var free: Array[Vector2i] = []
+	var door := sim.door_cell(s.origin, s.rot)
+	for x in range(s.origin.x, s.origin.x + 5):
+		for y in range(s.origin.y, s.origin.y + 5):
+			var c := Vector2i(x, y)
+			if not r.has_point(c) and c != door:
+				free.append(c)
+	if free.size() < 3:
+		return
+	var ring := free[0]
+	var crate := free[free.size() / 2]
+	var sapling := free[free.size() - 1]
+	for k in [Vector2i(0, 0), Vector2i(2, 0), Vector2i(0, 2), Vector2i(2, 2)]:  # cobbles round a small fire
+		b.box(Vector3(ring.x + 0.2 + k.x * 0.15, 0, ring.y + 0.2 + k.y * 0.15), Vector3(ring.x + 0.4 + k.x * 0.15, 0.2, ring.y + 0.4 + k.y * 0.15), Palette.COBBLE, BlockTextures.COBBLES)
+	b.box(Vector3(ring.x + 0.4, 0, ring.y + 0.4), Vector3(ring.x + 0.6, 0.12, ring.y + 0.6), EMBER)
+	b.box(Vector3(crate.x + 0.15, 0, crate.y + 0.15), Vector3(crate.x + 0.85, 0.6, crate.y + 0.85), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(sapling.x + 0.45, 0, sapling.y + 0.45), Vector3(sapling.x + 0.55, 0.5, sapling.y + 0.55), Palette.LOG, BlockTextures.LOG)
+	b.box(Vector3(sapling.x + 0.25, 0.5, sapling.y + 0.25), Vector3(sapling.x + 0.75, 0.9, sapling.y + 0.75), Palette.LEAVES, BlockTextures.FOLIAGE)
 
 
 static var EMBER := Color("#E8763A")
@@ -1362,21 +1429,23 @@ static var BED_BLANKET := Color("#B83A3A")
 
 ## The bed sits in the house's top corner: the back corner, furthest from the camera (issue #43).
 ## Two cells long against the back wall, with a plank frame, a red blanket and a white pillow.
-func _add_bed(b: Batch, o: Vector2i, ghost: bool) -> void:
+func _add_bed(b: Batch, r: Rect2i, ghost: bool) -> void:
 	var g := Color(Palette.BLUE, 0.45)
-	var x0 := float(o.x + 1) + 0.1
-	var z0 := float(o.y + 1) + 0.1
-	b.box(Vector3(x0, 0.5, z0), Vector3(x0 + 1.8, 0.72, z0 + 0.8), g if ghost else Palette.PLANK, BlockTextures.BOARD)
+	var x0 := float(r.position.x + 1) + 0.1
+	var z0 := float(r.position.y + 1) + 0.1
+	var len := 1.8 if r.size.x >= 5 else 0.8  # a 3x3 house has room for a short bed
+	b.box(Vector3(x0, 0.5, z0), Vector3(x0 + len, 0.72, z0 + 0.8), g if ghost else Palette.PLANK, BlockTextures.BOARD)
 	if ghost:
 		return
 	b.box(Vector3(x0 + 0.05, 0.72, z0 + 0.05), Vector3(x0 + 0.55, 0.84, z0 + 0.75), Palette.ITEM_COLORS.wool, BlockTextures.FLEECE)
-	b.box(Vector3(x0 + 0.6, 0.72, z0 + 0.03), Vector3(x0 + 1.77, 0.82, z0 + 0.77), BED_BLANKET, BlockTextures.FLEECE)
+	if len > 1.0:
+		b.box(Vector3(x0 + 0.6, 0.72, z0 + 0.03), Vector3(x0 + len - 0.03, 0.82, z0 + 0.77), BED_BLANKET, BlockTextures.FLEECE)
 
 
-func _add_roof(b: Batch, o: Vector2i, color: Color) -> void:
-	for a in 3:
-		for x in range(o.x + a, o.x + 5 - a):
-			for y in range(o.y + a, o.y + 5 - a):
+func _add_roof(b: Batch, r: Rect2i, color: Color) -> void:
+	for a in (r.size.x + 1) / 2:
+		for x in range(r.position.x + a, r.end.x - a):
+			for y in range(r.position.y + a, r.end.y - a):
 				b.box(Vector3(x, 2.5 + a * 0.5, y), Vector3(x + 1, 3.0 + a * 0.5, y + 1), color, BlockTextures.SHINGLES)
 
 
@@ -1444,8 +1513,12 @@ func _build_occluders() -> void:
 	see_through.apply(_trees_faded)
 	var roofs := Batch.new()
 	for s in sim.sites:
-		if s.tpl == "house" and s.stage >= 3 and not open_roofs.has(s.id):
-			_add_roof(roofs, s.origin, Palette.ROOF)
+		if s.tpl == "house" and not open_roofs.has(s.id):
+			if not s.has("tier"):
+				if s.stage >= 3:
+					_add_roof(roofs, Rect2i(s.origin, Vector2i(5, 5)), Palette.ROOF)
+			elif Sim.house_tier(s) >= 2:
+				_add_roof(roofs, Sim.house_rect(s, Sim.house_tier(s)), Palette.ROOF)
 	roofs.apply(_roofs)
 
 
