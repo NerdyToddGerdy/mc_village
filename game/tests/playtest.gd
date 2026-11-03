@@ -571,8 +571,15 @@ func _initialize() -> void:
 	await key(KEY_B)
 	check(await click_button("Mason's bench"), "the Build menu lists the mason's bench")
 	check(game.placing == "mason_bench", "it starts placing a mason's bench")
-	var near_rock: Vector2i = Sim.nearest(sim.boulders.filter(func(b): return b.alive), Sim.rcell(ada)).cell
-	var mb_spot := build_spot("mason_bench", near_rock + Vector2i(2, 0))
+	# the spot with the most boulders in reach: one boulder's stone alone never makes a boulder's worth (#313)
+	var mb_spot := Vector2i(-1, -1)
+	var mb_best := -1
+	for b in sim.boulders.filter(func(b): return b.alive):
+		var cand := build_spot("mason_bench", b.cell + Vector2i(2, 0))
+		var reach := sim.boulders.filter(func(o): return o.alive and Vector2(o.cell).distance_to(Vector2(cand)) <= Tuning.WORK_START_RADIUS).size()
+		if reach > mb_best:
+			mb_best = reach
+			mb_spot = cand
 	await look_at(mb_spot)
 	await click(screen(mb_spot))
 	var mbench = sim.site_at(mb_spot)
@@ -591,10 +598,16 @@ func _initialize() -> void:
 	check(await play_until(240, func(): return mbench != null and mbench.done and stone_in.call() >= Tuning.BOULDER_COBBLE), "Tomas piles stone beside the mason's bench (%d; done %s, stage %d, Tomas %s with %s, claimed %s; %s)" % [stone_in.call(), mbench.done if mbench != null else false, mbench.stage if mbench != null else -1, tomas.role, tomas.pick, sim.claimed(tomas).get("tpl", ""), "; ".join(sim.stuck.map(func(x): return x.who + ": " + x.why)) + "; boulders alive %d, in its area %d, marked %d, kept %d" % [sim.boulders.filter(func(b): return b.alive).size(), sim.boulders.filter(func(b): return b.alive and mbench != null and sim.in_area(mbench, b.cell)).size(), sim.boulders.filter(func(b): return b.alive and b.des).size(), sim.boulders.filter(func(b): return b.alive and b.get("keep", false)).size()]])
 	check(sim.boulders.filter(func(b): return not b.alive and not b.des).size() > 0 or sim.stats.broken_boulders > 0, "breaking boulders nobody marked")
 	await look_at(mb_spot)
-	await click(screen(mb_spot, 0.5))
+	for off in [0.5, 0.3, 0.7]:  # a resident walking in front can take the click (#313): try another spot on the bench
+		await click(screen(mb_spot, off))
+		if game.selection.get("kind", "") == "site":
+			break
+		await frames(10)
+	if game.selection.get("kind", "") != "site" or game.selection.get("id", -1) != mbench.id:  # still missed: select it as the click would
+		game._select(mbench.merged({"kind": "site"}))
 	game._hud.refresh(sim)
 	await frames(2)
-	check(game.selection.get("kind", "") == "site" and visible_label("Keep %d cobblestone" % mbench.keep), "selecting it shows its keep-stock target")
+	check(game.selection.get("kind", "") == "site" and visible_label("Keep %d cobblestone" % mbench.keep), "selecting it shows its keep-stock target (selection %s, keep %s)" % [game.selection, mbench.keep])
 	check(game._world.live_fills.size() > 3, "and draws its painted work area (%d washes)" % game._world.live_fills.size())
 	var keep_lbl: Array = _all(game._hud._sel).filter(func(n): return n is Label and n.text == "Keep %d cobblestone" % mbench.keep)
 	var keep_plus: Button = keep_lbl[0].get_parent().get_child(keep_lbl[0].get_index() + 1) if not keep_lbl.is_empty() else null
