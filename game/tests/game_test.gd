@@ -369,13 +369,19 @@ func _test_minimap(game: Game) -> void:
 	var hud: Hud = game._hud
 	var mm: MiniMap = hud._minimap
 	game._menu.visible = false
-	check(not mm.visible, "the minimap starts hidden")
+	hud.refresh(game.sim)
+	await game.get_tree().process_frame
+	check(mm.visible and hud.minimap_on, "the corner map is always there")
 	check(game.keys.action_for(_key_event(KEY_I)) == "minimap", "I is its key")
 	game._key(_key_event(KEY_I))
 	hud.refresh(game.sim)
 	await game.get_tree().process_frame
+	check(not mm.visible, "pressing it hides the map")
+	game._key(_key_event(KEY_I))
+	hud.refresh(game.sim)
 	await game.get_tree().process_frame
-	check(mm.visible and hud.minimap_on, "pressing it shows the map")
+	await game.get_tree().process_frame
+	check(mm.visible and hud.minimap_on, "and shows it again")
 	check(hud.get_viewport().get_visible_rect().encloses(mm.get_global_rect()), "inside the window (%s)" % [mm.get_global_rect()])
 	var mp: SimMap = game.sim.get_map(game.view_map)
 	var before: Vector3 = game._target
@@ -394,6 +400,28 @@ func _test_minimap(game: Game) -> void:
 	game._key(_key_event(KEY_I))
 	hud.refresh(game.sim)
 	check(not mm.visible, "and the key hides it again")
+	await _test_world_map(game)
+
+
+## The full-screen world map (issue #347): P opens it and pauses, Esc closes it and the speed comes back; a ring sends the Cartographer.
+func _test_world_map(game: Game) -> void:
+	var hud: Hud = game._hud
+	var wm: WorldMap = hud._world_map
+	game.set_speed(2)
+	check(game.keys.action_for(_key_event(KEY_P)) == "worldmap", "P is the world map's key")
+	game._key(_key_event(KEY_P))
+	await game.get_tree().process_frame
+	await game.get_tree().process_frame
+	check(game.world_map_open and wm.visible and game.speed == 0, "it opens full screen and pauses the game")
+	check(not hud._minimap.visible, "the corner map steps aside")
+	var cell: Vector2i = wm._cell_at(wm._centre() + Vector2(0, -wm._radius(1) * 0.9))
+	check(cell == Vector2i(0, 1), "a point above the village is the north sector's near ring (%s)" % [cell])
+	var sector: Vector2i = wm._cell_at(wm._centre() + Vector2(wm._radius(3) * 0.7, wm._radius(3) * 0.7))
+	check(sector.x == 3 and sector.y == 3, "and one down and right is the south-east far ring (%s)" % [sector])
+	game._key(_key_event(KEY_ESCAPE))
+	await game.get_tree().process_frame
+	check(not game.world_map_open and not wm.visible and game.speed == 2, "Esc closes it and the speed comes back")
+	game.set_speed(1)
 
 
 func _key_event(code: Key) -> InputEventKey:
