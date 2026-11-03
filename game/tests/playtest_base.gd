@@ -51,6 +51,7 @@ func press(pos: Vector2, down: bool, button := MOUSE_BUTTON_LEFT, shift := false
 
 
 func click(pos: Vector2, button := MOUSE_BUTTON_LEFT, shift := false) -> void:
+	game._hud.minimap_on = false  # the corner map is always on now (#347) and would take clicks aimed at the world beneath it
 	await move(pos)
 	await press(pos, true, button, shift)
 	await press(pos, false, button, shift)
