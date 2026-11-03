@@ -39,6 +39,7 @@ const ACTIONS := [
 	["composter", "Orders", "Place a composter", []],
 	["lodge", "Orders", "Place a hunter's lodge", []],
 	["builder_table", "Orders", "Place a builder's table", []],
+	["cartographer_table", "Orders", "Place a cartographer's table", []],
 	["rotate", "Orders", "Turn a building while placing", [KEY_R]],
 	["next_res", "Residents", "Select the next resident", [KEY_F]],
 	["jobs", "Residents", "Open the village jobs board", [KEY_J]],

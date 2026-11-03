@@ -2720,6 +2720,9 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 	if s.tpl == "storehouse":  # issue #189
 		_panels().fill_storehouse(c, sim, s)
 		return
+	if s.tpl == "cartographer_table" and s.done:  # issue #321
+		_panels().fill_cartographer(c, sim, s)
+		return
 	if s.tpl == "composter" and s.done:  # issue #269
 		_panels().fill_farm(c, sim, s)
 		return

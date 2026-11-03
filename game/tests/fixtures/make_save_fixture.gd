@@ -7,6 +7,7 @@ extends SceneTree
 
 
 func _initialize() -> void:
+	Survey.enabled = false  # the fixture reaches the Nether the way every older village did, with no ruin to find (#321)
 	var sim := Sim.new_game()
 	# v15 to v21 switched Ada's Toolsmith on here (#91); from v22 Ada does everything (#134).
 	sim.designate_mine(area(0, 0, 10, 18))

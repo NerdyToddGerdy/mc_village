@@ -37,6 +37,8 @@ const CHAPTERS := [
 const VILLAGE := [
 	{"c": 3, "t": "Give a second resident a workstation", "h": "Choose Build for a mason's bench, composter or another workstation, and give someone that job from the Jobs board.",
 		"w": "A resident with a workstation works their job on their own, in its area. One workstation is Tomas's; the next frees you from marking boulders, fields or game."},
+	{"c": 3, "t": "Send a Cartographer to find the old caves", "h": "Build a cartographer's table from the Build menu, give someone the Cartographer job and choose Survey on the table.",
+		"w": "The land beyond the clearing is unknown. A survey finds the old caves first, then a ruined portal, and each ring out takes longer and is more dangerous."},
 	{"c": 3, "t": "Bring iron ore home from the old caves", "h": "Plan a trip to the old caves at the expedition board. If the road isn't built yet, the board says what to build first.",
 		"w": "The clearing has no ore: only expeditions find it. Smelted with coal at the fireplace's furnace, it makes iron tools that last more than twice as long as stone, and lets the toolsmith's bench grow into an anvil."},
 ]
@@ -82,6 +84,10 @@ const PAGES := [
 		"what": "A hunter hunts animals on their own and brings the meat, wool and leather home.",
 		"grows": "Reserves a plot, and grows into a tannery.",
 		"without": "Hunting is something you mark by hand each time."},
+	{"id": "cartographer_table", "title": "Cartographer's table", "tpl": "cartographer_table", "who": "A cartographer", "unlock": "board",
+		"what": "A cartographer surveys the land round the village, one ring of one direction at a time, and finds the old caves, then a ruined portal.",
+		"grows": "Reserves a plot, and grows into a map room.",
+		"without": "Nothing beyond the clearing is known: the caves and the portal stay hidden."},
 	{"id": "builder_table", "title": "Builder's table", "tpl": "builder_table", "who": "A builder",
 		"what": "A builder raises blueprints, and plants the stakes for new land.",
 		"grows": "Reserves a plot, and grows into a builder's yard.",
@@ -178,6 +184,7 @@ static func page_for(tpl: String) -> Dictionary:
 static func village_done(sim: Sim, i: int) -> bool:
 	match i:
 		0: return sim.sites.filter(func(s): return s.done and s.get("worker", 0) != 0 and s.tpl in ["chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table"]).size() >= 2
+		1: return Survey.found(sim, "old_mine") or sim.get_map("old_mine").known
 		_: return sim.stats.get("ore_home", false)
 
 

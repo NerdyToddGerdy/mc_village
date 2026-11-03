@@ -320,7 +320,7 @@ static func site_height(sim: Sim, s: Dictionary) -> float:
 		return 0.55 if s.done else 0.2
 	if s.tpl == "mason_bench":
 		return 0.8 if s.done else 0.2
-	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table"]:
+	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table"]:
 		return 0.9 if s.done else 0.2
 	if sim.is_device(s):
 		return 0.5 if s.done else 0.2
