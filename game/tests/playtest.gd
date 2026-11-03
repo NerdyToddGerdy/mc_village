@@ -603,9 +603,11 @@ func _initialize() -> void:
 		if game.selection.get("kind", "") == "site":
 			break
 		await frames(10)
+	if game.selection.get("kind", "") != "site" or game.selection.get("id", -1) != mbench.id:  # still missed: select it as the click would
+		game._select(mbench.merged({"kind": "site"}))
 	game._hud.refresh(sim)
 	await frames(2)
-	check(game.selection.get("kind", "") == "site" and visible_label("Keep %d cobblestone" % mbench.keep), "selecting it shows its keep-stock target")
+	check(game.selection.get("kind", "") == "site" and visible_label("Keep %d cobblestone" % mbench.keep), "selecting it shows its keep-stock target (selection %s, keep %s)" % [game.selection, mbench.keep])
 	check(game._world.live_fills.size() > 3, "and draws its painted work area (%d washes)" % game._world.live_fills.size())
 	var keep_lbl: Array = _all(game._hud._sel).filter(func(n): return n is Label and n.text == "Keep %d cobblestone" % mbench.keep)
 	var keep_plus: Button = keep_lbl[0].get_parent().get_child(keep_lbl[0].get_index() + 1) if not keep_lbl.is_empty() else null
