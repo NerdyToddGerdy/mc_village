@@ -187,7 +187,7 @@ static func page_for(tpl: String) -> Dictionary:
 ## Whether village goal `i` is done.
 static func village_done(sim: Sim, i: int) -> bool:
 	match i:
-		0: return sim.sites.filter(func(s): return s.done and s.get("worker", 0) != 0 and s.tpl in ["chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table"]).size() >= 2
+		0: return sim.sites.filter(func(s): return s.done and s.get("worker", 0) != 0 and Defs.JOB_STATIONS.values().has(s.tpl)).size() >= 2
 		1: return Survey.found(sim, "old_mine") or sim.get_map("old_mine").known
 		_: return sim.stats.get("ore_home", false)
 

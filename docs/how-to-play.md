@@ -127,7 +127,7 @@ Click a wedge, press 1 to 4, or hold the right button, drag to a wedge and let g
 
 ## Night
 
-A day lasts 8 minutes: about 5 of day and 3 of night. The top bar says "Day 3" and, at night, "· night". At night the light dims and turns blue; residents keep working, and nobody needs to sleep.
+A day lasts 12 minutes: about 7½ of day and 4½ of night. The top bar says "Day 3" and, at night, "· night". At night the light dims and turns blue; residents keep working, and nobody needs to sleep.
 
 Once the village has **3 residents**, two things start:
 - An **iron golem** appears by itself and patrols. It knocks out the night's mobs and never hurts anyone.
