@@ -231,9 +231,15 @@ static func legacy_done(sim: Sim) -> bool:
 		and sim.stats.houses >= 2 and sim.stats.traveler_home and built.has("chopping_block")
 
 
+## Off in the village bot, which builds in its own order and not the book's.
+static var follow_book := true
+
+
 ## Whether the book has got to founding goal `i` (every one before it done), which is when the Build menu shows what it
 ## introduces (issue #370). A step past the list is the village chapter, once the founding is complete.
 static func reached(sim: Sim, i: int) -> bool:
+	if not follow_book:
+		return true
 	if sim.stats.get("founding_done", false):
 		return true
 	var open := first_open(sim)
