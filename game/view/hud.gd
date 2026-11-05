@@ -1630,7 +1630,9 @@ func _refresh_book(sim: Sim) -> void:
 	var rows := Goals.guide_rows(sim)
 	var fresh := Goals.new_pages(sim).map(func(p): return p.id)
 	var guide_sel: String = game.guide_page if rows.any(func(p): return p.id == game.guide_page) else rows[0].id
-	sig += "|%s|%s" % [fresh, guide_sel]
+	var cur_chapter := Goals.current_chapter(sim)
+	var goals_sel: int = game.goals_chapter if game.goals_chapter >= 0 and game.goals_chapter <= cur_chapter else cur_chapter
+	sig += "|%s|%s|%d" % [fresh, guide_sel, goals_sel]
 	var live: Control = _board if game.book_page == "jobs" else (_roster if game.book_page == "residents" else null)
 	_rebuild(_book, sig, func(c: Container) -> void:
 		var head := HBoxContainer.new()
@@ -1652,7 +1654,7 @@ func _refresh_book(sim: Sim) -> void:
 		_book_scroll = ScrollContainer.new()
 		_book_scroll.custom_minimum_size = Vector2(440, 330)
 		_book_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		if game.book_page == "guide":  # a list of the pages on the left, the chosen one on the right (issue #348)
+		if game.book_page == "guide" or game.book_page == "goals":  # a list on the left, the chosen one on the right (issues #348, #371)
 			var split := HBoxContainer.new()
 			split.add_theme_constant_override("separation", 8)
 			c.add_child(split)
@@ -1664,17 +1666,31 @@ func _refresh_book(sim: Sim) -> void:
 			list.add_theme_constant_override("separation", 2)
 			list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			list_scroll.add_child(list)
-			for row in rows:
-				var known := Goals.page_known(sim, row)
-				var rb := _button("%s%s" % [row.title if known else "???", "  new" if fresh.has(row.id) else ""], func(): game.select_guide(row.id))
-				rb.alignment = HORIZONTAL_ALIGNMENT_LEFT
-				rb.toggle_mode = true
-				rb.set_pressed_no_signal(row.id == guide_sel)
-				rb.set_meta("label", "Guide: " + (row.title if known else "???"))
-				if not known:
-					for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-						rb.add_theme_color_override(state, Palette.CHALK_DIM)
-				list.add_child(rb)
+			if game.book_page == "goals":
+				for ch in Goals.CHAPTERS.size():
+					var counts := Goals.chapter_progress(sim, ch)
+					var reached := ch <= cur_chapter
+					var cb := _button(("%d  %s    %d of %d" % [ch + 1, Goals.CHAPTERS[ch].name, counts[0], counts[1]]) if reached else "%d  ???" % [ch + 1], func(): game.select_chapter(ch))
+					cb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+					cb.toggle_mode = true
+					cb.set_pressed_no_signal(ch == goals_sel)
+					cb.set_meta("label", "Chapter: " + (Goals.CHAPTERS[ch].name if reached else "???"))
+					if not reached or counts[0] == counts[1]:
+						for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+							cb.add_theme_color_override(state, Palette.CHALK_DIM if not reached else Palette.GREEN)
+					list.add_child(cb)
+			else:
+				for row in rows:
+					var known := Goals.page_known(sim, row)
+					var rb := _button("%s%s" % [row.title if known else "???", "  new" if fresh.has(row.id) else ""], func(): game.select_guide(row.id))
+					rb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+					rb.toggle_mode = true
+					rb.set_pressed_no_signal(row.id == guide_sel)
+					rb.set_meta("label", "Guide: " + (row.title if known else "???"))
+					if not known:
+						for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+							rb.add_theme_color_override(state, Palette.CHALK_DIM)
+					list.add_child(rb)
 			split.add_child(_book_scroll)
 		else:
 			c.add_child(_book_scroll)
@@ -1696,7 +1712,7 @@ func _refresh_book(sim: Sim) -> void:
 				clue.custom_minimum_size.x = 420
 				body.add_child(clue)
 		else:
-			_fill_book_goals(body, sim),
+			_fill_book_goals(body, sim, goals_sel, cur_chapter),
 		func() -> void:  # the live pages outlive a rebuild: take them out before the old page is freed
 			for n in [_board, _roster]:
 				if n.get_parent() != null:
@@ -1758,34 +1774,38 @@ func _refresh_roster(sim: Sim) -> void:
 			c.add_child(line))
 
 
-func _fill_book_goals(c: Container, sim: Sim) -> void:
-	for ch in Goals.CHAPTERS.size():
-		var info: Dictionary = Goals.CHAPTERS[ch]
-		var rows: Array = []  # [goal, done]
-		if ch < 3:
-			for i in Goals.LIST.size():
-				if Goals.LIST[i].c == ch:
-					rows.append([Goals.LIST[i], Goals.done(sim, i)])
-		else:
-			for i in Goals.VILLAGE.size():
-				rows.append([Goals.VILLAGE[i], Goals.village_done(sim, i)])
-		var finished := rows.filter(func(r): return r[1]).size()
-		c.add_child(_label("%d  %s    %d of %d" % [ch + 1, info.name, finished, rows.size()], true, Palette.GREEN if finished == rows.size() else Palette.CHALK, Palette.BODY))
-		var why := _label(info.why, false, Palette.CHALK_DIM, Palette.CAPTION, true)
-		why.custom_minimum_size.x = 420
-		c.add_child(why)
-		for r in rows:
-			var g: Dictionary = r[0]
-			var t := _label("%s  %s" % ["√" if r[1] else "·", g.t], true, Palette.GREEN if r[1] else Palette.CHALK, Palette.BODY, true)
-			t.custom_minimum_size.x = 420
-			c.add_child(t)
-			var w := _label(g.w, false, Palette.CHALK_DIM, Palette.CAPTION, true)
-			w.custom_minimum_size.x = 420
-			c.add_child(w)
-		if finished == rows.size():
-			var note := _label(info.note, false, Palette.GREEN, Palette.CAPTION, true)
-			note.custom_minimum_size.x = 420
-			c.add_child(note)
+## One chapter of the book's Goals tab (issue #371): its why, then each step with its hint and why. A chapter the
+## book hasn't reached shows nothing but that it's ahead.
+func _fill_book_goals(c: Container, sim: Sim, ch: int, current: int) -> void:
+	var info: Dictionary = Goals.CHAPTERS[ch]
+	var rows: Array = []  # [goal, done]
+	if ch < 3:
+		for i in Goals.LIST.size():
+			if Goals.LIST[i].c == ch:
+				rows.append([Goals.LIST[i], Goals.done(sim, i)])
+	else:
+		for i in Goals.VILLAGE.size():
+			rows.append([Goals.VILLAGE[i], Goals.village_done(sim, i)])
+	var finished := rows.filter(func(r): return r[1]).size()
+	c.add_child(_label("%d  %s    %d of %d" % [ch + 1, info.name, finished, rows.size()], true, Palette.GREEN if finished == rows.size() else Palette.CHALK, Palette.BODY))
+	var why := _label(info.why, false, Palette.CHALK_DIM, Palette.CAPTION, true)
+	why.custom_minimum_size.x = 420
+	c.add_child(why)
+	var first_open := true
+	for r in rows:
+		var g: Dictionary = r[0]
+		var mark := "√" if r[1] else (">" if first_open and ch == current else "·")
+		first_open = first_open and r[1]
+		var t := _label("%s  %s" % [mark, g.t], true, Palette.GREEN if r[1] else Palette.CHALK, Palette.BODY, true)
+		t.custom_minimum_size.x = 420
+		c.add_child(t)
+		var w := _label(g.w, false, Palette.CHALK_DIM, Palette.CAPTION, true)
+		w.custom_minimum_size.x = 420
+		c.add_child(w)
+	if finished == rows.size():
+		var note := _label(info.note, false, Palette.GREEN, Palette.CAPTION, true)
+		note.custom_minimum_size.x = 420
+		c.add_child(note)
 
 
 func _fill_book_page(c: Container, p: Dictionary) -> void:
@@ -2864,7 +2884,13 @@ func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 	for x in reasons.slice(0, 1):
 		status.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
 	c.add_child(status)
-	var recipes: Array = Defs.recipes_at(s.tpl)
+	var recipes: Array = Defs.recipes_shown(sim, s.tpl)
+	for q in s.queue:  # whatever's already queued stays in the book, in its place
+		var queued := Defs.recipe(q)
+		if not queued.is_empty() and not recipes.has(queued):
+			recipes.append(queued)
+	if recipes.is_empty():  # a station built before the book reached it (a save, a test): show its whole book
+		recipes = Defs.recipes_at(s.tpl)
 	var rec: Dictionary = Defs.recipe(_craft_pick.get(s.tpl, recipes[0].id))
 	if rec.is_empty() or not recipes.has(rec):
 		rec = recipes[0]
@@ -3431,6 +3457,18 @@ func _add_level_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
 ## can't go is listed with why.
 func _add_party_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
 	c.add_child(_row("Party", "%d of up to %d" % [plan.party.size(), Tuning.PARTY_MAX], false))
+	var can_go := sim.residents.filter(func(r): return sim.cant_join(r) == "" and not plan.party.has(r.id)).size()
+	var fill := HBoxContainer.new()
+	var fill_b := _button("Fill the party", func(): game.plan_fill(), "Secondary")
+	fill_b.set_meta("label", "Fill the party")
+	fill_b.disabled = can_go == 0 or plan.party.size() >= Tuning.PARTY_MAX
+	fill_b.tooltip_text = "Takes the best fit among those who can go, up to %d" % Tuning.PARTY_MAX
+	var clear_b := _button("Unselect all", func(): game.plan_clear(), "Secondary")
+	clear_b.set_meta("label", "Unselect all")
+	clear_b.disabled = plan.party.is_empty()
+	fill.add_child(fill_b)
+	fill.add_child(clear_b)
+	c.add_child(fill)
 	for r in sim.residents:
 		var why := sim.cant_join(r)
 		var on: bool = plan.party.has(r.id)
