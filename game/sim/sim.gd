@@ -5914,7 +5914,7 @@ func cancel_expedition(slot_id := "") -> void:
 func _stuck_expedition() -> void:
 	if building_line() and expedition.get("state", "") == "out" and map_id == NetherRoute.ROUTES.quartz.id:  # the track waits on a bridge (issue #159)
 		var l := nline()
-		for i in Road.segment_count():
+		for i in Road.BASE_SEGMENTS:
 			if l.laid[i] < Tuning.RAILS_PER_SEGMENT:
 				if nline_obstacle(i) and not l.bridged.has(i) and expedition.get("supplies", {}).get("plank", 0) < Tuning.NETHER_BRIDGE_PLANKS:
 					_add_stuck("Track", "needs %s bridged first" % NetherRoute.ROUTES.quartz.segments[i].name.to_lower(), Vector2(Road.SEGMENTS[i].x + 2, NetherRoute.LINE_ROW) + Vector2(0.5, 0.5), 0.6, "", 0)
@@ -7207,7 +7207,7 @@ func _nether_route_report(id: String) -> Dictionary:
 		var laid := 0
 		for n in ln.laid:
 			laid += 1 if n >= Tuning.RAILS_PER_SEGMENT else 0
-		line_text = "Line: %d of %d segments laid, %d of 2 bridges, %d of 2 stations, %s" % [laid, Road.segment_count(), ln.bridged.size(), (1 if ln.stations.landing else 0) + (1 if ln.stations.site else 0), "cart parked" if ln.cart else "no cart"]
+		line_text = "Line: %d of %d segments laid, %d of 2 bridges, %d of 2 stations, %s" % [laid, Road.BASE_SEGMENTS, ln.bridged.size(), (1 if ln.stations.landing else 0) + (1 if ln.stations.site else 0), "cart parked" if ln.cart else "no cart"]
 	return {"name": name, "told": def.told, "line": line_text, "visited": rm.seen > 1 or rm.surveyed, "travel": walk if rm.surveyed else -1.0, "level": 0, "pattern": "",
 		"resources": [], "hazards": hazards, "access": ["A narrow way beside the lava: bridges and cuts come with the line"] if rm.surveyed else [], "finds": [], "levels": [], "door": "",
 		"segments": segs, "scouted": rm.surveyed, "seen": rm.seen}
