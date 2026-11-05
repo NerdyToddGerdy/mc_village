@@ -401,6 +401,22 @@ func _test_minimap(game: Game) -> void:
 	hud.refresh(game.sim)
 	check(not mm.visible, "and the key hides it again")
 	await _test_world_map(game)
+	_test_strip_cameras(game)
+
+
+## Issue #375: the village's road to the old mine runs east and the meadow's runs west, so +x on each strip
+## has to read as going the way its signpost points.
+func _test_strip_cameras(game: Game) -> void:
+	var here: String = game.view_map
+	var dx := {}
+	for id in [OldMine.ID, MeadowRoad.ID]:
+		game.switch_map(id)
+		var a: Vector2 = game._cam.unproject_position(Vector3(10, 0, 3))
+		var b: Vector2 = game._cam.unproject_position(Vector3(11, 0, 3))
+		dx[id] = b.x - a.x
+	check(dx[OldMine.ID] > 0.0, "walking out along the road to the old caves goes right on the screen")
+	check(dx[MeadowRoad.ID] < 0.0, "and out along the meadow's strip goes left, towards its signpost on the west edge")
+	game.switch_map(here)
 
 
 ## The full-screen world map (issue #347): P opens it and pauses, Esc closes it and the speed comes back; a ring sends the Cartographer.

@@ -3,6 +3,7 @@ extends Node3D
 ## Hosts the sim at a fixed tick rate, owns the camera and selection, and turns input into sim
 ## commands. Views never change the sim directly; they call the methods here.
 
+const ISO_DIR_WEST := Vector3(-1, 1, -1)  ## The same view turned half way round, for the strip that runs west.
 const ISO_DIR := Vector3(1, 1, 1)      ## True isometric: camera looks down (-1, -1, -1).
 const ELEVATION_SIN := 0.57735         ## sin(35.26°), for converting screen drags to ground moves.
 
@@ -202,7 +203,10 @@ func _place_camera() -> void:
 	var margin: float = Tuning.CLAIM_DEPTH + 2.0 if tool == "claim" else 2.0  # room to see the strips on offer (issue #187)
 	_target.x = clampf(_target.x, -margin, mp.w + margin)
 	_target.z = clampf(_target.z, -margin, mp.h + margin)
-	_cam.position = _target + ISO_DIR.normalized() * 60.0
+	# The strip to the meadow starts at its village end (x = 0), but the meadow lies west of the village,
+	# so its camera looks from the other side and a party walks out the same way the signpost points (#375).
+	var dir := ISO_DIR_WEST if view_map == MeadowRoad.ID else ISO_DIR
+	_cam.position = _target + dir.normalized() * 60.0
 	_cam.look_at(_target, Vector3.UP)
 
 
