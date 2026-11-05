@@ -139,13 +139,15 @@ func _initialize() -> void:
 	await key(KEY_QUOTELEFT)
 	check(await play_until(120, func(): return sim.get_map(OldMine.ID).discovered), "the vein is surveyed")
 	check(sim.plan_targets(OldMine.ID).any(func(x): return x.item == "iron_ore"), "iron is a known resource now")
+	tomas.hurt = 0  # a ledge may have hurt him on the longer walk, and an injured miner mines nothing: the hazards have their own tests
+	tomas.heal = 0.0
 	# Mark an iron block and a coal block, clear of the loose ceilings: 4 iron ore and 3 coal.
 	await key(KEY_X)
 	for c in [Vector2i(12, 14), Vector2i(5, 10)]:
 		await look_at(c)
 		await click(screen(c, 0.5))
 	await key(KEY_ESCAPE)
-	check(await play_ticks_until(400, func(): return sim.expedition.get("cargo", {}).get("iron_ore", 0) >= 3 and sim.expedition.cargo.get("coal", 0) >= 3), "the party mines and packs iron ore and coal (%s, load %d of %d, %s)" % [sim.expedition.get("cargo", {}), sim.pack_load(), Sim.pack_capacity(sim.expedition), _seen.filter(func(t): return "Heading home" in t or "Back from" in t or "hurt" in t)])
+	check(await play_ticks_until(400, func(): return sim.expedition.get("cargo", {}).get("iron_ore", 0) >= 3 and sim.expedition.cargo.get("coal", 0) >= 3), "the party mines and packs iron ore and coal (%s, why %s, load %d of %d, %s)" % [sim.expedition.get("cargo", {}), sim.expedition.get("home_why", ""), sim.pack_load(), Sim.pack_capacity(sim.expedition), _seen.filter(func(t): return "Heading home" in t or "Back from" in t or "hurt" in t)])
 
 	# ---- A serious injury (issue #110): triggered here, then answered with Retreat
 	sim.on_map(OldMine.ID, sim.injure.bind(tomas, 2, "a cave-in"))
