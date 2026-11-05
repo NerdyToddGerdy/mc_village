@@ -10,7 +10,7 @@ var _checks := 0
 var _current := ""
 var _opening = null  ## The played opening's save and its sites' ids, played once for every test that needs it.
 ## Seconds to allow for walking the road to the mine, one way (issue #118).
-const ROAD := 30.0
+const ROAD := 50.0
 
 
 func _init() -> void:
@@ -2803,6 +2803,8 @@ func test_hazards_and_injuries() -> void:
 	house.owner = ada.id
 	sim.rev += 1
 	var healed_at := -1.0
+	ada.hunger = 100.0  # the walk home was long: keep the rest to healing, not to a meal from the party's unhauled cargo
+	tomas.hunger = 100.0
 	for i in int((Tuning.HEAL_TIME[1] + 60) * Tuning.TPS):
 		sim.step()
 		if ada.hurt == 0:
@@ -3778,10 +3780,10 @@ func test_pens_and_breeding() -> void:
 	var plan2 := sim.new_plan(Meadow.ID)
 	check(plan2.sticks == 0 and plan2.wheat == 0, "with the pen built and the pair resting, a new plan packs no sticks or wheat")
 	plan2.party = [ada.id, tomas.id]
-	plan2.meals = 4
+	plan2.meals = 8  # the walk is short now, so the animals' wandering decides how long the hunt takes: allow for it (#377)
 	plan2.target = {"item": "pens", "n": 2}
 	sim.plan_expedition(plan2)
-	b.store = {"bread": 4}
+	b.store = {"bread": 8}
 	for i in 60 * Tuning.TPS:
 		sim.step()
 		if sim.depart_blocker() == "":
