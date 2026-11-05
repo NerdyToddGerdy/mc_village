@@ -32,6 +32,7 @@ var book_open := false                  ## The village book (issue #198).
 const FLASH_MS := 1800                  ## How long a focused thing blinks (issue #304).
 var _flash_rect := Rect2i()
 var _flash_until := 0
+var goals_chapter := -1                 ## The Goals tab's chosen chapter, or -1 for the one the book is on (issue #371).
 var guide_page := ""                    ## The Guide's chosen page, or "" for the first one (issue #348).
 var book_page := "goals"                ## Its open page: "goals", "jobs", "residents", or a page's id from Goals.PAGES.
 var world_map_open := false              ## The full-screen world map (issue #347), which pauses the game while it is open.
@@ -1489,8 +1490,16 @@ func open_book(page := "goals", open := true) -> void:
 	book_open = open
 	if open:
 		book_page = page
+		if page == "goals":
+			goals_chapter = -1
 		if Goals.PAGES.any(func(p): return p.id == page):  # a building's page: the Guide tab, with that page chosen (issue #348)
 			select_guide(page)
+
+
+## Chooses a chapter of the Goals tab (issue #371).
+func select_chapter(ch: int) -> void:
+	book_page = "goals"
+	goals_chapter = ch
 
 
 ## Chooses a page of the Guide (issue #348). Opening a page that's known clears its "new" mark.

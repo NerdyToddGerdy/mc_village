@@ -270,6 +270,21 @@ static func chapter_count(sim: Sim, ch: int) -> Array:
 	return [finished, total]
 
 
+## The chapter the book is on, 0 to 3: the next founding step's, then the village chapter.
+static func current_chapter(sim: Sim) -> int:
+	return chapter_of(current(sim))
+
+
+## [finished, total] for any chapter, the village's included (issue #371).
+static func chapter_progress(sim: Sim, ch: int) -> Array:
+	if ch < 3:
+		return chapter_count(sim, ch)
+	var finished := 0
+	for i in VILLAGE.size():
+		finished += 1 if village_done(sim, i) else 0
+	return [finished, VILLAGE.size()]
+
+
 ## A save's label and the menu's subtitle: the next founding step, then facts about the village
 ## once the founding is done (issue #81), so village saves can be told apart.
 static func progress_text(sim: Sim) -> String:
