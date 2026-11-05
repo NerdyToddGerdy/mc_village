@@ -12,12 +12,43 @@ extends RefCounted
 ## 3. Add tests/fixtures/save_v<N>.save (made with tests/fixtures/make_save_fixture.gd) and a test
 ##    that loads it, alongside the older fixtures, which must keep loading.
 
-const VERSION := 67
+const VERSION := 68
 
 ## Version N -> the step that upgrades a version-N save to version N + 1. Each step takes the
 ## whole save Dictionary and returns it upgraded. Steps never need to set `v`; upgrade() does.
 static func upgrades() -> Dictionary:
-	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23, 23: _v23_to_v24, 24: _v24_to_v25, 25: _v25_to_v26, 26: _v26_to_v27, 27: _v27_to_v28, 28: _v28_to_v29, 29: _v29_to_v30, 30: _v30_to_v31, 31: _v31_to_v32, 32: _v32_to_v33, 33: _v33_to_v34, 34: _v34_to_v35, 35: _v35_to_v36, 36: _v36_to_v37, 37: _v37_to_v38, 38: _v38_to_v39, 39: _v39_to_v40, 40: _v40_to_v41, 41: _v41_to_v42, 42: _v42_to_v43, 43: _v43_to_v44, 44: _v44_to_v45, 45: _v45_to_v46, 46: _v46_to_v47, 47: _v47_to_v48, 48: _v48_to_v49, 49: _v49_to_v50, 50: _v50_to_v51, 51: _v51_to_v52, 52: _v52_to_v53, 53: _v53_to_v54, 54: _v54_to_v55, 55: _v55_to_v56, 56: _v56_to_v57, 57: _v57_to_v58, 58: _v58_to_v59, 59: _v59_to_v60, 60: _v60_to_v61, 61: _v61_to_v62, 62: _v62_to_v63, 63: _v63_to_v64, 64: _v64_to_v65, 65: _v65_to_v66, 66: _v66_to_v67}
+	return {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5, 5: _v5_to_v6, 6: _v6_to_v7, 7: _v7_to_v8, 8: _v8_to_v9, 9: _v9_to_v10, 10: _v10_to_v11, 11: _v11_to_v12, 12: _v12_to_v13, 13: _v13_to_v14, 14: _v14_to_v15, 15: _v15_to_v16, 16: _v16_to_v17, 17: _v17_to_v18, 18: _v18_to_v19, 19: _v19_to_v20, 20: _v20_to_v21, 21: _v21_to_v22, 22: _v22_to_v23, 23: _v23_to_v24, 24: _v24_to_v25, 25: _v25_to_v26, 26: _v26_to_v27, 27: _v27_to_v28, 28: _v28_to_v29, 29: _v29_to_v30, 30: _v30_to_v31, 31: _v31_to_v32, 32: _v32_to_v33, 33: _v33_to_v34, 34: _v34_to_v35, 35: _v35_to_v36, 36: _v36_to_v37, 37: _v37_to_v38, 38: _v38_to_v39, 39: _v39_to_v40, 40: _v40_to_v41, 41: _v41_to_v42, 42: _v42_to_v43, 43: _v43_to_v44, 44: _v44_to_v45, 45: _v45_to_v46, 46: _v46_to_v47, 47: _v47_to_v48, 48: _v48_to_v49, 49: _v49_to_v50, 50: _v50_to_v51, 51: _v51_to_v52, 52: _v52_to_v53, 53: _v53_to_v54, 54: _v54_to_v55, 55: _v55_to_v56, 56: _v56_to_v57, 57: _v57_to_v58, 58: _v58_to_v59, 59: _v59_to_v60, 60: _v60_to_v61, 61: _v61_to_v62, 62: _v62_to_v63, 63: _v63_to_v64, 64: _v64_to_v65, 65: _v65_to_v66, 66: _v66_to_v67, 67: _v67_to_v68}
+
+
+## v68: the road lengths (issue #377). The road to the old mine grows from 48 to 88 columns, the new part plain grass past the old end, so the
+## track and stations a village has built stay where they are. The strip to the meadow shrinks from 85 to 46: a party on it is put at the
+## same share of the way, and trees past the new end are dropped.
+static func _v67_to_v68(d: Dictionary) -> Dictionary:
+	var maps: Dictionary = d.state.get("maps", {})
+	if maps.has(Road.ID) and maps[Road.ID].w < Road.LAYOUT[0].length():
+		var rd: Dictionary = maps[Road.ID]
+		rd.w = Road.LAYOUT[0].length()
+		if rd.get("seen", 1) >= Road.BASE_SEGMENTS:  # a walked road is walked to its end, the new stretch included
+			rd.seen = Road.segment_count()
+		var tracks: Array = rd.sites.filter(func(s): return s.tpl == "track")
+		if tracks.size() == Road.BASE_SEGMENTS and tracks.all(func(s): return s.done):  # a finished line stays finished: its new stretch comes laid
+			var last: Dictionary = tracks[tracks.size() - 1]
+			for i in range(Road.BASE_SEGMENTS, Road.segment_count()):
+				var extra: Dictionary = last.duplicate(true)
+				extra.id = d.state.next_id
+				d.state.next_id += 1
+				extra.seg = i
+				extra.origin = Vector2i(Road.SEGMENTS[i].x, Road.LINE_ROW)
+				rd.sites.append(extra)
+	if maps.has(MeadowRoad.ID) and maps[MeadowRoad.ID].w > Tuning.MEADOW_ROAD_LEN:
+		var old_last := float(maps[MeadowRoad.ID].w - 1)
+		var last := float(Tuning.MEADOW_ROAD_LEN - 1)
+		maps[MeadowRoad.ID].w = Tuning.MEADOW_ROAD_LEN
+		maps[MeadowRoad.ID].trees = maps[MeadowRoad.ID].trees.filter(func(tr): return tr.cell.x < Tuning.MEADOW_ROAD_LEN)
+		for r in d.state.get("residents", []):
+			if r.get("map", "") == MeadowRoad.ID:
+				r.pos = Vector2(minf(r.pos.x * last / old_last, last), r.pos.y)
+	return d
 
 
 ## v67: the Cartographer job and the cartographer's table (issue #321). Every resident gets the job at no experience. `stats.found` and
