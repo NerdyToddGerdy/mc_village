@@ -402,6 +402,27 @@ func _test_minimap(game: Game) -> void:
 	check(not mm.visible, "and the key hides it again")
 	await _test_world_map(game)
 	_test_strip_cameras(game)
+	_test_build_menu_follows_book(game)
+
+
+## Issue #370: the Build menu follows the founding book. A new game lists the bench; each step adds its entry.
+func _test_build_menu_follows_book(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var ids := func() -> Array: return OrderMenus.entries("build", sim).map(func(e): return e.id)
+	check(ids.call() == ["bench"], "a new game's Build menu lists only the crafting bench (%s)" % [ids.call()])
+	game.start_placing("house")
+	check(game.placing == "", "and a shortcut for the house does nothing yet")
+	sim.stats.houses = 1
+	sim.stats.felled = 1
+	sim.stats.built = {"bench": true}
+	sim.stats.axe_crafted = true
+	sim.stats.pick_crafted = true
+	sim.stats.broken_boulders = 1
+	sim.stats.sheep_hunted = 1
+	check(ids.call() == ["bench", "house", "composter"] and ids.call().size() == 3, "past Ada's house it also lists the composter (%s)" % [ids.call()])
+	sim.stats.founding_done = true
+	check(ids.call().has("mason_bench") and ids.call().has("storehouse"), "a finished founding, or an old save, shows everything")
 
 
 ## Issue #375: the village's road to the old mine runs east and the meadow's runs west, so +x on each strip
@@ -1231,6 +1252,7 @@ func _test_order_menus(game: Game) -> void:
 	check(game.tool == "hunt", "G still switches Hunt on directly")
 	_key(game, KEY_ESCAPE)
 	check(game.tool == "", "Esc puts the order away")
+	sim.stats.founding_done = true  # the Build menu follows the book (issue #370), so show it all
 	_key(game, KEY_B)
 	_key(game, KEY_2)
 	check(game.tool == "build" and game.placing == "house", "B then 2 places a house, as the Build menu's second row")
@@ -1286,6 +1308,7 @@ func _test_rebinding(game: Game) -> void:
 	menu._do_confirmed()
 	check(game.keys.keys.chopping_block == [KEY_Q] and game.keys.keys.mine.is_empty(), "confirming moves Q to the chopping block and leaves Mine without a key")
 	game._hud.refresh(game.sim)
+	game.sim.stats.founding_done = true
 	game.set_tool("build")
 	game._hud.refresh(game.sim)
 	check(_menu_caps(game, "build", "Chopping block").has("Q"), "the chopping block's row shows Q (%s)" % [_menu_caps(game, "build", "Chopping block")])
@@ -1406,6 +1429,7 @@ func _test_right_click_never_silent(game: Game) -> void:
 	check(game.radial.is_empty() and not game._menu.visible, "Esc closes the radial, and doesn't open the menu")
 	# Placing a building: right-click cancels the placement, as before.
 	game.selection = {"kind": "res", "ids": [ada.id]}
+	game.sim.stats.founding_done = true  # the book has to have reached the house (issue #370)
 	game.start_placing("house")
 	_right(game, at)
 	check(game.tool == "" and game.radial.is_empty() and ada.direct == null, "while placing a building, right-click cancels the placement")
@@ -1485,6 +1509,7 @@ func _test_fireplace(game: Game) -> void:
 	game.restart()
 	var sim := game.sim
 	var hud: Hud = game._hud
+	sim.stats.founding_done = true
 	_key(game, KEY_K)
 	check(game.tool == "build" and game.placing == "fireplace", "K picks the fireplace")
 	var ada_cell := Sim.rcell(sim.residents[0])

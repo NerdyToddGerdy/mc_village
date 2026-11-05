@@ -1421,6 +1421,9 @@ func start_moving(s: Dictionary) -> void:
 func start_placing(tpl: String) -> void:
 	if view_map != "village":
 		return
+	var entry := OrderMenus.entry(tpl)
+	if not entry.is_empty() and not OrderMenus.unlocked(entry, sim):  # the book hasn't got to it, so its key does nothing (issue #370)
+		return
 	tool = "build"
 	moving_id = 0
 	placing = tpl
