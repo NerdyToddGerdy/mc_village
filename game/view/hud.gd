@@ -3431,6 +3431,18 @@ func _add_level_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
 ## can't go is listed with why.
 func _add_party_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
 	c.add_child(_row("Party", "%d of up to %d" % [plan.party.size(), Tuning.PARTY_MAX], false))
+	var can_go := sim.residents.filter(func(r): return sim.cant_join(r) == "" and not plan.party.has(r.id)).size()
+	var fill := HBoxContainer.new()
+	var fill_b := _button("Fill the party", func(): game.plan_fill(), "Secondary")
+	fill_b.set_meta("label", "Fill the party")
+	fill_b.disabled = can_go == 0 or plan.party.size() >= Tuning.PARTY_MAX
+	fill_b.tooltip_text = "Takes the best fit among those who can go, up to %d" % Tuning.PARTY_MAX
+	var clear_b := _button("Unselect all", func(): game.plan_clear(), "Secondary")
+	clear_b.set_meta("label", "Unselect all")
+	clear_b.disabled = plan.party.is_empty()
+	fill.add_child(fill_b)
+	fill.add_child(clear_b)
+	c.add_child(fill)
 	for r in sim.residents:
 		var why := sim.cant_join(r)
 		var on: bool = plan.party.has(r.id)

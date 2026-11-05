@@ -1776,6 +1776,18 @@ func _test_meadow(game: Game) -> void:
 	hud.refresh(sim)
 	await process_frame
 	check(game.adventure == OldMine.ID and game.plan.dest == OldMine.ID and not hud._loc_drop.visible, "choosing the old caves shows its planner and closes the list")
+	# Fill the party and Unselect all (issue #374).
+	var can: Array = sim.residents.filter(func(r): return sim.cant_join(r) == "")
+	game.plan_clear()
+	hud.refresh(sim)
+	await process_frame
+	var fill_btn: Button = _walk(hud._plan_box).filter(func(n): return n is Button and n.get_meta("label", "") == "Fill the party")[0]
+	var clear_btn: Button = _walk(hud._plan_box).filter(func(n): return n is Button and n.get_meta("label", "") == "Unselect all")[0]
+	check(clear_btn.disabled and fill_btn.disabled == can.is_empty(), "with an empty party, Unselect all is greyed and Fill the party follows who can go")
+	fill_btn.pressed.emit()
+	check(game.plan.party.size() == mini(can.size(), Tuning.PARTY_MAX) and game.plan.party.all(func(id): return sim.cant_join(sim.resident(id)) == ""), "Fill the party takes up to %d who can go" % Tuning.PARTY_MAX)
+	clear_btn.pressed.emit()
+	check(game.plan.party.is_empty(), "Unselect all empties the party")
 	# The cargo priority list (issue #185): rows to turn on and off, reorder and set amounts.
 	var by_label := func(label: String) -> Button:
 		for n in _walk(hud._plan_box):

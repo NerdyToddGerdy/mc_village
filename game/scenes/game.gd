@@ -1633,6 +1633,29 @@ func plan_toggle(id: int) -> void:
 		plan.party.append(id)
 
 
+## Fills the party with the best fit among those who can go: the highest level for the destination first, the
+## roster's order among equals. Whoever is already on stays (issue #374).
+func plan_fill() -> void:
+	var skill := "hunt" if plan.dest == Meadow.ID else "mason"
+	var pool: Array = []
+	for r in sim.residents:
+		if sim.cant_join(r) == "" and not plan.party.has(r.id):
+			pool.append(r)
+	var order := {}
+	for i in pool.size():
+		order[pool[i].id] = i
+	pool.sort_custom(func(a, b): return Sim.level(a, skill) > Sim.level(b, skill) or (Sim.level(a, skill) == Sim.level(b, skill) and order[a.id] < order[b.id]))
+	for r in pool:
+		if plan.party.size() >= Tuning.PARTY_MAX:
+			break
+		plan.party.append(r.id)
+
+
+## Sends everyone home again (issue #374).
+func plan_clear() -> void:
+	plan.party.clear()
+
+
 ## Changes one of the plan's numbers by `by`, kept at 0 or more (the target at 1 or more).
 func plan_step(key: String, by: int) -> void:
 	if key == "target":  # the herd size kept of each kind, when tending the pens
