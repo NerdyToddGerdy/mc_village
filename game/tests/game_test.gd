@@ -403,6 +403,7 @@ func _test_minimap(game: Game) -> void:
 	await _test_world_map(game)
 	_test_strip_cameras(game)
 	_test_build_menu_follows_book(game)
+	_test_recipes_follow_book(game)
 
 
 ## Issue #370: the Build menu follows the founding book. A new game lists the bench; each step adds its entry.
@@ -423,6 +424,16 @@ func _test_build_menu_follows_book(game: Game) -> void:
 	check(ids.call() == ["bench", "house", "composter"] and ids.call().size() == 3, "past Ada's house it also lists the composter (%s)" % [ids.call()])
 	sim.stats.founding_done = true
 	check(ids.call().has("mason_bench") and ids.call().has("storehouse"), "a finished founding, or an old save, shows everything")
+
+
+## Issue #372: the first bench lists wooden tools, planks and sticks; the book adds the rest.
+func _test_recipes_follow_book(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var names := func(tpl: String) -> Array: return Defs.recipes_shown(sim, tpl).map(func(r): return r.id)
+	check(names.call("bench") == ["planks", "sticks", "wood_axe", "wood_pick"], "a new game's bench lists planks, sticks and the wooden tools (%s)" % [names.call("bench")])
+	sim.stats.founding_done = true
+	check(names.call("bench").has("iron_pick") and names.call("fireplace").has("smelt_iron"), "a finished founding lists every recipe")
 
 
 ## Issue #375: the village's road to the old mine runs east and the meadow's runs west, so +x on each strip

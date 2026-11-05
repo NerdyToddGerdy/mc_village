@@ -2884,7 +2884,13 @@ func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
 	for x in reasons.slice(0, 1):
 		status.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
 	c.add_child(status)
-	var recipes: Array = Defs.recipes_at(s.tpl)
+	var recipes: Array = Defs.recipes_shown(sim, s.tpl)
+	for q in s.queue:  # whatever's already queued stays in the book, in its place
+		var queued := Defs.recipe(q)
+		if not queued.is_empty() and not recipes.has(queued):
+			recipes.append(queued)
+	if recipes.is_empty():  # a station built before the book reached it (a save, a test): show its whole book
+		recipes = Defs.recipes_at(s.tpl)
 	var rec: Dictionary = Defs.recipe(_craft_pick.get(s.tpl, recipes[0].id))
 	if rec.is_empty() or not recipes.has(rec):
 		rec = recipes[0]
