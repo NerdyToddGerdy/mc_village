@@ -2792,6 +2792,9 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			return false
 		"unload_wait":  # the party unloading its packs at the signpost (issue #123)
 			return not expedition.get("unloading", false)
+		"lead_end":  # the hunter at an end of the meadow's strip (issue #355)
+			LeadHome.reached_end(self, r)
+			return true
 		"road_end":  # the far end of the road: into the site, or home (issue #118)
 			var leg: String = "road_" + expedition.get("leg", "out")
 			if expedition.has(leg):
@@ -3451,6 +3454,9 @@ func _finish_work(r: Dictionary, st: Dictionary):
 ## Picks the resident's next job. Priority (spec §5): craft > deliver to a bench > build >
 ## deliver to a site > mine > haul.
 func _claim(r: Dictionary) -> void:
+	if r.get("trip", "") in ["lead_out", "lead_back"] and r.map == MeadowRoad.ID:  # the hunter walking animals home (issue #355)
+		r.job = LeadHome.walk_job(self, r)
+		return
 	# Starving residents only eat (spec §4); hungry ones eat after any orders you've given them.
 	if r.hunger <= 0.0:
 		var ej = _eat_job(r)
@@ -3635,6 +3641,10 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 				var wj = _workstation_job(r, c)
 				if wj != null:
 					return wj
+			if r.role == "hunt" and m.kind == "village":  # the lodge's hunter feeds the village pens' pairs (issue #355)
+				var fj = _village_feed_job(r, c)
+				if fj != null:
+					return _tagged(fj, "hunt")
 			if r.role == "hunt" and m.kind == "village" and not claimed(r).is_empty():  # down to the herd floor (issue #183)
 				var prey := auto_prey()
 				if not prey.is_empty():
@@ -4449,6 +4459,39 @@ func _feed_job(r: Dictionary, c: Vector2i):
 			j.hold({"t": "claim", "ent": a})
 		j.step(_goto([m.entrance], false))
 		j.step({"op": "take_supply", "type": "wheat", "n": 2 * Tuning.FEED_WHEAT})
+		j.step({"op": "chase", "target": pair[0], "planned_for": null})
+		j.step({"op": "work", "what": "feed", "pair": pair, "label": "Feeding the %s" % many})
+		return j
+	return null
+
+
+## The lodge's hunter feeding a pair in a village pen (issue #355): wheat from a stack at home, as the party feeds with the packs'.
+## The young one comes after BREED_TIME, so the village herd grows by itself once it has a grown pair.
+func _village_feed_job(r: Dictionary, c: Vector2i):
+	var need := 2 * Tuning.FEED_WHEAT
+	var stacks := stacks_where(func(s): return s.type == "wheat" and avail(s) >= need)
+	if stacks.is_empty():
+		return null
+	var stack: Dictionary = nearest(stacks, c)
+	var pens: Array = m.pens.duplicate()
+	pens.sort_custom(func(x, y): return manhattan(x.gate, c) < manhattan(y.gate, c))
+	for p in pens:
+		var pairs := feed_pairs(p)
+		if pairs.is_empty():
+			continue
+		var pair: Array = pairs[0]
+		var many: String = Defs.SPECIES[pair[0].species].many
+		var j := Job.new("feed", "Going to feed a pair of %s" % many, "the pen")
+		j.work = "hunt"
+		j.target = pair[0]
+		stack.res += need
+		var hd := j.hold({"t": "stack", "stack": stack, "n": need})
+		for a in pair:
+			a.claim = r.id
+			j.hold({"t": "claim", "ent": a})
+		j.step(_goto(reach(stack.cell), false))
+		j.step({"op": "pickup", "stack": stack, "n": need, "hold": hd})
+		j.step(_goto([p.gate], false))
 		j.step({"op": "chase", "target": pair[0], "planned_for": null})
 		j.step({"op": "work", "what": "feed", "pair": pair, "label": "Feeding the %s" % many})
 		return j
