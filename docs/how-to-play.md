@@ -301,7 +301,7 @@ Once the board is up, the Build menu offers a **hunter's lodge** and a **pen**. 
 
 ### The world map
 
-The **corner map** is always in the bottom right (**I** hides it), and moves left when the Craft panel or the planner opens so it never sits on them. Press **P** or choose it in the controls to open the **world map**: the village at the centre, the land round it in eight sectors and three rings with fog over what hasn't been surveyed, the coast in blue and the places found as pins. The game pauses while it's open. Click a pin and **Plan a trip** closes the map and opens the expedition board on that place, where you pack; click a ring and **Send the Cartographer** surveys it. Esc closes it and the speed comes back.
+The **corner map** is always in the bottom right (**I** hides it), and moves left when the Craft panel or the planner opens so it never sits on them. Press **P** or choose it in the controls to open the **world map**: the village at the centre, the land round it in eight sectors and three rings with fog over what hasn't been surveyed, the coast in blue and the places found as pins. The game pauses while it's open. Click a pin and **Plan a trip** closes the map and opens the expedition board on that place, where you pack; click a ring and **Send the Cartographer** surveys it. Esc closes it and the speed comes back. The map is drawn in blocky pixels like a Minecraft map, each surveyed sector in its land's colours (plains, snow, desert, jungle, swamp, dark forest) and the sea in blue; a party that is out shows as yellow dots on a dashed line from the village to its place, part-way along as it walks. On a short window the corner map shrinks so it stays clear of the top bar.
 
 ### The Cartographer
 

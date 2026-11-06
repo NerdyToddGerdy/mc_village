@@ -4,6 +4,13 @@ extends Control
 ## rectangle the camera sees. Clicking or dragging on it moves the camera there. Drawing only: it reads the sim.
 
 const SIZE := 190.0
+const MIN_SIZE := 110.0  ## the smallest it shrinks to on a small screen or in a narrow browser window (issue #347)
+
+
+## The side it takes in a window `view` pixels big: full size, or smaller when the window is short.
+static func side_for(view: Vector2) -> float:
+	return clampf(view.y * 0.3, MIN_SIZE, SIZE)
+
 
 var game: Game
 var _drag := false
@@ -11,7 +18,7 @@ var _since := 0.0
 
 
 func _init() -> void:
-	custom_minimum_size = Vector2(SIZE, SIZE)
+	custom_minimum_size = Vector2(MIN_SIZE, MIN_SIZE)
 	size = Vector2(SIZE, SIZE)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
@@ -26,7 +33,7 @@ func _process(delta: float) -> void:
 
 ## Screen pixels in the minimap to map cells, and back.
 func _scale(mp: SimMap) -> float:
-	return SIZE / float(maxi(mp.w, mp.h))
+	return size.x / float(maxi(mp.w, mp.h))
 
 
 func _to_map(p: Vector2, mp: SimMap) -> Vector2:
@@ -106,7 +113,7 @@ func _draw() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	var poly := PackedVector2Array()
 	for corner in [Vector2.ZERO, Vector2(vp.x, 0), vp, Vector2(0, vp.y)]:
-		poly.append(_to_mini(_ground(corner), mp).clamp(Vector2.ZERO, Vector2(SIZE, SIZE)))
+		poly.append(_to_mini(_ground(corner), mp).clamp(Vector2.ZERO, size))
 	poly.append(poly[0])
 	draw_polyline(poly, Palette.CHALK, 1.5)
 	draw_rect(Rect2(Vector2.ZERO, Vector2(mp.w, mp.h) * k), Palette.CHALK_DIM, false, 1.0)

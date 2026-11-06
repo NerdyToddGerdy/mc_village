@@ -8,12 +8,27 @@ const SIDE_W := 300.0
 const MAP_PAD := 40.0
 const TOP := 74.0  ## clear of the top bar
 const RINGS := 3
+const BLOCK := 9.0  ## a map "pixel", in screen pixels
+## What each sector looks like once surveyed: a biome, in blocky tints (the coast is the sea, whatever's surveyed).
+const BIOMES := {
+	"north": ["#7FA55B", "#8DB365", "#74994F"],        # plains
+	"north-east": ["#E8EEF0", "#D6E2E6", "#C4D4DA"],   # snowy
+	"east": ["#D9C98A", "#CDBA78", "#E2D49A"],         # desert
+	"south-east": ["#3F7F3A", "#4C8F44", "#366F32"],   # jungle
+	"south": ["#4A7FB0", "#5A8FC0", "#3F73A3"],        # the sea
+	"south-west": ["#4A7FB0", "#5A8FC0", "#3F73A3"],
+	"west": ["#5C6E3F", "#506238", "#687A48"],         # swamp
+	"north-west": ["#3B5A34", "#34502E", "#43663B"],   # dark forest
+}
+const FOG_TINTS := ["#3A4350", "#343C48", "#404A58"]
 
 var game: Game
 var _hover := Vector2i(-1, -1)  ## the hovered (sector, ring), or (-1, -1)
 var _pick := {}                 ## the picked place or ring: {kind: "place", id} or {kind: "ring", sector, ring}
 var _bar: VBoxContainer
 var _bar_sig := ""
+var _blocks: Array = []         ## the map's pixels, [Rect2, Color]: rebuilt when the map's size or what's surveyed changes
+var _blocks_sig := ""
 
 
 func _init() -> void:
@@ -121,16 +136,22 @@ func _draw() -> void:
 	var sq := _square().grow(18.0)
 	draw_rect(sq, Color("#C9B98F"))                      # the paper
 	draw_rect(sq, Color("#6B5A3A"), false, 4.0)          # its frame
+	_rebuild_blocks(sim)
 	for sector in 8:
 		for ring in range(1, RINGS + 1):
 			var name: String = Survey.SECTORS[sector]
-			var col := Color("#3A4350")                  # fog
+			var base := Color(FOG_TINTS[0])
 			if name in Survey.COAST:
-				col = Color("#4A7FB0")                   # the sea
+				base = Color(BIOMES[name][0])
 			elif Survey.surveyed(sim, name, ring):
-				col = Color("#7FA55B").lerp(Color("#D8D0A8"), 0.15 * (sector % 3))  # surveyed ground, in blocky biome tints
+				base = Color(BIOMES[name][0])
+			draw_colored_polygon(_cell_poly(sector, ring), base)
+	for blk in _blocks:
+		draw_rect(blk[0], blk[1])
+	for sector in 8:
+		for ring in range(1, RINGS + 1):
+			var name: String = Survey.SECTORS[sector]
 			var poly := _cell_poly(sector, ring)
-			draw_colored_polygon(poly, col)
 			var outline := poly.duplicate()
 			outline.append(poly[0])
 			var hot: bool = _hover == Vector2i(sector, ring) or (_pick.get("kind", "") == "ring" and _pick.sector == name and _pick.ring == ring)
@@ -149,6 +170,67 @@ func _draw() -> void:
 		draw_rect(Rect2(p - Vector2(8, 8), Vector2(16, 16)), Palette.RED if pin.adventure else Palette.CHALK)
 		draw_rect(Rect2(p - Vector2(8, 8), Vector2(16, 16)), Color("#2A2724"), false, 2.0)
 		draw_string(font, p + Vector2(-40, 26), pin.name, HORIZONTAL_ALIGNMENT_CENTER, 80, 12, Color("#2A2724"))
+	for ex in sim.expeditions.values():  # a party out, on a dashed line to its place
+		if ex.is_empty() or ex.get("state", "") != "out":
+			continue
+		for pin in _pins():
+			if pin.id != ex.get("dest", "") and not (pin.id == OldMine.ID and ex.get("dest", "").begins_with("old_mine")):
+				continue
+			var to := _pin_pos(pin.at)
+			draw_dashed_line(c, to, Color("#2A2724"), 2.0, 6.0)
+			var at := c.lerp(to, _party_progress(sim, ex))
+			var n: int = ex.get("party", []).size()
+			for k in n:
+				var off := Vector2((k - (n - 1) / 2.0) * 9.0, -12.0)
+				draw_circle(at + off, 4.5, Color("#2A2724"))
+				draw_circle(at + off, 3.2, Palette.YELLOW)
+
+
+## The map's pixels: each cell filled with square blocks of its biome's tints (fog's dark ones while unsurveyed), like a
+## Minecraft map. Cached, since the cells only change when a survey ends or the window is resized.
+func _rebuild_blocks(sim: Sim) -> void:
+	var sig := "%s" % [_square()]
+	for sector in 8:
+		for ring in range(1, RINGS + 1):
+			sig += "1" if Survey.surveyed(sim, Survey.SECTORS[sector], ring) else "0"
+	if sig == _blocks_sig:
+		return
+	_blocks_sig = sig
+	_blocks = []
+	for sector in 8:
+		var name: String = Survey.SECTORS[sector]
+		for ring in range(1, RINGS + 1):
+			var live: bool = name in Survey.COAST or Survey.surveyed(sim, name, ring)
+			var tints: Array = BIOMES[name] if live else FOG_TINTS
+			var poly := _cell_poly(sector, ring)
+			var box := Rect2(poly[0], Vector2.ZERO)
+			for pt in poly:
+				box = box.expand(pt)
+			var x := floorf(box.position.x / BLOCK) * BLOCK
+			while x < box.end.x:
+				var y := floorf(box.position.y / BLOCK) * BLOCK
+				while y < box.end.y:
+					var mid := Vector2(x + BLOCK / 2.0, y + BLOCK / 2.0)
+					if Geometry2D.is_point_in_polygon(mid, poly):
+						var h := absi(hash(Vector2i(int(x / BLOCK), int(y / BLOCK)))) % 3
+						_blocks.append([Rect2(x, y, BLOCK, BLOCK), Color(tints[h])])
+					y += BLOCK
+				x += BLOCK
+
+
+## Where a party out for `dest` is on its way: 0 at the village, 1 at the place, from how far along the road its first member is.
+func _party_progress(sim: Sim, ex: Dictionary) -> float:
+	for id in ex.get("party", []):
+		var r := sim.resident(id)
+		if r.is_empty():
+			continue
+		if r.map == Road.ID or r.map == MeadowRoad.ID:
+			var mp := sim.get_map(r.map)
+			return clampf(r.pos.x / float(maxi(mp.w - 1, 1)), 0.0, 1.0)
+		if r.map == "village":
+			return 0.0
+		return 1.0
+	return 1.0
 
 
 func _gui_input(event: InputEvent) -> void:
