@@ -40,6 +40,7 @@ func _init() -> void:
 		"test_house_tiers",
 		"test_survey",
 		"test_lead_animals_home",
+		"test_village_pen_breeding",
 		"test_guide_new_marks",
 		"test_many_loose_items_tick_cheaply",
 		"test_idle_residents_go_home",
@@ -1333,16 +1334,56 @@ func test_lead_animals_home() -> void:
 	check(sim.maps.village.fences.size() == 11 and sim.maps.village.gates.size() == 1, "with its fences and its gate")
 	var before: int = sim.maps[Meadow.ID].sheep.filter(func(a): return a.alive and not a.get("lead", false)).size()
 	run(sim, 3)
-	check(tomas.away and tomas.trip == "lead_home", "Tomas sets out for the meadow")
+	check(tomas.map == MeadowRoad.ID and tomas.trip == "lead_out" and not tomas.away, "Tomas sets out for the meadow, onto the strip where he can be seen")
 	var led: Array = sim.stats.lead_home.animals
 	check(led.size() == LeadHome.MAX_LED and sim.maps[Meadow.ID].sheep.filter(func(a): return a.get("lead", false)).size() == 1, "three animals are taken off the meadow, one marked one stays")
+	run(sim, 10)
+	check(tomas.pos.x > 5.0 and tomas.map == MeadowRoad.ID and tomas.trip == "lead_out", "he walks out along the road (x %.1f)" % tomas.pos.x)
 	var loaded := Sim.from_state(sim.save_state())
-	check(loaded.stats.lead_home.animals.size() == 3, "animals on the road are saved")
-	run(sim, LeadHome.seconds(sim) + 5.0)
+	check(loaded.stats.lead_home.animals.size() == 3 and loaded.resident(tomas.id).map == MeadowRoad.ID, "animals on the road are saved, with the hunter on it")
+	for i in int((LeadHome.seconds(sim) + 10.0) * Tuning.TPS):  # until the first trip is home: the lodge then looks for another
+		sim.step()
+		loaded.step()
+		if sim.stats.get("led_home", 0) >= 3 and loaded.stats.get("led_home", 0) >= 3:
+			break
+	check(loaded.maps.village.sheep.filter(func(a): return a.get("pen", 0) == pen.id).size() >= 3 and loaded.resident(tomas.id).map == "village", "and a game saved on the way gets them home too")
+	check(sim.stats.get("led_home", 0) >= 3 and sim.stats.get("lead_home", {}).is_empty(), "the first trip is home")
 	var penned: Array = sim.maps.village.sheep.filter(func(a): return a.get("pen", 0) == pen.id)
 	check(penned.size() >= 3 and penned.all(func(a): return Pens.pen_inside(pen).has_point(a.cell)), "the animals are penned in the village, inside the fences (%d)" % penned.size())
 	check(sim.stats.led_home >= 3, "and counted (%d)" % sim.stats.get("led_home", 0))
 	check(before >= 0, "(the meadow keeps its other animals)")
+
+
+## Issue #355: the lodge's hunter feeds a grown pair in a village pen with wheat from home, and a young one is born.
+func test_village_pen_breeding() -> void:
+	var sim := Sim.new_game()
+	sim.sheep.clear()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	var lodge := sim.place_site("lodge", at(6, 6))
+	lodge.stage = 1
+	lodge.done = true
+	sim._occ_dirty = true
+	sim.set_role(tomas, "hunt")
+	var bp := sim.place_site("village_pen", at(14, 10))
+	bp.stage = 1
+	bp.store = {"stick": 12}
+	bp.stage = 0
+	sim._complete_stage(bp)
+	var pen: Dictionary = sim.maps.village.pens[0]
+	var inside := Pens.pen_inside(pen)
+	for k in 2:
+		var cow := sim.add_animal(inside.position + Vector2i(k, 0), "cow")
+		cow.pen = pen.id
+	for r in sim.residents:
+		r.hunger = 100.0
+	run(sim, 3)
+	check(sim.free_count("wheat") == 0 and sim.stats.get("fed", 0) == 0, "no wheat, so nobody feeds them")
+	sim.drop_items(at(8, 8), "wheat", 2 * Tuning.FEED_WHEAT)
+	run(sim, 60)
+	check(sim.stats.get("fed", 0) == 1, "Tomas takes the wheat to the pair and feeds them (%d)" % sim.stats.get("fed", 0))
+	run(sim, Tuning.BREED_TIME + 10.0)
+	check(sim.stats.get("bred", 0) == 1 and sim.maps.village.sheep.any(func(a): return a.get("young", false) and a.get("pen", 0) == pen.id), "and a calf is born in the village pen (%d)" % sim.stats.get("bred", 0))
 
 
 ## Issue #360: at night mobs can injure residents, who fight back, guards best and the golem too; nobody dies.

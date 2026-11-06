@@ -297,7 +297,7 @@ The **expedition board** is where expeditions are planned. Once it's built, the 
 
 ### Leading animals home
 
-Once the board is up, the Build menu offers a **hunter's lodge** and a **pen**. A pen is a 4×4 blueprint of fences, 12 sticks, raised by builders like any building; when it's done it's a pen with a gate and room for four animals. At the meadow, mark animals with the **Lead to a pen** order. A hunter who works a finished lodge goes to the meadow on their own whenever a village pen has room and animals are marked, takes up to three on a lead, walks home along the road (the walk there and back) and pens them. The village herd doesn't regrow: it's restocked from the meadow.
+Once the board is up, the Build menu offers a **hunter's lodge** and a **pen**. A pen is a 4×4 blueprint of fences, 12 sticks, raised by builders like any building; when it's done it's a pen with a gate and room for four animals. At the meadow, mark animals with the **Lead to a pen** order. A hunter who works a finished lodge goes to the meadow on their own whenever a village pen has room and animals are marked, takes up to three on a lead, and walks the road to the meadow and back where you can see them (switch to the road in the map switcher to watch), then pens them. The same hunter feeds a grown pair in a village pen a wheat each from the village's wheat, and a young one follows half a minute later, so the village herd grows once it has a pair. The village herd doesn't regrow: it's restocked from the meadow.
 
 ### The world map
 
