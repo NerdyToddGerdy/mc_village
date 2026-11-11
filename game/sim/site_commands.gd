@@ -51,14 +51,15 @@ static func placement_check(sim: Sim, tpl: String, origin: Vector2i, rot := 0, i
 		var gap := Rect2i(pf.origin, pf.size).grow(Tuning.PORTAL_STATION_REACH)
 		if not gap.encloses(foot):
 			return "The station stands beside the portal"
-	if tpl == "house" and not sim.front_clear(sim.front_cell(origin, rot), ignore):
-		return "The entrance is blocked: leave the cell in front of the door clear"
+	var front := Sim.entrance_front(tpl, origin, rot)
+	if front.x >= 0 and not sim.front_clear(front, ignore):
+		return "The entrance is blocked: leave the cell in front of the %s clear" % ("door" if tpl == "house" else "building")
 	var plot = sim.plot_rect(tpl, origin, rot)
 	for s in sim.m.sites:  # a later building can't close an entrance that's there (issue #285)
-		if s.tpl == "house" and s.id != ignore and not sim.is_old_house(s):
-			var fc := sim.front_cell(s.origin, s.rot)
-			if foot.has_point(fc) or (plot != null and plot.has_point(fc)):
-				return "It would block a house's entrance"
+		if s.id != ignore and not sim.is_old_house(s):
+			var fc := Sim.entrance_front(s.tpl, s.origin, s.rot)
+			if fc.x >= 0 and (foot.has_point(fc) or (plot != null and plot.has_point(fc))):
+				return "It would block the entrance of a %s" % Defs.TEMPLATES[s.tpl].name.to_lower()
 	if plot != null:
 		var no_room := "Not enough room to grow into a %s" % Defs.TEMPLATES[tpl].plot
 		if not Rect2i(0, 0, sim.w, sim.h).encloses(plot):
