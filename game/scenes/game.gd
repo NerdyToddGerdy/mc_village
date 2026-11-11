@@ -359,6 +359,10 @@ func _update_live_overlays() -> void:
 			outlines.append({"rect": _drag.rect, "h": 0.03, "color": col, "dashed": true})
 	elif tool in OrderMenus.MARK_TOOLS and _hover != null:
 		outlines.append({"rect": Rect2i(_hover, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
+	if view_map == "village":  # an old house shows as a blueprint outline until it's updated (issue #356)
+		for st in sim.sites:
+			if Sim.is_old_house(st) and moving_id != st.id:
+				outlines.append({"rect": Rect2i(st.origin, st.size), "h": 0.03, "color": Color(Palette.YELLOW, 0.8), "dashed": true})
 	if view_map == "village":  # strips already staked, until the builder finishes (issue #187)
 		for st in sim.sites:
 			if st.tpl == "claim_stakes":
@@ -392,11 +396,12 @@ func _update_live_overlays() -> void:
 			fills.append_array(_area_fills(sim.work_area_start(placing, origin), _area_color(placing), 0.22))
 		if err == "" and placing == "house":
 			fills.append({"rect": Rect2i(sim.door_cell(origin, rot), Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.55)})
+			fills.append({"rect": Rect2i(Sim.front_cell(origin, rot), Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.3)})
 		if err != "":
 			hint = err
 			hint_col = Palette.YELLOW
 		else:
-			var clr := Sim.clearing_text(sim.obstacles_in(Rect2i(origin, size)))
+			var clr := Sim.clearing_text(sim.obstacles_for(placing, origin, rot))
 			var turn := keys.first("rotate")
 			var tpl_def: Dictionary = Defs.TEMPLATES[placing]
 			var name: String = tpl_def.name.to_lower()
@@ -1871,6 +1876,12 @@ func plan_from_map(id: String) -> void:
 
 func start_survey(sector: String, ring: int) -> void:
 	sim.start_survey(sector, ring)
+
+
+## Updates an old house (issue #356): in place when its front is clear, else it's picked up to be put down where it fits.
+func update_house(s: Dictionary) -> void:
+	if sim.update_house(s) == "move":
+		start_moving(s)
 
 
 func upgrade_house(s: Dictionary) -> void:
