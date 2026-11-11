@@ -13,18 +13,18 @@ const NAME := "Road to the mine"
 ## One row per line, west (the village) to east (the mine).
 ##   . grass   ~ the stream   # rock (the cut's walls)   o boulder   T tree
 const LAYOUT := [
-	".....T.....T........~~....T.....########....T...",
-	"...............T....~~..........########........",
-	"....................~~...............o..........",
-	"....................~~...........o..o.o.........",
-	"....................~~............o.............",
-	"....................~~..........########........",
-	"....................~~..........########........",
+	".....T.....T........~~....T.....########....T......T.........T..........T..........T....",
+	"...............T....~~..........########..............T..........T..........T...........",
+	"....................~~...............o..................................................",
+	"....................~~...........o..o.o.................................................",
+	"....................~~............o.....................................................",
+	"....................~~..........########..................T..........T.............T....",
+	"....................~~..........########..................T..........T.............T....",
 ]
 
 ## Where the road meets the village (west) and the mine (east). The line runs along this row.
 const VILLAGE_END := Vector2i(0, 3)
-const MINE_END := Vector2i(47, 3)
+const MINE_END := Vector2i(87, 3)
 const LINE_ROW := 3
 
 ## The segments, west to east: name, first column, and obstacle ("", "stream" or "cut").
@@ -35,12 +35,20 @@ const SEGMENTS := [
 	{"name": "The long field", "x": 24, "terrain": "grass", "obstacle": ""},
 	{"name": "The rocky cut", "x": 32, "terrain": "a rocky cut", "obstacle": "cut"},
 	{"name": "Below the mine", "x": 40, "terrain": "grass", "obstacle": ""},
+	{"name": "The long walk", "x": 48, "terrain": "grass", "obstacle": ""},
+	{"name": "The old wagon ruts", "x": 56, "terrain": "grass", "obstacle": ""},
+	{"name": "The high field", "x": 64, "terrain": "grass", "obstacle": ""},
+	{"name": "The last rise", "x": 72, "terrain": "grass", "obstacle": ""},
+	{"name": "Under the hill", "x": 80, "terrain": "grass", "obstacle": ""},
 ]
+
+## The segments the Nether's route is cut like (it shares their shapes); the road to the mine goes on past them (issue #377).
+const BASE_SEGMENTS := 6
 
 ## Where rails for the line are piled before they're carried to the track (issue #122).
 const RAILHEAD := Vector2i(2, 1)
 ## The stations (issue #123): 1×3 platforms beside the line, one at each end.
-const STATIONS := {"village": Vector2i(2, 4), "mine": Vector2i(42, 4)}
+const STATIONS := {"village": Vector2i(2, 4), "mine": Vector2i(82, 4)}
 
 ## The plank bridge over the stream: where it goes, and its size. It spans the stream along the line.
 const BRIDGE_AT := Vector2i(19, 2)

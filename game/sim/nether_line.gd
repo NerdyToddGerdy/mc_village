@@ -19,7 +19,7 @@ static func nline_obstacle(seg: int) -> bool:
 
 static func nline_complete(sim: Sim) -> bool:
 	var l := nline(sim)
-	for i in Road.segment_count():
+	for i in Road.BASE_SEGMENTS:
 		if l.laid[i] < Tuning.RAILS_PER_SEGMENT or (nline_obstacle(i) and not l.bridged.has(i)):
 			return false
 	return l.stations.landing and l.stations.site and l.cart
@@ -29,7 +29,7 @@ static func nline_complete(sim: Sim) -> bool:
 static func nline_remaining(sim: Sim) -> Dictionary:
 	var l := nline(sim)
 	var out := {"rails": 0, "planks": 0, "cobble": 0, "minecarts": 0}
-	for i in Road.segment_count():
+	for i in Road.BASE_SEGMENTS:
 		out.rails += maxi(0, Tuning.RAILS_PER_SEGMENT - l.laid[i])
 		if nline_obstacle(i) and not l.bridged.has(i):
 			out.planks += Tuning.NETHER_BRIDGE_PLANKS
@@ -58,10 +58,10 @@ static func nline_task(sim: Sim, where: String, who := 0) -> Dictionary:
 	var st: Dictionary = Defs.TEMPLATES.station.stages[0].cost
 	match where:
 		"route":
-			for i in Road.segment_count():
+			for i in Road.BASE_SEGMENTS:
 				if nline_obstacle(i) and not l.bridged.has(i) and sup.get("plank", 0) >= Tuning.NETHER_BRIDGE_PLANKS and not taken.call("bridge%d" % i):
 					return {"kind": "bridge", "seg": i, "key": "bridge%d" % i}
-			for i in Road.segment_count():
+			for i in Road.BASE_SEGMENTS:
 				if l.laid[i] < Tuning.RAILS_PER_SEGMENT:
 					if nline_obstacle(i) and not l.bridged.has(i):
 						return {}  # the way is blocked until it's sim.bridged
@@ -84,7 +84,7 @@ static func _line_supplies(sim: Sim, plan: Dictionary) -> void:
 	var room: int = Tuning.PARTY_MAX * Tuning.PACK_CAPACITY - plan.meals
 	var st: Dictionary = Defs.TEMPLATES.station.stages[0].cost
 	var unbridged := 0
-	for i in Road.segment_count():
+	for i in Road.BASE_SEGMENTS:
 		if nline_obstacle(i) and not nline(sim).bridged.has(i):
 			unbridged += 1
 	var stations := 0
