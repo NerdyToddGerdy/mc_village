@@ -299,7 +299,7 @@ func _initialize() -> void:
 	if SaveFormat.VERSION >= 44:  # the quartz route scouted, the piglin route scouted as far as its third segment (#153)
 		var quartz := sim.get_map(NetherRoute.ROUTES.quartz.id)
 		quartz.known = true
-		quartz.seen = Road.segment_count()
+		quartz.seen = Road.BASE_SEGMENTS
 		quartz.surveyed = true
 		sim.get_map(NetherRoute.ROUTES.quartz.site).known = true
 		var piglin := sim.get_map(NetherRoute.ROUTES.piglin.id)

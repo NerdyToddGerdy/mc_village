@@ -259,7 +259,7 @@ static func _route_scout_job(sim: Sim, r: Dictionary) -> Job:
 		return hj
 	var idx: int = sim.m.seen
 	var j := Job.new("scout", "Scouting the route", "the way ahead")
-	if idx < Road.segment_count():
+	if idx < Road.BASE_SEGMENTS:
 		j.step(sim._goto([Vector2i(Road.SEGMENTS[idx].x, NetherRoute.LINE_ROW)], true))
 		j.step({"op": "reach_segment", "idx": idx})
 	else:

@@ -113,7 +113,7 @@ static func build(s: Sim, key: String) -> SimMap:
 ## A fresh Nether line: no rails, no bridges, no stations, no cart (issue #159).
 static func default_line() -> Dictionary:
 	var laid: Array = []
-	for i in Road.segment_count():
+	for i in Road.BASE_SEGMENTS:
 		laid.append(0)
 	return {"laid": laid, "bridged": [], "stations": {"landing": false, "site": false}, "cart": false}
 
