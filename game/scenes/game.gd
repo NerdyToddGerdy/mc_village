@@ -3,6 +3,7 @@ extends Node3D
 ## Hosts the sim at a fixed tick rate, owns the camera and selection, and turns input into sim
 ## commands. Views never change the sim directly; they call the methods here.
 
+const ISO_DIR_WEST := Vector3(-1, 1, -1)  ## The same view turned half way round, for the strip that runs west.
 const ISO_DIR := Vector3(1, 1, 1)      ## True isometric: camera looks down (-1, -1, -1).
 const ELEVATION_SIN := 0.57735         ## sin(35.26°), for converting screen drags to ground moves.
 
@@ -31,8 +32,11 @@ var book_open := false                  ## The village book (issue #198).
 const FLASH_MS := 1800                  ## How long a focused thing blinks (issue #304).
 var _flash_rect := Rect2i()
 var _flash_until := 0
+var goals_chapter := -1                 ## The Goals tab's chosen chapter, or -1 for the one the book is on (issue #371).
 var guide_page := ""                    ## The Guide's chosen page, or "" for the first one (issue #348).
 var book_page := "goals"                ## Its open page: "goals", "jobs", "residents", or a page's id from Goals.PAGES.
+var world_map_open := false              ## The full-screen world map (issue #347), which pauses the game while it is open.
+var _map_prev_speed := 1
 var planner_open := false               ## The expedition planner above the toolbar (issue #106).
 var line_preview := false                ## The route panel shows the line's cost before it's planned (issue #121).
 var plan := {}                          ## The plan being drawn up in the planner; the sim's once confirmed.
@@ -200,7 +204,10 @@ func _place_camera() -> void:
 	var margin: float = Tuning.CLAIM_DEPTH + 2.0 if tool == "claim" else 2.0  # room to see the strips on offer (issue #187)
 	_target.x = clampf(_target.x, -margin, mp.w + margin)
 	_target.z = clampf(_target.z, -margin, mp.h + margin)
-	_cam.position = _target + ISO_DIR.normalized() * 60.0
+	# The strip to the meadow starts at its village end (x = 0), but the meadow lies west of the village,
+	# so its camera looks from the other side and a party walks out the same way the signpost points (#375).
+	var dir := ISO_DIR_WEST if view_map == MeadowRoad.ID else ISO_DIR
+	_cam.position = _target + dir.normalized() * 60.0
 	_cam.look_at(_target, Vector3.UP)
 
 
@@ -352,6 +359,14 @@ func _update_live_overlays() -> void:
 			outlines.append({"rect": _drag.rect, "h": 0.03, "color": col, "dashed": true})
 	elif tool in OrderMenus.MARK_TOOLS and _hover != null:
 		outlines.append({"rect": Rect2i(_hover, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
+	if view_map == "village" and not sim.m.torches.is_empty():  # a warm pool at each door's torch, on at night, off by day (issue #367)
+		if Night.is_night(sim):
+			for t in sim.m.torches:
+				fills.append({"rect": Rect2i(t - Vector2i.ONE, Vector2i(3, 3)), "h": 0.015, "color": Color(Palette.YELLOW, 0.22)})
+	if view_map == "village":  # an old house shows as a blueprint outline until it's updated (issue #356)
+		for st in sim.sites:
+			if Sim.is_old_house(st) and moving_id != st.id:
+				outlines.append({"rect": Rect2i(st.origin, st.size), "h": 0.03, "color": Color(Palette.YELLOW, 0.8), "dashed": true})
 	if view_map == "village":  # strips already staked, until the builder finishes (issue #187)
 		for st in sim.sites:
 			if st.tpl == "claim_stakes":
@@ -385,11 +400,12 @@ func _update_live_overlays() -> void:
 			fills.append_array(_area_fills(sim.work_area_start(placing, origin), _area_color(placing), 0.22))
 		if err == "" and placing == "house":
 			fills.append({"rect": Rect2i(sim.door_cell(origin, rot), Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.55)})
+			fills.append({"rect": Rect2i(Sim.front_cell(origin, rot), Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.3)})
 		if err != "":
 			hint = err
 			hint_col = Palette.YELLOW
 		else:
-			var clr := Sim.clearing_text(sim.obstacles_in(Rect2i(origin, size)))
+			var clr := Sim.clearing_text(sim.obstacles_for(placing, origin, rot))
 			var turn := keys.first("rotate")
 			var tpl_def: Dictionary = Defs.TEMPLATES[placing]
 			var name: String = tpl_def.name.to_lower()
@@ -871,7 +887,9 @@ func _key(e: InputEventKey) -> void:
 			return
 		_hud.disarm_panel()
 	if e.keycode == KEY_ESCAPE:
-		if tool != "" or menu_open != "":
+		if world_map_open:
+			close_world_map()
+		elif tool != "" or menu_open != "":
 			set_tool("")
 		elif book_open:
 			book_open = false
@@ -919,9 +937,10 @@ func _key(e: InputEventKey) -> void:
 		"cache_sensor", "condition", "freight_loader", "dispatcher": start_placing(keys.action_for(e))
 		"redstone_overlay": toggle_redstone_overlay()
 		"minimap": _hud.toggle_minimap()
+		"worldmap": toggle_world_map()
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
-		"toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table": start_placing(keys.action_for(e))
+		"toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "village_pen": start_placing(keys.action_for(e))
 		"rotate":
 			if tool == "build":
 				rot = (rot + 1) % 4
@@ -1218,7 +1237,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
+const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "village_pen", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -1412,6 +1431,9 @@ func start_moving(s: Dictionary) -> void:
 func start_placing(tpl: String) -> void:
 	if view_map != "village":
 		return
+	var entry := OrderMenus.entry(tpl)
+	if not entry.is_empty() and not OrderMenus.unlocked(entry, sim):  # the book hasn't got to it, so its key does nothing (issue #370)
+		return
 	tool = "build"
 	moving_id = 0
 	placing = tpl
@@ -1477,8 +1499,16 @@ func open_book(page := "goals", open := true) -> void:
 	book_open = open
 	if open:
 		book_page = page
+		if page == "goals":
+			goals_chapter = -1
 		if Goals.PAGES.any(func(p): return p.id == page):  # a building's page: the Guide tab, with that page chosen (issue #348)
 			select_guide(page)
+
+
+## Chooses a chapter of the Goals tab (issue #371).
+func select_chapter(ch: int) -> void:
+	book_page = "goals"
+	goals_chapter = ch
 
 
 ## Chooses a page of the Guide (issue #348). Opening a page that's known clears its "new" mark.
@@ -1626,6 +1656,29 @@ func plan_toggle(id: int) -> void:
 		plan.party.erase(id)
 	elif plan.party.size() < Tuning.PARTY_MAX:
 		plan.party.append(id)
+
+
+## Fills the party with the best fit among those who can go: the highest level for the destination first, the
+## roster's order among equals. Whoever is already on stays (issue #374).
+func plan_fill() -> void:
+	var skill := "hunt" if plan.dest == Meadow.ID else "mason"
+	var pool: Array = []
+	for r in sim.residents:
+		if sim.cant_join(r) == "" and not plan.party.has(r.id):
+			pool.append(r)
+	var order := {}
+	for i in pool.size():
+		order[pool[i].id] = i
+	pool.sort_custom(func(a, b): return Sim.level(a, skill) > Sim.level(b, skill) or (Sim.level(a, skill) == Sim.level(b, skill) and order[a.id] < order[b.id]))
+	for r in pool:
+		if plan.party.size() >= Tuning.PARTY_MAX:
+			break
+		plan.party.append(r.id)
+
+
+## Sends everyone home again (issue #374).
+func plan_clear() -> void:
+	plan.party.clear()
 
 
 ## Changes one of the plan's numbers by `by`, kept at 0 or more (the target at 1 or more).
@@ -1801,8 +1854,38 @@ func set_herd_floor(species: String, n: int) -> void:
 	sim.set_herd_floor(species, n)
 
 
+func toggle_world_map() -> void:
+	if world_map_open:
+		close_world_map()
+		return
+	if _menu.visible or view_map != "village":
+		return
+	_map_prev_speed = last_speed if speed == 0 else speed
+	set_speed(0)
+	world_map_open = true
+
+
+func close_world_map() -> void:
+	if not world_map_open:
+		return
+	world_map_open = false
+	set_speed(_map_prev_speed)
+
+
+## A place picked on the world map: the map closes and the expedition board opens on it, for packing.
+func plan_from_map(id: String) -> void:
+	close_world_map()
+	open_adventure(id)
+
+
 func start_survey(sector: String, ring: int) -> void:
 	sim.start_survey(sector, ring)
+
+
+## Updates an old house (issue #356): in place when its front is clear, else it's picked up to be put down where it fits.
+func update_house(s: Dictionary) -> void:
+	if sim.update_house(s) == "move":
+		start_moving(s)
 
 
 func upgrade_house(s: Dictionary) -> void:
@@ -2073,6 +2156,23 @@ func _screenshot_scene() -> void:
 					house.store = sim.current_stage(house).cost.duplicate()
 					sim._complete_stage(house)
 	selection = {"kind": "site", "id": house.id}
+	if "--world-map" in OS.get_cmdline_user_args():  # the world map with a few surveys done, for a screenshot (issue #347)
+		sim.stats.found = {"old_mine": true, "ruined_portal": true}
+		sim.stats.found_at = {"old_mine": "east:1", "ruined_portal": "north:2"}
+		sim.stats.surveyed = {"east:1": true, "north:1": true, "north:2": true, "north-east:1": true}
+		sim.maps[Meadow.ID].known = true
+		sim.maps[OldMine.ID].known = true
+		world_map_open = true
+	if "--village-pen" in OS.get_cmdline_user_args():  # a finished village pen with led animals in it, for a screenshot (issue #355)
+		var pen_site := sim.place_site("village_pen", house.origin + Vector2i(8, 0))
+		pen_site.store = {"stick": 12}
+		sim._complete_stage(pen_site)
+		var pen: Dictionary = sim.m.pens[-1]
+		for k in 3:
+			var a := sim.add_animal(Pens.pen_inside(pen).position + Vector2i(k % 2, k / 2), ["sheep", "cow", "pig"][k])
+			a.pen = pen.id
+		_look_at_first_resident()
+		_target = Vector3(pen.rect.position.x + 2, 0, pen.rect.position.y + 2)
 	if "--tools" in OS.get_cmdline_user_args():
 		_hud._drop_pinned = "tools"
 	if "--mark-sheep" in OS.get_cmdline_user_args():

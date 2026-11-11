@@ -249,6 +249,8 @@ func _build_static() -> void:
 	for bush in sim.bushes:
 		_add_bush(solid, bush)
 	if sim.m.kind == "village":
+		_add_fences(solid, sim.m)  # the village's pens (issue #355)
+	if sim.m.kind == "village":
 		_add_signpost(solid, sim.meadow_sign())
 		_add_route_sign(solid, sim.route_sign())
 	for k in sim.farm:
@@ -270,6 +272,11 @@ func _build_static() -> void:
 		if s.get("plot") != null:  # the reserved plot it will grow into, faint
 			_outline(dark, col, s.plot, 0.02, Color(Palette.CHALK, 0.35), true)
 	if sim.m.kind == "village":
+		for t in sim.m.torches:  # a building's torch at its door (issue #367)
+			var tx: float = t.x + 0.5
+			var tz: float = t.y + 0.5
+			solid.box(Vector3(tx - 0.06, 0.0, tz - 0.06), Vector3(tx + 0.06, 0.55, tz + 0.06), Palette.LOG, BlockTextures.LOG)
+			solid.box(Vector3(tx - 0.1, 0.55, tz - 0.1), Vector3(tx + 0.1, 0.75, tz + 0.1), TORCH_FLAME)
 		_add_dust(solid, ghost)
 	for p in sim.m.pens:
 		_add_pen_plan(ghost, dark, col, p)
@@ -404,6 +411,22 @@ func _add_packs(b: Batch, mp: SimMap, at: Vector2, dir: float) -> void:
 		b.box(Vector3(px - 0.135, py + 0.1, pz - 0.135), Vector3(px + 0.135, py + 0.14, pz + 0.135), Palette.LOG, BlockTextures.LOG)
 
 
+## Posts and rails for a map's fences, and its gates: the meadow's old fences, and the pens in either map (issue #355).
+func _add_fences(b: Batch, mp: SimMap) -> void:
+	for c in mp.fences:
+		var x: float = c.x + 0.5
+		var z: float = c.y + 0.5
+		b.box(Vector3(x - 0.07, 0, z - 0.07), Vector3(x + 0.07, 0.75, z + 0.07), Palette.LOG, BlockTextures.LOG)
+		for d in Sim.DIRS:  # rails toward each neighbouring fence or gate
+			if mp.fences.has(c + d) or mp.gates.has(c + d):
+				var lo := Vector3(x + minf(0.0, d.x * 0.5), 0.0, z + minf(0.0, d.y * 0.5))
+				var hi := Vector3(x + maxf(0.0, d.x * 0.5), 0.0, z + maxf(0.0, d.y * 0.5))
+				for y in [0.3, 0.58]:
+					b.box(Vector3(lo.x - 0.04, y, lo.z - 0.04), Vector3(hi.x + 0.04, y + 0.08, hi.z + 0.04), Palette.LOG.lightened(0.1))
+	for c in mp.gates:
+		_add_gate(b, c, mp.fences.has(c + Vector2i(1, 0)) or mp.fences.has(c - Vector2i(1, 0)))
+
+
 ## The meadow (issue #137): bright open grass, the pond set below its muddy bank, and old fences of
 ## posts and rails. A signpost by the entrance on the east edge points home, with the party's packs.
 func _add_meadow_ground(b: Batch) -> void:
@@ -419,18 +442,7 @@ func _add_meadow_ground(b: Batch) -> void:
 			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT, BlockTextures.EARTH)
 			var top := MUD * Color(v, v, v) if c in mp.banks else MEADOW_GRASS * Color(v, v, v)
 			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), top, BlockTextures.EARTH if c in mp.banks else BlockTextures.GROUND)
-	for c in mp.fences:
-		var x: float = c.x + 0.5
-		var z: float = c.y + 0.5
-		b.box(Vector3(x - 0.07, 0, z - 0.07), Vector3(x + 0.07, 0.75, z + 0.07), Palette.LOG, BlockTextures.LOG)
-		for d in Sim.DIRS:  # rails toward each neighbouring fence or gate
-			if mp.fences.has(c + d) or mp.gates.has(c + d):
-				var lo := Vector3(x + minf(0.0, d.x * 0.5), 0.0, z + minf(0.0, d.y * 0.5))
-				var hi := Vector3(x + maxf(0.0, d.x * 0.5), 0.0, z + maxf(0.0, d.y * 0.5))
-				for y in [0.3, 0.58]:
-					b.box(Vector3(lo.x - 0.04, y, lo.z - 0.04), Vector3(hi.x + 0.04, y + 0.08, hi.z + 0.04), Palette.LOG.lightened(0.1))
-	for c in mp.gates:
-		_add_gate(b, c, mp.fences.has(c + Vector2i(1, 0)) or mp.fences.has(c - Vector2i(1, 0)))
+	_add_fences(b, mp)
 	var e := mp.entrance
 	_add_end_sign(b, e + Vector2i(0, -1), 1.0, Palette.GRASS)
 	_add_packs(b, mp, Vector2(e.x - 1.2, e.y + 0.17), -1.0)
@@ -1803,11 +1815,18 @@ func _make_person(r: Dictionary) -> Node3D:
 
 
 func _update_people() -> void:
+	var doors := {}  # a resident standing in a house's door is inside it (issue #285): drawn only while selected, with the roof cutaway
+	if sim.m.kind == "village":
+		for st in sim.sites:
+			if st.tpl == "house" and st.done and not Sim.is_old_house(st):
+				doors[sim.door_cell(st.origin, st.rot)] = true
 	for r in sim.residents:
 		if not _people.has(r.id):
 			_people[r.id] = _make_person(r)
 		var n: Node3D = _people[r.id]
 		n.visible = not r.away and r.map == map_id  # off the map on a meadow trip, or on another map
+		if n.visible and not doors.is_empty() and doors.has(Sim.rcell(r)) and not selected_ids.has(r.id):
+			n.visible = false
 		var at := drawn_pos(r)
 		n.position = Vector3(at.x + 0.5, 0, at.y + 0.5)
 		(n.get_node("Body") as Node3D).position.y = _hop(r.id, at)

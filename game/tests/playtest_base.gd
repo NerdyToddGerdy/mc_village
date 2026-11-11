@@ -51,6 +51,7 @@ func press(pos: Vector2, down: bool, button := MOUSE_BUTTON_LEFT, shift := false
 
 
 func click(pos: Vector2, button := MOUSE_BUTTON_LEFT, shift := false) -> void:
+	game._hud.minimap_on = false  # the corner map is always on now (#347) and would take clicks aimed at the world beneath it
 	await move(pos)
 	await press(pos, true, button, shift)
 	await press(pos, false, button, shift)
@@ -407,6 +408,8 @@ func build_spot(tpl: String, near: Vector2i) -> Vector2i:
 					for y in size.y:
 						var c := o + Vector2i(x, y)
 						ok = ok and sim.walkable(c) and not sim.items.has(c) and not sim.farm.has(c)
+				if ok and tpl == "house":  # the step in front of the door is clear too (issue #285)
+					ok = sim.walkable(Sim.front_cell(o, game.rot))
 				if ok:
 					return o
 	return Vector2i(-1, -1)
@@ -494,3 +497,13 @@ func settle() -> void:
 	await frames(2)
 	game._hud.refresh(game.sim)
 	await frames(2)
+
+
+## A village saved before entrances has old houses (issue #356): the player presses Update on each, and it turns into a house with an entrance
+## where it stands. Returns how many couldn't be, because their front is taken.
+func update_old_houses() -> int:
+	var left := 0
+	for s in game.sim.sites.duplicate():
+		if Sim.is_old_house(s) and game.sim.update_house(s) != "":
+			left += 1
+	return left

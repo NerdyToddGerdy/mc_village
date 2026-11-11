@@ -8,6 +8,7 @@ extends "res://tests/playtest_base.gd"
 
 
 func _initialize() -> void:
+	Goals.follow_book = false  # this bot builds in its own order, not the founding book's (issue #370)
 	game = load("res://scenes/main.tscn").instantiate()
 	game.keys_path = "user://test_settings/playtest_village_keys.cfg"
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.keys_path))
@@ -378,7 +379,8 @@ func _initialize() -> void:
 	check(new_house != null and new_house.tpl == "house" and new_house.origin.y < Tuning.CLAIM_DEPTH, "a house is placed on the new land (%s)" % [hs])
 	if game.tool != "":
 		await key(KEY_ESCAPE)
-	check(await play_until(300, func(): return new_house != null and new_house.stage >= 1), "and builders get its foundation down (stage %d)" % (new_house.stage if new_house != null else -1))
+	sim.drop_items(sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(1, 1)), "wool", 3)  # the hunt's luck decides the meadow's wool, as above: this step is about building
+	check(await play_until(300, func(): return new_house != null and new_house.stage >= 1), "and builders get its foundation down (stage %d; %s)" % [new_house.stage if new_house != null else -1, "; ".join(sim.stuck.map(func(x): return x.who + ": " + x.why))])
 
 	# ---- Worn paths (issue #196): the village has run a while, so the busy ground has packed down
 	await play_until(300, func(): return sim.maps.village.wear.values().any(func(w): return w >= Tuning.WEAR_DIRT))  # cheaper houses shorten the walking, so give the paths time

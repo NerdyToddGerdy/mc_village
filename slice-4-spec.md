@@ -38,7 +38,7 @@ Slice 4 is done when, from a Slice 3 village with iron on hand, a player can:
 
 **Walking replaces the timed walk.** Slice 3's off-map timer (`MINE_TRIP`, 60 s) is gone. A party walks the road at the normal walking speed. They're drawn and can be selected, take no work on the way, and can eat from the packs. Their panel, the signpost and the party line say "On the road to the old mine, about N s" or "On the road home, about N s".
 
-**The trip is shorter than before.** The road is about 16 s on foot. Matching the old 60 s at the same walking speed would need a road about 180 cells long, and that would also need far more rails. So the issue's 48-cell length was kept, and the Slice 3 trip got shorter. This is provisional.
+**The trip length (#377).** The road is 88 cells, about 30 s on foot (it began as 48 cells and 16 s; the extra stretch is five plain segments past the old end, so a village's built track and stations stay where they are, and a finished line is stamped finished on load). It takes 22 rails to lay. The original note follows. The road was about 16 s on foot. Matching the old 60 s at the same walking speed would need a road about 180 cells long, and that would also need far more rails. So the issue's 48-cell length was kept, and the Slice 3 trip got shorter. This is provisional.
 
 **Saving.** Save format **v18** adds the road map (with its water cells and how much of it has been walked). Older saves get the road when they load, known if the old mine is. A party saved on the road in a v17 save, away with a time left, is placed at the matching point along the road, still heading the same way.
 
@@ -135,7 +135,7 @@ The planner's site report shows the walking estimate once the road is surveyed, 
 
 There they get out and walk to the end of the road. Coming home, the cart waits at the mine station, is loaded, and rides back. The party and the cargo ride together: there's no unmanned freight.
 
-**Shown.** The cart is drawn moving along the line, with its riders side by side in it and the cargo heaped on top. Riders' status reads "Riding to the old mine by cart" or "Riding home by cart". The route report gives the walk and the ride as the line stands now: "On foot about 16 s, by cart about 7 s as the line stands."
+**Shown.** The cart is drawn moving along the line, with its riders side by side in it and the cargo heaped on top. Riders' status reads "Riding to the old mine by cart" or "Riding home by cart". The route report gives the walk and the ride as the line stands now: "On foot about 30 s, by cart about 11 s as the line stands."
 
 **Extraction unchanged.** Mining at the site is the same with or without the line, and a test guards this.
 
@@ -192,7 +192,7 @@ Starting values from the issues. Rows marked "set by #N" get their value when th
 |---|---|---|
 | Road size | 48×7 | Cells, village end to mine end (laid out in `game/sim/road.gd`). |
 | Segment length | 8 cells | Six segments, each with at most one obstacle. |
-| `WALK` | 3 cells/s | Unchanged. The road is about 16 s on foot, replacing Slice 3's 60 s `MINE_TRIP`. |
+| `WALK` | 3 cells/s | Unchanged. The road is about 30 s on foot since #377 (it was 16 s), replacing Slice 3's 60 s `MINE_TRIP`. |
 | `FORD_SPEED` | 0.4 | Walking speed wading the stream, before the bridge. |
 | Bridge cost | 12 planks | One stage, 4×3 over the stream. |
 | Rails recipe | 6 iron ingots + 1 stick → 16 rails | As in Minecraft. |

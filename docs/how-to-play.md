@@ -34,7 +34,7 @@ You need Godot 4.7 to run the game; the README's [Running the game](../README.md
 - **Below that, at the left:** the **tutorial tab**, which names the chapter and the step you're on, such as "The founding · 4 Craft an axe and a pickaxe". Click it to drop down the step's hint and why, in a panel that's always the same size, with a **Book** button. It never opens by itself. Once both chapters are done the tab reads "The village ✓" and opens the village book.
 - **Top right of the bar:** pause and speed, then **Skip**, the **gear** (the menu) and the **Log** button, and the **Stuck** tab, which hangs below the bar and opens the list of anything that can't go on and why. **Log** keeps the last 60 messages that popped up (arrivals, finds, a party's return), newest first with the game time, and says how many are new; a message about a person or place has a button to go there. Esc, a click elsewhere or the button closes it.
 - **Bottom left:** whatever you've selected: a resident, a building, a tree, a farm plot.
-- **Bottom right:** the **orders toolbar**, and the Craft panel when it's open.
+- **Bottom right:** the **orders toolbar**, and the Craft panel when it's open. The **Build menu follows the founding book**: it starts with the crafting bench and adds each building as the book reaches it. A building's key does nothing until it shows.
 
 **Other maps.** Expeditions go to places off the map, such as some old caves and a meadow. Once the village knows of one, a place button in the top bar shows where you are; click it for a list of **Village**, **Old caves** and the rest, and pick one (Tab cycles through them), and a dim line under it says what a party there is doing, or how long until it gets there. Each map keeps its own view. Stockpiles, farms and buildings stay in the village.
 
@@ -127,7 +127,7 @@ Click a wedge, press 1 to 4, or hold the right button, drag to a wedge and let g
 
 ## Night
 
-A day lasts 8 minutes: about 5 of day and 3 of night. The top bar says "Day 3" and, at night, "· night". At night the light dims and turns blue; residents keep working, and nobody needs to sleep.
+A day lasts 12 minutes: about 7½ of day and 4½ of night. The top bar says "Day 3" and, at night, "· night". At night the light dims and turns blue; residents keep working, and nobody needs to sleep.
 
 Once the village has **3 residents**, two things start:
 - An **iron golem** appears by itself and patrols. It knocks out the night's mobs and never hurts anyone.
@@ -215,6 +215,12 @@ Items stay where they fell until the village has a storehouse with a chest, and 
 
 A resident earns **one emerald** each time they gain a level in any job, from level 2 up, so someone who changes jobs earns faster than someone who stays in one. Emeralds show in their panel. When a resident has enough, a toast says so; select their house and click **Upgrade**. The emeralds are spent (**3** for the house, **6** for the building) and builders bring the materials like any stage. The house stays solid while it grows, and it keeps its resident, its bed and its door. A house placed before tiers is already the building and has no Upgrade button.
 
+**Entrances.** A house's 5×5 plot is solid except its door, and the cell in front of the door must stay clear: the ghost shows both, the game refuses a spot where the door would be blocked, and no later building can be put in front of a door. Residents walk to the door when they go home.
+
+**Torches.** At night the village is dark: work on ground no torch lights goes slower (70% speed), as in an unlit tunnel. Daytime is unchanged. Once the village has coal, craft **Torches** at the bench (1 coal and 1 stick make 4). Idle residents carry them to each new house's door step and set one down there, lighting 3 cells around it with a warm glow at night. Old houses get none until they're updated. Torches have no effect on mobs.
+
+**Old houses.** A house from a save made before entrances has no door that residents can use. It shows as a dashed yellow outline, and its resident still eats and sleeps there but takes no work (the roster says *Waits for a new home*). Select the house and click **Update**: if the cell in front of its old door is clear, it becomes a house with an entrance where it stands, for free, and its resident goes back to work. Otherwise the button reads **Update: move it**, and you put the house down where a 5×5 and its entrance fit.
+
 **The storehouse** (Build menu: 6 cobblestone, 12 planks and 4 logs) is the main storage once you have one. It holds nothing until you add chests. Craft a **chest** at the bench (8 planks) and a hauler carries it in. Each chest holds 9 stacks of anything. A storehouse starts 3 wide and holds 6 chests; a chest sits in every cell but the door's column, which is the aisle. Haulers fill the nearest storehouse with room first, and stockpiles take what doesn't fit. Residents fetch what's stored at its door, and its panel lists what's inside. The squares on each chest's lid show what it holds.
 
 **More room.** Select a finished storehouse and click **Paint more room**, then drag over whole columns of three cells beside it, to the left or right of the door's column. Each column costs 2 cobblestone and 6 planks, is built like any building, and joins the storehouse when it's done: 3 wide, then up to 7 wide (18 chests), never deeper. The door never moves. A storehouse that has grown can't be moved. With no storehouse and no stockpile, loose items and harvested wheat are simply carried clear of the way to open ground.
@@ -225,7 +231,7 @@ The top bar counts what you have, with how much of it is still lying loose.
 
 ## Crafting and tools
 
-Click a bench or fireplace, or press **C**, to open the **Craft panel**. With more than one, there's a tab for each.
+Click a bench or fireplace, or press **C**, to open the **Craft panel**. With more than one, there's a tab for each. A recipe shows once the founding book has got to what it needs: the first bench lists planks, sticks and the wooden tools, and the rest arrive with the book (a finished founding shows them all).
 
 The panel is laid out like a crafting table:
 - **Recipe book** (left): one slot per recipe. A dimmed slot with a yellow corner means there isn't enough on hand for one.
@@ -295,11 +301,19 @@ Residents get hungry. A full resident empties in about 6 minutes of game time.
 
 The **expedition board** is where expeditions are planned. Once it's built, the village has word of a **meadow** a short walk west, with sheep, cows and pigs. The **old caves** a short walk east, with stone and coal, have to be found first: see [The Cartographer](#the-cartographer). A village saved before surveys already knows everything it had.
 
+### Leading animals home
+
+Once the board is up, the Build menu offers a **hunter's lodge** and a **pen**. A pen is a 4×4 blueprint of fences, 12 sticks, raised by builders like any building; when it's done it's a pen with a gate and room for four animals. At the meadow, mark animals with the **Lead to a pen** order. A hunter who works a finished lodge goes to the meadow on their own whenever a village pen has room and animals are marked, takes up to three on a lead, and walks the road to the meadow and back where you can see them (switch to the road in the map switcher to watch), then pens them. The same hunter feeds a grown pair in a village pen a wheat each from the village's wheat, and a young one follows half a minute later, so the village herd grows once it has a pair. The village herd doesn't regrow: it's restocked from the meadow.
+
+### The world map
+
+The **corner map** is always in the bottom right corner, to the right of the Gather, Paint, Build and Craft buttons and level with them, so it never moves when a menu opens (**I** hides it). Press **P** or choose it in the controls to open the **world map**: the village at the centre, the land round it in eight sectors and three rings with fog over what hasn't been surveyed, the coast in blue and the places found as pins. The game pauses while it's open. Click a pin and **Plan a trip** closes the map and opens the expedition board on that place, where you pack; click a ring and **Send the Cartographer** surveys it. Esc closes it and the speed comes back. The map is drawn in blocky pixels like a Minecraft map, each surveyed sector in its land's colours (plains, snow, desert, jungle, swamp, dark forest) and the sea in blue; a party that is out shows as yellow dots on a dashed line from the village to its place, part-way along as it walks. On a short window the corner map shrinks so it stays clear of the top bar.
+
 ### The Cartographer
 
 Build a **cartographer's table** (Build menu once the board is up: 6 planks) and give someone the **Cartographer** job from the Jobs board. Select the table and choose a **Survey**: the land round the village is eight sectors (the compass points) in three rings, near, middle and far. The Cartographer leaves for a time that grows with the ring (90, 180 and 300 seconds, quicker as they level) and is away from village work. Each survey that succeeds finds the next place: first the **old caves**, then a **ruined portal**, which the village needs found before it can build its own portal. Mobs can drive the surveyor back (10%, 25% or 40% by ring, less with armor): they come home hurt, the trip is lost and the ring stays unsurveyed. The south and south-west are the coast, which needs a boat. Far rings need the ring inside them surveyed first.
 
-**The Location dropdown.** Select the board and it opens on the place you last planned for (the first one the first time), with a **Location** dropdown in its header showing it and its walk, such as "Meadow · ~28 s each way". Open the dropdown to see everywhere the village knows of, one line each with its walk and whether anyone has been, and a flag where hazards are known; choose one to see its site report and planner. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open the board on it, or the old caves' for **Plan a trip to the old caves**. Only one expedition goes at a time, so while one is packing or out, the dropdown shows where the party is and the other places are listed but can't be chosen.
+**The Location dropdown.** Select the board and it opens on the place you last planned for (the first one the first time), with a **Location** dropdown in its header showing it and its walk, such as "Meadow · ~15 s each way". On the expedition page, **Fill the party** takes the best fit among those who can go (the highest Stonemason level, or Hunt at the meadow) and **Unselect all** clears it. Open the dropdown to see everywhere the village knows of, one line each with its walk and whether anyone has been, and a flag where hazards are known; choose one to see its site report and planner. Each place also has a signpost on the village's edge facing it: click the meadow's signpost to open the board on it, or the old caves' for **Plan a trip to the old caves**. Only one expedition goes at a time, so while one is packing or out, the dropdown shows where the party is and the other places are listed but can't be chosen.
 
 **Repeat last trip.** Once a trip has been planned to a place, the board shows **Repeat last trip** above the planner: one click fills in the same party, objective, Bring-back list, meals and return policy as last time. If someone in that party can't go now (hurt, or away) the next free resident goes in their place, and a message says who and why. The pens' sticks and wheat are worked out afresh. Check the plan and press **Start packing** as usual.
 
@@ -343,7 +357,7 @@ Build a **cartographer's table** (Build menu once the board is up: 6 planks) and
 
 The **meadow** is a short walk west, past the signpost on the village's left edge: open grass around a pond, with trees, a few old fences, and herds of sheep, cows and pigs. Plan a trip there from the board's Location dropdown, for wool, leather or meat. No spare pickaxes are needed.
 
-The party carries the packs to the west signpost and walks the **road to the meadow**, a plain strip of its own map, about 28 seconds each way. It shows in the map switcher once the board is up, and you can switch to it to watch them go and come back. It has no obstacles and nothing to build on it. At the meadow they hunt the animals that give what they were sent for, nearest first, follow them as they wander, and pack the drops. Once they have enough, they pack anything else lying about, such as the leather from the cows they hunted for beef. A full party brings back as much as its packs hold. You can mark more animals with Hunt while you're looking at the meadow.
+The party carries the packs to the west signpost and walks the **road to the meadow**, a plain strip of its own map, about 15 seconds each way. It shows in the map switcher once the board is up, and you can switch to it to watch them go and come back. It has no obstacles and nothing to build on it. At the meadow they hunt the animals that give what they were sent for, nearest first, follow them as they wander, and pack the drops. Once they have enough, they pack anything else lying about, such as the leather from the cows they hunted for beef. A full party brings back as much as its packs hold. You can mark more animals with Hunt while you're looking at the meadow.
 
 **Hazards** there are mild: an **angry bull** can hurt someone hunting a cow, and the **pond bank** is slippery. Neither injury is ever serious.
 

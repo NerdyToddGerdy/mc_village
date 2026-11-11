@@ -88,6 +88,10 @@ const PAGES := [
 		"what": "A cartographer surveys the land round the village, one ring of one direction at a time, and finds the old caves, then a ruined portal.",
 		"grows": "Reserves a plot, and grows into a map room.",
 		"without": "Nothing beyond the clearing is known: the caves and the portal stay hidden."},
+	{"id": "village_pen", "clue": "Something the expedition board makes room for.", "title": "Village pen", "tpl": "village_pen", "unlock": "board", "who": "Builders raise it; a hunter fills it",
+		"what": "A fenced pen in the village for animals a hunter leads home from the meadow.",
+		"grows": "It holds up to four animals. The village herd does not regrow: it is restocked from the meadow.",
+		"without": "Led animals have nowhere to go, and the hunter stays home."},
 	{"id": "builder_table", "title": "Builder's table", "tpl": "builder_table", "who": "A builder",
 		"what": "A builder raises blueprints, and plants the stakes for new land.",
 		"grows": "Reserves a plot, and grows into a builder's yard.",
@@ -183,7 +187,7 @@ static func page_for(tpl: String) -> Dictionary:
 ## Whether village goal `i` is done.
 static func village_done(sim: Sim, i: int) -> bool:
 	match i:
-		0: return sim.sites.filter(func(s): return s.done and s.get("worker", 0) != 0 and s.tpl in ["chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table"]).size() >= 2
+		0: return sim.sites.filter(func(s): return s.done and s.get("worker", 0) != 0 and Defs.JOB_STATIONS.values().has(s.tpl)).size() >= 2
 		1: return Survey.found(sim, "old_mine") or sim.get_map("old_mine").known
 		_: return sim.stats.get("ore_home", false)
 
@@ -227,6 +231,21 @@ static func legacy_done(sim: Sim) -> bool:
 		and sim.stats.houses >= 2 and sim.stats.traveler_home and built.has("chopping_block")
 
 
+## Off in the village bot, which builds in its own order and not the book's.
+static var follow_book := true
+
+
+## Whether the book has got to founding goal `i` (every one before it done), which is when the Build menu shows what it
+## introduces (issue #370). A step past the list is the village chapter, once the founding is complete.
+static func reached(sim: Sim, i: int) -> bool:
+	if not follow_book:
+		return true
+	if sim.stats.get("founding_done", false):
+		return true
+	var open := first_open(sim)
+	return open < 0 or open >= i
+
+
 ## Index of the first unfinished goal, or -1 when the founding is complete. Once it has been, it stays complete.
 static func current(sim: Sim) -> int:
 	if sim.stats.get("founding_done", false):
@@ -255,6 +274,21 @@ static func chapter_count(sim: Sim, ch: int) -> Array:
 			total += 1
 			finished += 1 if done(sim, i) else 0
 	return [finished, total]
+
+
+## The chapter the book is on, 0 to 3: the next founding step's, then the village chapter.
+static func current_chapter(sim: Sim) -> int:
+	return chapter_of(current(sim))
+
+
+## [finished, total] for any chapter, the village's included (issue #371).
+static func chapter_progress(sim: Sim, ch: int) -> Array:
+	if ch < 3:
+		return chapter_count(sim, ch)
+	var finished := 0
+	for i in VILLAGE.size():
+		finished += 1 if village_done(sim, i) else 0
+	return [finished, VILLAGE.size()]
 
 
 ## A save's label and the menu's subtitle: the next founding step, then facts about the village

@@ -36,8 +36,8 @@ const FOOD_VALUE := {"berries": 15.0, "mutton": 20.0, "bread": 50.0, "cooked_mut
 	"beef": 20.0, "porkchop": 20.0, "cooked_beef": 60.0, "cooked_porkchop": 60.0}
 const BUSH_MAX := 3                     ## Berries a bush holds.
 ## Night at the village (issues #66, #357-#360).
-const DAY_SECONDS := 480.0            ## A whole day: about 5 minutes of day and 3 of night.
-const NIGHT_AT := 300.0               ## Seconds into the day when night falls.
+const DAY_SECONDS := 720.0            ## A whole day: 12 minutes, about 7½ of day and 4½ of night.
+const NIGHT_AT := 450.0               ## Seconds into the day when night falls.
 const DUSK_SECONDS := 20.0            ## How long the light takes to change at dusk and dawn.
 const NIGHT_FROM := 3                 ## Residents the village needs before mobs come at night.
 const GOLEM_AT := 3                   ## Residents the village needs before an iron golem appears.
@@ -69,7 +69,7 @@ const SKIP_MAX_SECS := 600.0            ## Game seconds a skip runs at most, if 
 const AUTOSAVE_SECS := 300.0            ## Seconds of play between autosaves.
 const AUTOSAVE_MIN_SECS := 120.0        ## A game younger than this isn't autosaved, so a fresh one never replaces a real village's.
 # The meadow (Slice 3.5, issues #137, #138). Its herds are laid out in game/sim/meadow.gd.
-const MEADOW_ROAD_LEN := 85             ## Cells in the road to the meadow, which sets the walk: 84 cells at WALK is 28 s each way (issue #210).
+const MEADOW_ROAD_LEN := 46             ## Cells in the road to the meadow, which sets the walk: 45 cells at WALK is 15 s each way (issues #210, #377).
 const MEADOW_REGROW := {"sheep": 240.0, "cow": 300.0, "pig": 180.0}  ## Seconds for a species to regain one animal.
 const BULL_CHANCE := 0.15               ## Chance hunting a cow gets the hunter hurt by an angry bull (never seriously).
 const SLIP_CHANCE := 0.03               ## Chance of a slip each time someone steps onto the pond's bank (never serious).
@@ -121,6 +121,7 @@ const CAVE_IN_CHANCE := 0.5             ## Chance that mining a loose-ceiling bl
 const CAVE_IN_SERIOUS := 0.5            ## Chance a cave-in's injury is serious.
 const FALL_CHANCE := 0.05               ## Chance of a fall each time someone steps onto a ledge in the dark.
 const FALL_SERIOUS := 0.25              ## Chance a fall's injury is serious.
+const TORCH_CARRY := 4                 ## Torches an idle resident takes to set down at buildings (one craft's worth, issue #367).
 const DARK_WORK := 0.7                  ## Work speed in an unlit tunnel.
 const INJURED_SPEED := 0.6              ## Walk and work speed while injured.
 const HEAL_TIME := [0.0, 120.0, 300.0]  ## Seconds of rest in bed to heal: injured, seriously injured.
