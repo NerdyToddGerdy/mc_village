@@ -131,6 +131,9 @@ static func arrive(sim: Sim, r: Dictionary) -> void:
 		sim._toast("%s surveyed the %s ring to the %s and found nothing new." % [r.name, ring_name(sv.ring), sv.sector], r.id)
 		return
 	reveal(sim, id)
+	if not sim.stats.has("found_at"):
+		sim.stats.found_at = {}
+	sim.stats.found_at[id] = "%s:%d" % [sv.sector, sv.ring]  # where the world map pins it
 	sim._toast("%s found %s, in the %s ring to the %s." % [r.name, FIND_NAMES[id], ring_name(sv.ring), sv.sector], r.id)
 
 
