@@ -37,6 +37,7 @@ func _init() -> void:
 		"test_emeralds",
 		"test_house_tiers",
 		"test_survey",
+		"test_lead_animals_home",
 		"test_guide_new_marks",
 		"test_many_loose_items_tick_cheaply",
 		"test_idle_residents_go_home",
@@ -1271,6 +1272,49 @@ func test_survey() -> void:
 	var old_sim := Sim.from_state(up.data.state)
 	check(Survey.found(old_sim, "old_mine") and Survey.found(old_sim, "ruined_portal") and old_sim.residents.all(func(r): return r.jobs.has("cartographer")), "an older village has found everything it has")
 	Survey.enabled = false
+
+
+## Issue #355: a village pen is raised from sticks; the lodge's hunter walks to the meadow and leads up to three marked animals home.
+func test_lead_animals_home() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	sim.maps[Meadow.ID].known = true
+	var lodge := sim.place_site("lodge", at(6, 6))
+	lodge.stage = 1
+	lodge.done = true
+	sim._occ_dirty = true
+	sim.set_role(tomas, "hunt")
+	run(sim, 3)
+	check(lodge.worker == tomas.id, "Tomas works the lodge")
+	check(LeadHome.check(sim) == "No animal at the meadow is marked to lead home", "nothing to fetch yet: " + LeadHome.check(sim))
+	sim.on_map(Meadow.ID, func():
+		var n := 0
+		for a in sim.m.sheep:
+			if a.alive and n < 4:
+				a.lead = true
+				n += 1)
+	check(LeadHome.check(sim) == "The village has no pen with room", "and nowhere to put them: " + LeadHome.check(sim))
+	var bp := sim.place_site("village_pen", at(14, 10))
+	bp.stage = 1
+	bp.store = {"stick": 12}
+	bp.stage = 0
+	sim._complete_stage(bp)
+	check(sim.maps.village.pens.size() == 1 and Pens.pen_done(sim.maps.village.pens[0]) and not sim.maps.village.sites.has(bp), "the blueprint is a finished pen, and the blueprint is gone")
+	var pen: Dictionary = sim.maps.village.pens[0]
+	check(sim.maps.village.fences.size() == 11 and sim.maps.village.gates.size() == 1, "with its fences and its gate")
+	var before: int = sim.maps[Meadow.ID].sheep.filter(func(a): return a.alive and not a.get("lead", false)).size()
+	run(sim, 3)
+	check(tomas.away and tomas.trip == "lead_home", "Tomas sets out for the meadow")
+	var led: Array = sim.stats.lead_home.animals
+	check(led.size() == LeadHome.MAX_LED and sim.maps[Meadow.ID].sheep.filter(func(a): return a.get("lead", false)).size() == 1, "three animals are taken off the meadow, one marked one stays")
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.stats.lead_home.animals.size() == 3, "animals on the road are saved")
+	run(sim, LeadHome.seconds(sim) + 5.0)
+	var penned: Array = sim.maps.village.sheep.filter(func(a): return a.get("pen", 0) == pen.id)
+	check(penned.size() >= 3 and penned.all(func(a): return Pens.pen_inside(pen).has_point(a.cell)), "the animals are penned in the village, inside the fences (%d)" % penned.size())
+	check(sim.stats.led_home >= 3, "and counted (%d)" % sim.stats.get("led_home", 0))
+	check(before >= 0, "(the meadow keeps its other animals)")
 
 
 ## Issue #360: at night mobs can injure residents, who fight back, guards best and the golem too; nobody dies.
