@@ -10,6 +10,7 @@ const BASE_ITEMS := {
 	# Dropped by a felled tree, and planted by a lumberjack (issue #177).
 	"sapling": {"one": "sapling", "many": "saplings", "label": "Saplings", "group": "building"},
 	# Crafted at the bench and carried into a storehouse (issue #189).
+	"torch": {"one": "torch", "many": "torches", "label": "Torches", "group": "building"},
 	"chest": {"one": "chest", "many": "chests", "label": "Chests", "group": "building"},
 	# Cut at the mason's bench (issue #178), for the upgrades to come.
 	"stone_brick": {"one": "stone brick", "many": "stone bricks", "label": "Stone bricks", "group": "building"},
@@ -225,6 +226,7 @@ const RECIPES := [
 	{"id": "sticks", "name": "Sticks", "inp": {"plank": 2}, "out": {"stick": 4}, "pattern": [" P ", " P ", "   "]},
 	{"id": "wood_axe", "name": "Wooden axe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_axe": 1}, "pattern": ["PP ", "PS ", " S "]},
 	{"id": "wood_pick", "name": "Wooden pickaxe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_pick": 1}, "pattern": ["PPP", " S ", " S "]},
+	{"id": "torch", "name": "Torches", "inp": {"coal": 1, "stick": 1}, "out": {"torch": 4}, "pattern": ["   ", " K ", " S "], "step": 99},
 	{"id": "chest", "name": "Chest", "inp": {"plank": 8}, "out": {"chest": 1}, "pattern": ["PPP", "P P", "PPP"], "step": 8},
 	{"id": "stone_axe", "name": "Stone axe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_axe": 1}, "pattern": ["CC ", "CS ", " S "], "step": 4},
 	{"id": "stone_pick", "name": "Stone pickaxe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_pick": 1}, "pattern": ["CCC", " S ", " S "], "step": 4},
@@ -259,7 +261,7 @@ const RECIPES := [
 	{"id": "stone_bricks", "name": "Stone bricks", "inp": {"cobble": 2}, "out": {"stone_brick": 2}, "at": "mason_bench", "doing": "Cutting stone bricks", "pattern": ["   ", "CC ", "   "]},
 ]
 
-const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot", "H": "leather", "D": "diamond", "F": "flint"}
+const PATTERN_KEYS := {"L": "log", "P": "plank", "S": "stick", "C": "cobble", "I": "iron_ingot", "H": "leather", "D": "diamond", "F": "flint", "K": "coal"}
 
 ## Resident jobs (slice-2-spec.md §5), in the order the Jobs grid shows them.
 ## Lumberjack and Stonemason replaced Mine in issue #177.

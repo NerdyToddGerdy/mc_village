@@ -34,6 +34,10 @@ static func _draw(img: Image, type: String) -> void:
 		"stick":
 			_line(img, Vector2(16, 50), Vector2(48, 14), 11, dark)
 			_line(img, Vector2(16, 50), Vector2(48, 14), 6, c)
+		"torch":  # a stick with a flame on top
+			_line(img, Vector2(24, 52), Vector2(38, 26), 9, Color("#7A5634"))
+			_disc(img, Vector2(40, 22), 11, dark)
+			_disc(img, Vector2(40, 22), 7, c)
 		"cobble":  # a few stones packed together
 			for p in [Vector2(22, 26), Vector2(41, 24), Vector2(30, 42), Vector2(46, 41)]:
 				_disc(img, p, 12, dark)

@@ -720,6 +720,8 @@ static func full_uses(type: String) -> int:
 		return Defs.ITEMS[type].uses
 	if Defs.is_armor(type):
 		return Tuning.ARMOR_USES
+	if not Defs.ITEMS[type].has("tier"):  # a torch carried to a door (issue #367)
+		return 1
 	return Tuning.DURABILITY[Defs.ITEMS[type].tier]
 
 
@@ -2740,6 +2742,16 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			r.carry = {"type": ls.type, "n": 1, "dur": ls.get("dur", full_uses(ls.type))}
 			rev += 1
 			return true
+		"place_torch":  # a torch at a building's door (issue #367)
+			var ts: Dictionary = st.site
+			var tc := torch_cell(ts)
+			if tc.x < 0 or ts.get("torch", false) or r.carry == null or r.carry.type != "torch":
+				return "gone"
+			m.add_torch(tc)
+			ts.torch = true
+			r.carry = null
+			rev += 1
+			return true
 		"pickup_tool":
 			var s = m.items.get(st.stack.cell)
 			if not is_same(s, st.stack) or s.n < 1:
@@ -3191,7 +3203,7 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 					total /= skill_speed(r, j.work)
 				if st.what != "eat":
 					total /= hurt_speed(r)
-					if m.is_dark(rcell(r)):  # unlit tunnels are slow going (issue #110)
+					if dark_here(rcell(r)):  # unlit tunnels and the village's unlit night are slow going (issues #110, #367)
 						total /= Tuning.DARK_WORK
 				st.total = total
 				st.t = 0.0
@@ -3607,7 +3619,49 @@ func _claim(r: Dictionary) -> void:
 	_idle_ticks[r.id] = idle
 	var after := int(Tuning.IDLE_HOME_AFTER * Tuning.TPS)
 	if idle >= after and (idle - after) % (10 * Tuning.TPS) == 0:
-		r.job = _home_job(r)
+		r.job = _torch_job(r)  # a torch that's due comes before going home
+		if r.job == null:
+			r.job = _home_job(r)
+
+
+## Whether work at `c` is slowed by the dark: an unlit tunnel, or the village by night with no torch near (issue #367).
+func dark_here(c: Vector2i) -> bool:
+	if m.kind == "village":
+		return Night.enabled and Night.is_night(self) and not m.is_lit(c)  # tests and bots that switch the night off keep their day's pace
+	return m.is_dark(c)
+
+
+## The cell a building's torch stands on, its front door step, or (-1, -1) for a building with none (issue #367). Only a house with an
+## entrance has one for now; an old building gets nothing.
+func torch_cell(s: Dictionary) -> Vector2i:
+	if s.tpl == "house" and s.done and not s.get("old", false):
+		return front_cell(s.origin, s.rot)
+	return Vector2i(-1, -1)
+
+
+## An idle resident takes a torch from the stockpile to the first building that has none, setting it down at its door (issue #367).
+func _torch_job(r: Dictionary):
+	if map_id != "village" or free_count("torch") <= 0:
+		return null
+	var need = null
+	for s in m.sites:
+		if torch_cell(s).x >= 0 and not s.get("torch", false):
+			need = s
+			break
+	if need == null:
+		return null
+	var stacks := stacks_where(func(x): return x.type == "torch" and avail(x) > 0)
+	if stacks.is_empty():
+		return null
+	var stack: Dictionary = nearest(stacks, rcell(r))
+	var j := Job.new("haul", "Going to set down a torch", "a torch")
+	stack.res += 1
+	var hd := j.hold({"t": "stack", "stack": stack, "n": 1})
+	j.step(_goto(reach(stack.cell), false))
+	j.step({"op": "pickup_lighter", "stack": stack, "hold": hd})
+	j.step(_goto([torch_cell(need)], false))
+	j.step({"op": "place_torch", "site": need})
+	return j
 
 
 ## A walk to the resident's own house, or null when they have none, are away from the village or are already by it (issue #345).
@@ -5099,9 +5153,13 @@ func move_site(s: Dictionary, origin: Vector2i, rot := 0) -> String:
 			if m.in_bounds(n) and _area_owner(s.tpl, n, s).is_empty():
 				shifted[n] = true
 		s.area = shifted
+	var old_front := front_cell(s.origin, s.rot)
 	s.origin = origin
 	s.rot = rot
 	s.erase("old")  # put down where it has an entrance (issue #356)
+	if s.get("torch", false):  # its torch comes with it, to the new door (issue #367)
+		m.remove_torch(old_front)
+		m.add_torch(front_cell(origin, rot))
 	if s.tpl == "storehouse":
 		s.erase("door")  # it moves only while 3 wide: the door is the formula's again (issue #318)
 	s.plot = plot_rect(s.tpl, origin, rot)
