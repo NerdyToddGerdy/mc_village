@@ -31,7 +31,8 @@ const MENUS := {
 		{"id": "mason_bench", "name": "Mason's bench", "sub": "2 planks and 4 cobblestone. Stonemasons break the boulders around it. Reserves room for a mineshaft", "mark": "build"},
 		{"id": "toolsmith_bench", "name": "Toolsmith's bench", "sub": "4 planks and 3 cobblestone. A toolsmith works from it. Reserves room for an anvil", "mark": "build"},
 		{"id": "composter", "name": "Composter", "sub": "4 planks. A farmer works from it. Reserves room for a granary", "mark": "build"},
-		{"id": "lodge", "name": "Hunter's lodge", "sub": "6 logs and 2 planks. A hunter works from it. Reserves room for a tannery", "mark": "build"},
+		{"id": "lodge", "name": "Hunter's lodge", "sub": "6 logs and 2 planks. A hunter leads marked animals home from the meadow. Reserves room for a tannery", "mark": "build", "unlock": "board"},
+		{"id": "village_pen", "name": "Pen", "sub": "12 sticks. A pen in the village for the animals a hunter leads home", "mark": "build", "unlock": "board"},
 		{"id": "builder_table", "name": "Builder's table", "sub": "4 planks and 2 logs. A builder works from it. Reserves room for a builder's yard", "mark": "build"},
 		{"id": "cartographer_table", "name": "Cartographer's table", "sub": "6 planks. A cartographer surveys the land from it. Reserves room for a map room", "mark": "build", "unlock": "board"},
 		{"id": "claim", "name": "Claim land", "sub": "A strip of new land, 8 cells deep, along an edge. A builder plants stakes (4 sticks). One claim for every 2 residents beyond the first two", "mark": "build", "unlock": "claims"},
@@ -77,6 +78,8 @@ static func unlocked(e: Dictionary, sim: Sim) -> bool:
 			return sim.map_id == "village"
 		"meadow":
 			return sim.map_id == Meadow.ID
+		"board":  # once the expedition board is built (issues #321, #355)
+			return sim.stats.get("built", {}).has("board")
 		"pens":
 			return not sim.m.pens.is_empty()
 		"enchanting":  # once an enchanted book has been found, or a workshop stands (issue #165)

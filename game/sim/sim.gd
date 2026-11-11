@@ -1145,6 +1145,27 @@ func _clear_footprint(s: Dictionary) -> void:
 					r.path = []
 
 
+## A finished pen blueprint in the village becomes a pen: fences all round, the gate in the middle of the side that faces the way
+## it was turned, and the blueprint is taken away (issue #355).
+func _make_village_pen(s: Dictionary) -> void:
+	var rect := Rect2i(s.origin, s.size)
+	var mid := rect.position + rect.size / 2
+	var gates := [Vector2i(mid.x, rect.end.y - 1), Vector2i(rect.end.x - 1, mid.y), Vector2i(mid.x, rect.position.y), Vector2i(rect.position.x, mid.y)]
+	var gate: Vector2i = gates[s.rot % 4]
+	var p := {"id": _id(), "kind": "pen", "rect": rect, "gate": gate, "built": {}}
+	for c in Pens.pen_edge(p):
+		p.built[c] = true
+		if c == gate:
+			m.gates[c] = true
+		else:
+			m.fences[c] = true
+	m.pens.append(p)
+	m.sites.erase(s)
+	_occ_dirty = true
+	rev += 1
+	_toast("A pen is finished in the village, with room for %d animals." % Pens.pen_room(p))
+
+
 func _on_site_done(s: Dictionary) -> void:
 	if s.tpl == "store_room":
 		_merge_store_room(s)
@@ -1155,6 +1176,9 @@ func _on_site_done(s: Dictionary) -> void:
 	if not stats.has("built"):
 		stats.built = {}
 	stats.built[s.tpl] = true  # for the founding goals (issue #182)
+	if s.tpl == "village_pen":  # the blueprint becomes a pen with all its fences up (issue #355)
+		_make_village_pen(s)
+		return
 	if s.tpl == "composter":
 		_start_plots(s)  # a new composter starts with plots round it (issue #319)
 	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table"]:
@@ -3839,6 +3863,7 @@ func _step_map() -> void:
 	if not m.pens.is_empty():
 		_step_pens()
 	if m.kind == "village":
+		LeadHome.step(self)  # the lodge's hunter fetching marked animals from the meadow (issue #355)
 		Night.step(self)  # dusk and dawn, the golem and the night's mobs (issues #357-#359)
 	if not m.creatures.is_empty():
 		_step_creatures()
@@ -3850,6 +3875,8 @@ func _step_map() -> void:
 			if tick >= r.back_at:
 				if r.trip == "survey":  # the Cartographer's survey (issue #321)
 					Survey.arrive(self, r)
+				elif r.trip == "lead_home":  # the hunter leading animals home (issue #355)
+					LeadHome.arrive(self, r)
 				elif r.trip == "village":
 					_arrive_home(r)
 				else:
