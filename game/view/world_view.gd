@@ -1810,11 +1810,18 @@ func _make_person(r: Dictionary) -> Node3D:
 
 
 func _update_people() -> void:
+	var doors := {}  # a resident standing in a house's door is inside it (issue #285): drawn only while selected, with the roof cutaway
+	if sim.m.kind == "village":
+		for st in sim.sites:
+			if st.tpl == "house" and st.done and not Sim.is_old_house(st):
+				doors[sim.door_cell(st.origin, st.rot)] = true
 	for r in sim.residents:
 		if not _people.has(r.id):
 			_people[r.id] = _make_person(r)
 		var n: Node3D = _people[r.id]
 		n.visible = not r.away and r.map == map_id  # off the map on a meadow trip, or on another map
+		if n.visible and not doors.is_empty() and doors.has(Sim.rcell(r)) and not selected_ids.has(r.id):
+			n.visible = false
 		var at := drawn_pos(r)
 		n.position = Vector3(at.x + 0.5, 0, at.y + 0.5)
 		(n.get_node("Body") as Node3D).position.y = _hop(r.id, at)
