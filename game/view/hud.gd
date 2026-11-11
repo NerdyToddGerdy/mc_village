@@ -1995,7 +1995,7 @@ func _refresh_minimap() -> void:
 	var side := MiniMap.side_for(view)  # smaller on a short screen, so it never reaches the top bar or the Menu button (issue #347)
 	_minimap.size = Vector2(side, side)
 	var x := view.x - side - 16.0
-	for p in [_craft_panel, _plan_panel]:  # it keeps clear of the panels that open at the right (issue #347)
+	for p in [_craft_panel, _plan_panel] + _menu_panels.values():  # it keeps clear of the panels that open at the right, the Build menu included (issue #347)
 		if p.visible:
 			x = minf(x, p.get_global_rect().position.x - side - 12.0)
 	_minimap.position = Vector2(maxf(x, 0.0), view.y - side - 82.0)

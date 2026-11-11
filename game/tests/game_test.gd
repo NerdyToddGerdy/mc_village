@@ -383,6 +383,15 @@ func _test_minimap(game: Game) -> void:
 	await game.get_tree().process_frame
 	check(mm.visible and hud.minimap_on, "and shows it again")
 	check(hud.get_viewport().get_visible_rect().encloses(mm.get_global_rect()), "inside the window (%s)" % [mm.get_global_rect()])
+	game.menu_open = "build"  # the Build menu opens over the same corner: the map moves aside
+	hud.refresh(game.sim)
+	await game.get_tree().process_frame
+	await game.get_tree().process_frame
+	hud._refresh_minimap()
+	check(not hud._menu_panels.build.get_global_rect().intersects(mm.get_global_rect()), "the corner map keeps clear of the Build menu (%s, %s)" % [mm.get_global_rect(), hud._menu_panels.build.get_global_rect()])
+	game.menu_open = ""
+	hud.refresh(game.sim)
+	await game.get_tree().process_frame
 	var mp: SimMap = game.sim.get_map(game.view_map)
 	var before: Vector3 = game._target
 	var ev := InputEventMouseButton.new()
