@@ -272,6 +272,9 @@ func _add_site_maps() -> void:
 	if not maps.has(MeadowRoad.ID):  # and the strip of road that leads to it (issue #210)
 		maps[MeadowRoad.ID] = MeadowRoad.build(self)
 		maps[MeadowRoad.ID].known = maps[Meadow.ID].known
+	for sid in Structures.IDS:  # the structure adventures: known once surveyed (Slice 7)
+		if not maps.has(sid):
+			maps[sid] = Structures.build(self, sid)
 	if not maps.has(NetherLanding.ID):  # the first Nether map: known once the portal is lit (issue #148)
 		maps[NetherLanding.ID] = NetherLanding.build(self)
 	for key in NetherRoute.ROUTES:  # the routes out of the landing, and the sites at their ends: known once scouted (issue #153)
@@ -6024,7 +6027,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.maps = {}
 	# Maps tick in the order a game makes them, so a loaded game replays as the saved one would have:
 	# the village, the old mine, the road, the meadow, then the levels below the mine as they opened.
-	var order := ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID, NetherLanding.ID] + NetherRoute.map_ids()
+	var order := ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID] + Structures.IDS + [NetherLanding.ID] + NetherRoute.map_ids()
 	var ids: Array = d.maps.keys()
 	ids.sort_custom(func(a, b): return [order.find(a) if a in order else 9, MineLevels.level_of(a)] < [order.find(b) if b in order else 9, MineLevels.level_of(b)])
 	for id in ids:

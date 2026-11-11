@@ -276,7 +276,7 @@ func fill_cartographer(c: Container, sim: Sim, s: Dictionary) -> void:
 		var left := maxf(0.0, float(who.back_at - sim.tick) / Tuning.TPS)
 		c.add_child(hud._label("%s is surveying the %s ring to the %s: back in %d s." % [who.name, Survey.ring_name(sv.ring), sv.sector, int(ceil(left))], false, Palette.CHALK, Palette.BODY, true))
 	var next := Survey.next_find(sim)
-	var found: Array = Survey.FINDS.filter(func(id): return Survey.found(sim, id)).map(func(id): return Survey.FIND_NAMES[id])
+	var found: Array = Survey.FINDS.filter(func(id): return Survey.found(sim, id)).map(func(id): return Survey.find_name(id))
 	c.add_child(hud._label("Found: %s." % (", ".join(found) if not found.is_empty() else "nothing yet"), false, Palette.CHALK_DIM, Palette.BODY, true))
 	if next == "":
 		c.add_child(hud._label("There's nothing more to find on foot yet.", false, Palette.CHALK_DIM, Palette.BODY, true))

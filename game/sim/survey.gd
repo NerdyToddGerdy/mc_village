@@ -12,8 +12,13 @@ const SECTORS := ["north", "north-east", "east", "south-east", "south", "south-w
 ## The two sectors on the coast (issue #271): the sea can't be surveyed on foot.
 const COAST := ["south", "south-west"]
 ## What a successful survey finds, in order. More follow when the structures are built (#242).
-const FINDS := ["old_mine", "ruined_portal"]
+const FINDS := ["old_mine", "ruined_portal"] + Structures.IDS
 const FIND_NAMES := {"old_mine": "the old caves", "ruined_portal": "a ruined portal"}
+
+
+## What a find is called in a toast or a list: "a ruined portal", "a geode".
+static func find_name(id: String) -> String:
+	return Structures.DEFS[id].find if Structures.is_structure(id) else FIND_NAMES[id]
 
 
 static func ring_name(ring: int) -> String:
@@ -134,7 +139,7 @@ static func arrive(sim: Sim, r: Dictionary) -> void:
 	if not sim.stats.has("found_at"):
 		sim.stats.found_at = {}
 	sim.stats.found_at[id] = "%s:%d" % [sv.sector, sv.ring]  # where the world map pins it
-	sim._toast("%s found %s, in the %s ring to the %s." % [r.name, FIND_NAMES[id], ring_name(sv.ring), sv.sector], r.id)
+	sim._toast("%s found %s, in the %s ring to the %s." % [r.name, find_name(id), ring_name(sv.ring), sv.sector], r.id)
 
 
 ## A place becomes known: the old caves with their road, or the ruined portal, which lets the village build its own.
@@ -145,4 +150,7 @@ static func reveal(sim: Sim, id: String) -> void:
 	if id == "old_mine":
 		sim.maps[OldMine.ID].known = true
 		sim.road().known = true
+	if Structures.is_structure(id):  # the place, and the road its party walks
+		sim.maps[id].known = true
+		sim.maps[Adventures.road_of(id)].known = true
 	sim.rev += 1

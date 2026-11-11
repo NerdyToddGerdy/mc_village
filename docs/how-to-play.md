@@ -369,6 +369,23 @@ Each kind of wild animal grows back on its own, a few minutes at a time, up to t
 - **Tend the pens** is an objective of its own: the party builds, leads and feeds, then hunts only the penned animals over the number you choose to keep of each kind, and packs their drops.
 - On any trip to the meadow, the party builds the pens and leads and feeds before it hunts, and never hunts penned animals for its objective. Wild animals regrow apart from the pens.
 
+## Structures
+
+After the old caves and the ruined portal, each further **Cartographer's survey** that succeeds finds the next **structure**: a desert well, a desert temple, a jungle temple, a fossil site, some trail ruins and a geode, in that order. A found structure gets a red pin on the world map and a row on the expedition board, with what's said of it, what it holds and the walk there.
+
+All of them work like the old caves: pack pickaxes and meals, mark what you want back, and the party digs from its packs. What's different is where they are, what they hold and what goes wrong:
+
+| Structure | Way there | Holds | Danger |
+|---|---|---|---|
+| Desert well | west signpost, the meadow's strip (about 15 s) | gold ore, stone, a chest's enchanted book | old stone can come down |
+| Desert temple | west | gold ore, two chests behind stone | old stone |
+| Jungle temple | east signpost, the road to the mine (about 30 s) | redstone, lapis, a chest's book; **needs iron pickaxes** | trap rooms: old stone and ledges in the dark |
+| Fossil site | west | coal, flint | old stone |
+| Trail ruins | west | flint, four chests' books | old stone |
+| Geode | east | lapis, gold ore; **needs iron pickaxes** | old stone |
+
+Their rooms are lit only near their torches, and a digger can fall from a ledge in the dark.
+
 ## The road to the mine
 
 The road between the village and the old caves is a map of its own: **Road to the mine** in the map switcher, once the expedition board has word of the mine. It's split into six segments, from the village edge to the slope below the mine.

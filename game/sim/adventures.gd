@@ -13,8 +13,9 @@ extends RefCounted
 ##   pens    whether the party builds and tends pens there (sticks and wheat in the plan)
 ##   got     "mined", "hunted": what the home report says it came back with nothing of
 ##   left    the stop reason when nothing's left to work
+##   told    what the village has heard of it before anyone has been (a mine-kind structure; the old mine's is `OldMine.TOLD`)
 
-const IDS := [OldMine.ID, Meadow.ID, NetherLanding.ID]
+const IDS := [OldMine.ID, Meadow.ID] + Structures.IDS + [NetherLanding.ID]
 
 const DEFS := {
 	OldMine.ID: {"kind": "mine", "sign": "east", "road": Road.ID, "cargo": "mine", "others": ["iron_ore", "coal", "cobble"],
@@ -29,6 +30,10 @@ const DEFS := {
 ## An adventure's entry. A destination that isn't one (a deeper mine level, a Nether site) answers as the old mine does,
 ## which is what its party works by.
 static func def(id: String) -> Dictionary:
+	if Structures.is_structure(id):  # a structure is a mine-kind adventure whose parts are its own table's
+		var d: Dictionary = Structures.DEFS[id]
+		return {"kind": "mine", "sign": d.sign, "road": d.road, "cargo": id, "others": d.others, "target": d.target, "picks": d.picks,
+			"pens": false, "got": "mined", "left": "nothing left to mine", "told": d.told}
 	return DEFS.get(id, DEFS[OldMine.ID])
 
 
