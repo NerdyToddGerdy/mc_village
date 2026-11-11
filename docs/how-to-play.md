@@ -295,6 +295,10 @@ Residents get hungry. A full resident empties in about 6 minutes of game time.
 
 The **expedition board** is where expeditions are planned. Once it's built, the village has word of a **meadow** a short walk west, with sheep, cows and pigs. The **old caves** a short walk east, with stone and coal, have to be found first: see [The Cartographer](#the-cartographer). A village saved before surveys already knows everything it had.
 
+### The world map
+
+The **corner map** is always in the bottom right (**I** hides it), and moves left when the Craft panel or the planner opens so it never sits on them. Press **P** or choose it in the controls to open the **world map**: the village at the centre, the land round it in eight sectors and three rings with fog over what hasn't been surveyed, the coast in blue and the places found as pins. The game pauses while it's open. Click a pin and **Plan a trip** closes the map and opens the expedition board on that place, where you pack; click a ring and **Send the Cartographer** surveys it. Esc closes it and the speed comes back.
+
 ### The Cartographer
 
 Build a **cartographer's table** (Build menu once the board is up: 6 planks) and give someone the **Cartographer** job from the Jobs board. Select the table and choose a **Survey**: the land round the village is eight sectors (the compass points) in three rings, near, middle and far. The Cartographer leaves for a time that grows with the ring (90, 180 and 300 seconds, quicker as they level) and is away from village work. Each survey that succeeds finds the next place: first the **old caves**, then a **ruined portal**, which the village needs found before it can build its own portal. Mobs can drive the surveyor back (10%, 25% or 40% by ring, less with armor): they come home hurt, the trip is lost and the ring stays unsurveyed. The south and south-west are the coast, which needs a boat. Far rings need the ring inside them surveyed first.

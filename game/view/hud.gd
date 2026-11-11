@@ -39,8 +39,9 @@ var _maps_open := false
 var _loc_drop: PanelContainer       ## The expedition board's location dropdown (issue #181), under its button.
 var _loc_list := VBoxContainer.new()
 var _loc_open := false
-var _minimap: MiniMap                ## The corner map (issue #298).
-var minimap_on := false
+var _minimap: MiniMap                ## The corner map (issue #298), always on from issue #347.
+var _world_map: WorldMap             ## The full-screen world map (issue #347).
+var minimap_on := true
 
 
 ## The message log (issue #297): the toasts so far, newest last, in a list that opens under its button.
@@ -355,6 +356,9 @@ func _ready() -> void:
 	_minimap = MiniMap.new()
 	_minimap.game = game
 	_root.add_child(_minimap)
+	_world_map = WorldMap.new()
+	_world_map.game = game
+	_root.add_child(_world_map)
 
 
 	_log_list.add_theme_constant_override("separation", 4)
@@ -1964,11 +1968,15 @@ func toggle_minimap() -> void:
 
 ## Shown in the bottom right corner above the orders toolbar, over the map, while it's on.
 func _refresh_minimap() -> void:
-	_minimap.visible = minimap_on and not game._menu.visible
+	_minimap.visible = minimap_on and not game._menu.visible and not game.world_map_open
 	if not _minimap.visible:
 		return
 	var view := get_viewport().get_visible_rect().size
-	_minimap.position = Vector2(view.x - MiniMap.SIZE - 16.0, view.y - MiniMap.SIZE - 82.0)
+	var x := view.x - MiniMap.SIZE - 16.0
+	for p in [_craft_panel, _plan_panel]:  # it keeps clear of the panels that open at the right (issue #347)
+		if p.visible:
+			x = minf(x, p.get_global_rect().position.x - MiniMap.SIZE - 12.0)
+	_minimap.position = Vector2(maxf(x, 0.0), view.y - MiniMap.SIZE - 82.0)
 
 
 # ---------------------------------------------------------------- the message log (issue #297)

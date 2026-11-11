@@ -33,6 +33,8 @@ var _flash_rect := Rect2i()
 var _flash_until := 0
 var guide_page := ""                    ## The Guide's chosen page, or "" for the first one (issue #348).
 var book_page := "goals"                ## Its open page: "goals", "jobs", "residents", or a page's id from Goals.PAGES.
+var world_map_open := false              ## The full-screen world map (issue #347), which pauses the game while it is open.
+var _map_prev_speed := 1
 var planner_open := false               ## The expedition planner above the toolbar (issue #106).
 var line_preview := false                ## The route panel shows the line's cost before it's planned (issue #121).
 var plan := {}                          ## The plan being drawn up in the planner; the sim's once confirmed.
@@ -871,7 +873,9 @@ func _key(e: InputEventKey) -> void:
 			return
 		_hud.disarm_panel()
 	if e.keycode == KEY_ESCAPE:
-		if tool != "" or menu_open != "":
+		if world_map_open:
+			close_world_map()
+		elif tool != "" or menu_open != "":
 			set_tool("")
 		elif book_open:
 			book_open = false
@@ -919,6 +923,7 @@ func _key(e: InputEventKey) -> void:
 		"cache_sensor", "condition", "freight_loader", "dispatcher": start_placing(keys.action_for(e))
 		"redstone_overlay": toggle_redstone_overlay()
 		"minimap": _hud.toggle_minimap()
+		"worldmap": toggle_world_map()
 		"claim": start_claiming()
 		"mason_bench": start_placing("mason_bench")
 		"toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table": start_placing(keys.action_for(e))
@@ -1801,6 +1806,30 @@ func set_herd_floor(species: String, n: int) -> void:
 	sim.set_herd_floor(species, n)
 
 
+func toggle_world_map() -> void:
+	if world_map_open:
+		close_world_map()
+		return
+	if _menu.visible or view_map != "village":
+		return
+	_map_prev_speed = last_speed if speed == 0 else speed
+	set_speed(0)
+	world_map_open = true
+
+
+func close_world_map() -> void:
+	if not world_map_open:
+		return
+	world_map_open = false
+	set_speed(_map_prev_speed)
+
+
+## A place picked on the world map: the map closes and the expedition board opens on it, for packing.
+func plan_from_map(id: String) -> void:
+	close_world_map()
+	open_adventure(id)
+
+
 func start_survey(sector: String, ring: int) -> void:
 	sim.start_survey(sector, ring)
 
@@ -2073,6 +2102,13 @@ func _screenshot_scene() -> void:
 					house.store = sim.current_stage(house).cost.duplicate()
 					sim._complete_stage(house)
 	selection = {"kind": "site", "id": house.id}
+	if "--world-map" in OS.get_cmdline_user_args():  # the world map with a few surveys done, for a screenshot (issue #347)
+		sim.stats.found = {"old_mine": true, "ruined_portal": true}
+		sim.stats.found_at = {"old_mine": "east:1", "ruined_portal": "north:2"}
+		sim.stats.surveyed = {"east:1": true, "north:1": true, "north:2": true, "north-east:1": true}
+		sim.maps[Meadow.ID].known = true
+		sim.maps[OldMine.ID].known = true
+		world_map_open = true
 	if "--tools" in OS.get_cmdline_user_args():
 		_hud._drop_pinned = "tools"
 	if "--mark-sheep" in OS.get_cmdline_user_args():
