@@ -359,6 +359,10 @@ func _update_live_overlays() -> void:
 			outlines.append({"rect": _drag.rect, "h": 0.03, "color": col, "dashed": true})
 	elif tool in OrderMenus.MARK_TOOLS and _hover != null:
 		outlines.append({"rect": Rect2i(_hover, Vector2i.ONE), "h": 0.03, "color": Palette.CHALK, "dashed": false})
+	if view_map == "village" and not sim.m.torches.is_empty():  # a warm pool at each door's torch, on at night, off by day (issue #367)
+		if Night.is_night(sim):
+			for t in sim.m.torches:
+				fills.append({"rect": Rect2i(t - Vector2i.ONE, Vector2i(3, 3)), "h": 0.015, "color": Color(Palette.YELLOW, 0.22)})
 	if view_map == "village":  # an old house shows as a blueprint outline until it's updated (issue #356)
 		for st in sim.sites:
 			if Sim.is_old_house(st) and moving_id != st.id:

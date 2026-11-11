@@ -272,6 +272,11 @@ func _build_static() -> void:
 		if s.get("plot") != null:  # the reserved plot it will grow into, faint
 			_outline(dark, col, s.plot, 0.02, Color(Palette.CHALK, 0.35), true)
 	if sim.m.kind == "village":
+		for t in sim.m.torches:  # a building's torch at its door (issue #367)
+			var tx: float = t.x + 0.5
+			var tz: float = t.y + 0.5
+			solid.box(Vector3(tx - 0.06, 0.0, tz - 0.06), Vector3(tx + 0.06, 0.55, tz + 0.06), Palette.LOG, BlockTextures.LOG)
+			solid.box(Vector3(tx - 0.1, 0.55, tz - 0.1), Vector3(tx + 0.1, 0.75, tz + 0.1), TORCH_FLAME)
 		_add_dust(solid, ghost)
 	for p in sim.m.pens:
 		_add_pen_plan(ghost, dark, col, p)

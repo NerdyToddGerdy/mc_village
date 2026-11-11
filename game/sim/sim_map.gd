@@ -71,6 +71,7 @@ var gates := {}              ## Vector2i -> true: built pen gates.
 
 var occ := PackedByteArray()
 var occ_dirty := true
+var _lit := {}               ## Vector2i -> true for cells a torch lights; worked out once, from the torches (issue #367).
 var _dark := {}              ## Vector2i -> true for unlit open cells; worked out once, from the torches.
 
 
@@ -207,6 +208,8 @@ func shift(off: Vector2i) -> void:
 	fences = _shifted_keys(fences, off)
 	for i in torches.size():
 		torches[i] += off
+	_lit.clear()
+	_dark.clear()
 	for i in banks.size():
 		banks[i] += off
 	for i in ledges.size():
@@ -246,9 +249,36 @@ func beside_lava(c: Vector2i) -> bool:
 	return false
 
 
+## Adds a torch at `c` (the village's, issue #367) and drops the light map so it's worked out again.
+func add_torch(c: Vector2i) -> void:
+	torches.append(c)
+	_lit.clear()
+	_dark.clear()
+
+
+func remove_torch(c: Vector2i) -> void:
+	torches.erase(c)
+	_lit.clear()
+	_dark.clear()
+
+
+## Whether a torch lights `c`: within TORCH_LIGHT of one. Worked out once per change of torches, not per call.
+func is_lit(c: Vector2i) -> bool:
+	if torches.is_empty():
+		return false
+	if _lit.is_empty():
+		var r := ceili(Tuning.TORCH_LIGHT)
+		for t in torches:
+			for dx in range(-r, r + 1):
+				for dy in range(-r, r + 1):
+					if Vector2(dx, dy).length() <= Tuning.TORCH_LIGHT:
+						_lit[t + Vector2i(dx, dy)] = true
+	return _lit.has(c)
+
+
 ## True for an open cell no torch lights (issue #102). Always false in the village.
 func is_dark(c: Vector2i) -> bool:
-	if torches.is_empty():
+	if torches.is_empty() or kind == "village":  # the village's torches light a night, not a tunnel (issue #367)
 		return false
 	if _dark.is_empty():
 		for x in w:

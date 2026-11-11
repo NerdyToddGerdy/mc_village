@@ -121,6 +121,7 @@ const CAVE_IN_CHANCE := 0.5             ## Chance that mining a loose-ceiling bl
 const CAVE_IN_SERIOUS := 0.5            ## Chance a cave-in's injury is serious.
 const FALL_CHANCE := 0.05               ## Chance of a fall each time someone steps onto a ledge in the dark.
 const FALL_SERIOUS := 0.25              ## Chance a fall's injury is serious.
+const TORCH_CARRY := 4                 ## Torches an idle resident takes to set down at buildings (one craft's worth, issue #367).
 const DARK_WORK := 0.7                  ## Work speed in an unlit tunnel.
 const INJURED_SPEED := 0.6              ## Walk and work speed while injured.
 const HEAL_TIME := [0.0, 120.0, 300.0]  ## Seconds of rest in bed to heal: injured, seriously injured.
