@@ -122,6 +122,24 @@ var equip_kind := ""          ## "axe" or "pick" while the resident panel lists 
 
 
 ## The panels for finished buildings (site_panels.gd), made once the HUD has its game.
+var _selection_panel: SelectionPanel
+
+
+func _selection_panel_of() -> SelectionPanel:
+	if _selection_panel == null:
+		_selection_panel = SelectionPanel.new(self, game)
+	return _selection_panel
+
+
+var _planner_panel: PlannerPanel
+
+
+func _planner() -> PlannerPanel:
+	if _planner_panel == null:
+		_planner_panel = PlannerPanel.new(self, game)
+	return _planner_panel
+
+
 func _panels() -> SitePanels:
 	if _site_panels == null:
 		_site_panels = SitePanels.new(self, game)
@@ -2056,315 +2074,158 @@ func _refresh_log() -> void:
 
 # ---------------------------------------------------------------- selection panel
 
+# The drawing lives in selection_panel.gd (#305); these forward to it.
+
 func _refresh_selection(sim: Sim) -> void:
-	var sel: Dictionary = game.selection
-	var sig := "%s" % [sel]
-	var target = game.selected_entity()
-	if sel.get("kind", "") == "res":
-		for id in sel.ids:
-			var r := sim.resident(id)
-			if not r.is_empty():
-				sig += "%s%s%s%s%s%s%s%d" % [r.job.label if r.job != null else "Idle", r.axe, r.pick, r.carry, r.broken, r.progress >= 0, r.orders, int(r.hunger / 5)] + "%s%s%s%s%s%s%d%d" % [r.jobs, r.role, _job_for == r.id, r.kept, equip_kind, r.away, int(sim.back_in(r)), r.get("hurt", 0)] + "%s" % [r.get("armor", {})]
-		for kind in ["axe", "pick"]:  # Equip appears when there's a tool to choose
-			for st in sim.tool_items(kind, 0):
-				sig += "%s%s%s" % [st.type, st.dur, st.cell]
-	elif target != null and target.kind == "route":
-		sig += "%s%s%s%s" % [sim.residents.map(func(r): return [r.away, r.get("trip", ""), r.map, sim.carrying_packs(r), r.job.label if r.job != null else ""]), sim.route_report(), game.line_preview, game.view_map]
-		sig += "%s%s%s" % [sim.cut_boulders().map(func(b): return b.des), sim.cart, [sim.station("village"), sim.station("mine")]]
-	elif target != null and target.kind == "meadow":
-		sig += "%s%s%s" % [sim.herds(), sim.adventures(), sim.expedition_board().is_empty()]
-	elif target != null and target.kind == "crop":
-		sig += "%d %d %d" % [Sim.crop_stage(target), int(target.grow / Tuning.WHEAT_GROW * 20.0), target.claim]
-	elif target != null and target.kind in ["pen", "animal"]:  # issue #139: counts and timers
-		sig += "%s%d%s" % [target, sim.tick / Tuning.TPS, sim.on_map(game.view_map, func(): return sim.m.sheep.map(func(a): return [a.alive, a.get("pen", 0), a.get("young", false), a.get("fed_at", -1)]))]
-	elif target != null:
-		sig += "%s" % [target]
-		if target.get("tpl", "") == "mason_bench":  # whether it can be dug out depends on the map's boulders and the bricks
-			sig += sim.shaft_check(target)
-	if not sel.is_empty():  # with nothing selected the panel shows no stuck reason, so a changing one needn't rebuild it (#343)
-		for s in sim.stuck:
-			sig += s.why
-	sig += game.tool + str(game.area_site)  # the Paint area button reads Done painting while it's on (issue #203)
-	sig += _keys_sig
-	_update_progress_bar(sim)
-	_rebuild(_sel, sig, func(c: Container) -> void:
-		_fill_selection(c, sim, sel, target)
-		_pin_wrap(c, 330 - 24)
-		_register_panel_keys(c))
+	_selection_panel_of()._refresh_selection(sim)
 
 
 func _fill_selection(c: Container, sim: Sim, sel: Dictionary, target) -> void:
-	if sel.is_empty():
-		c.add_child(_label("Nothing selected", true, Palette.CHALK, Palette.HEADING))
-		c.add_child(_label("Click Ada to select her. With Ada selected, right-click a tree to mine it, or use the orders toolbar to mark work for anyone. Press F to select a resident.", false, Palette.CHALK_DIM, Palette.BODY, true))
-		return
-	if sel.kind == "res":
-		var rs: Array = sel.ids.map(func(id): return sim.resident(id)).filter(func(r): return not r.is_empty())
-		if rs.size() > 1:
-			c.add_child(_label("%d residents" % rs.size(), true, Palette.CHALK, Palette.TITLE))
-			for r in rs:
-				var line := HBoxContainer.new()
-				line.add_theme_constant_override("separation", 8)
-				line.add_child(_swatch(r.shirt))
-				line.add_child(_label("%s: %s" % [r.name, _status(sim, r)], false, Palette.CHALK_DIM))
-				c.add_child(line)
-			return
-		if rs.is_empty():
-			return
-		var r: Dictionary = rs[0]
-		c.add_child(_head(r.name, _status(sim, r), true, 24, r.shirt))
-		if r.progress >= 0:
-			var pbar := _bar(r.progress)
-			pbar.set_meta("progress_of", r.id)  # filled in place each frame, so the panel isn't rebuilt (#336)
-			c.add_child(pbar)
-		if r.away:  # on the walk to or from the meadow (issue #137)
-			c.add_child(_label("Off the map with the party. Residents on the way don’t work or get hungry.", false, Palette.CHALK_DIM, Palette.BODY, true))
-			c.add_child(_bar(1.0 - sim.back_in(r) / sim.trip_time(r.trip), Palette.GREEN))
-			return
-		_add_tool_row(c, sim, r, "axe")
-		_add_tool_row(c, sim, r, "pick")
-		_add_armor_row(c, r)
-		c.add_child(_row("Carrying", Defs.words(r.carry.type, r.carry.n) if r.carry != null else "Nothing"))
-		c.add_child(_row("Food", _mood(r)))
-		if r.get("hurt", 0) > 0:  # issue #110
-			c.add_child(_row("Health", "Injured" if r.hurt == 1 else "Seriously hurt"))
-		c.add_child(_bar(r.hunger / 100.0, Palette.YELLOW if r.hunger < Tuning.HUNGRY_BELOW else Palette.CHALK))
-		for s in sim.stuck:
-			if s.focus_kind == "res" and s.focus_id == r.id:
-				c.add_child(_reason(s.why))
-		if not r.orders.is_empty():
-			c.add_child(_label("Queued orders", true))
-			for i in r.orders.size():
-				c.add_child(_label("%d  %s" % [i + 1, Sim.order_text(r.orders[i])], false, Palette.CHALK, Palette.BODY))
-			c.add_child(_destructive("Clear orders", "Click again to clear orders", "orders:%d" % r.id, func(): game.clear_orders(r)))
-		if equip_kind != "":
-			return  # the tool list takes the Jobs grid's room while it's open
-		var rex := sim.expedition_of(r)
-		if rex.get("state", "") == "out" and r.map == rex.dest:
-			_add_call_home(c, sim)
-		if r.axe == null and not r.broken.axe:
-			c.add_child(_label("Chopping by hand is slow. Stone needs a pickaxe.", false, Palette.CHALK_DIM, Palette.BODY, true))
-		_add_jobs_summary(c, sim, r)
-		return
-	if target == null:
-		c.add_child(_label("That’s gone.", false, Palette.CHALK_DIM))
-		return
-	match target.kind:
-		"tree":
-			if not Sim.grown(target):  # planted by a lumberjack (issue #177)
-				c.add_child(_head("Sapling" if Sim.tree_stage(target) == 0 else "Young tree", "Growing, %d%%" % int(target.grow / Tuning.SAPLING_GROW * 100.0)))
-				c.add_child(_bar(target.grow / Tuning.SAPLING_GROW, Palette.GREEN))
-				c.add_child(_label("It grows into a tree in %d minutes, and can't be chopped till then." % int(Tuning.SAPLING_GROW / 60.0), false, Palette.CHALK_DIM, Palette.BODY, true))
-				return
-			c.add_child(_head("Tree", "Drops %d logs and a sapling" % target.logs))
-			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target), "Secondary" if target.des else "Primary"))
-			_add_keep(c, sim, target)
-		"bush":
-			c.add_child(_head("Berry bush", "%d of %d berries" % [target.berries, Tuning.BUSH_MAX]))
-			c.add_child(_label("A berry grows back every %d seconds. Hungry residents eat here." % int(Tuning.BUSH_REGROW), false, Palette.CHALK_DIM, Palette.BODY, true))
-			var dig := _button("Cancel digging" if target.des else "Dig up", func(): game.toggle_dig_bush(target), "Secondary" if target.des else "Primary")
-			dig.tooltip_text = "A resident digs the bush up and carries its berries off. Berries are early food, so it's gone for good."
-			c.add_child(dig)
-		"meadow":  # the signpost to the meadow (issues #136, #137)
-			_fill_signpost(c, sim, Meadow.ID)
-		"route":
-			_fill_route(c, sim)
-		"crop":
-			var stage := Sim.crop_stage(target)
-			var status := "Empty, waiting to be planted"
-			if stage == 4:
-				status = "Ripe wheat, waiting to be harvested"
-			elif stage > 0:
-				status = "Wheat growing, %d%%" % int(target.grow / Tuning.WHEAT_GROW * 100.0)
-			c.add_child(_head("Farm plot", status))
-			if stage > 0 and stage < 4:
-				c.add_child(_bar(target.grow / Tuning.WHEAT_GROW, Palette.YELLOW))
-			if target.claim != 0:
-				var who: String = sim.resident(target.claim).get("name", "Someone")
-				c.add_child(_label("%s is %s it." % [who, "harvesting" if stage == 4 else "planting"], false, Palette.CHALK_DIM))
-			c.add_child(_label("Wheat takes %d minutes to grow and gives %d when harvested." % [int(Tuning.WHEAT_GROW / 60.0), Tuning.WHEAT_YIELD], false, Palette.CHALK_DIM, Palette.BODY, true))
-			c.add_child(_destructive("Remove this plot", "Click again to remove the plot", "plot:%d" % target.id, func(): game.remove_farm_plot(target)))
-		"animal":
-			_fill_animal(c, sim, target)
-		"pen":
-			_fill_pen(c, sim, target)
-		"boulder":
-			var drops := Defs.words("cobble", Tuning.BOULDER_COBBLE)
-			if target.has("ore"):
-				drops = Defs.words(target.get("book", Defs.ORES[target.ore].item), Tuning.ORE_YIELD[target.ore])
-			c.add_child(_head(Sim.block_name(target), "Drops " + drops))
-			if target.des and sim.stuck.any(func(s): return s.focus_kind == "boulder"):
-				c.add_child(_reason("Needs a pickaxe"))
-			c.add_child(_button("Cancel mining" if target.des else "Mine", func(): game.toggle_mine(target), "Secondary" if target.des else "Primary"))
-			_add_keep(c, sim, target)
-		"site":
-			_fill_site(c, sim, target)
-			if target.done and not target.tpl in Sim.UNMOVABLE and game.view_map == "village":  # pick a finished building up and put it down elsewhere (issue #234)
-				var why := sim.move_check(target, target.origin, target.rot)
-				var mv := _button("Move", func(): game.start_moving(target), "Secondary")
-				mv.set_meta("label", "Move building")
-				mv.disabled = why != ""
-				mv.tooltip_text = why if why != "" else "Pick it up and put it down somewhere else. Its queue and stored items go with it."
-				c.add_child(mv)
-			var page := Goals.page_for(target.tpl)
-			if not page.is_empty() and Goals.page_known(sim, page):  # the book's page for this building (issue #198)
-				var about := _button("?  About the %s" % Defs.TEMPLATES[target.tpl].name.to_lower(), func(): game.open_book(page.id))
-				about.flat = true
-				about.alignment = HORIZONTAL_ALIGNMENT_LEFT
-				c.add_child(about)
+	_selection_panel_of()._fill_selection(c, sim, sel, target)
 
 
-## A village tree or boulder's Keep toggle (issue #177): lumberjacks and stonemasons never take a kept
-## one on their own.
 func _add_keep(c: Container, sim: Sim, target: Dictionary) -> void:
-	if sim.map_id != "village":
-		return
-	var kept: bool = target.get("keep", false)
-	var b := _button("Keep: on" if kept else "Keep", func(): game.toggle_keep(target), "Secondary")
-	b.toggle_mode = true
-	b.set_pressed_no_signal(kept)
-	b.tooltip_text = "Lumberjacks and stonemasons leave it alone unless it's marked to mine."
-	c.add_child(b)
-	if not kept and sim.protected(target):
-		c.add_child(_label("On protected land: gatherers leave it alone.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	_selection_panel_of()._add_keep(c, sim, target)
 
 
-## The Craft button appears once a bench is finished; it opens the Craft panel above the toolbar
-## (issue #57), with a tab for each station once there's more than one (issue #76).
 func _refresh_craft(sim: Sim) -> void:
-	var bench = game.craft_bench()
-	_tool_btns.craft.visible = bench != null
-	_craft_panel.visible = game.craft_menu_open and bench != null
-	if not _craft_panel.visible:
-		return
-	var list: Array = game.benches()
-	var sig := "%s|%s|%s|%s|%s|%s|%s|%d" % [list.map(func(b): return b.id), bench, sim.auto_craft, _craft_n, sim.stuck.map(func(x): return x.why), _blocked_sites(sim), _craft_pick, int(_craft_progress(sim, bench) * 10)]
-	for k in Palette.ITEM_COLORS:
-		sig += "%d," % sim.free_count(k)
-	_rebuild(_craft_box, sig, func(c: Container) -> void:
-		if list.size() > 1:
-			c.add_child(_station_tabs(sim, list, bench))
-		_fill_bench(c, sim, bench)
-		_pin_wrap(c, 400 - 24),
-		Callable(), "%s|%s|%s" % [bench.id, _craft_pick, list.size()])
+	_selection_panel_of()._refresh_craft(sim)
 
 
 func _blocked_sites(sim: Sim) -> Array:
-	return sim.stuck.filter(func(x): return not x.waiting and x.focus_kind == "site").map(func(x): return x.focus_id)
+	return _selection_panel_of()._blocked_sites(sim)
 
 
-## One tab per bench and fireplace (issue #76); a station with a blocker carries a yellow flag.
 func _station_tabs(sim: Sim, list: Array, current: Dictionary) -> Control:
-	var tabs := HFlowContainer.new()
-	tabs.add_theme_constant_override("h_separation", 4)
-	tabs.add_theme_constant_override("v_separation", 4)
-	var blocked := _blocked_sites(sim)
-	var seen := {}
-	for i in list.size():
-		var st: Dictionary = list[i]
-		seen[st.tpl] = seen.get(st.tpl, 0) + 1
-		var name: String = ("Bench" if st.tpl == "bench" else Defs.TEMPLATES[st.tpl].name) + ("" if seen[st.tpl] == 1 else " %d" % seen[st.tpl])
-		var on := is_same(st, current)
-		var t := _button(name, func(): game.show_craft_bench(i), "" if on else "Secondary")
-		t.toggle_mode = true
-		t.set_pressed_no_signal(on)
-		t.custom_minimum_size = Vector2(0, 36)
-		if blocked.has(st.id):
-			t.icon = MarkTextures.flag()
-			t.add_theme_constant_override("icon_max_width", 12)
-		tabs.add_child(t)
-	return tabs
+	return _selection_panel_of()._station_tabs(sim, list, current)
 
 
-## The resident panel's line about jobs (issues #78, #134): their job and level, with the job dropdown,
-## and a button to the Village jobs board.
 func _add_jobs_summary(c: Container, sim: Sim, r: Dictionary) -> void:
-	var line := HBoxContainer.new()
-	line.add_theme_constant_override("separation", 12)
-	line.add_child(_label("Job", false, Palette.CHALK_DIM))
-	line.add_child(_job_picker(sim, r))
-	c.add_child(line)
-	var em: int = r.get("emeralds", 0)
-	var el := _label("Emeralds  %d" % em, false, Palette.CHALK_DIM)
-	el.tooltip_text = "%s earns an emerald with each level gained in any job, from level 2. They're spent on upgrading %s home." % [r.name, "their"]
-	c.add_child(el)
-	if r.role == "all":
-		c.add_child(_label("%s founded the village and does any work that's waiting." % r.name, false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	var key: String = game.keys.first("jobs")
-	var b := _button("Jobs board" + ("  (%s)" % key if key != "" else ""), func(): game.toggle_jobs_board(true), "Secondary")
-	b.tooltip_text = "Everyone's jobs and levels"
-	c.add_child(b)
+	_selection_panel_of()._add_jobs_summary(c, sim, r)
 
 
-## A resident's job (issue #134): a button that opens the job dropdown, or "Everything" for Ada,
-## who has none to choose.
 func _job_picker(sim: Sim, r: Dictionary) -> Control:
-	if r.role == "all":
-		var l := _label("Everything", false, Palette.CHALK)
-		l.tooltip_text = "%s does every job, and covers whatever nobody else's job does." % r.name
-		l.mouse_filter = Control.MOUSE_FILTER_STOP
-		return l
-	var lv := "" if r.role == "none" else ", level %d" % Sim.level(r, r.role)
-	var short := " (no %s)" % Defs.TEMPLATES[Defs.JOB_STATIONS[r.role]].name.to_lower() if sim.needs_station(r) else ""
-	var b := _button("%s%s%s  ↓" % [Sim.role_name(r), lv, short], func(): pass, "Secondary")
-	b.set_meta("label", "Job: %s" % r.name)
-	b.toggle_mode = true
-	b.set_pressed_no_signal(_job_for == r.id)
-	b.tooltip_text = "Choose %s's job. They do its work, and haul when there's none." % r.name
-	b.pressed.connect(func():
-		if _job_for == r.id:
-			_close_job_drop()
-		else:
-			_job_for = r.id
-			_job_anchor = b.get_global_rect()
-			_sigs.erase(_job_list.get_instance_id())
-			_refresh_job_drop(sim))
-	return b
+	return _selection_panel_of()._job_picker(sim, r)
 
 
 func _close_job_drop() -> void:
-	_job_for = -1
-	_job_anchor = Rect2()
-	_job_drop.visible = false
+	_selection_panel_of()._close_job_drop()
 
 
-## The job dropdown (issue #134): each job with the resident's level in it, best first, and how many
-## already have it, then No job. Choosing one closes it.
 func _refresh_job_drop(sim: Sim) -> void:
-	var r: Dictionary = sim.resident(_job_for) if _job_for >= 0 else {}
-	if r.is_empty() or r.role == "all" or not (game.jobs_board_open or game.selection.get("ids", []).has(r.id)):
-		_close_job_drop()
-		return
-	_job_drop.visible = true
-	var h := _job_drop.get_combined_minimum_size().y
-	var below := _job_anchor.end.y + 4 + h <= get_viewport().get_visible_rect().size.y
-	_place_drop(_job_drop, Vector2(_job_anchor.position.x, _job_anchor.end.y + 4 if below else _job_anchor.position.y - 4 - h))  # above, when there's no room below
-	var counts := {}
-	for o in sim.residents:
-		counts[o.role] = counts.get(o.role, 0) + 1
-	var sig := "%d%s%s%s%s" % [r.id, r.role, r.jobs, counts, _stations_sig(sim)]
-	_rebuild(_job_list, sig, func(c: Container) -> void:
-		var order: Array = Defs.JOBS.duplicate()
-		order.sort_custom(func(a, b): return Sim.level(r, a) > Sim.level(r, b) or (Sim.level(r, a) == Sim.level(r, b) and Defs.JOBS.find(a) < Defs.JOBS.find(b)))
-		for jb in order + ["none"]:
-			var text := "No job: haul" if jb == "none" else "%s · level %d" % [Defs.JOB_NAMES[jb], Sim.level(r, jb)]
-			var n: int = counts.get(jb, 0)
-			if jb != "none" and n > 0:
-				text += " · %d %s" % [n, _job_people(jb, n)]
-			if Defs.JOB_STATIONS.has(jb):  # issue #184: a job needs a free workstation of its own
-				var tpl: String = Defs.JOB_STATIONS[jb]
-				var free: int = sim.maps.village.sites.filter(func(st): return st.done and st.tpl == tpl and st.get("worker", 0) in [0, r.id]).size()
-				var tname: String = Defs.TEMPLATES[tpl].name.to_lower()
-				text += " · %d %s free" % [free, tname] if free > 0 else " · no %s" % tname
-			var b := _button(text, func():
-				game.set_role(r, jb)
-				_close_job_drop(), "Secondary")
-			b.set_meta("label", "Job choice: " + text)
-			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			b.toggle_mode = true
-			b.set_pressed_no_signal(r.role == jb)
-			b.tooltip_text = "Only hauls, when there's something to carry" if jb == "none" else "%s does %s work from a %s of their own, and hauls when there's none or no %s is free" % [r.name, Defs.JOB_NAMES[jb], Defs.TEMPLATES[Defs.JOB_STATIONS[jb]].name.to_lower(), Defs.TEMPLATES[Defs.JOB_STATIONS[jb]].name.to_lower()] if Defs.JOB_STATIONS.has(jb) else "%s does %s work, and hauls when there's none" % [r.name, Defs.JOB_NAMES[jb]]
-			c.add_child(b))
+	_selection_panel_of()._refresh_job_drop(sim)
+
+
+func _refresh_board(sim: Sim) -> void:
+	_selection_panel_of()._refresh_board(sim)
+
+
+func _wild_herds(sim: Sim) -> Dictionary:
+	return _selection_panel_of()._wild_herds(sim)
+
+
+func _add_herd_floors(c: Container, sim: Sim, herds: Dictionary) -> void:
+	_selection_panel_of()._add_herd_floors(c, sim, herds)
+
+
+func _add_wheat_keep(c: Container, sim: Sim) -> void:
+	_selection_panel_of()._add_wheat_keep(c, sim)
+
+
+func _board_cell(r: Dictionary, jb: String) -> Control:
+	return _selection_panel_of()._board_cell(r, jb)
+
+
+func _add_armor_row(c: Container, r: Dictionary) -> void:
+	_selection_panel_of()._add_armor_row(c, r)
+
+
+func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
+	_selection_panel_of()._add_tool_row(c, sim, r, kind)
+
+
+func _status(sim: Sim, r: Dictionary) -> String:
+	return _selection_panel_of()._status(sim, r)
+
+
+func _fill_animal(c: Container, sim: Sim, a: Dictionary) -> void:
+	_selection_panel_of()._fill_animal(c, sim, a)
+
+
+func _fill_pen(c: Container, sim: Sim, p: Dictionary) -> void:
+	_selection_panel_of()._fill_pen(c, sim, p)
+
+
+func _fill_signpost(c: Container, sim: Sim, id: String) -> void:
+	_selection_panel_of()._fill_signpost(c, sim, id)
+
+
+func _tool_text(t: Dictionary) -> String:
+	return _selection_panel_of()._tool_text(t)
+
+
+func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
+	_selection_panel_of()._fill_site(c, sim, s)
+
+
+func _make_keep_row(sim: Sim, s: Dictionary) -> Control:
+	return _selection_panel_of()._make_keep_row(sim, s)
+
+
+func _station_line(sim: Sim, s: Dictionary) -> String:
+	return _selection_panel_of()._station_line(sim, s)
+
+
+func _bench_status(sim: Sim, s: Dictionary) -> String:
+	return _selection_panel_of()._bench_status(sim, s)
+
+
+func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
+	_selection_panel_of()._fill_bench(c, sim, s)
+
+
+func _have(sim: Sim, s: Dictionary, k: String) -> int:
+	return _selection_panel_of()._have(sim, s, k)
+
+
+func _short(sim: Sim, s: Dictionary, rec: Dictionary) -> Array:
+	return _selection_panel_of()._short(sim, s, rec)
+
+
+func _slot(type: String, n := 1, size := 40, outline := Palette.CHALK_DIM, dim := false) -> PanelContainer:
+	return _selection_panel_of()._slot(type, n, size, outline, dim)
+
+
+func _book_slot(sim: Sim, s: Dictionary, rec: Dictionary, chosen: bool) -> Button:
+	return _selection_panel_of()._book_slot(sim, s, rec, chosen)
+
+
+func _crafting_grid(sim: Sim, s: Dictionary, rec: Dictionary) -> Control:
+	return _selection_panel_of()._crafting_grid(sim, s, rec)
+
+
+func _furnace(sim: Sim, s: Dictionary, rec: Dictionary) -> Control:
+	return _selection_panel_of()._furnace(sim, s, rec)
+
+
+func _arrow() -> Control:
+	return _selection_panel_of()._arrow()
+
+
+func _queue_control(s: Dictionary, rec: Dictionary) -> Control:
+	return _selection_panel_of()._queue_control(s, rec)
+
+
+func _hotbar(sim: Sim, s: Dictionary) -> Control:
+	return _selection_panel_of()._hotbar(sim, s)
+
+
+func _craft_progress(sim: Sim, s: Dictionary) -> float:
+	return _selection_panel_of()._craft_progress(sim, s)
+
+
+func _on_hand(sim: Sim, s: Dictionary) -> Control:
+	return _selection_panel_of()._on_hand(sim, s)
 
 
 ## Which workstations exist and who has each (issue #184), for panels that show them.
@@ -2377,230 +2238,6 @@ static func _job_people(jb: String, n: int) -> String:
 	return Defs.JOB_SKILLED[jb] + ("" if n == 1 else "s")
 
 
-## The Village jobs board (issues #78, #134): a row per resident with their job's dropdown, and a
-## column per job with their level in it and a tick of progress to the next level. Their own job's
-## cell is lit. A column header counts who has the job, yellow when nobody does (Ada aside).
-func _refresh_board(sim: Sim) -> void:
-	_jobs_btn.set_pressed_no_signal(game.book_open)
-	if not game.jobs_board_open:
-		return
-	var sig := "%s|%s|%d|%s" % [game.selection, _keys_sig, _job_for, _stations_sig(sim)]
-	for r in sim.residents:
-		sig += "%d%s%s%s%s%s;" % [r.id, r.name, r.role, r.jobs, r.away, r.map]
-	var herds := _wild_herds(sim)
-	sig += "|%s|%s|%s|%s" % [herds, sim.herd_floor, sim.wheat_keep, sim.m.farm.size()]
-	_rebuild(_board, sig, func(c: Container) -> void:
-		var head := HBoxContainer.new()
-		var title := _label("Village jobs", true, Palette.CHALK, Palette.HEADING)
-		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		head.add_child(title)
-		head.add_child(_label("One job each. Idle residents haul.", false, Palette.CHALK_DIM, Palette.CAPTION))
-		c.add_child(head)
-		var grid := GridContainer.new()
-		grid.columns = Defs.JOBS.size() + 2
-		grid.add_theme_constant_override("h_separation", 3)
-		grid.add_theme_constant_override("v_separation", 3)
-		grid.add_child(Control.new())
-		var job_head := _label("Job", true, Palette.CHALK, Palette.BODY)
-		job_head.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-		grid.add_child(job_head)
-		for jb in Defs.JOBS:
-			var n: int = sim.residents.filter(func(r): return r.role == jb).size()
-			var col := VBoxContainer.new()
-			col.add_theme_constant_override("separation", 0)
-			var name := _label(Defs.JOB_NAMES[jb], true, Palette.CHALK, Palette.BODY)
-			name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			col.add_child(name)
-			var nobody: bool = n == 0 and jb != "haul"  # everyone hauls when idle
-			var count := _label("nobody" if n == 0 else str(n), false, Palette.YELLOW if nobody else Palette.CHALK_DIM, Palette.CAPTION)
-			count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			col.add_child(count)
-			var people: String = Defs.JOB_SKILLED[jb].capitalize() + "s"
-			col.tooltip_text = "%s: %s. Ada does this work when she can." % [people, "nobody" if n == 0 else str(n)] if jb != "haul" else "%s: %d. Everyone hauls when there's nothing of their own job to do." % [people, n]
-			if Defs.JOB_STATIONS.has(jb):  # how many workstations there are for it (issue #184)
-				var tpl: String = Defs.JOB_STATIONS[jb]
-				var ns: int = sim.maps.village.sites.filter(func(st): return st.done and st.tpl == tpl).size()
-				var word: String = Defs.TEMPLATES[tpl].name.to_lower().split(" ")[-1]  # "2 benches", "no composter"
-				var built := _label("%d %s" % [ns, word if ns == 1 else word + ("es" if word.ends_with("ch") else "s")] if ns > 0 else "no " + word, false, Palette.CHALK_DIM, Palette.CAPTION)
-				built.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-				col.add_child(built)
-				col.tooltip_text += " Each needs a %s of their own: %d built." % [Defs.TEMPLATES[tpl].name.to_lower(), ns]
-			col.mouse_filter = Control.MOUSE_FILTER_STOP
-			grid.add_child(col)
-		for r in sim.residents:
-			var who := _button(r.name + (" (away)" if r.away else (" (on the road)" if r.map == Road.ID or r.map == MeadowRoad.ID else "")), func(): game.focus_on("res", r.id))
-			who.icon = _swatch_tex(r.shirt)
-			who.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			who.custom_minimum_size = Vector2(120, 0)
-			who.toggle_mode = true
-			who.set_pressed_no_signal(game.selection.get("ids", []).has(r.id))
-			who.tooltip_text = "Select %s" % r.name if r.map != Road.ID and r.map != MeadowRoad.ID else "Select %s. %s" % [r.name, _status(sim, r)]
-			grid.add_child(who)
-			var pick := _job_picker(sim, r)
-			pick.custom_minimum_size = Vector2(170, 0)
-			pick.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			grid.add_child(pick)
-			for jb in Defs.JOBS:
-				grid.add_child(_board_cell(r, jb))
-		c.add_child(grid)
-		_add_herd_floors(c, sim, herds)
-		_add_wheat_keep(c, sim))
-
-
-## Wild animals in the village by species, penned ones aside (issue #139).
-func _wild_herds(sim: Sim) -> Dictionary:
-	var out := {}
-	for a in sim.maps.village.sheep:
-		if a.alive and a.get("pen", 0) == 0:
-			out[a.species] = out.get(a.species, 0) + 1
-	return out
-
-
-## The jobs board's herd floors (issue #183): how many of each wild species hunters leave, with a stepper.
-func _add_herd_floors(c: Container, sim: Sim, herds: Dictionary) -> void:
-	if herds.is_empty():
-		return
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	row.add_child(_label("Hunters leave", true, Palette.CHALK, Palette.BODY))
-	for sp in Defs.SPECIES:
-		if not herds.has(sp):
-			continue
-		var sd: Dictionary = Defs.SPECIES[sp]
-		var n := sim.floor_of(sp)
-		var less := _button("−", func(): game.set_herd_floor(sp, n - 1), "Secondary")
-		less.disabled = n <= 0
-		less.tooltip_text = "Leave one fewer %s" % sd.one
-		row.add_child(less)
-		var lbl := _label("%d %s" % [n, sd.one if n == 1 else sd.many], false, Palette.CHALK, Palette.BODY)
-		lbl.tooltip_text = "Hunters hunt %s on their own until %d %s left (%d now). Marked ones are hunted anyway." % [sd.many, n, "is" if n == 1 else "are", herds[sp]]
-		lbl.mouse_filter = Control.MOUSE_FILTER_STOP
-		row.add_child(lbl)
-		var more := _button("+", func(): game.set_herd_floor(sp, n + 1), "Secondary")
-		more.tooltip_text = "Leave one more %s" % sd.one
-		row.add_child(more)
-	c.add_child(row)
-
-
-## The jobs board's wheat target (issue #269): farmers stop once the village has this much, with a stepper.
-func _add_wheat_keep(c: Container, sim: Sim) -> void:
-	if sim.m.farm.is_empty():
-		return
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	row.add_child(_label("Farmers keep", true, Palette.CHALK, Palette.BODY))
-	var less := _button("−", func(): game.set_wheat_keep(sim.wheat_keep - Tuning.KEEP_STEP), "Secondary")
-	less.disabled = sim.wheat_keep <= 0
-	row.add_child(less)
-	var lbl := _label("%d wheat" % sim.wheat_keep, false, Palette.CHALK, Palette.BODY)
-	lbl.tooltip_text = "Farmers plant and harvest until the village has %d wheat (%d now)." % [sim.wheat_keep, sim.free_count("wheat")]
-	lbl.mouse_filter = Control.MOUSE_FILTER_STOP
-	row.add_child(lbl)
-	row.add_child(_button("+", func(): game.set_wheat_keep(sim.wheat_keep + Tuning.KEEP_STEP), "Secondary"))
-	c.add_child(row)
-
-
-## A resident's level in a job on the board, with a tick of progress to the next; lit for their job.
-func _board_cell(r: Dictionary, jb: String) -> Control:
-	var lv := Sim.level(r, jb)
-	var mine: bool = r.role == jb or r.role == "all"
-	var p := PanelContainer.new()
-	p.set_meta("cell", "%d:%s" % [r.id, jb])
-	p.custom_minimum_size = Vector2(66, 40)
-	p.mouse_filter = Control.MOUSE_FILTER_STOP
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Palette.SLATE_DEEP if mine else Color(Palette.SLATE_DEEP, 0.0)
-	sb.set_corner_radius_all(3)
-	p.add_theme_stylebox_override("panel", sb)
-	var v := VBoxContainer.new()
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	var l := _label("Lv %d" % lv, mine, Palette.CHALK if mine else Palette.CHALK_DIM, Palette.BODY)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(l)
-	var bar := _bar(Sim.level_progress(r, jb), Palette.GREEN)
-	bar.custom_minimum_size = Vector2(46, 3)
-	bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(bar)
-	p.add_child(v)
-	var xp: int = r.jobs[jb].get("xp", 0)
-	var lv_text := "level %d: %d of %d points to level %d" % [lv, xp, Sim.xp_for(lv + 1), lv + 1]
-	p.tooltip_text = "%s, %s: %s%s." % [r.name, Defs.JOB_NAMES[jb], lv_text, ". Their job" if r.role == jb else ""]
-	return p
-
-
-## What armor a resident wears (issue #140), and how much of the hazards' harm it turns aside.
-func _add_armor_row(c: Container, r: Dictionary) -> void:
-	var worn := Sim.armor_worn(r)
-	if worn.is_empty():
-		c.add_child(_row("Armor", "None"))
-		return
-	c.add_child(_row("Armor", "%d%% guard" % roundi(Sim.protection(r) * 100.0) + (", full set" if worn.size() == Defs.ARMOR_SLOTS.size() else "")))
-	var parts: PackedStringArray = []
-	for slot in Defs.ARMOR_SLOTS:
-		if worn.has(slot):
-			parts.append("%s, %d %s" % [Defs.SLOT_NAMES[slot], worn[slot].dur, "use" if worn[slot].dur == 1 else "uses"])
-	c.add_child(_label("%s. Turns aside that share of injuries from hazards, and wears a use each time one strikes." % "; ".join(parts), false, Palette.CHALK_DIM, Palette.CAPTION, true))
-
-
-## A resident's axe or pickaxe, with Equip to choose another one (lying about or stockpiled).
-func _add_tool_row(c: Container, sim: Sim, r: Dictionary, kind: String) -> void:
-	var t = r[kind]
-	var none := "Bare hands" if kind == "axe" else "None"
-	var text: String = _tool_text(t) if t != null else ("Broke" if r.broken[kind] else none)
-	var h := _row("Axe" if kind == "axe" else "Pickaxe", text)
-	var spare := sim.tool_items(kind, 0)
-	if not spare.is_empty() or equip_kind == kind:
-		var b := _button("Close" if equip_kind == kind else "Equip", func(): equip_kind = "" if equip_kind == kind else kind, "Secondary")
-		b.add_theme_font_size_override("font_size", Palette.CAPTION)
-		b.tooltip_text = "Choose which %s %s uses" % ["axe" if kind == "axe" else "pickaxe", r.name]
-		h.add_child(b)
-	c.add_child(h)
-	if t != null and r.kept[kind]:
-		var k := HBoxContainer.new()
-		var l := _label("Kept until it breaks.", false, Palette.CHALK_DIM, Palette.CAPTION)
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		k.add_child(l)
-		var auto := _button("Use the best", func(): game.release_kept_tool(r, kind), "Secondary")
-		auto.add_theme_font_size_override("font_size", Palette.CAPTION)
-		auto.tooltip_text = "Let %s swap it for a better one when there is one" % r.name
-		k.add_child(auto)
-		c.add_child(k)
-	if equip_kind != kind:
-		return
-	if spare.is_empty():
-		c.add_child(_label("No other %s is lying about or stockpiled." % ("axe" if kind == "axe" else "pickaxe"), false, Palette.CHALK_DIM, Palette.CAPTION, true))
-		return
-	spare.sort_custom(func(a, b): return Defs.ITEMS[a.type].tier > Defs.ITEMS[b.type].tier or (a.type == b.type and a.dur > b.dur))
-	for st in spare:
-		var where := "in the stockpile" if sim.in_zone(st.cell) else "on the ground"
-		var it: Dictionary = Defs.ITEMS[st.type]
-		var b := _button("%s, %d %s left, %s" % [it.one.substr(0, 1).to_upper() + it.one.substr(1), st.dur, "use" if st.dur == 1 else "uses", where], func():
-			equip_kind = ""
-			game.equip_tool(r, st))
-		b.theme_type_variation = "Secondary"
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.add_theme_font_size_override("font_size", Palette.CAPTION)
-		b.set_meta("entry", true)  # 1–9 pick it while the list is open (issue #197)
-		c.add_child(b)
-
-
-## What a resident is doing, for panel headings.
-func _status(sim: Sim, r: Dictionary) -> String:
-	if r.away:
-		return _road_text(sim, r)
-	if sim.on_road(r) and r.job != null and not sim.cart.get("riders", []).has(r.id):  # walking the road map (issue #118)
-		return "%s, about %d s" % [r.job.label, ceili(sim.road_eta(r))]
-	if r.map == Road.ID and not sim.on_road(r) and r.job != null:  # out working on the road (issue #122)
-		return "On the road: %s" % r.job.label.to_lower()
-	var ex := sim.expedition_of(r)
-	if Sim.realm_of(r.map) == "nether" and ex.get("target", {}).get("item", "") in ["line", "pline"] and r.job != null and r.job.kind == "build":  # issue #159
-		return "In the Nether: %s" % r.job.label.to_lower()
-	if r.job == null and sim.waits_for_home(r):  # issue #356
-		return "Waits for a new home"
-	return r.job.label if r.job != null else "Idle"
-
-
 ## "On the way to the meadow, 22 s", "On the way home, 22 s" or "On the road home, 22 s".
 static func _road_text(sim: Sim, r: Dictionary) -> String:
 	var meadow: bool = sim.expedition_of(r).get("dest", "") == Meadow.ID
@@ -2609,581 +2246,7 @@ static func _road_text(sim: Sim, r: Dictionary) -> String:
 	return "On the %s to the %s, %d s" % ["way" if meadow else "road", sim.get_map(r.trip).name.to_lower(), ceili(sim.back_in(r))]
 
 
-## An animal (issues #42, #138, #139): what it drops, whether it's penned, fed or young, and the
-## Hunt and Lead buttons.
-func _fill_animal(c: Container, sim: Sim, a: Dictionary) -> void:
-	var sp: Dictionary = Defs.SPECIES[a.species]
-	var secs := func(at: int) -> int: return maxi(1, ceili(float(at - sim.tick) / Tuning.TPS))
-	if a.get("young", false):
-		c.add_child(_head(sp.young.capitalize(), "Grows up in %d s" % secs.call(a.grown_at)))
-		c.add_child(_label("Young ones can't be hunted. Grown, it drops %s." % Defs.drops_text(a.species), false, Palette.CHALK_DIM, Palette.BODY, true))
-	else:
-		c.add_child(_head(sp.name, "Drops " + Defs.drops_text(a.species)))
-	var pens: bool = sim.on_map(game.view_map, func(): return not sim.m.pens.is_empty())
-	if a.get("pen", 0) != 0:
-		var note := "In a pen."
-		if a.get("fed_at", -1) >= 0:
-			note = "In a pen, fed: a young one in about %d s, once its mate is fed too." % secs.call(a.fed_at + int(Tuning.BREED_TIME * Tuning.TPS))
-		elif a.get("cool_until", 0) > sim.tick:
-			note = "In a pen. It can be fed again in %d s." % secs.call(a.cool_until)
-		elif not a.get("young", false):
-			note = "In a pen. Fed wheat with another %s, it has a young one." % sp.one
-		c.add_child(_label(note, false, Palette.CHALK_DIM, Palette.BODY, true))
-	if a.claim != 0:
-		var who: Dictionary = sim.resident(a.claim)
-		var doing := "hunting it"
-		if who.get("job") != null:
-			doing = {"lead": "leading it to a pen", "feed": "feeding it"}.get(who.job.kind, doing)
-		c.add_child(_label("%s is %s." % [who.get("name", "Someone"), doing], false, Palette.CHALK_DIM))
-	elif a.get("lead", false):
-		c.add_child(_label("Marked to lead into a pen. The party does it at the meadow.", false, Palette.CHALK_DIM, Palette.BODY, true))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	if not a.get("young", false):
-		row.add_child(_button("Cancel hunt" if a.des else "Hunt", func(): game.toggle_hunt(a), "Secondary" if a.des else "Primary"))
-	if pens and a.get("pen", 0) == 0:
-		row.add_child(_button("Don't lead" if a.get("lead", false) else "Lead to a pen", func(): game.toggle_lead(a), "Secondary"))
-	if row.get_child_count() > 0:
-		c.add_child(row)
-
-
-## A pen (issue #139): its fences, or what's in it, and how breeding works.
-func _fill_pen(c: Container, sim: Sim, p: Dictionary) -> void:
-	var edge := Sim.pen_edge(p).size()
-	c.add_child(_head("Pen", "%d×%d, room for %d" % [p.rect.size.x, p.rect.size.y, Sim.pen_room(p)]))
-	if not Sim.pen_done(p):
-		var left: int = (edge - p.built.size()) * Tuning.FENCE_STICKS
-		c.add_child(_row("Fences built", "%d / %d" % [p.built.size(), edge]))
-		c.add_child(_bar(float(p.built.size()) / edge, Palette.BLUE))
-		c.add_child(_label("A party builds it with sticks from its packs: %s more. Plan a meadow trip with sticks." % Defs.words("stick", left), false, Palette.CHALK_DIM, Palette.BODY, true))
-	else:
-		var animals: Array = sim.on_map(game.view_map, sim.penned.bind(p))
-		var parts: PackedStringArray = []
-		for sp in ["cow", "pig", "sheep"]:
-			var grown := animals.filter(func(a): return a.species == sp and not a.get("young", false)).size()
-			var young := animals.filter(func(a): return a.species == sp and a.get("young", false)).size()
-			if grown > 0:
-				parts.append(Defs.animals(sp, grown))
-			if young > 0:
-				parts.append("%d %s" % [young, Defs.SPECIES[sp].young if young == 1 else Defs.SPECIES[sp].youngs])
-		c.add_child(_label(", ".join(parts) + "." if not parts.is_empty() else "Empty. Mark animals with Gather → Lead to a pen, and the party walks them in.", false, Palette.CHALK, Palette.BODY, true))
-		var fed := animals.filter(func(a): return a.get("fed_at", -1) >= 0).size()
-		if fed > 0:
-			c.add_child(_label("%d fed, a young one on the way." % fed, false, Palette.WHEAT, Palette.BODY))
-		c.add_child(_label("A pair of one kind fed %s each has a young one after %d s, and can be fed again after %d min. Young ones grow up in %d min." % [Defs.words("wheat", Tuning.FEED_WHEAT), roundi(Tuning.BREED_TIME), roundi(Tuning.BREED_COOLDOWN / 60.0), roundi(Tuning.GROW_TIME / 60.0)], false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	c.add_child(_destructive("Take the pen down", "Click again to take it down. Its animals go free", "pen:%d" % p.id, func(): game.remove_pen(p)))
-
-
-## A signpost to an adventure (issue #136): what's past it, and the way to plan a trip there.
-func _fill_signpost(c: Container, sim: Sim, id: String) -> void:
-	var row: Dictionary = {}
-	for a in sim.adventures():
-		if a.id == id:
-			row = a
-	var mp := sim.get_map(id)
-	c.add_child(_head("To the %s" % mp.name.to_lower(), row.get("status", "Nobody knows where it goes")))
-	if row.is_empty():
-		c.add_child(_label("An expedition board would have word of what's past this signpost.", false, Palette.CHALK_DIM, Palette.BODY, true))
-		return
-	c.add_child(_label("%s. About %d s walk each way." % [row.what, roundi(row.travel)], false, Palette.CHALK, Palette.BODY, true))
-	if id == Meadow.ID and mp.visited:
-		var hs := sim.herds()
-		var parts: PackedStringArray = []
-		for sp in ["cow", "pig", "sheep"]:
-			parts.append(Defs.animals(sp, hs.get(sp, 0)))
-		c.add_child(_label("%s. Each kind grows back on its own." % ", ".join(parts), false, Palette.CHALK_DIM, Palette.BODY, true))
-	var b := _button("Plan a trip to the %s" % mp.name.to_lower(), func(): game.open_adventure(id), "Primary")
-	b.disabled = row.locked
-	b.tooltip_text = "One expedition at a time" if row.locked else "Open the expedition board on this adventure"
-	c.add_child(b)
-
-
-func _tool_text(t: Dictionary) -> String:
-	return "%s, %d %s left" % [Defs.TIER_NAMES[t.tier], t.dur, "use" if t.dur == 1 else "uses"]
-
-
-func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
-	var tpl: Dictionary = Defs.TEMPLATES[s.tpl]
-	var reasons := sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id)
-	if s.tpl == "track":  # a segment of the line (issues #121, #122)
-		c.add_child(_head("Track", Road.SEGMENTS[s.seg].name))
-		if s.done:
-			c.add_child(_label("Laid. Carts run at full speed here.", false, Palette.CHALK_DIM, Palette.BODY, true))
-			return
-		var laid: int = s.get("laid", 0)
-		c.add_child(_row("Rails laid", "%d / %d" % [laid, Tuning.RAILS_PER_SEGMENT], false))
-		c.add_child(_bar(float(laid) / Tuning.RAILS_PER_SEGMENT))
-		c.add_child(_row("Rails here", str(s.store.get("rail", 0))))
-		for x in reasons:
-			c.add_child(_reason(x.why))
-		if sim.next_track() != s.seg:
-			c.add_child(_label("Waiting its turn: track is laid from the village end.", false, Palette.CHALK_DIM, Palette.BODY, true))
-		if s.builder:
-			c.add_child(_label("%s is laying it." % sim.resident(s.builder).name, false, Palette.CHALK_DIM))
-		c.add_child(_destructive("Cancel this segment", "Click again to cancel it", "site:%d" % s.id, func(): game.cancel_site(s)))
-		return
-	if s.tpl == "station" and s.done:  # issue #123
-		_fill_station(c, sim, s)
-		return
-	if Defs.TEMPLATES[s.tpl].has("device") and s.done:  # issues #170, #171
-		_panels().fill_device(c, sim, s)
-		return
-	if s.tpl == "portal_station" and s.done:  # issues #168, #169
-		_panels().fill_portal_station(c, sim, s)
-		return
-	if not s.done:
-		var st := sim.current_stage(s)
-		var stages := Sim.stages_of(s)
-		var stage_line: String = "Stage %d of %d: %s" % [s.stage + 1, stages.size(), st.name.to_lower()] if stages.size() > 1 else "Blueprint"
-		if s.get("upgrading", false):
-			stage_line = "Digging it out"
-		elif s.get("grow", false):
-			stage_line = "Growing into a %s" % Defs.HOUSE_TIER_NAMES[s.tier - 1].to_lower()
-		c.add_child(_head(Sim.station_name(s), stage_line))
-		if not sim.footprint_clear(s):
-			c.add_child(_label("Clearing the ground first: %s." % Sim.clearing_text(sim.site_obstacles(s)), false, Palette.CHALK, Palette.BODY, true))
-		for k in st.cost:
-			var have: int = s.store.get(k, 0)
-			c.add_child(_row(Defs.ITEMS[k].label, "%d / %d" % [have, st.cost[k]], false))
-			c.add_child(_bar(float(have) / st.cost[k]))
-		for x in reasons:
-			c.add_child(_reason(x.why))
-		if s.builder:
-			c.add_child(_label("%s is building." % sim.resident(s.builder).name, false, Palette.CHALK_DIM))
-		if s.stage + 1 < Sim.stages_of(s).size():
-			var nxt: Dictionary = Sim.stages_of(s)[s.stage + 1]
-			c.add_child(_label("%s next: %s." % [nxt.name, Defs.cost_text(nxt.cost)], false, Palette.CHALK_DIM, Palette.BODY, true))
-		if not s.get("grow", false):  # a house that is growing keeps what it has
-			c.add_child(_destructive("Cancel blueprint", "Click again to cancel the blueprint", "site:%d" % s.id, func(): game.cancel_site(s)))
-		return
-	if s.tpl == "storehouse":  # issue #189
-		_panels().fill_storehouse(c, sim, s)
-		return
-	if s.tpl == "cartographer_table" and s.done:  # issue #321
-		_panels().fill_cartographer(c, sim, s)
-		return
-	if s.tpl == "composter" and s.done:  # issue #269
-		_panels().fill_farm(c, sim, s)
-		return
-	if s.tpl == "enchanting_workshop" and s.done:  # issue #165
-		_panels().fill_enchanting(c, sim, s)
-		return
-	if s.tpl == "house":
-		var owner := sim.resident(s.owner)
-		var line := "Home of %s." % owner.name if not owner.is_empty() else ("Empty. A traveler should arrive soon." if sim.arrival_at >= 0 else "Empty.")
-		var tier := Sim.house_tier(s)
-		c.add_child(_label(Defs.HOUSE_TIER_NAMES[tier - 1] if tier >= 1 else "House", true, Palette.CHALK, Palette.TITLE))
-		c.add_child(_label(line, false, Palette.CHALK_DIM, Palette.BODY, true))
-		if Sim.is_old_house(s):  # issue #356
-			var in_place := sim.house_update_in_place(s)
-			c.add_child(_label("An old house, with no entrance. %s eats and sleeps here but takes no work until it's updated." % (owner.name if not owner.is_empty() else "Its resident"), false, Palette.YELLOW, Palette.BODY, true))
-			var upd := _button("Update" if in_place else "Update: move it", func(): game.update_house(s), "Primary")
-			upd.tooltip_text = "Gives it an entrance where it stands, free." if in_place else "There's no room for a door here. Pick it up and put it down where a 5x5 and its entrance fit."
-			c.add_child(upd)
-		if s.has("tier") and s.tier < 3 and not owner.is_empty():
-			var need: int = Tuning.EMERALD_COSTS[s.tier - 1]
-			var next: String = Defs.HOUSE_TIER_NAMES[s.tier].to_lower()
-			c.add_child(_row("Emeralds", "%d / %d" % [owner.get("emeralds", 0), need], false))
-			c.add_child(_label("Upgrading to a %s costs %d emeralds from %s, then %s." % [next, need, owner.name, Defs.cost_text(Defs.house_cost(s.tier + 1))], false, Palette.CHALK_DIM, Palette.CAPTION, true))
-			var up := _button("Upgrade to a %s" % next, func(): game.upgrade_house(s), "Primary")
-			up.disabled = sim.house_upgrade_check(s) != ""
-			up.tooltip_text = sim.house_upgrade_check(s)
-			c.add_child(up)
-		return
-	if s.tpl == "board":  # its planner opens above the toolbar (issue #106)
-		c.add_child(_label(tpl.name, true, Palette.CHALK, Palette.TITLE))
-		c.add_child(_label(_board_status(sim), false, Palette.CHALK_DIM, Palette.BODY, true))
-		for x in reasons:
-			c.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
-		if not game.planner_open:
-			c.add_child(_button("Open the planner", func(): game.open_planner(), "Primary"))
-		return
-	if not Sim.work_of(s).is_empty():  # a chopping block or mason's bench (issue #177)
-		_panels().fill_workstation(c, sim, s, reasons)
-		return
-	if not Sim.is_station(s):  # the toolsmith's bench, composter, lodge or builder's table (issue #184)
-		c.add_child(_label(sim.station_title(s), true, Palette.CHALK, Palette.TITLE))
-		c.add_child(_label(_station_line(sim, s), false, Palette.CHALK_DIM, Palette.BODY, true))
-		for x in reasons:
-			c.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
-		return
-	# A finished bench or fireplace: a short summary here. Its recipes and queue live only in the
-	# Craft panel on the right, which selecting it opens.
-	c.add_child(_label(sim.station_title(s), true, Palette.CHALK, Palette.TITLE))
-	c.add_child(_label(_station_line(sim, s), false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	c.add_child(_label(_bench_status(sim, s), false, Palette.CHALK_DIM, Palette.BODY, true))
-	for x in reasons:
-		c.add_child(_reason(x.why))
-	if not game.craft_menu_open:
-		c.add_child(_button("Open the craft menu", func(): game.open_craft_menu(s), "Primary"))
-
-
-
-
-
-
-
-
-
-
-## A workstation's standing order (issue #178): "Keep 20 planks", with − and +. 0 is off.
-func _make_keep_row(sim: Sim, s: Dictionary) -> Control:
-	var rec := Defs.recipe(Defs.TEMPLATES[s.tpl].makes)
-	var out: String = rec.out.keys()[0]
-	var v := VBoxContainer.new()
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	var n: int = s.get("make_keep", 0)
-	var less := _button("−", func(): game.set_make_keep(s, n - Tuning.MAKE_STEP), "Secondary")
-	less.disabled = n <= 0
-	less.tooltip_text = "Keep %d fewer" % Tuning.MAKE_STEP
-	row.add_child(less)
-	var lbl := _label("Keep %s" % Defs.words(out, n) if n > 0 else "Make %s: off" % Defs.ITEMS[out].many, false, Palette.CHALK, Palette.BODY)
-	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	row.add_child(lbl)
-	var more := _button("+", func(): game.set_make_keep(s, n + Tuning.MAKE_STEP), "Secondary")
-	more.tooltip_text = "Keep %d more" % Tuning.MAKE_STEP
-	row.add_child(more)
-	v.add_child(row)
-	var inp: String = rec.inp.keys()[0]
-	v.add_child(_label("The village has %d. While it has fewer, %ss make them here from %s." % [sim.free_count(out), Defs.JOB_NAMES[Sim.recipe_job(rec)].to_lower(), Defs.ITEMS[inp].many] if n > 0 else "Nothing is made here unless you queue it.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	return v
-
-
-## Who works from a workstation (issue #184): "Bram works here as the farmer.", or that it's free.
-func _station_line(sim: Sim, s: Dictionary) -> String:
-	var job: String = Defs.JOB_STATIONS.find_key(s.tpl)
-	var who := sim.resident(s.get("worker", 0))
-	var what: String = {"toolsmith": " Tools are made at the crafting bench; the toolsmith keeps spares in stock.",
-		"farm": " The farmer tends any farm plot.", "hunt": " The hunter hunts marked animals.", "build": " The builder puts up blueprints."}.get(job, "")
-	if not who.is_empty():
-		return "%s works here as the %s.%s" % [who.name, Defs.JOB_SKILLED[job], what]
-	return "Free: give someone the %s job and they'll claim it. Ada works anywhere without one.%s" % [Defs.JOB_NAMES[job], what]
-
-
-## What a finished bench or fireplace is doing, for its panels.
-func _bench_status(sim: Sim, s: Dictionary) -> String:
-	var ready := sim.bench_craftable(s)
-	var ai := sim.bench_active(s)
-	if s.crafting != "":
-		var rec := {}
-		for r in Defs.RECIPES:
-			if r.name == s.crafting:
-				rec = r
-		return rec.get("doing", "Crafting " + s.crafting.to_lower())
-	if not ready.is_empty():
-		return "Ready to make " + ready.name.to_lower()
-	if s.queue.is_empty():
-		return "Nothing queued"
-	var head := Defs.recipe(s.queue[maxi(ai, 0)])
-	var missing: PackedStringArray = []
-	for k in head.inp:
-		var have: int = s.store.get(k, 0)
-		if have < head.inp[k]:
-			missing.append(Defs.words(k, head.inp[k] - have))
-	return "%s %s for %s" % ["Gathering" if ai >= 0 else "Waiting for", ", ".join(missing), head.name.to_lower()]
-
-
-## The station panel (issue #95), laid out like a crafting table's screen: a recipe book of result
-## icons, the chosen recipe's crafting grid (a furnace at the fireplace), an arrow to the result with
-## Queue, then the queue as a hotbar and what's on hand. The grid only shows the recipe: residents
-## fetch the ingredients, so nothing is dropped into it. What's doing and stuck comes first, and the
-## top part never changes size, so the Queue control stays put as the queue changes (#57, #76).
-func _fill_bench(c: Container, sim: Sim, s: Dictionary) -> void:
-	var reasons := sim.stuck.filter(func(x): return x.focus_kind == "site" and x.focus_id == s.id)
-	if game.benches().size() < 2:  # with tabs, the pressed tab names the station
-		c.add_child(_label(Defs.TEMPLATES[s.tpl].name, true, Palette.CHALK, Palette.HEADING))
-	var status := VBoxContainer.new()
-	status.add_theme_constant_override("separation", 2)
-	status.custom_minimum_size = Vector2(0, 44)
-	status.add_child(_label(_bench_status(sim, s), false, Palette.CHALK, Palette.BODY, true))
-	for x in reasons.slice(0, 1):
-		status.add_child(_reason(x.why) if not x.waiting else _label(x.why, false, Palette.CHALK_DIM, Palette.BODY, true))
-	c.add_child(status)
-	var recipes: Array = Defs.recipes_shown(sim, s.tpl)
-	for q in s.queue:  # whatever's already queued stays in the book, in its place
-		var queued := Defs.recipe(q)
-		if not queued.is_empty() and not recipes.has(queued):
-			recipes.append(queued)
-	if recipes.is_empty():  # a station built before the book reached it (a save, a test): show its whole book
-		recipes = Defs.recipes_at(s.tpl)
-	var rec: Dictionary = Defs.recipe(_craft_pick.get(s.tpl, recipes[0].id))
-	if rec.is_empty() or not recipes.has(rec):
-		rec = recipes[0]
-	var table := HBoxContainer.new()
-	table.add_theme_constant_override("separation", 14)
-	var book := GridContainer.new()
-	book.columns = 2
-	book.add_theme_constant_override("h_separation", 3)
-	book.add_theme_constant_override("v_separation", 3)
-	book.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	for r in recipes:
-		book.add_child(_book_slot(sim, s, r, is_same(r, rec)))
-	table.add_child(book)
-	table.add_child(_furnace(sim, s, rec) if s.tpl == "fireplace" else _crafting_grid(sim, s, rec))
-	table.add_child(_arrow())
-	var out_type: String = rec.out.keys()[0]
-	var right := VBoxContainer.new()
-	right.add_theme_constant_override("separation", 6)
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.alignment = BoxContainer.ALIGNMENT_CENTER
-	right.add_child(_slot(out_type, rec.out[out_type], 46))
-	right.add_child(_label(rec.name, true, Palette.CHALK, Palette.BODY, true))
-	right.add_child(_queue_control(s, rec))
-	table.add_child(right)
-	c.add_child(table)
-	c.add_child(_rule())
-	var bar := _hotbar(sim, s)
-	if s.tpl == "bench":
-		bar.tooltip_text = "Missing planks and sticks are queued automatically." if sim.auto_craft else "Once Ada’s house is finished, the bench queues the planks and sticks a recipe needs."
-	c.add_child(bar)
-	c.add_child(_on_hand(sim, s))
-	if Defs.TEMPLATES[s.tpl].has("makes"):
-		c.add_child(_make_keep_row(sim, s))
-	if s.tpl == "fireplace":
-		var on: bool = s.get("keep_meals", true)
-		var keep := _button("Keep %d meals in stock: %s" % [Tuning.MEAL_STOCK, "on" if on else "off"], func(): game.set_keep_meals(s, not on), "Secondary")
-		keep.toggle_mode = true
-		keep.set_pressed_no_signal(on)
-		keep.tooltip_text = "While stored bread and cooked mutton are fewer than %d, cooks make whichever the wheat, mutton and logs allow." % Tuning.MEAL_STOCK
-		c.add_child(keep)
-
-
-
-## How many of an item the station could use now: in it, on the way, or lying about.
-func _have(sim: Sim, s: Dictionary, k: String) -> int:
-	return s.store.get(k, 0) + s.incoming.get(k, 0) + sim.free_count(k)
-
-
-func _short(sim: Sim, s: Dictionary, rec: Dictionary) -> Array:
-	return rec.inp.keys().filter(func(k): return _have(sim, s, k) < rec.inp[k])
-
-
-## A square slot: an inset with an item's icon and, past 1, its count in the corner. An outline
-## colour marks it (yellow: short of it).
-func _slot(type: String, n := 1, size := 40, outline := Palette.CHALK_DIM, dim := false) -> PanelContainer:
-	var p := PanelContainer.new()
-	var sb := _box(Palette.SLATE_DEEP, 3, 0, outline)
-	p.add_theme_stylebox_override("panel", sb)
-	p.custom_minimum_size = Vector2(size, size)
-	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	p.mouse_filter = Control.MOUSE_FILTER_PASS
-	if type != "":
-		var t := TextureRect.new()
-		t.texture = ItemIcons.icon(type)
-		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		t.custom_minimum_size = Vector2(size - 8, size - 8)
-		t.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		t.modulate = Color(1, 1, 1, 0.45) if dim else Color.WHITE
-		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		p.add_child(t)
-		p.tooltip_text = Defs.words(type, n)
-	if n > 1:
-		var count := _label("%d" % n, true, Palette.CHALK, Palette.CAPTION)
-		count.add_theme_color_override("font_outline_color", Palette.SLATE_DEEP)
-		count.add_theme_constant_override("outline_size", 4)
-		count.size_flags_horizontal = Control.SIZE_SHRINK_END
-		count.size_flags_vertical = Control.SIZE_SHRINK_END
-		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		p.add_child(count)
-	return p
-
-
-## A recipe in the book: its result's icon. Dimmed with a yellow corner when there isn't enough on
-## hand for one; pressed while it's the one shown.
-func _book_slot(sim: Sim, s: Dictionary, rec: Dictionary, chosen: bool) -> Button:
-	var out_type: String = rec.out.keys()[0]
-	var short := _short(sim, s, rec)
-	var b := _button("", func(): _craft_pick[s.tpl] = rec.id, "Secondary")
-	b.set_meta("label", rec.name)
-	b.toggle_mode = true
-	b.set_pressed_no_signal(chosen)
-	b.custom_minimum_size = Vector2(38, 38)
-	var t := TextureRect.new()
-	t.texture = ItemIcons.icon(out_type)
-	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 6)
-	t.modulate = Color(1, 1, 1, 0.45) if not short.is_empty() else Color.WHITE
-	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	b.add_child(t)
-	if not short.is_empty():
-		var corner := ColorRect.new()
-		corner.color = Palette.YELLOW
-		corner.size = Vector2(8, 8)
-		corner.position = Vector2(28, 2)
-		corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		b.add_child(corner)
-	b.tooltip_text = rec.name + (" (not enough %s on hand for one)" % ", ".join(short.map(func(k): return Defs.ITEMS[k].many)) if not short.is_empty() else "")
-	return b
-
-
-## The chosen bench recipe laid out on a 3×3 grid. Slots the village is short of are outlined yellow.
-func _crafting_grid(sim: Sim, s: Dictionary, rec: Dictionary) -> Control:
-	var short := _short(sim, s, rec)
-	var g := GridContainer.new()
-	g.columns = 3
-	g.add_theme_constant_override("h_separation", 3)
-	g.add_theme_constant_override("v_separation", 3)
-	g.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	for row in rec.pattern:
-		for ch in row:
-			var item: String = Defs.PATTERN_KEYS.get(ch, "")
-			g.add_child(_slot(item, 1, 34, Palette.YELLOW if short.has(item) else Palette.CHALK_DIM))
-	return g
-
-
-## The fireplace's screen, like a furnace: what's cooked above, the fuel below, a flame between.
-func _furnace(sim: Sim, s: Dictionary, rec: Dictionary) -> Control:
-	var short := _short(sim, s, rec)
-	var fuel: String = rec.get("fuel", "")
-	var food: String = rec.inp.keys().filter(func(k): return k != fuel)[0]
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 4)
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	v.add_child(_slot(food, rec.inp[food], 38, Palette.YELLOW if short.has(food) else Palette.CHALK_DIM))
-	var flame := Control.new()
-	flame.custom_minimum_size = Vector2(38, 22)
-	flame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	flame.draw.connect(func():
-		var pts := PackedVector2Array([Vector2(19, 2), Vector2(28, 14), Vector2(24, 21), Vector2(14, 21), Vector2(10, 14)])
-		flame.draw_colored_polygon(pts, Palette.SLATE_DEEP)
-		flame.draw_colored_polygon(PackedVector2Array([Vector2(19, 6), Vector2(25, 14), Vector2(22, 19), Vector2(16, 19), Vector2(13, 14)]), Palette.YELLOW if fuel != "" else Palette.CHALK_DIM))
-	v.add_child(flame)
-	var fuel_slot := _slot(fuel, 1, 38, Palette.YELLOW if short.has(fuel) else Palette.CHALK_DIM)
-	fuel_slot.tooltip_text = "Fuel: " + Defs.words(fuel, 1) if fuel != "" else "No fuel needed"
-	v.add_child(fuel_slot)
-	return v
-
-
-## The chalk arrow from the grid to the result.
-func _arrow() -> Control:
-	var a := Control.new()
-	a.custom_minimum_size = Vector2(28, 28)
-	a.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	a.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	a.draw.connect(func():
-		a.draw_line(Vector2(2, 14), Vector2(18, 14), Palette.CHALK, 4)
-		a.draw_colored_polygon(PackedVector2Array([Vector2(16, 5), Vector2(27, 14), Vector2(16, 23)]), Palette.CHALK))
-	return a
-
-
-## − Queue n + (issue #76): the count lives in _craft_n, and every button reads it when pressed, so
-## quick clicks between panel rebuilds all count; they relabel the control at once.
-func _queue_control(s: Dictionary, rec: Dictionary) -> Control:
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 4)
-	var n: int = _craft_n.get(rec.id, 1)
-	var q := _button("Queue %d" % n, func(): game.queue_craft(s, rec.id, _craft_n.get(rec.id, 1)), "Primary")
-	q.custom_minimum_size = Vector2(84, 0)
-	var less := _button("−", func(): pass, "Secondary")
-	var more := _button("+", func(): pass, "Secondary")
-	var step := func(by: int) -> void:
-		var m: int = clampi(_craft_n.get(rec.id, 1) + by, 1, CRAFT_MAX)
-		_craft_n[rec.id] = m
-		q.text = "Queue %d" % m
-		less.disabled = m <= 1
-		more.disabled = m >= CRAFT_MAX
-	less.pressed.connect(step.bind(-1))
-	more.pressed.connect(step.bind(1))
-	less.disabled = n <= 1
-	more.disabled = n >= CRAFT_MAX
-	less.tooltip_text = "Queue fewer"
-	more.tooltip_text = "Queue more"
-	less.custom_minimum_size = Vector2(30, 0)
-	more.custom_minimum_size = Vector2(30, 0)
-	for b in [less, q, more]:
-		h.add_child(b)
-	return h
-
-
-## The queue as a hotbar: a slot per entry (click to remove), the first filling as it's made. The
-## toolsmith's and auto-queued entries carry a small letter. Empty slots fill out the bar.
-func _hotbar(sim: Sim, s: Dictionary) -> Control:
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 4)
-	v.add_child(_label("Queue" if not s.queue.is_empty() else "Queue: nothing yet. Pick a recipe above and queue it.", true if not s.queue.is_empty() else false, Palette.CHALK if not s.queue.is_empty() else Palette.CHALK_DIM, Palette.BODY))
-	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 4)
-	var shown := mini(s.queue.size(), HOTBAR)
-	for i in shown:
-		var rec := Defs.recipe(s.queue[i])
-		var out_type: String = rec.out.keys()[0]
-		var b := _button("", func(): game.unqueue_craft(s, i), "Secondary")
-		var mark := ""
-		if str(s.autoq[i]) == "toolsmith":
-			mark = "T"
-		elif s.autoq[i]:
-			mark = "A"
-		b.set_meta("label", "queued %s" % rec.name)
-		b.custom_minimum_size = Vector2(36, 36)
-		var t := TextureRect.new()
-		t.texture = ItemIcons.icon(out_type)
-		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 5)
-		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		b.add_child(t)
-		if mark != "":
-			var m := _label(mark, true, Palette.CHALK_DIM, Palette.CAPTION)
-			m.position = Vector2(3, 0)
-			m.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			b.add_child(m)
-		if i == 0 and s.crafter != 0 and s.crafting == rec.name:
-			var fill := _bar(_craft_progress(sim, s), Palette.GREEN)
-			fill.position = Vector2(4, 30)
-			fill.size = Vector2(28, 3)
-			fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			b.add_child(fill)
-		b.tooltip_text = "%s%s. Click to remove." % [rec.name, {"T": " (toolsmith)", "A": " (auto)"}.get(mark, "")]
-		bar.add_child(b)
-	for i in range(shown, HOTBAR):
-		bar.add_child(_slot("", 1, 36, Color(Palette.CHALK_DIM, 0.35)))
-	v.add_child(bar)
-	if s.queue.size() > HOTBAR:
-		v.add_child(_label("and %d more" % (s.queue.size() - HOTBAR), false, Palette.CHALK_DIM, Palette.CAPTION))
-	return v
-
-
 const HOTBAR := 8
-
-
-## How far along the craft at the head of the queue is, 0 to 1.
-func _craft_progress(sim: Sim, s: Dictionary) -> float:
-	var r := sim.resident(s.crafter)
-	return clampf(r.progress, 0.0, 1.0) if not r.is_empty() and r.progress >= 0 else 0.0
-
-
-## The village's stock of this station's ingredients, read-only, like an inventory row.
-func _on_hand(sim: Sim, s: Dictionary) -> Control:
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 4)
-	var l := _label("On hand", true, Palette.CHALK, Palette.BODY)
-	l.custom_minimum_size = Vector2(70, 0)
-	h.add_child(l)
-	var items: Array = []
-	for rec in Defs.recipes_at(s.tpl):
-		for k in rec.inp:
-			if not items.has(k):
-				items.append(k)
-	for k in items:
-		var n := _have(sim, s, k)
-		var slot := _slot(k, maxi(n, 1), 36, Palette.CHALK_DIM, n == 0)
-		if n <= 1:  # show 1 and 0 too: a slot with no number would read as one
-			var count := _label("%d" % n, true, Palette.CHALK if n > 0 else Palette.CHALK_DIM, Palette.CAPTION)
-			count.add_theme_color_override("font_outline_color", Palette.SLATE_DEEP)
-			count.add_theme_constant_override("outline_size", 4)
-			count.size_flags_horizontal = Control.SIZE_SHRINK_END
-			count.size_flags_vertical = Control.SIZE_SHRINK_END
-			slot.add_child(count)
-		slot.tooltip_text = "%s on hand" % Defs.words(k, n)
-		h.add_child(slot)
-	return h
 
 
 # ---------------------------------------------------------------- cursor hint
@@ -3202,735 +2265,115 @@ func show_hint(text: String, at: Vector2, color := Palette.CHALK) -> void:
 
 # ---------------------------------------------------------------- the expedition planner (issues #105-#107)
 
-## The planner opens above the toolbar when the board is selected. With no expedition it draws up a
-## plan; while one is packing it shows the packing and Depart; while one is out it says so.
+# The drawing lives in planner_panel.gd (#305); these forward to it.
+
 func _refresh_planner(sim: Sim) -> void:
-	var prev := sim.use_slot(game.plan_slot())  # the planner shows the realm of the chosen adventure (issue #145)
-	_refresh_planner_slot(sim)
-	sim.use_slot(prev)
+	_planner()._refresh_planner(sim)
 
 
 func _refresh_planner_slot(sim: Sim) -> void:
-	var board := sim.expedition_board()
-	_plan_panel.visible = game.planner_open and not board.is_empty()
-	if not _plan_panel.visible:
-		return
-	_plan_panel.custom_minimum_size.x = 0 if sim.expedition.is_empty() else 400
-	var dest: String = sim.expedition.get("dest", game.plan.get("dest", OldMine.ID))
-	var sig := "%s|%s|%s|%s|%s|%s|%s|%s|%s" % [game.plan, sim.expedition, board.store, board.get("report", []), sim.stuck.map(func(x): return x.why), sim.site_report(dest), game.adventure, sim.adventures(), _loc_open]
-	for r in sim.residents:
-		sig += "%d%s%s%s%d%d%s%s;" % [r.id, sim.cant_join(r), sim.at_board(r), r.pick, int(r.hunger / 10), ceili(sim.back_in(r)), r.map, r.away]
-		sig += r.job.label if r.job != null else "Idle"
-	_rebuild(_plan_box, sig, func(c: Container) -> void:
-		_fill_planner(c, sim)
-		if not sim.expedition.is_empty():  # the packing view is a single 400-wide column (the panel's width less its margins)
-			_pin_wrap(c, 400 - 24),
-		Callable(), "%s|%s|%s" % [sim.expedition.get("state", ""), dest, game.adventure])
+	_planner()._refresh_planner_slot(sim)
 
 
 func _fill_planner(c: Container, sim: Sim) -> void:
-	var rows := sim.adventures()
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 8)
-	var title := _label("Expedition board", true, Palette.CHALK, Palette.HEADING)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(title)
-	head.add_child(_location_button(sim, rows))
-	head.add_child(_button("Close", func(): game.close_planner(), "Secondary"))
-	c.add_child(head)
-	match sim.expedition.get("state", ""):
-		"staging":
-			_fill_staging(c, sim)
-		"out":
-			_fill_out(c, sim)
-		_:
-			if rows.is_empty():
-				c.add_child(_label("Nobody knows of anywhere to go yet. Walk the signpost at the village's edge to learn of a place.", false, Palette.CHALK_DIM, Palette.BODY, true))
-				return
-			if game.adventure == "" or not rows.any(func(a): return a.id == game.adventure):
-				game.adventure = rows[0].id
-			if game.plan.is_empty() or not game.plan_matches_adventure():  # the planner was left open while an expedition ended
-				game.plan = sim.new_plan(game.adventure)
-			if sim.last_plans.has(game.plan.dest):  # one click to what was packed last time (issue #301)
-				var again := _button("Repeat last trip", func(): game.repeat_last_trip(), "Secondary")
-				again.tooltip_text = "Fill in the party, objective, list and meals of the last trip here. Anyone who can't go is replaced."
-				again.set_meta("label", "Repeat last trip")
-				again.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-				c.add_child(again)
-			_fill_plan(c, sim)
+	_planner()._fill_planner(c, sim)
 
 
-## The board's Location dropdown (issue #181): the chosen place and its travel time, which opens a list of
-## every known destination. While a party is packing or out it shows theirs and the list is read-only.
 func _location_button(sim: Sim, rows: Array) -> Button:
-	var busy: bool = not sim.expedition.is_empty()
-	var here: String = sim.expedition.get("dest", game.adventure)
-	var cur := rows.filter(func(a): return a.id == here)
-	var text := "Nowhere known yet"
-	if not cur.is_empty():
-		text = "%s%s" % [cur[0].name, " · ~%d s each way" % roundi(cur[0].travel) if cur[0].travel >= 0.0 else ""]
-	var b := _button(text + "  ↓", func(): pass, "Secondary")
-	b.set_meta("label", "Location: " + text)
-	b.disabled = rows.is_empty()
-	b.tooltip_text = "One expedition at a time" if busy else "Choose where to go"
-	b.pressed.connect(func() -> void:
-		if _loc_open:
-			_close_loc_drop()
-		else:
-			_loc_open = true
-			_loc_button = b
-			_loc_anchor = b.get_global_rect())
-	return b
+	return _planner()._location_button(sim, rows)
 
 
-## Puts a dropdown at `pos`, kept wholly inside the visible area on every side (a browser window is rarely
-## 16:9, so what fits on the desktop can run off the edge there).
 func _place_drop(drop: Control, pos: Vector2) -> void:
-	var view := get_viewport().get_visible_rect()
-	var sz := drop.get_combined_minimum_size()
-	drop.position = Vector2(clampf(pos.x, view.position.x + 8.0, maxf(view.position.x + 8.0, view.end.x - sz.x - 8.0)),
-			clampf(pos.y, view.position.y + 8.0, maxf(view.position.y + 8.0, view.end.y - sz.y - 8.0)))
+	_planner()._place_drop(drop, pos)
 
 
 func _close_loc_drop() -> void:
-	_loc_open = false
-	_loc_button = null
-	_loc_anchor = Rect2()
-	_loc_drop.visible = false
+	_planner()._close_loc_drop()
 
 
-## The list under the Location button: one line a destination, its travel time and status beside it, and a
-## yellow flag where hazards are known. While a party is out the lines are shown but can't be chosen.
 func _refresh_loc_drop(sim: Sim) -> void:
-	if not _loc_open or not _plan_panel.visible:
-		_close_loc_drop()
-		return
-	_loc_drop.visible = true
-	var h := _loc_drop.get_combined_minimum_size().y
-	if is_instance_valid(_loc_button) and _loc_button.is_visible_in_tree():
-		_loc_anchor = _loc_button.get_global_rect()  # live: the board can move or resize after it opens
-	var w := _loc_drop.get_combined_minimum_size().x
-	var below := _loc_anchor.end.y + 4 + h <= get_viewport().get_visible_rect().size.y
-	_place_drop(_loc_drop, Vector2(_loc_anchor.end.x - w, _loc_anchor.end.y + 4 if below else _loc_anchor.position.y - 4 - h))
-	var rows := sim.adventures()
-	_rebuild(_loc_list, "%s|%s" % [rows, game.adventure], func(c: Container) -> void:
-		for a in rows:
-			var line := "%s · %s · %s" % [a.name, "~%d s" % roundi(a.travel) if a.travel >= 0.0 else "road not walked", a.status]
-			if not a.hazards.is_empty():
-				line += "  !"
-			var b := _button(line, func():
-				game.open_adventure(a.id)
-				_close_loc_drop(), "Secondary")
-			b.set_meta("label", "Adventure: " + a.name)
-			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			b.disabled = a.locked
-			b.toggle_mode = true
-			b.set_pressed_no_signal(a.id == game.adventure)
-			var hz: String = "Hazards: " + "; ".join(a.hazards) if not a.hazards.is_empty() else "No hazards known yet"
-			b.tooltip_text = ("One expedition at a time. " if a.locked else "") + hz
-			c.add_child(b))
+	_planner()._refresh_loc_drop(sim)
 
 
-## The cargo priority list (issue #185): what to bring back, best first. Each row has a toggle (an item that's
-## off is left), its name, how many are wanted (Max: as much as fits), and ↑ ↓ to reorder. The packs' bar below
-## shows the wanted amounts against the room.
 func _add_cargo_list(c: Container, plan: Dictionary, tend: bool) -> void:
-	if plan.target.item in ["survey", "scout", "build", "trade", "fortress", "rescue"]:  # these bring nothing back: the objective row says what they do (issues #148, #154)
-		return
-	var head := HBoxContainer.new()
-	var l := _label("Bring back, best first", true)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(l)
-	if tend:
-		head.add_child(_label("Tending the pens", false, Palette.CHALK_DIM, Palette.CAPTION))
-	c.add_child(head)
-	var clear: bool = plan.get("clear", false)
-	if plan.dest != Meadow.ID and not tend:  # clear the level (issue #188)
-		var cb := _button("Clear the level", func(): game.plan_clear_toggle(), "Secondary")
-		cb.toggle_mode = true
-		cb.set_pressed_no_signal(clear)
-		cb.tooltip_text = "Work every block of what's ticked below, nearest the entrance first. Once the level is cleared the party digs to the door itself and goes down, and carries on until the packs are full, the food runs low or someone is badly hurt."
-		c.add_child(cb)
-		if clear:
-			c.add_child(_label("Every amount below is as much as fits. They go down a level when this one's cleared.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	var list: Array = plan.get("list", [])
-	for i in list.size():
-		var row: Dictionary = list[i]
-		var h := HBoxContainer.new()
-		h.add_theme_constant_override("separation", 4)
-		var on := _button("√" if row.on and not tend else "", func(): game.plan_cargo_toggle(i), "Secondary")
-		on.toggle_mode = true
-		on.set_pressed_no_signal(row.on and not tend)
-		on.custom_minimum_size = Vector2(28, 0)
-		on.set_meta("label", "Bring back: " + Defs.ITEMS[row.item].label)
-		on.tooltip_text = "Bring it back" if not row.on else "Leave it"
-		h.add_child(on)
-		var name := _label("%s%s" % [Defs.ITEMS[row.item].label, "  New" if row.get("new", false) else ""], false, Palette.CHALK if row.on and not tend else Palette.CHALK_DIM)
-		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		h.add_child(name)
-		var up := _button("↑", func(): game.plan_cargo_move(i, -1), "Secondary")
-		up.disabled = i == 0
-		up.tooltip_text = "Bring it back before the one above"
-		up.set_meta("label", "%s up" % Defs.ITEMS[row.item].label)
-		var down := _button("↓", func(): game.plan_cargo_move(i, 1), "Secondary")
-		down.disabled = i == list.size() - 1
-		down.tooltip_text = "Bring it back after the one below"
-		down.set_meta("label", "%s down" % Defs.ITEMS[row.item].label)
-		for b in [up, down]:
-			b.add_theme_font_size_override("font_size", Palette.CAPTION)
-		h.add_child(up)
-		h.add_child(down)
-		var less := _button("−", func(): game.plan_cargo_amount(i, -1), "Secondary")
-		less.disabled = row.n <= 0 or clear
-		less.set_meta("label", "%s less" % Defs.ITEMS[row.item].label)
-		var amount := _label("Max" if row.n <= 0 or clear else "%d" % row.n, false, Palette.CHALK if row.on and not tend else Palette.CHALK_DIM)
-		amount.custom_minimum_size.x = 34
-		amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		amount.tooltip_text = "How many to bring back. Max takes as much as fits."
-		amount.mouse_filter = Control.MOUSE_FILTER_STOP
-		var more := _button("+", func(): game.plan_cargo_amount(i, 1), "Secondary")
-		more.disabled = clear
-		more.set_meta("label", "%s more" % Defs.ITEMS[row.item].label)
-		h.add_child(less)
-		h.add_child(amount)
-		h.add_child(more)
-		c.add_child(h)
+	_planner()._add_cargo_list(c, plan, tend)
 
 
-## Drawing up a plan (issue #106): the site report and the party on the left, the rest on the right.
 func _fill_plan(c: Container, sim: Sim) -> void:
-	var plan: Dictionary = game.plan
-	var cols := HBoxContainer.new()
-	cols.add_theme_constant_override("separation", 22)
-	var left := VBoxContainer.new()
-	left.add_theme_constant_override("separation", 6)
-	left.custom_minimum_size.x = 270
-	var right := VBoxContainer.new()
-	right.add_theme_constant_override("separation", 6)
-	right.custom_minimum_size.x = 320
-	cols.add_child(left)
-	cols.add_child(right)
-	c.add_child(cols)
-	var last: Array = sim.expedition_board().get("report", [])
-	if not last.is_empty():  # the last expedition's report (issue #112)
-		left.add_child(_label("Last expedition", true))
-		for line in last:
-			left.add_child(_label(line + ".", false, Palette.CHALK_DIM, Palette.CAPTION, true))
-		left.add_child(_rule())
-	_add_level_picker(left, sim, plan)
-	_add_site_report(left, sim, plan.dest)
-	left.add_child(_rule())
-	_add_party_picker(left, sim, plan)
-	_add_plan_details(right, sim, plan)
+	_planner()._fill_plan(c, sim)
 
 
-## The site report (brief §8): what the village knows of the place before anyone sets off.
 func _add_site_report(c: Container, sim: Sim, dest: String) -> void:
-	var rep := sim.site_report(dest)
-	c.add_child(_row(rep.name, "about %d s walk each way" % roundi(rep.travel) if rep.travel >= 0.0 else "the road isn’t walked yet", false))
-	if rep.visited and rep.get("pattern", "") != "":
-		c.add_child(_label(rep.pattern if rep.get("biome", "") == "" else "%s · %s" % [rep.biome, rep.pattern], false, Palette.CHALK_DIM, Palette.CAPTION))
-	if not rep.visited:
-		c.add_child(_label("“%s”" % rep.told, false, Palette.CHALK_DIM, Palette.BODY, true))
-	for x in rep.resources:
-		c.add_child(_row(x.name, "?" if x.reserve < 0 else "about %d" % x.reserve))
-	for f in rep.get("finds", []):
-		c.add_child(_label(f, true, Palette.CHALK, Palette.BODY, true))
-	if not rep.visited:
-		c.add_child(_label("Nobody has been there yet: no estimates, and no hazards known.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
-		return
-	for hz in rep.hazards:
-		c.add_child(_label("Hazard: " + hz, false, Palette.YELLOW, Palette.BODY, true))
-	for a in rep.access:
-		c.add_child(_label(a, false, Palette.CHALK_DIM, Palette.BODY, true))
-	if rep.get("levels", []).size() > 1:  # every level known so far (issue #132)
-		c.add_child(_label("Levels", true))
-		for lv in rep.levels:
-			var ore: String = "%d ore blocks left" % lv.ore if lv.ore >= 0 else "not visited"
-			c.add_child(_row("%d  %s" % [lv.level, lv.pattern], "%s, %s" % [ore, lv.door]))
+	_planner()._add_site_report(c, sim, dest)
 
 
-## The levels a plan can be made for (issue #132): a button per level once there's more than one.
 func _add_level_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
-	var levels := sim.mine_levels()
-	if levels.size() < 2 or sim.level_of(plan.dest) == 0:
-		return
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	row.add_child(_label("Work level", true))
-	for id in levels:
-		var n := sim.level_of(id)
-		var b := _button(str(n), func(): game.plan_dest(id), "Secondary")
-		b.set_meta("label", "Level %d" % n)
-		b.toggle_mode = true
-		b.set_pressed_no_signal(id == plan.dest)
-		b.custom_minimum_size = Vector2(34, 0)
-		b.tooltip_text = "%s: %s" % [sim.get_map(id).name, MineLevels.FAMILY_NAMES.get(sim.get_map(id).pattern, "")] if sim.get_map(id).visited else "%s: nobody has been down yet" % sim.get_map(id).name
-		row.add_child(b)
-	c.add_child(row)
+	_planner()._add_level_picker(c, sim, plan)
 
 
-## Who goes: up to PARTY_MAX residents, each with their Stonemason level, pickaxe and hunger. Anyone who
-## can't go is listed with why.
 func _add_party_picker(c: Container, sim: Sim, plan: Dictionary) -> void:
-	c.add_child(_row("Party", "%d of up to %d" % [plan.party.size(), Tuning.PARTY_MAX], false))
-	var can_go := sim.residents.filter(func(r): return sim.cant_join(r) == "" and not plan.party.has(r.id)).size()
-	var fill := HBoxContainer.new()
-	var fill_b := _button("Fill the party", func(): game.plan_fill(), "Secondary")
-	fill_b.set_meta("label", "Fill the party")
-	fill_b.disabled = can_go == 0 or plan.party.size() >= Tuning.PARTY_MAX
-	fill_b.tooltip_text = "Takes the best fit among those who can go, up to %d" % Tuning.PARTY_MAX
-	var clear_b := _button("Unselect all", func(): game.plan_clear(), "Secondary")
-	clear_b.set_meta("label", "Unselect all")
-	clear_b.disabled = plan.party.is_empty()
-	fill.add_child(fill_b)
-	fill.add_child(clear_b)
-	c.add_child(fill)
-	for r in sim.residents:
-		var why := sim.cant_join(r)
-		var on: bool = plan.party.has(r.id)
-		var pick: String = Defs.ITEMS[r.pick.type].one if r.pick != null else "no pickaxe"
-		var line: String = why if why != "" else "Stonemason level %d, %s, %s" % [Sim.level(r, "mason"), pick, _mood(r).to_lower()]
-		if why == "" and plan.dest == Meadow.ID:  # at the meadow it's hunting that counts, and no pickaxe is needed
-			line = "Hunt level %d, %s" % [Sim.level(r, "hunt"), _mood(r).to_lower()]
-		var b := _button("%s\n%s" % [r.name, line], func(): game.plan_toggle(r.id), "Secondary")
-		b.set_meta("label", r.name)
-		b.toggle_mode = true
-		b.set_pressed_no_signal(on)
-		b.icon = _swatch_tex(r.shirt)
-		b.add_theme_constant_override("icon_max_width", 14)
-		b.add_theme_constant_override("h_separation", 10)
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.disabled = why != "" or (not on and plan.party.size() >= Tuning.PARTY_MAX)
-		b.tooltip_text = ("%s can’t go: %s" % [r.name, why.to_lower()]) if why != "" else ("Leave %s at home" % r.name if on else "Take %s" % r.name)
-		c.add_child(b)
+	_planner()._add_party_picker(c, sim, plan)
 
 
-## The Nether's objective picker (issue #154): one button for each, greyed out with its reason when it has nowhere to go; a scout
-## picks a route; then the briefing.
 func _add_objectives(c: Container, sim: Sim, plan: Dictionary) -> void:
-	c.add_child(_label("Objective", true))
-	var row := HFlowContainer.new()
-	row.add_theme_constant_override("h_separation", 4)
-	var cur: String = plan.get("objective", "survey")
-	for obj in Sim.OBJECTIVES:
-		var dests := sim.objective_destinations(obj)
-		var b := _button(Sim.OBJECTIVES[obj].name, func(): game.plan_objective(obj), "Secondary")
-		b.toggle_mode = true
-		b.set_pressed_no_signal(obj == cur)
-		b.disabled = dests.is_empty()
-		b.tooltip_text = Sim.OBJECTIVES[obj].sub if not dests.is_empty() else sim.objective_why_none(obj)
-		row.add_child(b)
-	c.add_child(row)
-	c.add_child(_label(Sim.OBJECTIVES[cur].sub, false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	if cur == "scout":
-		var routes := HFlowContainer.new()
-		routes.add_theme_constant_override("h_separation", 4)
-		for d in sim.objective_destinations("scout"):
-			var rb := _button(d.label.replace("route to the ", "").capitalize(), func(): game.plan_objective("scout", d), "Secondary")
-			rb.toggle_mode = true
-			rb.set_pressed_no_signal(plan.target.get("route", "") == d.route)
-			routes.add_child(rb)
-		c.add_child(routes)
-	for l in sim.plan_briefing(plan):
-		c.add_child(_label(l, false, Palette.YELLOW if l.begins_with("Risk") or l.begins_with("Danger") else Palette.CHALK_DIM, Palette.CAPTION, true))
+	_planner()._add_objectives(c, sim, plan)
 
 
-## The objective, provisions, spare pickaxes, the packs they share, the return policy, and Start packing.
 func _add_plan_details(c: Container, sim: Sim, plan: Dictionary) -> void:
-	var tend: bool = plan.target.item in ["pens", "survey"]
-	if not plan.party.is_empty():  # issue #140: the party's armor against the hazards
-		c.add_child(_label(_protection_text(sim, plan.party), false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	if Sim.realm_of(plan.dest) == "nether":  # the objective, and what the party is told before it commits (issue #154)
-		_add_objectives(c, sim, plan)
-	for w in sim.plan_warnings(plan):  # a guard with no sword (issue #150)
-		c.add_child(_label(w, false, Palette.YELLOW, Palette.CAPTION, true))
-	_add_cargo_list(c, plan, tend)
-	var meadow: bool = plan.dest == Meadow.ID and not sim.get_map(Meadow.ID).pens.is_empty()
-	if meadow:  # issue #139: or tend the pens
-		var pr := HBoxContainer.new()
-		pr.add_theme_constant_override("separation", 6)
-		var tb := _button("Tend the pens", func(): game.plan_target("pens"), "Secondary")
-		tb.toggle_mode = true
-		tb.set_pressed_no_signal(tend)
-		pr.add_child(tb)
-		var pg := Control.new()
-		pg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		pr.add_child(pg)
-		if tend:
-			pr.add_child(_label("Keep of each", false, Palette.CHALK_DIM, Palette.CAPTION))
-			pr.add_child(_stepper("%d" % plan.target.n, "target"))
-		c.add_child(pr)
-		if tend:
-			c.add_child(_label("Build the pens, lead marked animals in, feed pairs, and hunt only what's over %d of each kind." % plan.target.n, false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	c.add_child(_stepper_row("Meals to take", plan.meals, "meals"))
-	if plan.target.item in ["line", "pline"]:  # what the line crew carries, past its meals (issues #159, #168)
-		for k in [["Rails", "rails"], ["Planks", "planks"], ["Cobblestone", "cobble"], ["Minecarts", "minecarts"]]:
-			c.add_child(_stepper_row(k[0], plan.get(k[1], 0), k[1]))
-	if plan.target.item == "trade":  # the gold carried, which takes room in the packs (issue #156)
-		c.add_child(_stepper_row("Gold to trade", plan.get("gold", 0), "gold"))
-	if Sim.realm_of(plan.dest) == "nether":  # the landing's shelter and cache (issue #152)
-		if plan.get("shelter", false):
-			c.add_child(_label("Carrying the shelter: %s and %s. The party builds it before it comes home." % [Defs.words("cobble", plan.cobble), Defs.words("plank", plan.planks)], false, Palette.CHALK_DIM, Palette.CAPTION, true))
-		else:
-			c.add_child(_stepper_row("Meals for the cache", plan.get("stock", 0), "stock"))
-	var keep := Sim.return_meals(plan)
-	var mins := Sim.site_minutes(plan)
-	var at := "the meadow" if plan.dest == Meadow.ID else ("the landing" if Sim.realm_of(plan.dest) == "nether" else "the mine")
-	var feeds := "About %d min at %s" % [roundi(mins), at] if mins >= 1.0 else "Not enough to eat at %s" % at
-	var food := "%s, the return food too." % feeds if plan.spend_return else "%s. %d kept for the walk home." % [feeds, keep]
-	var food_row := HBoxContainer.new()
-	food_row.add_theme_constant_override("separation", 8)
-	var food_l := _label(food, false, Palette.CHALK_DIM, Palette.CAPTION, true)
-	food_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	food_row.add_child(food_l)
-	var spend := _button("Spend it", func(): game.plan_spend_return(), "Secondary")
-	spend.toggle_mode = true
-	spend.set_pressed_no_signal(plan.spend_return)
-	spend.add_theme_font_size_override("font_size", Palette.CAPTION)
-	spend.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	spend.tooltip_text = "Let the party eat the meals kept for the walk home, to stay longer"
-	food_row.add_child(spend)
-	c.add_child(food_row)
-	if plan.dest != Meadow.ID or plan.picks > 0:
-		c.add_child(_stepper_row("Spare pickaxes", plan.picks, "picks"))
-	if plan.dest == Meadow.ID and not sim.get_map(Meadow.ID).pens.is_empty():  # issue #139
-		c.add_child(_stepper_row("Sticks for fences", plan.get("sticks", 0), "sticks"))
-		c.add_child(_stepper_row("Wheat to feed pairs", plan.get("wheat", 0), "wheat"))
-		var need: PackedStringArray = []
-		var fl := sim.fence_left()
-		var wh := sim.wheat_wanted()
-		if fl > 0:
-			need.append("the pens need %s" % Defs.words("stick", fl))
-		if wh > 0:
-			need.append("%d %s can be fed now, for %s" % [wh / (2 * Tuning.FEED_WHEAT), "pair" if wh == 2 * Tuning.FEED_WHEAT else "pairs", Defs.words("wheat", wh)])
-		if not need.is_empty():
-			var t := ", ".join(need)
-			c.add_child(_label(t[0].to_upper() + t.substr(1) + ".", false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	_add_packs(c, plan)
-	var home := _label("Come home when", true)
-	home.tooltip_text = "Any of the chosen ones brings them home. A serious injury always does, and stops the game for you."
-	home.mouse_filter = Control.MOUSE_FILTER_STOP
-	c.add_child(home)
-	var policy := HBoxContainer.new()
-	policy.add_theme_constant_override("separation", 4)
-	for k in [["target", "Target reached"], ["full", "Packs full"], ["low", "Food runs low"]]:
-		var b := _button(k[1], func(): game.plan_policy(k[0]), "Secondary")
-		b.toggle_mode = true
-		b.set_pressed_no_signal(plan.policy[k[0]])
-		b.add_theme_font_size_override("font_size", Palette.CAPTION)
-		policy.add_child(b)
-	c.add_child(policy)
-	c.add_child(_label("Or a serious injury: that always brings them home.", false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	var problems := sim.plan_problems(plan)
-	for p in problems.slice(0, 2):
-		c.add_child(_reason(p))
-	var go := _button("Start packing", func(): game.confirm_plan(), "Primary")
-	go.disabled = not problems.is_empty()
-	go.tooltip_text = "Residents pack the supplies at the board and the party gathers there. Nobody leaves until you choose Depart."
-	c.add_child(go)
+	_planner()._add_plan_details(c, sim, plan)
 
 
-## "Armor: Ada turns aside 35% of hazard injuries (full set), Tomas none." (issue #140)
 func _protection_text(sim: Sim, party: Array) -> String:
-	var parts: PackedStringArray = []
-	for id in party:
-		var r := sim.resident(id)
-		if r.is_empty():
-			continue
-		var g := Sim.protection(r)
-		var full := Sim.armor_worn(r).size() == Defs.ARMOR_SLOTS.size()
-		parts.append("%s %s" % [r.name, "none" if g <= 0.0 else "%d%%" % roundi(g * 100.0) + (", full set" if full else "")])
-	return "Armor against the hazards: %s. It turns aside that share of injuries." % ", ".join(parts)
+	return _planner()._protection_text(sim, party)
 
 
-## The meadow's pens in a line (issue #139): fences to build, animals penned, young ones.
 func _pens_text(sim: Sim) -> String:
-	var mp := sim.get_map(Meadow.ID)
-	var parts: PackedStringArray = []
-	var fl := sim.fence_left()
-	if fl > 0:
-		parts.append("%d %s to build" % [fl / Tuning.FENCE_STICKS, "fence" if fl == Tuning.FENCE_STICKS else "fences"])
-	var penned := mp.sheep.filter(func(a): return a.alive and a.get("pen", 0) != 0)
-	var young := penned.filter(func(a): return a.get("young", false)).size()
-	parts.append("%d penned" % penned.size() + (", %d young" % young if young > 0 else ""))
-	var lead := mp.sheep.filter(func(a): return a.alive and a.get("lead", false) and a.get("pen", 0) == 0).size()
-	if lead > 0:
-		parts.append("%d to lead in" % lead)
-	var t := ", ".join(parts)
-	return t[0].to_upper() + t.substr(1) + "."
+	return _planner()._pens_text(sim)
 
 
-## The packs, shared (brief §5): supplies in yellow, the cargo target in blue, room left dim.
 func _add_packs(c: Container, plan: Dictionary) -> void:
-	var cap := Sim.pack_capacity(plan)
-	var sup := Sim.plan_supplies(plan)
-	var room := maxi(0, cap - sup)
-	c.add_child(_row("Packs", "%d supplies, room for %d of %d" % [sup, room, cap]))
-	if plan.get("cart_cap", false):
-		c.add_child(_label("Includes the cart's %d, with the line laid." % Tuning.CART_CAPACITY, false, Palette.CHALK_DIM, Palette.CAPTION, true))
-	if cap == 0:
-		return
-	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 1)
-	var wanted := 0  # the amounts the list asks for, against the room (issue #185)
-	for r in Sim.cargo_rows(plan):
-		wanted += r.n
-	var cargo: int = 0 if plan.target.item == "pens" else mini(wanted, room)
-	for seg in [[mini(sup, cap), Palette.YELLOW], [cargo, Palette.BLUE], [room - cargo, Palette.SLATE_DEEP]]:
-		if seg[0] <= 0:
-			continue
-		var r := ColorRect.new()
-		r.color = seg[1]
-		r.custom_minimum_size = Vector2(0, 8)
-		r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		r.size_flags_stretch_ratio = seg[0]
-		bar.add_child(r)
-	bar.tooltip_text = "Supplies take %d, the amounts wanted %d, and %d is spare" % [sup, cargo, room - cargo]
-	bar.mouse_filter = Control.MOUSE_FILTER_STOP
-	c.add_child(bar)
+	_planner()._add_packs(c, plan)
 
 
 func _stepper_row(name: String, value: int, key: String) -> HBoxContainer:
-	var h := HBoxContainer.new()
-	var l := _label(name)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(l)
-	h.add_child(_stepper("%d" % value, key))
-	return h
+	return _planner()._stepper_row(name, value, key)
 
 
-## − n + for one of the plan's numbers.
 func _stepper(value: String, key: String) -> HBoxContainer:
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 4)
-	var less := _button("−", func(): game.plan_step(key, -1), "Secondary")
-	var more := _button("+", func(): game.plan_step(key, 1), "Secondary")
-	less.set_meta("label", key + " less")
-	more.set_meta("label", key + " more")
-	for b in [less, more]:
-		b.custom_minimum_size = Vector2(30, 0)
-	var v := _label(value, true)
-	v.custom_minimum_size.x = 30
-	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	h.add_child(less)
-	h.add_child(v)
-	h.add_child(more)
-	return h
+	return _planner()._stepper(value, key)
 
 
-## Packing (issue #107): what's packed, where the party is, and Depart once it's all ready.
 func _fill_staging(c: Container, sim: Sim) -> void:
-	var ex: Dictionary = sim.expedition
-	var p := sim.packed()
-	var aim := "to survey the landing" if ex.target.item == "survey" else "to tend the pens" if ex.target.item == "pens" else ("to clear the level" if ex.get("clear", false) else "to bring back %s" % Sim.list_text(ex))
-	c.add_child(_label("Packing for the %s, %s" % [sim.get_map(ex.dest).name.to_lower(), aim], false, Palette.CHALK, Palette.BODY, true))
-	c.add_child(_row("Meals", "%d / %d" % [p.meals, ex.meals]))
-	c.add_child(_bar(float(p.meals) / maxi(ex.meals, 1)))
-	if ex.picks > 0:
-		c.add_child(_row("Spare pickaxes", "%d / %d" % [p.picks, ex.picks]))
-		c.add_child(_bar(float(p.picks) / ex.picks))
-	for k in [["sticks", "Sticks"], ["wheat", "Wheat"]]:  # issue #139
-		if ex.get(k[0], 0) > 0:
-			c.add_child(_row(k[1], "%d / %d" % [p[k[0]], ex[k[0]]]))
-			c.add_child(_bar(float(p[k[0]]) / ex[k[0]]))
-	c.add_child(_label("Party", true))
-	for id in ex.party:
-		var r := sim.resident(id)
-		if r.is_empty():
-			continue
-		var where := "At the board" if sim.at_board(r) else sim.cant_join(r)
-		if where == "":
-			where = r.job.label if r.job != null else "Idle"
-		var line := HBoxContainer.new()
-		line.add_theme_constant_override("separation", 8)
-		line.add_child(_swatch(r.shirt))
-		line.add_child(_label("%s: %s" % [r.name, where], false, Palette.CHALK if sim.at_board(r) else Palette.CHALK_DIM))
-		c.add_child(line)
-	for x in sim.stuck:
-		if x.who == "Expedition" and not x.waiting:
-			c.add_child(_reason(x.why))
-	var why := sim.depart_blocker()
-	var go := _button("Depart", func(): game.depart(), "Primary")
-	go.disabled = why != ""
-	go.tooltip_text = why if why != "" else "Send the party off. They’re out of village work until they’re back."
-	c.add_child(go)
-	if why != "":
-		c.add_child(_label(why, false, Palette.CHALK_DIM, Palette.BODY, true))
-	c.add_child(_destructive("Call off the expedition", "Click again to call it off", "expedition", func(): game.cancel_expedition()))
+	_planner()._fill_staging(c, sim)
 
 
-## An expedition that's out: one at a time (#25), so there's nothing to plan.
 func _fill_out(c: Container, sim: Sim) -> void:
-	var ex: Dictionary = sim.expedition
-	var mp := sim.get_map(ex.dest)
-	var party: Array = ex.party.map(func(id): return sim.resident(id)).filter(func(r): return not r.is_empty())
-	var road: Array = party.filter(func(r): return sim.on_road(r))
-	var names := Sim.names_text(party.map(func(r): return r.name))
-	var are := "is" if party.size() == 1 else "are"
-	var home: bool = ex.get("leg", "out") == "home"
-	if ex.has("stranded"):  # the rescue window, supplies and what's at stake (issue #158)
-		c.add_child(_label(sim.stranded_text(ex), false, Palette.YELLOW, Palette.BODY, true))
-		var rb := _button("Plan a rescue", func(): game.plan_objective("rescue"), "Primary")
-		rb.disabled = sim.objective_destinations("rescue").is_empty()
-		rb.tooltip_text = "Send a party with provisions and flint and steel. It can set out even with both parties out." if not rb.disabled else sim.objective_why_none("rescue")
-		c.add_child(rb)
-	if not road.is_empty():
-		var when := ceili(sim.road_eta(road[0]))
-		c.add_child(_label("%s %s on the road %s, there in %d s." % [names, are, "home" if home else "to the " + mp.name.to_lower(), when], false, Palette.CHALK, Palette.BODY, true))
-	elif home:
-		c.add_child(_label("%s %s heading home from the %s." % [names, are, mp.name.to_lower()], false, Palette.CHALK, Palette.BODY, true))
-	elif party.all(func(r): return r.map == ex.dest):
-		c.add_child(_label("The party is at the %s: %s." % [mp.name.to_lower(), names], false, Palette.CHALK, Palette.BODY, true))
-		_fill_party(c, sim)
-		c.add_child(_button("Show the %s" % mp.name.to_lower(), func(): game.switch_map(ex.dest), "Secondary"))
-	else:
-		c.add_child(_label("%s %s carrying the packs to the signpost." % [names, are], false, Palette.CHALK, Palette.BODY, true))
-	_add_call_home(c, sim)
+	_planner()._fill_out(c, sim)
 
 
-## Call the party home (issue #108), until #109's return policy does it by itself. Disabled, with
-## why, until the whole party is at the site.
 func _add_call_home(c: Container, sim: Sim) -> void:
-	var sl := Sim.realm_of(game.view_map)
-	var why := sim.call_home_blocker(sl)
-	if sim.expeditions[sl].get("leg", "out") == "home":
-		return
-	var b := _button("Call the party home", func(): game.call_home(), "Primary")
-	b.disabled = why != ""
-	b.tooltip_text = why if why != "" else "They walk to the entrance with what they’ve mined, and take the road home."
-	c.add_child(b)
+	_planner()._add_call_home(c, sim)
 
 
-## The signpost to the old mine (issue #108), and those at both ends of the road: the route report
-## (issue #119) with each segment and the journey, who's on the road, and the work it needs: the
-## bridge, the cut, and the line (issue #121).
 func _fill_route(c: Container, sim: Sim) -> void:
-	var mp := sim.get_map(OldMine.ID)
-	var rep := sim.route_report()
-	var sub := "about %d s on foot each way" % roundi(rep.walk) if rep.surveyed else "not walked yet"
-	c.add_child(_head("Road to the %s" % mp.name.to_lower() if mp.known else "A road east", sub))
-	if not mp.known:
-		c.add_child(_label("Nobody in the village knows where it goes yet. An expedition board would.", false, Palette.CHALK_DIM, Palette.BODY, true))
-		return
-	for i in rep.segments.size():
-		var sg: Dictionary = rep.segments[i]
-		if not sg.known:
-			c.add_child(_row("%d  Not walked yet" % (i + 1), "%d cells" % sg.len))
-			continue
-		var track: String = {"none": "", "planned": "track planned", "built": "track laid"}[sg.track]
-		c.add_child(_row("%d  %s" % [i + 1, sg.name], track if track != "" else "%d cells, %s" % [sg.len, sg.terrain]))
-		if sg.obstacle != "":
-			var done: bool = sg.obstacle in ["Bridged", "Cleared"]
-			c.add_child(_label(sg.obstacle, false, Palette.CHALK_DIM if done else Palette.YELLOW, Palette.CAPTION, true))
-	if rep.surveyed and not sim.cart.is_empty():
-		c.add_child(_label("On foot about %d s, by cart about %d s as the line stands." % [roundi(rep.walk), roundi(rep.cart_now)], false, Palette.CHALK, Palette.BODY, true))
-	elif rep.surveyed:
-		c.add_child(_label("By cart about %d s, once the line is laid." % roundi(rep.cart), false, Palette.CHALK, Palette.BODY, true))
-	else:
-		c.add_child(_label("The first party to walk it will survey the rest of the road.", false, Palette.CHALK_DIM, Palette.BODY, true))
-	var on_road: Array = sim.residents.filter(func(r): return r.map == Road.ID or sim.carrying_packs(r))
-	for r in on_road:
-		var line := HBoxContainer.new()
-		line.add_theme_constant_override("separation", 8)
-		line.add_child(_swatch(r.shirt))
-		line.add_child(_label("%s: %s" % [r.name, _status(sim, r)], false, Palette.CHALK))
-		c.add_child(line)
-	if game.view_map != Road.ID:
-		c.add_child(_button("Show the road", func(): game.switch_map(Road.ID), "Secondary"))
-	if not sim.expedition_board().is_empty() and sim.expedition.is_empty():  # the old mine's adventure (issue #136)
-		c.add_child(_button("Plan a trip to the old caves", func(): game.open_adventure(OldMine.ID), "Secondary"))
-	# The work the road needs.
-	var seen: int = sim.road().seen
-	if sim.bridge().is_empty() and seen > Sim._seg_of("stream"):
-		var b := _button("Build the bridge", func(): game.plan_bridge(), "Secondary")
-		b.tooltip_text = "A plank bridge over the stream: %s. Village builders carry the planks out." % Defs.cost_text(Defs.TEMPLATES.bridge.stages[0].cost)
-		c.add_child(b)
-	var cut := sim.cut_boulders()
-	if not cut.is_empty() and seen > Sim._seg_of("cut") and not cut.all(func(x): return x.des):
-		var b := _button("Clear the cut", func(): game.clear_cut(), "Secondary")
-		b.tooltip_text = "Marks the boulders on the line to be mined. Miners walk out from the village."
-		c.add_child(b)
-	for end in ["village", "mine"]:  # the stations (issue #123)
-		if sim.station(end).is_empty() and seen > Road.segment_at(Road.STATIONS[end].x) and not sim.plan_line_blocker().begins_with("Walk"):
-			var b := _button("Build the %s station" % end, func(): game.plan_station(end), "Secondary")
-			b.tooltip_text = "A platform beside the line where the cart stops, loads and unloads: %s." % Defs.cost_text(Defs.TEMPLATES.station.stages[0].cost)
-			c.add_child(b)
-	_add_line(c, sim)
+	_planner()._fill_route(c, sim)
 
 
-
-
-
-
-## A station (issue #123): the line's state, where the cart is, and what's on the platform.
 func _fill_station(c: Container, sim: Sim, s: Dictionary) -> void:
-	c.add_child(_head("Station", "%s end" % ("Village" if s.end == "village" else "Mine")))
-	var laid := range(Road.segment_count()).filter(func(i): return sim.track_state(i) == "built").size()
-	c.add_child(_row("The line", "%d of %d segments laid" % [laid, Road.segment_count()]))
-	var where := "No minecart yet. Craft one at the bench, and it's hauled out here."
-	var cart: Dictionary = sim.cart
-	if not cart.is_empty():
-		match cart.state:
-			"moving": where = "The cart is on the line, %s" % ("to the mine" if sim.expedition.get("leg", "out") == "out" else "coming home")
-			"loading": where = "The cart is being loaded at the mine end"
-			"unloading": where = "The cart is being unloaded at the village end"
-			_: where = "The cart is parked at the %s end" % cart.at
-	c.add_child(_label(where + ".", false, Palette.CHALK, Palette.BODY, true))
-	var on: Array = sim.road().items.values().filter(func(st): return Rect2i(s.origin, s.size).grow(1).has_point(st.cell))
-	if on.is_empty():
-		c.add_child(_label("Nothing on the platform.", false, Palette.CHALK_DIM, Palette.BODY, true))
-	for st in on:
-		c.add_child(_row(Defs.ITEMS[st.type].label, str(st.n)))
-	c.add_child(_label("Carts load and unload here at %d items a second. Haulers carry what's set down to the stockpile." % int(Tuning.LOAD_RATE), false, Palette.CHALK_DIM, Palette.CAPTION, true))
+	_planner()._fill_station(c, sim, s)
 
 
-## The line (issue #121): how far it's laid, or the plan with its cost and the time it saves.
 func _add_line(c: Container, sim: Sim) -> void:
-	var states: Array = range(Road.segment_count()).map(func(i): return sim.track_state(i))
-	if states.has("planned") or states.has("built"):
-		var laid := states.count("built")
-		c.add_child(_row("The line", "%d of %d segments laid" % [laid, states.size()], false))
-		var nxt := sim.next_track()
-		if nxt >= 0 and sim.track_blocker(nxt) != "":
-			c.add_child(_label("%s: %s" % [Road.SEGMENTS[nxt].name, sim.track_blocker(nxt).to_lower()], false, Palette.YELLOW, Palette.CAPTION, true))
-		if not states.has("none"):
-			return
-	var why := sim.plan_line_blocker()
-	if not game.line_preview:
-		var b := _button("Plan the line", func(): game.line_preview = true, "Primary")
-		b.disabled = why != ""
-		b.tooltip_text = why if why != "" else "Track along the road, from the village to the mine."
-		c.add_child(b)
-		return
-	var cost := sim.line_cost()
-	var craft := " Crafting them takes %d iron ingots." % cost.ingots if cost.ingots > 0 else ""
-	c.add_child(_label("%d rails, with %d on hand.%s" % [cost.rails, cost.on_hand, craft], false, Palette.CHALK, Palette.BODY, true))
-	c.add_child(_label("Laid from the village end. Saves about %d s a round trip, once there's a cart." % roundi(cost.saved), false, Palette.CHALK, Palette.BODY, true))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	var lay := _button("Lay track", func(): game.plan_line(), "Primary")
-	lay.disabled = why != ""
-	lay.tooltip_text = why
-	row.add_child(lay)
-	row.add_child(_button("Not now", func(): game.line_preview = false, "Secondary"))
-	c.add_child(row)
+	_planner()._add_line(c, sim)
 
 
-## "Starving", "Hungry", "Peckish" or "Fed".
 static func _mood(r: Dictionary) -> String:
 	return "Starving" if r.hunger <= 0.0 else ("Hungry" if r.hunger < Tuning.HUNGRY_BELOW else ("Peckish" if r.hunger < Tuning.EAT_BELOW else "Fed"))
 
 
-## What the board is up to, for its selection panel.
 func _board_status(sim: Sim) -> String:
-	var ex: Dictionary = sim.expedition
-	match ex.get("state", ""):
-		"staging":
-			return "Packing for the %s." % sim.get_map(ex.dest).name.to_lower()
-		"out":
-			return "The party is out at the %s." % sim.get_map(ex.dest).name.to_lower()
-	return "Plan an adventure here: the old caves or the meadow."
+	return _planner()._board_status(sim)
+
 
 
 # ---------------------------------------------------------------- the party at work, and choices (issues #109-#111)
