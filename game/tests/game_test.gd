@@ -2007,6 +2007,7 @@ func _test_after_the_founding(game: Game) -> void:
 	# Chapter two done: the chip.
 	sim.stats.meals_cooked = 1
 	sim.stats.ore_home = true
+	sim.stats.found = {"old_mine": true}
 	sim.paint_farm(Rect2i(sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(-6, 6)), Vector2i(2, 2)))
 	for st in sim.sites:
 		if st.tpl == "bench":
@@ -2167,6 +2168,7 @@ func _walk(n: Node) -> Array:
 
 func _initialize() -> void:
 	Night.enabled = false
+	Survey.enabled = false
 	var game: Game = load("res://scenes/main.tscn").instantiate()
 	game.keys_path = "user://test_settings/game_test_keys.cfg"
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.keys_path))

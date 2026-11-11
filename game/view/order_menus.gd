@@ -33,6 +33,7 @@ const MENUS := {
 		{"id": "composter", "name": "Composter", "sub": "4 planks. A farmer works from it. Reserves room for a granary", "mark": "build"},
 		{"id": "lodge", "name": "Hunter's lodge", "sub": "6 logs and 2 planks. A hunter works from it. Reserves room for a tannery", "mark": "build"},
 		{"id": "builder_table", "name": "Builder's table", "sub": "4 planks and 2 logs. A builder works from it. Reserves room for a builder's yard", "mark": "build"},
+		{"id": "cartographer_table", "name": "Cartographer's table", "sub": "6 planks. A cartographer surveys the land from it. Reserves room for a map room", "mark": "build", "unlock": "board"},
 		{"id": "claim", "name": "Claim land", "sub": "A strip of new land, 8 cells deep, along an edge. A builder plants stakes (4 sticks). One claim for every 2 residents beyond the first two", "mark": "build", "unlock": "claims"},
 		{"id": "storehouse", "name": "Storehouse", "sub": "6 cobblestone, 12 planks and 4 logs. Chests carried in store anything; stockpiles take the overflow. Reserves room to grow", "mark": "build"},
 		{"id": "enchanting_workshop", "name": "Enchanting workshop", "sub": "4 obsidian, 2 diamonds and 6 planks. An enchanter carries books to it to learn their recipes, and enchants gear. Reserves room for a library", "mark": "build", "unlock": "enchanting"},
