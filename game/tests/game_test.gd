@@ -466,6 +466,15 @@ func _test_world_map(game: Game) -> void:
 	check(cell == Vector2i(0, 1), "a point above the village is the north sector's near ring (%s)" % [cell])
 	var sector: Vector2i = wm._cell_at(wm._centre() + Vector2(wm._radius(3) * 0.7, wm._radius(3) * 0.7))
 	check(sector.x == 3 and sector.y == 3, "and one down and right is the south-east far ring (%s)" % [sector])
+	wm._rebuild_blocks(game.sim)
+	check(wm._blocks.size() > 200 and wm._blocks.all(func(b): return b[0].size == Vector2(WorldMap.BLOCK, WorldMap.BLOCK)), "the map is drawn in blocky pixels (%d)" % wm._blocks.size())
+	var ex := {"party": [game.sim.residents[0].id], "dest": Meadow.ID, "state": "out"}
+	check(wm._party_progress(game.sim, ex) == 0.0, "a party still in the village is at the village end of its line")
+	game.sim.residents[0].map = MeadowRoad.ID
+	game.sim.residents[0].pos = Vector2(float(Tuning.MEADOW_ROAD_LEN - 1) / 2.0, 2.0)
+	check(absf(wm._party_progress(game.sim, ex) - 0.5) < 0.01, "and half-way along the road is half-way along the line")
+	game.sim.residents[0].map = "village"
+	check(MiniMap.side_for(Vector2(1280, 720)) == MiniMap.SIZE and MiniMap.side_for(Vector2(800, 400)) < MiniMap.SIZE and MiniMap.side_for(Vector2(300, 200)) == MiniMap.MIN_SIZE, "the corner map shrinks on a short window")
 	game._key(_key_event(KEY_ESCAPE))
 	await game.get_tree().process_frame
 	check(not game.world_map_open and not wm.visible and game.speed == 2, "Esc closes it and the speed comes back")

@@ -38,8 +38,11 @@ func _init() -> void:
 		"test_village_combat",
 		"test_emeralds",
 		"test_house_tiers",
+		"test_house_entrance",
+		"test_old_house_update",
 		"test_survey",
 		"test_lead_animals_home",
+		"test_village_pen_breeding",
 		"test_guide_new_marks",
 		"test_many_loose_items_tick_cheaply",
 		"test_idle_residents_go_home",
@@ -1253,6 +1256,50 @@ func test_house_tiers() -> void:
 	check(Sim.house_tier(old) == 3 and sim.house_upgrade_check(old) != "", "a house from before tiers is the building")
 
 
+## Issue #285: a house is solid but for its door, the cell in front of it must stay clear, and a later building can't close it.
+func test_house_entrance() -> void:
+	var sim := Sim.new_game()
+	var h := sim.place_site("house", at(11, 0))
+	h.stage = 1
+	sim._occ_dirty = true
+	var door := sim.door_cell(h.origin, h.rot)
+	var front := Sim.front_cell(h.origin, h.rot)
+	check(sim.site_blocks(h) and not sim.walkable(Vector2i(h.origin.x + 1, h.origin.y + 1)) and sim.walkable(door), "the plot is solid, and the door is the one way in")
+	var edge := sim.placement_check("house", Vector2i(sim.w - 5, 0), 1)
+	check(edge.contains("entrance"), "a door facing the map's edge is blocked: " + edge)
+	check(sim.placement_check("bench", front).contains("entrance"), "a bench can't go in front of a door")
+	check(sim.placement_check("bench", front + Vector2i(1, 1)) == "", "but beside it can")
+	var ada: Dictionary = sim.residents[0]
+	var j := sim.home_goal(h)
+	check(j.cells == [door] and not j.adj, "going home is walking to the door")
+
+## Issues #285, #356: an old house takes no work from its resident until it's updated in place or moved.
+func test_old_house_update() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var h := sim.place_site("house", at(11, 0))
+	h.stage = 4
+	h.done = true
+	h.owner = ada.id
+	h.old = true
+	sim.rev += 1
+	check(Sim.is_old_house(h) and sim.waits_for_home(ada) and not sim.walkable(sim.door_cell(h.origin, h.rot)), "an old house has no entrance, and its resident waits")
+	ada.job = null
+	sim.step()
+	check(ada.job == null, "she takes no job")
+	var loaded := Sim.from_state(sim.save_state())
+	check(Sim.is_old_house(loaded.site_at(h.origin)), "old is saved")
+	check(sim.update_house(h) == "" and not Sim.is_old_house(h) and not sim.waits_for_home(ada), "with its front clear, Update converts it where it stands")
+	check(sim.walkable(sim.door_cell(h.origin, h.rot)), "and its door is open")
+	var blocked := sim.place_site("house", at(11, 8))
+	blocked.stage = 4
+	blocked.done = true
+	blocked.old = true
+	sim.place_site("bench", Sim.front_cell(blocked.origin, blocked.rot))
+	check(sim.update_house(blocked) == "move" and Sim.is_old_house(blocked), "with the front taken, Update asks for a move")
+	var v68 := SaveFormat.upgrade(str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v68.save")))
+	check(v68.has("data") and v68.data.state.maps.village.sites.filter(func(x): return x.tpl == "house").all(func(x): return x.get("old", false)), "a v68 save's houses are stamped old")
+
 ## Issue #321: a Cartographer's survey finds the old caves, then a ruined portal, and can fail; the portal waits for the ruin.
 func test_survey() -> void:
 	Survey.enabled = true
@@ -1333,16 +1380,56 @@ func test_lead_animals_home() -> void:
 	check(sim.maps.village.fences.size() == 11 and sim.maps.village.gates.size() == 1, "with its fences and its gate")
 	var before: int = sim.maps[Meadow.ID].sheep.filter(func(a): return a.alive and not a.get("lead", false)).size()
 	run(sim, 3)
-	check(tomas.away and tomas.trip == "lead_home", "Tomas sets out for the meadow")
+	check(tomas.map == MeadowRoad.ID and tomas.trip == "lead_out" and not tomas.away, "Tomas sets out for the meadow, onto the strip where he can be seen")
 	var led: Array = sim.stats.lead_home.animals
 	check(led.size() == LeadHome.MAX_LED and sim.maps[Meadow.ID].sheep.filter(func(a): return a.get("lead", false)).size() == 1, "three animals are taken off the meadow, one marked one stays")
+	run(sim, 10)
+	check(tomas.pos.x > 5.0 and tomas.map == MeadowRoad.ID and tomas.trip == "lead_out", "he walks out along the road (x %.1f)" % tomas.pos.x)
 	var loaded := Sim.from_state(sim.save_state())
-	check(loaded.stats.lead_home.animals.size() == 3, "animals on the road are saved")
-	run(sim, LeadHome.seconds(sim) + 5.0)
+	check(loaded.stats.lead_home.animals.size() == 3 and loaded.resident(tomas.id).map == MeadowRoad.ID, "animals on the road are saved, with the hunter on it")
+	for i in int((LeadHome.seconds(sim) + 10.0) * Tuning.TPS):  # until the first trip is home: the lodge then looks for another
+		sim.step()
+		loaded.step()
+		if sim.stats.get("led_home", 0) >= 3 and loaded.stats.get("led_home", 0) >= 3:
+			break
+	check(loaded.maps.village.sheep.filter(func(a): return a.get("pen", 0) == pen.id).size() >= 3 and loaded.resident(tomas.id).map == "village", "and a game saved on the way gets them home too")
+	check(sim.stats.get("led_home", 0) >= 3 and sim.stats.get("lead_home", {}).is_empty(), "the first trip is home")
 	var penned: Array = sim.maps.village.sheep.filter(func(a): return a.get("pen", 0) == pen.id)
 	check(penned.size() >= 3 and penned.all(func(a): return Pens.pen_inside(pen).has_point(a.cell)), "the animals are penned in the village, inside the fences (%d)" % penned.size())
 	check(sim.stats.led_home >= 3, "and counted (%d)" % sim.stats.get("led_home", 0))
 	check(before >= 0, "(the meadow keeps its other animals)")
+
+
+## Issue #355: the lodge's hunter feeds a grown pair in a village pen with wheat from home, and a young one is born.
+func test_village_pen_breeding() -> void:
+	var sim := Sim.new_game()
+	sim.sheep.clear()
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(ada) + Vector2i(2, 0)))
+	var lodge := sim.place_site("lodge", at(6, 6))
+	lodge.stage = 1
+	lodge.done = true
+	sim._occ_dirty = true
+	sim.set_role(tomas, "hunt")
+	var bp := sim.place_site("village_pen", at(14, 10))
+	bp.stage = 1
+	bp.store = {"stick": 12}
+	bp.stage = 0
+	sim._complete_stage(bp)
+	var pen: Dictionary = sim.maps.village.pens[0]
+	var inside := Pens.pen_inside(pen)
+	for k in 2:
+		var cow := sim.add_animal(inside.position + Vector2i(k, 0), "cow")
+		cow.pen = pen.id
+	for r in sim.residents:
+		r.hunger = 100.0
+	run(sim, 3)
+	check(sim.free_count("wheat") == 0 and sim.stats.get("fed", 0) == 0, "no wheat, so nobody feeds them")
+	sim.drop_items(at(8, 8), "wheat", 2 * Tuning.FEED_WHEAT)
+	run(sim, 60)
+	check(sim.stats.get("fed", 0) == 1, "Tomas takes the wheat to the pair and feeds them (%d)" % sim.stats.get("fed", 0))
+	run(sim, Tuning.BREED_TIME + 10.0)
+	check(sim.stats.get("bred", 0) == 1 and sim.maps.village.sheep.any(func(a): return a.get("young", false) and a.get("pen", 0) == pen.id), "and a calf is born in the village pen (%d)" % sim.stats.get("bred", 0))
 
 
 ## Issue #360: at night mobs can injure residents, who fight back, guards best and the golem too; nobody dies.
