@@ -401,6 +401,54 @@ func _test_minimap(game: Game) -> void:
 	hud.refresh(game.sim)
 	check(not mm.visible, "and the key hides it again")
 	await _test_world_map(game)
+	_test_strip_cameras(game)
+	_test_build_menu_follows_book(game)
+	_test_recipes_follow_book(game)
+
+
+## Issue #370: the Build menu follows the founding book. A new game lists the bench; each step adds its entry.
+func _test_build_menu_follows_book(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var ids := func() -> Array: return OrderMenus.entries("build", sim).map(func(e): return e.id)
+	check(ids.call() == ["bench"], "a new game's Build menu lists only the crafting bench (%s)" % [ids.call()])
+	game.start_placing("house")
+	check(game.placing == "", "and a shortcut for the house does nothing yet")
+	sim.stats.houses = 1
+	sim.stats.felled = 1
+	sim.stats.built = {"bench": true}
+	sim.stats.axe_crafted = true
+	sim.stats.pick_crafted = true
+	sim.stats.broken_boulders = 1
+	sim.stats.sheep_hunted = 1
+	check(ids.call() == ["bench", "house", "composter"] and ids.call().size() == 3, "past Ada's house it also lists the composter (%s)" % [ids.call()])
+	sim.stats.founding_done = true
+	check(ids.call().has("mason_bench") and ids.call().has("storehouse"), "a finished founding, or an old save, shows everything")
+
+
+## Issue #372: the first bench lists wooden tools, planks and sticks; the book adds the rest.
+func _test_recipes_follow_book(game: Game) -> void:
+	game.restart()
+	var sim := game.sim
+	var names := func(tpl: String) -> Array: return Defs.recipes_shown(sim, tpl).map(func(r): return r.id)
+	check(names.call("bench") == ["planks", "sticks", "wood_axe", "wood_pick"], "a new game's bench lists planks, sticks and the wooden tools (%s)" % [names.call("bench")])
+	sim.stats.founding_done = true
+	check(names.call("bench").has("iron_pick") and names.call("fireplace").has("smelt_iron"), "a finished founding lists every recipe")
+
+
+## Issue #375: the village's road to the old mine runs east and the meadow's runs west, so +x on each strip
+## has to read as going the way its signpost points.
+func _test_strip_cameras(game: Game) -> void:
+	var here: String = game.view_map
+	var dx := {}
+	for id in [OldMine.ID, MeadowRoad.ID]:
+		game.switch_map(id)
+		var a: Vector2 = game._cam.unproject_position(Vector3(10, 0, 3))
+		var b: Vector2 = game._cam.unproject_position(Vector3(11, 0, 3))
+		dx[id] = b.x - a.x
+	check(dx[OldMine.ID] > 0.0, "walking out along the road to the old caves goes right on the screen")
+	check(dx[MeadowRoad.ID] < 0.0, "and out along the meadow's strip goes left, towards its signpost on the west edge")
+	game.switch_map(here)
 
 
 ## The full-screen world map (issue #347): P opens it and pauses, Esc closes it and the speed comes back; a ring sends the Cartographer.
@@ -1215,6 +1263,7 @@ func _test_order_menus(game: Game) -> void:
 	check(game.tool == "hunt", "G still switches Hunt on directly")
 	_key(game, KEY_ESCAPE)
 	check(game.tool == "", "Esc puts the order away")
+	sim.stats.founding_done = true  # the Build menu follows the book (issue #370), so show it all
 	_key(game, KEY_B)
 	_key(game, KEY_2)
 	check(game.tool == "build" and game.placing == "house", "B then 2 places a house, as the Build menu's second row")
@@ -1270,6 +1319,7 @@ func _test_rebinding(game: Game) -> void:
 	menu._do_confirmed()
 	check(game.keys.keys.chopping_block == [KEY_Q] and game.keys.keys.mine.is_empty(), "confirming moves Q to the chopping block and leaves Mine without a key")
 	game._hud.refresh(game.sim)
+	game.sim.stats.founding_done = true
 	game.set_tool("build")
 	game._hud.refresh(game.sim)
 	check(_menu_caps(game, "build", "Chopping block").has("Q"), "the chopping block's row shows Q (%s)" % [_menu_caps(game, "build", "Chopping block")])
@@ -1390,6 +1440,7 @@ func _test_right_click_never_silent(game: Game) -> void:
 	check(game.radial.is_empty() and not game._menu.visible, "Esc closes the radial, and doesn't open the menu")
 	# Placing a building: right-click cancels the placement, as before.
 	game.selection = {"kind": "res", "ids": [ada.id]}
+	game.sim.stats.founding_done = true  # the book has to have reached the house (issue #370)
 	game.start_placing("house")
 	_right(game, at)
 	check(game.tool == "" and game.radial.is_empty() and ada.direct == null, "while placing a building, right-click cancels the placement")
@@ -1469,6 +1520,7 @@ func _test_fireplace(game: Game) -> void:
 	game.restart()
 	var sim := game.sim
 	var hud: Hud = game._hud
+	sim.stats.founding_done = true
 	_key(game, KEY_K)
 	check(game.tool == "build" and game.placing == "fireplace", "K picks the fireplace")
 	var ada_cell := Sim.rcell(sim.residents[0])
@@ -1776,6 +1828,18 @@ func _test_meadow(game: Game) -> void:
 	hud.refresh(sim)
 	await process_frame
 	check(game.adventure == OldMine.ID and game.plan.dest == OldMine.ID and not hud._loc_drop.visible, "choosing the old caves shows its planner and closes the list")
+	# Fill the party and Unselect all (issue #374).
+	var can: Array = sim.residents.filter(func(r): return sim.cant_join(r) == "")
+	game.plan_clear()
+	hud.refresh(sim)
+	await process_frame
+	var fill_btn: Button = _walk(hud._plan_box).filter(func(n): return n is Button and n.get_meta("label", "") == "Fill the party")[0]
+	var clear_btn: Button = _walk(hud._plan_box).filter(func(n): return n is Button and n.get_meta("label", "") == "Unselect all")[0]
+	check(clear_btn.disabled and fill_btn.disabled == can.is_empty(), "with an empty party, Unselect all is greyed and Fill the party follows who can go")
+	fill_btn.pressed.emit()
+	check(game.plan.party.size() == mini(can.size(), Tuning.PARTY_MAX) and game.plan.party.all(func(id): return sim.cant_join(sim.resident(id)) == ""), "Fill the party takes up to %d who can go" % Tuning.PARTY_MAX)
+	clear_btn.pressed.emit()
+	check(game.plan.party.is_empty(), "Unselect all empties the party")
 	# The cargo priority list (issue #185): rows to turn on and off, reorder and set amounts.
 	var by_label := func(label: String) -> Button:
 		for n in _walk(hud._plan_box):

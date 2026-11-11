@@ -3,7 +3,7 @@
 Built after Slice 7 was decided, from the decisions on #66 (research) and the issues #357 to #360. It only describes what's new since Slice 2. Rules live in `game/sim/night.gd`; every number is in `game/sim/tuning.gd`.
 
 ## The day (#357)
-- A day is **480 s** (8 minutes): the first **300 s** are day, the last **180 s** night. Light eases over **20 s** at dusk and dawn.
+- A day is **720 s** (12 minutes): the first **450 s** are day, the last **270 s** night. Light eases over **20 s** at dusk and dawn.
 - It runs on sim ticks (it follows the speed buttons and stops when paused). `stats.day_zero` is the tick a morning began on; a new game, and an older save when it loads, start just past the dawn light.
 - Night is for looks and mood: the sun dims and turns blue, the sky darkens, and the top bar says "Day N · night". Residents keep working. There's no sleep and no rest need. Underground maps don't change.
 
@@ -22,8 +22,8 @@ Built after Slice 7 was decided, from the decisions on #66 (research) and the is
 ## Tuning
 | Name | Value | Meaning |
 |---|---|---|
-| `DAY_SECONDS` | 480 | A whole day |
-| `NIGHT_AT` | 300 | Seconds into the day when night falls |
+| `DAY_SECONDS` | 720 | A whole day |
+| `NIGHT_AT` | 450 | Seconds into the day when night falls |
 | `DUSK_SECONDS` | 20 | Light change at dusk and dawn |
 | `NIGHT_FROM` | 3 | Residents before mobs come |
 | `GOLEM_AT` | 3 | Residents before the golem appears |

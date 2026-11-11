@@ -36,8 +36,8 @@ const FOOD_VALUE := {"berries": 15.0, "mutton": 20.0, "bread": 50.0, "cooked_mut
 	"beef": 20.0, "porkchop": 20.0, "cooked_beef": 60.0, "cooked_porkchop": 60.0}
 const BUSH_MAX := 3                     ## Berries a bush holds.
 ## Night at the village (issues #66, #357-#360).
-const DAY_SECONDS := 480.0            ## A whole day: about 5 minutes of day and 3 of night.
-const NIGHT_AT := 300.0               ## Seconds into the day when night falls.
+const DAY_SECONDS := 720.0            ## A whole day: 12 minutes, about 7½ of day and 4½ of night.
+const NIGHT_AT := 450.0               ## Seconds into the day when night falls.
 const DUSK_SECONDS := 20.0            ## How long the light takes to change at dusk and dawn.
 const NIGHT_FROM := 3                 ## Residents the village needs before mobs come at night.
 const GOLEM_AT := 3                   ## Residents the village needs before an iron golem appears.

@@ -3,6 +3,7 @@ extends Node3D
 ## Hosts the sim at a fixed tick rate, owns the camera and selection, and turns input into sim
 ## commands. Views never change the sim directly; they call the methods here.
 
+const ISO_DIR_WEST := Vector3(-1, 1, -1)  ## The same view turned half way round, for the strip that runs west.
 const ISO_DIR := Vector3(1, 1, 1)      ## True isometric: camera looks down (-1, -1, -1).
 const ELEVATION_SIN := 0.57735         ## sin(35.26°), for converting screen drags to ground moves.
 
@@ -31,6 +32,7 @@ var book_open := false                  ## The village book (issue #198).
 const FLASH_MS := 1800                  ## How long a focused thing blinks (issue #304).
 var _flash_rect := Rect2i()
 var _flash_until := 0
+var goals_chapter := -1                 ## The Goals tab's chosen chapter, or -1 for the one the book is on (issue #371).
 var guide_page := ""                    ## The Guide's chosen page, or "" for the first one (issue #348).
 var book_page := "goals"                ## Its open page: "goals", "jobs", "residents", or a page's id from Goals.PAGES.
 var world_map_open := false              ## The full-screen world map (issue #347), which pauses the game while it is open.
@@ -202,7 +204,10 @@ func _place_camera() -> void:
 	var margin: float = Tuning.CLAIM_DEPTH + 2.0 if tool == "claim" else 2.0  # room to see the strips on offer (issue #187)
 	_target.x = clampf(_target.x, -margin, mp.w + margin)
 	_target.z = clampf(_target.z, -margin, mp.h + margin)
-	_cam.position = _target + ISO_DIR.normalized() * 60.0
+	# The strip to the meadow starts at its village end (x = 0), but the meadow lies west of the village,
+	# so its camera looks from the other side and a party walks out the same way the signpost points (#375).
+	var dir := ISO_DIR_WEST if view_map == MeadowRoad.ID else ISO_DIR
+	_cam.position = _target + dir.normalized() * 60.0
 	_cam.look_at(_target, Vector3.UP)
 
 
@@ -1417,6 +1422,9 @@ func start_moving(s: Dictionary) -> void:
 func start_placing(tpl: String) -> void:
 	if view_map != "village":
 		return
+	var entry := OrderMenus.entry(tpl)
+	if not entry.is_empty() and not OrderMenus.unlocked(entry, sim):  # the book hasn't got to it, so its key does nothing (issue #370)
+		return
 	tool = "build"
 	moving_id = 0
 	placing = tpl
@@ -1482,8 +1490,16 @@ func open_book(page := "goals", open := true) -> void:
 	book_open = open
 	if open:
 		book_page = page
+		if page == "goals":
+			goals_chapter = -1
 		if Goals.PAGES.any(func(p): return p.id == page):  # a building's page: the Guide tab, with that page chosen (issue #348)
 			select_guide(page)
+
+
+## Chooses a chapter of the Goals tab (issue #371).
+func select_chapter(ch: int) -> void:
+	book_page = "goals"
+	goals_chapter = ch
 
 
 ## Chooses a page of the Guide (issue #348). Opening a page that's known clears its "new" mark.
@@ -1631,6 +1647,29 @@ func plan_toggle(id: int) -> void:
 		plan.party.erase(id)
 	elif plan.party.size() < Tuning.PARTY_MAX:
 		plan.party.append(id)
+
+
+## Fills the party with the best fit among those who can go: the highest level for the destination first, the
+## roster's order among equals. Whoever is already on stays (issue #374).
+func plan_fill() -> void:
+	var skill := "hunt" if plan.dest == Meadow.ID else "mason"
+	var pool: Array = []
+	for r in sim.residents:
+		if sim.cant_join(r) == "" and not plan.party.has(r.id):
+			pool.append(r)
+	var order := {}
+	for i in pool.size():
+		order[pool[i].id] = i
+	pool.sort_custom(func(a, b): return Sim.level(a, skill) > Sim.level(b, skill) or (Sim.level(a, skill) == Sim.level(b, skill) and order[a.id] < order[b.id]))
+	for r in pool:
+		if plan.party.size() >= Tuning.PARTY_MAX:
+			break
+		plan.party.append(r.id)
+
+
+## Sends everyone home again (issue #374).
+func plan_clear() -> void:
+	plan.party.clear()
 
 
 ## Changes one of the plan's numbers by `by`, kept at 0 or more (the target at 1 or more).

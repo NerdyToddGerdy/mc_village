@@ -225,35 +225,35 @@ const RECIPES := [
 	{"id": "sticks", "name": "Sticks", "inp": {"plank": 2}, "out": {"stick": 4}, "pattern": [" P ", " P ", "   "]},
 	{"id": "wood_axe", "name": "Wooden axe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_axe": 1}, "pattern": ["PP ", "PS ", " S "]},
 	{"id": "wood_pick", "name": "Wooden pickaxe", "inp": {"plank": 3, "stick": 2}, "out": {"wood_pick": 1}, "pattern": ["PPP", " S ", " S "]},
-	{"id": "chest", "name": "Chest", "inp": {"plank": 8}, "out": {"chest": 1}, "pattern": ["PPP", "P P", "PPP"]},
-	{"id": "stone_axe", "name": "Stone axe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_axe": 1}, "pattern": ["CC ", "CS ", " S "]},
-	{"id": "stone_pick", "name": "Stone pickaxe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_pick": 1}, "pattern": ["CCC", " S ", " S "]},
+	{"id": "chest", "name": "Chest", "inp": {"plank": 8}, "out": {"chest": 1}, "pattern": ["PPP", "P P", "PPP"], "step": 8},
+	{"id": "stone_axe", "name": "Stone axe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_axe": 1}, "pattern": ["CC ", "CS ", " S "], "step": 4},
+	{"id": "stone_pick", "name": "Stone pickaxe", "inp": {"cobble": 3, "stick": 2}, "out": {"stone_pick": 1}, "pattern": ["CCC", " S ", " S "], "step": 4},
 	# Iron tools (issue #104), from ingots smelted at the fireplace.
-	{"id": "iron_axe", "name": "Iron axe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_axe": 1}, "pattern": ["II ", "IS ", " S "]},
-	{"id": "iron_pick", "name": "Iron pickaxe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_pick": 1}, "pattern": ["III", " S ", " S "]},
+	{"id": "iron_axe", "name": "Iron axe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_axe": 1}, "pattern": ["II ", "IS ", " S "], "step": 99},
+	{"id": "iron_pick", "name": "Iron pickaxe", "inp": {"iron_ingot": 3, "stick": 2}, "out": {"iron_pick": 1}, "pattern": ["III", " S ", " S "], "step": 99},
 	# Diamond tools (issue #186): the best tier, from diamonds found on the deep levels.
-	{"id": "flint_and_steel", "name": "Flint and steel", "inp": {"flint": 1, "iron_ingot": 1}, "out": {"flint_and_steel": 1}, "pattern": ["F  ", " I ", "   "]},
+	{"id": "flint_and_steel", "name": "Flint and steel", "inp": {"flint": 1, "iron_ingot": 1}, "out": {"flint_and_steel": 1}, "pattern": ["F  ", " I ", "   "], "step": 99},
 	# The Guard's gear (issue #150).
-	{"id": "iron_sword", "name": "Iron sword", "inp": {"iron_ingot": 2, "stick": 1}, "out": {"iron_sword": 1}, "pattern": [" I ", " I ", " S "]},
-	{"id": "iron_chestplate", "name": "Iron chestplate", "inp": {"iron_ingot": 8}, "out": {"iron_chestplate": 1}, "pattern": ["I I", "III", "III"]},
-	{"id": "diamond_axe", "name": "Diamond axe", "inp": {"diamond": 3, "stick": 2}, "out": {"diamond_axe": 1}, "pattern": ["DD ", "DS ", " S "]},
-	{"id": "diamond_pick", "name": "Diamond pickaxe", "inp": {"diamond": 3, "stick": 2}, "out": {"diamond_pick": 1}, "pattern": ["DDD", " S ", " S "]},
+	{"id": "iron_sword", "name": "Iron sword", "inp": {"iron_ingot": 2, "stick": 1}, "out": {"iron_sword": 1}, "pattern": [" I ", " I ", " S "], "step": 99},
+	{"id": "iron_chestplate", "name": "Iron chestplate", "inp": {"iron_ingot": 8}, "out": {"iron_chestplate": 1}, "pattern": ["I I", "III", "III"], "step": 99},
+	{"id": "diamond_axe", "name": "Diamond axe", "inp": {"diamond": 3, "stick": 2}, "out": {"diamond_axe": 1}, "pattern": ["DD ", "DS ", " S "], "step": 99},
+	{"id": "diamond_pick", "name": "Diamond pickaxe", "inp": {"diamond": 3, "stick": 2}, "out": {"diamond_pick": 1}, "pattern": ["DDD", " S ", " S "], "step": 99},
 	# The line to the mine (issue #120): Craft work, not Toolsmith, since nobody carries them as tools.
-	{"id": "rails", "name": "Rails", "inp": {"iron_ingot": 6, "stick": 1}, "out": {"rail": 16}, "pattern": ["I I", "ISI", "I I"]},
-	{"id": "minecart", "name": "Minecart", "inp": {"iron_ingot": 5}, "out": {"minecart": 1}, "pattern": ["   ", "I I", "III"]},
+	{"id": "rails", "name": "Rails", "inp": {"iron_ingot": 6, "stick": 1}, "out": {"rail": 16}, "pattern": ["I I", "ISI", "I I"], "step": 99},
+	{"id": "minecart", "name": "Minecart", "inp": {"iron_ingot": 5}, "out": {"minecart": 1}, "pattern": ["   ", "I I", "III"], "step": 99},
 	# Leather armor (issue #140): Craft work, like anything queued by hand. Spares aren't kept.
-	{"id": "leather_cap", "name": "Leather cap", "inp": {"leather": 5}, "out": {"leather_cap": 1}, "pattern": ["HHH", "H H", "   "]},
-	{"id": "leather_tunic", "name": "Leather tunic", "inp": {"leather": 8}, "out": {"leather_tunic": 1}, "pattern": ["H H", "HHH", "HHH"]},
-	{"id": "leather_trousers", "name": "Leather trousers", "inp": {"leather": 7}, "out": {"leather_trousers": 1}, "pattern": ["HHH", "H H", "H H"]},
-	{"id": "leather_boots", "name": "Leather boots", "inp": {"leather": 4}, "out": {"leather_boots": 1}, "pattern": ["   ", "H H", "H H"]},
+	{"id": "leather_cap", "name": "Leather cap", "inp": {"leather": 5}, "out": {"leather_cap": 1}, "pattern": ["HHH", "H H", "   "], "step": 11},
+	{"id": "leather_tunic", "name": "Leather tunic", "inp": {"leather": 8}, "out": {"leather_tunic": 1}, "pattern": ["H H", "HHH", "HHH"], "step": 11},
+	{"id": "leather_trousers", "name": "Leather trousers", "inp": {"leather": 7}, "out": {"leather_trousers": 1}, "pattern": ["HHH", "H H", "H H"], "step": 11},
+	{"id": "leather_boots", "name": "Leather boots", "inp": {"leather": 4}, "out": {"leather_boots": 1}, "pattern": ["   ", "H H", "H H"], "step": 11},
 	# Fireplace recipes (issue #46). "at" says which job building makes a recipe; the default is the bench.
-	{"id": "bread", "name": "Bread", "inp": {"wheat": 3}, "out": {"bread": 1}, "at": "fireplace", "doing": "Baking bread"},
-	{"id": "cooked_mutton", "name": "Cooked mutton", "inp": {"mutton": 1, "log": 1}, "out": {"cooked_mutton": 1}, "at": "fireplace", "doing": "Cooking mutton", "fuel": "log"},
-	{"id": "cooked_beef", "name": "Cooked beef", "inp": {"beef": 1, "log": 1}, "out": {"cooked_beef": 1}, "at": "fireplace", "doing": "Cooking beef", "fuel": "log"},
-	{"id": "cooked_porkchop", "name": "Cooked porkchop", "inp": {"porkchop": 1, "log": 1}, "out": {"cooked_porkchop": 1}, "at": "fireplace", "doing": "Cooking a porkchop", "fuel": "log"},
+	{"id": "bread", "name": "Bread", "inp": {"wheat": 3}, "out": {"bread": 1}, "at": "fireplace", "doing": "Baking bread", "step": 7},
+	{"id": "cooked_mutton", "name": "Cooked mutton", "inp": {"mutton": 1, "log": 1}, "out": {"cooked_mutton": 1}, "at": "fireplace", "doing": "Cooking mutton", "fuel": "log", "step": 7},
+	{"id": "cooked_beef", "name": "Cooked beef", "inp": {"beef": 1, "log": 1}, "out": {"cooked_beef": 1}, "at": "fireplace", "doing": "Cooking beef", "fuel": "log", "step": 7},
+	{"id": "cooked_porkchop", "name": "Cooked porkchop", "inp": {"porkchop": 1, "log": 1}, "out": {"cooked_porkchop": 1}, "at": "fireplace", "doing": "Cooking a porkchop", "fuel": "log", "step": 7},
 	# Smelting (issue #104): coal is the fuel. It's Cook work, like everything at the fireplace.
-	{"id": "smelt_iron", "name": "Smelt iron", "inp": {"iron_ore": 1, "coal": 1}, "out": {"iron_ingot": 1}, "at": "fireplace", "doing": "Smelting iron", "fuel": "coal"},
-	{"id": "smelt_gold", "name": "Smelt gold", "inp": {"gold_ore": 1, "coal": 1}, "out": {"gold_ingot": 1}, "at": "fireplace", "doing": "Smelting gold", "fuel": "coal"},
+	{"id": "smelt_iron", "name": "Smelt iron", "inp": {"iron_ore": 1, "coal": 1}, "out": {"iron_ingot": 1}, "at": "fireplace", "doing": "Smelting iron", "fuel": "coal", "step": 99},
+	{"id": "smelt_gold", "name": "Smelt gold", "inp": {"gold_ore": 1, "coal": 1}, "out": {"gold_ingot": 1}, "at": "fireplace", "doing": "Smelting gold", "fuel": "coal", "step": 99},
 	# Workstations process their material (issue #178): Lumberjack and Stonemason work.
 	{"id": "saw_planks", "name": "Sawn planks", "inp": {"log": 1}, "out": {"plank": 5}, "at": "chopping_block", "doing": "Sawing planks", "pattern": ["   ", " L ", "   "]},
 	{"id": "stone_bricks", "name": "Stone bricks", "inp": {"cobble": 2}, "out": {"stone_brick": 2}, "at": "mason_bench", "doing": "Cutting stone bricks", "pattern": ["   ", "CC ", "   "]},
@@ -432,9 +432,15 @@ static func recipe(id: String) -> Dictionary:
 	return {}
 
 
-## The recipes a job building makes.
+## The recipes a job building makes. A recipe's optional `step` is the founding goal the book must have reached
+## before the panel shows it (issue #372); 99 is the village chapter.
 static func recipes_at(tpl: String) -> Array:
 	return RECIPES.filter(func(r): return r.get("at", "bench") == tpl)
+
+
+## What a station's panel lists: its recipes the book has reached (issue #372). A recipe already queued stays.
+static func recipes_shown(sim: Sim, tpl: String) -> Array:
+	return recipes_at(tpl).filter(func(r): return Goals.reached(sim, r.get("step", 0)))
 
 
 ## The first recipe at this job building that outputs this item, used to fill in missing ingredients.
