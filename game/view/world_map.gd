@@ -114,7 +114,6 @@ func _pins() -> Array:
 		out.append({"id": Meadow.ID, "name": "Meadow", "at": "west:1", "adventure": true})
 	if sim.get_map(OldMine.ID).known:
 		out.append({"id": OldMine.ID, "name": "Old caves", "at": sim.stats.get("found_at", {}).get("old_mine", "east:1"), "adventure": true})
-	if Survey.found(sim, "ruined_portal"):
 		out.append({"id": "ruined_portal", "name": "Ruined portal", "at": sim.stats.get("found_at", {}).get("ruined_portal", "north-east:1"), "adventure": false})
 	return out
 

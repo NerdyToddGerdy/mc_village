@@ -91,6 +91,7 @@ Chapters 1 to 3 are also the opening's three book chapters decided in #318 (Shel
 
 *Everything past the Nether.*
 - **Built:** nothing in the sim yet.
+- **Built (Slice 7, started):** six mine-kind structures (#247 to #252: desert well, desert temple, jungle temple, fossil site, trail ruins, geode), found by the Cartographer's surveys. See `slice-7-spec.md`.
 - **Prepared:** #289 (the End: a stronghold portal, the dragon's platform, bridging out), #290 (the Sift, parked), #242 and #243–#268 (Slice 7: 26 structures as adventures), #271 (a coast, a dock and underwater adventures), #66 (night and mobs).
 - **Needs to get to:** a late game of long, planned journeys, each different.
 

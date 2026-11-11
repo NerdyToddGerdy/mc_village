@@ -41,6 +41,9 @@ func _init() -> void:
 		"test_house_entrance",
 		"test_old_house_update",
 		"test_village_torches",
+		"test_desert_well",
+		"test_every_structure",
+		"test_jungle_temple_trip",
 		"test_survey",
 		"test_lead_animals_home",
 		"test_village_pen_breeding",
@@ -2308,7 +2311,7 @@ func send_to_mine(sim: Sim, r: Dictionary) -> void:
 ## tallies leave out what lies on another map.
 func test_residents_only_work_on_their_own_map() -> void:
 	var sim := Sim.new_game()
-	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID, NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old caves, the road between them, the meadow and its road, and the Nether landing, with the village current")
+	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID] + Structures.IDS + [NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old caves, the road between them, the meadow and its road, and the Nether landing, with the village current")
 	var ada: Dictionary = sim.residents[0]
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
 	check(ada.map == "village" and tomas.map == "village", "residents start on the village map")
@@ -3716,7 +3719,7 @@ func test_the_adventures_registry() -> void:
 		var d: Dictionary = Adventures.def(id)
 		check(need.all(func(k): return d.has(k)), "%s has every field" % id)
 		check(Tuning.CARGO_DEFAULTS.has(d.cargo), "%s's Bring-back defaults exist" % id)
-	check(Sim.ADVENTURES == Adventures.IDS and Sim.ADVENTURES == [OldMine.ID, Meadow.ID, NetherLanding.ID], "the board's order is the registry's")
+	check(Sim.ADVENTURES == Adventures.IDS and Sim.ADVENTURES == [OldMine.ID, Meadow.ID] + Structures.IDS + [NetherLanding.ID], "the board's order is the registry's")
 	var sim := Sim.new_game()
 	check(sim.sign_for(Meadow.ID) == sim.meadow_sign() and sim.sign_for(OldMine.ID) == sim.route_sign(), "the meadow's party leaves by the west signpost, the mine's by the east")
 	check(Sim.road_map_for(Meadow.ID) == MeadowRoad.ID and Sim.road_map_for(OldMine.ID) == Road.ID and Sim.road_map_for(MineLevels.level_id(2)) == Road.ID, "the road each walks, a deeper level by the mine's")
@@ -3726,6 +3729,149 @@ func test_the_adventures_registry() -> void:
 	check(op.target.item == "coal" and op.target.n == 8 and op.picks == 1 and op.sticks == 0 and op.wheat == 0, "a mine plan asks for coal, with a spare pickaxe and no pens")
 	check(Adventures.def("a_place_nobody_listed") == Adventures.def(OldMine.ID), "an unlisted destination works as the old caves does")
 
+
+## Slice 7, issue #247: the desert well. Hidden until the Cartographer finds it; then a party walks the meadow's strip to it, digs gold,
+## and comes home by the west signpost. An old save gets the map on loading.
+func test_desert_well() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	var mp := sim.get_map("desert_well")
+	check(mp.kind == "site" and mp.name == "Desert well" and not mp.known and mp.entrance == Vector2i(0, 3), "a small site map, entered from the west, nobody knows of it")
+	check(mp.boulders.filter(func(b): return b.get("ore", "") == "gold").size() == 3 and mp.boulders.any(func(b): return b.get("ore", "") == "chest" and b.has("book")), "with three gold ores and a chest with a book in it")
+	check(mp.boulders.any(func(b): return b.get("loose", false)), "and old stone that can come down")
+	var b := built_board(sim)
+	check(sim.adventures().all(func(a): return a.id != "desert_well"), "the board doesn't list it before it's found")
+	Survey.reveal(sim, "desert_well")
+	check(mp.known and sim.get_map(MeadowRoad.ID).known and Survey.found(sim, "desert_well"), "a survey finding it makes it known, with the strip")
+	var row: Dictionary = sim.adventures().filter(func(a): return a.id == "desert_well")[0]
+	check(absf(row.travel - MeadowRoad.walk_time()) < 0.5, "the board lists it with the walk along the meadow's strip")
+	check(sim.sign_for("desert_well") == sim.meadow_sign() and Sim.road_map_for("desert_well") == MeadowRoad.ID, "its party leaves by the west signpost and walks the strip")
+	var plan := sim.new_plan("desert_well")
+	check(plan.target.item == "gold_ore" and plan.target.n == 4 and plan.picks == 1 and plan.sticks == 0, "a plan asks for gold, with a spare pickaxe and no pens")
+	var rep := sim.site_report("desert_well")
+	check(rep.told == Structures.DEFS.desert_well.told and rep.levels.is_empty() and rep.resources.all(func(r): return r.item != "coal"), "the report is its own: what's told, no mine levels, no coal")
+	# A trip: Ada and a pickaxe to dig four gold.
+	var ada: Dictionary = sim.residents[0]
+	ada.pick = {"type": "iron_pick", "tier": 3, "dur": 99}
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	tomas.pick = {"type": "iron_pick", "tier": 3, "dur": 99}
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 4
+	plan.picks = 0
+	sim.aim_plan(plan, "gold_ore", 4)
+	check(sim.plan_expedition(plan) == "", "the plan is accepted")
+	b.store = {"bread": 4}
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	check(sim.depart() == "", "they depart")
+	until_at_site(sim, [ada, tomas], MeadowRoad.walk_time() + 10)
+	check(ada.map == "desert_well" and Sim.rcell(ada) == mp.entrance, "they arrive at the well's entrance")
+	var home := false
+	for i in 600 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose(sim.pending[0].options[0].id) if sim.pending[0].has("options") else sim.choose("")
+		if sim.expedition.is_empty():
+			home = true
+			break
+	check(home and ada.map == "village", "they come home")
+	check(count(sim, "gold_ore") >= 2, "with gold in the stockpile (%d)" % count(sim, "gold_ore"))
+	check(b.report[0].begins_with("Back from the desert well: "), "the report names it: %s" % [b.report])
+	# Saves: what's found stays found; an older save gets the map, unknown.
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.get_map("desert_well").known and Survey.found(loaded, "desert_well"), "the find is saved")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v%d.save" % SaveFormat.VERSION).data.state)
+	check(old.maps.has("desert_well") and not old.get_map("desert_well").known, "a save from before it gets the map, unknown")
+	Survey.enabled = false
+
+## Slice 7, issues #247 to #252: every structure is well-formed, found in order, listed on the board once found, pinned on the world map, and
+## planned with its own Bring-back defaults and report.
+func test_every_structure() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	built_board(sim)
+	check(Survey.FINDS == ["old_mine", "ruined_portal"] + Structures.IDS, "the survey finds them in the table's order, after the caves and the portal")
+	for id in Structures.IDS:
+		var d: Dictionary = Structures.DEFS[id]
+		var mp := sim.get_map(id)
+		var w: int = d.layout[0].length()
+		check(d.layout.all(func(row): return row.length() == w) and mp.w == w and mp.h == d.layout.size(), "%s: every row of its layout is %d wide" % [id, w])
+		check(mp.entrance.x == 0 and not mp.known and not mp.torches.is_empty(), "%s: entered from the west, hidden, lit by torches" % id)
+		# Every block can be reached by digging in from the entrance: walk through open floor and blocks alike.
+		var seen := {mp.entrance: true}
+		var queue: Array = [mp.entrance]
+		while not queue.is_empty():
+			var c: Vector2i = queue.pop_front()
+			for dd in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var n: Vector2i = c + dd
+				if n.x >= 0 and n.y >= 0 and n.x < mp.w and n.y < mp.h and not mp.rock.has(n) and not seen.has(n):
+					seen[n] = true
+					queue.append(n)
+		check(mp.boulders.all(func(b): return seen.has(b.cell)), "%s: every block can be dug to" % id)
+		check(mp.boulders.any(func(b): return b.get("loose", false)), "%s: has old stone that can come down" % id)
+		for ore in d.gives:
+			check(mp.boulders.any(func(b): return b.get("ore", "") == ore), "%s: holds the %s it's said to give" % [id, ore])
+		var def := Adventures.def(id)
+		check(Tuning.CARGO_DEFAULTS.has(def.cargo) and Tuning.CARGO_DEFAULTS[def.cargo][0][0] == def.target[0], "%s: its Bring-back list starts with its target" % id)
+		check(sim.adventures().all(func(a): return a.id != id), "%s: not on the board before it's found" % id)
+		Survey.reveal(sim, id)
+		check(mp.known and sim.get_map(Adventures.road_of(id)).known and sim.adventures().any(func(a): return a.id == id), "%s: found, it's known with its road and listed" % id)
+		var plan := sim.new_plan(id)
+		check(plan.target.item == def.target[0] and plan.list.any(func(r): return r.item == def.target[0]), "%s: a new plan asks for %s" % [id, def.target[0]])
+		var rep := sim.site_report(id)
+		check(rep.told == d.told and rep.levels.is_empty() and rep.resources.any(func(r): return r.item == Defs.ORES[d.gives[0]].item) and rep.travel > 5.0, "%s: its report says what's told and the walk (%.0f s)" % [id, rep.travel])
+		check(sim.sign_for(id) == (sim.meadow_sign() if d.sign == "west" else sim.route_sign()) and Sim.road_map_for(id) == d.road, "%s: by the %s signpost and its road" % [id, d.sign])
+	var loaded := Sim.from_state(sim.save_state())
+	check(Structures.IDS.all(func(id): return loaded.get_map(id).known), "what's found is saved")
+	Survey.enabled = false
+
+## Slice 7: a structure on the road to the mine (the jungle temple) is walked to along that road, and its redstone is dug with iron pickaxes.
+func test_jungle_temple_trip() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	var id := "jungle_temple"
+	var mp := sim.get_map(id)
+	var b := built_board(sim)
+	Survey.reveal(sim, id)
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	for r in [ada, tomas]:
+		r.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
+	var plan := sim.new_plan(id)
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 6
+	plan.picks = 0
+	sim.aim_plan(plan, "redstone", 4)
+	for r in [ada, tomas]:
+		r.pick = {"type": "iron_pick", "tier": 3, "dur": 99}
+	check(sim.plan_expedition(plan) == "", "with iron pickaxes the plan is accepted")
+	b.store = {"bread": 6}
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	check(sim.depart() == "", "they depart")
+	var on_road := false
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		if ada.map == Road.ID and sim.on_road(ada):
+			on_road = true
+			break
+	check(on_road, "they walk the road to the mine, past the east signpost")
+	until_at_site(sim, [ada, tomas], ROAD + 60)
+	check(ada.map == id and Sim.rcell(ada) == mp.entrance, "and arrive at the temple's entrance")
+	var home := false
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose(sim.pending[0].options[0].id)
+		if sim.expedition.is_empty():
+			home = true
+			break
+	check(home and ada.map == "village" and count(sim, "redstone") >= 3, "they come home with redstone (%d)" % count(sim, "redstone"))
+	Survey.enabled = false
 
 ## Issue #137: the meadow is an expedition site with its own map: herds of sheep, cows and pigs, a pond,
 ## trees and fences. A party walks there past the west signpost, hunts what's marked for its objective,

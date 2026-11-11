@@ -28,18 +28,23 @@ static func site_report(sim: Sim, id: String) -> Dictionary:
 	if id == NetherLanding.ID:
 		return sim._landing_report()
 	var mp: SimMap = sim.maps[id]
+	var is_mine := MineLevels.level_of(id) > 0  # the old mine and its levels; a structure site has the mine's work rules but not its levels
 	var stone := mp.boulders.filter(func(b): return b.alive and not b.has("ore")).size()
 	var res: Array = [
 		{"item": "cobble", "name": "Stone", "reserve": stone * Tuning.BOULDER_COBBLE if mp.visited else -1},
 		{"item": "coal", "name": "Coal", "reserve": sim.ore_left(id, "coal") * Tuning.ORE_YIELD.coal if mp.visited else -1},
 	]
+	if not is_mine:  # a structure's finds, rather than the mine's coal: told before anyone has been
+		res.pop_back()
+		for ore in Structures.DEFS[id].gives:
+			res.append({"item": Defs.ORES[ore].item, "name": Defs.ORES[ore].name.replace(" ore", ""), "reserve": sim.ore_left(id, ore) * Tuning.ORE_YIELD[ore] if mp.visited else -1})
 	for x in res:
 		x.known = true
 	if mp.discovered:
 		res.append({"item": "iron_ore", "name": "Iron", "reserve": sim.ore_left(id, "iron") * Tuning.ORE_YIELD.iron, "known": true})
 	elif mp.found:
 		res.append({"item": "iron_ore", "name": "Iron", "reserve": -1, "known": false})
-	elif mp.visited:
+	elif mp.visited and is_mine:
 		res.append({"item": "iron_ore", "name": "?", "reserve": -1, "known": false})
 	if mp.diamond_found:  # a known resource of this level once someone has found it (issue #186)
 		res.append({"item": "diamond", "name": "Diamond", "reserve": sim.ore_left(id, "diamond") * Tuning.ORE_YIELD.diamond, "known": true})
@@ -51,7 +56,7 @@ static func site_report(sim: Sim, id: String) -> Dictionary:
 		for k in books:
 			res.append({"item": k, "name": Defs.ITEMS[k].label, "reserve": books[k], "known": true})
 	for ore in ["gold", "obsidian", "gravel", "lapis", "redstone"]:  # what the deeper levels hold once someone has seen them (issues #146, #163)
-		if mp.visited and mp.boulders.any(func(b): return b.get("ore", "") == ore):
+		if mp.visited and mp.boulders.any(func(b): return b.get("ore", "") == ore) and not (not is_mine and ore in Structures.DEFS[id].gives):
 			res.append({"item": Defs.ORES[ore].item, "name": {"gold": "Gold", "obsidian": "Obsidian", "gravel": "Flint", "lapis": "Lapis", "redstone": "Redstone"}[ore],
 				"reserve": sim.ore_left(id, ore) * Tuning.ORE_YIELD[ore], "known": true})
 	var hazards: Array = []
@@ -78,6 +83,8 @@ static func site_report(sim: Sim, id: String) -> Dictionary:
 	if mp.water.size() > 0 and mp.visited:
 		hazards.append("An underground stream: the way goes around it")
 	var told: String = OldMine.TOLD if mp.level <= 1 else "Behind the door at the far end of level %d. Nobody has been down." % (mp.level - 1)
+	if not is_mine:
+		told = Adventures.def(id).told
 	if mp.level > 1 and mp.level - 1 == 1:
 		told = "Behind the door at the far end of the old caves. Nobody has been down."
 	var levels: Array = []
@@ -87,9 +94,11 @@ static func site_report(sim: Sim, id: String) -> Dictionary:
 		var door: String = {"open": "door open", "found": "door found"}.get(lm.door_state, "door not reached")
 		levels.append({"id": lid, "level": lm.level, "pattern": MineLevels.FAMILY_NAMES.get(lm.pattern, ""), "ore": left if lm.visited else -1, "door": door, "visited": lm.visited})
 	var travel := sim.route_walk_time() + sim.level_walk(id) if sim.route_surveyed() else -1.0
+	if not is_mine:
+		travel = Travel.trip_time(sim, id)
 	return {"name": mp.name, "told": told, "visited": mp.visited, "travel": travel, "level": mp.level, "pattern": MineLevels.FAMILY_NAMES.get(mp.pattern, ""),
-		"biome": MineLevels.BIOMES[MineLevels.biome(mp.level)] if mp.level > 0 else "", "resources": res, "hazards": hazards, "access": (MineLevels.ACCESS.get(mp.pattern, []) + [MineLevels.BIOME_NOTES[MineLevels.biome(mp.level)]]) if mp.visited else [], "finds": finds,
-		"levels": levels if mp.level > 0 else [], "door": mp.door_state}
+		"biome": MineLevels.BIOMES[MineLevels.biome(mp.level)] if is_mine else "", "resources": res, "hazards": hazards, "access": ((MineLevels.ACCESS.get(mp.pattern, []) + [MineLevels.BIOME_NOTES[MineLevels.biome(mp.level)]]) if is_mine else Structures.DEFS[id].access) if mp.visited else [], "finds": finds,
+		"levels": levels if is_mine else [], "door": mp.door_state}
 
 
 ## The meadow's site report (issue #137): what each herd would give if it were all hunted, the herds

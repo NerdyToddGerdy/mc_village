@@ -163,6 +163,12 @@ const KEEP_STEP := 5                    ## The keep-stock target's step in the w
 ## amount wanted (0: as much as fits). Only the items the village knows the location gives are listed.
 const CARGO_DEFAULTS := {
 	"mine": [["iron_ore", 8], ["coal", 8], ["cobble", 0]],
+	"desert_well": [["gold_ore", 4], ["cobble", 0]],
+	"desert_temple": [["gold_ore", 4], ["cobble", 0]],
+	"jungle_temple": [["redstone", 4], ["lapis", 3], ["cobble", 0]],
+	"fossil_site": [["coal", 8], ["flint", 4], ["cobble", 0]],
+	"trail_ruins": [["flint", 4], ["cobble", 0]],
+	"geode": [["lapis", 6], ["gold_ore", 2], ["cobble", 0]],
 	"meadow": [["wool", 6], ["leather", 0], ["beef", 0], ["porkchop", 0], ["mutton", 0]],
 }
 const SHAFT_COST := {"plank": 8, "stone_brick": 6}  ## Upgrading a mason's bench into a mineshaft (issue #204).
