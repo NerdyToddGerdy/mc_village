@@ -33,6 +33,7 @@ func _initialize() -> void:
 	var slot := game._slot_path(1)
 	DirAccess.copy_absolute(ProjectSettings.globalize_path("res://tests/fixtures/slice3_village.save"), ProjectSettings.globalize_path(slot))
 	check(game.load_slot(1) == "", "load the Slice 3 village")
+	check(update_old_houses() == 0, "the saved village's old houses are updated in place")
 	await frames(3)
 	await key(KEY_QUOTELEFT)  # paused throughout: only play() moves time on
 	var sim := game.sim

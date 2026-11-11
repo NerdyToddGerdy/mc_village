@@ -38,6 +38,8 @@ func _init() -> void:
 		"test_village_combat",
 		"test_emeralds",
 		"test_house_tiers",
+		"test_house_entrance",
+		"test_old_house_update",
 		"test_survey",
 		"test_lead_animals_home",
 		"test_village_pen_breeding",
@@ -1253,6 +1255,50 @@ func test_house_tiers() -> void:
 	old.done = true
 	check(Sim.house_tier(old) == 3 and sim.house_upgrade_check(old) != "", "a house from before tiers is the building")
 
+
+## Issue #285: a house is solid but for its door, the cell in front of it must stay clear, and a later building can't close it.
+func test_house_entrance() -> void:
+	var sim := Sim.new_game()
+	var h := sim.place_site("house", at(11, 0))
+	h.stage = 1
+	sim._occ_dirty = true
+	var door := sim.door_cell(h.origin, h.rot)
+	var front := Sim.front_cell(h.origin, h.rot)
+	check(sim.site_blocks(h) and not sim.walkable(Vector2i(h.origin.x + 1, h.origin.y + 1)) and sim.walkable(door), "the plot is solid, and the door is the one way in")
+	var edge := sim.placement_check("house", Vector2i(sim.w - 5, 0), 1)
+	check(edge.contains("entrance"), "a door facing the map's edge is blocked: " + edge)
+	check(sim.placement_check("bench", front).contains("entrance"), "a bench can't go in front of a door")
+	check(sim.placement_check("bench", front + Vector2i(1, 1)) == "", "but beside it can")
+	var ada: Dictionary = sim.residents[0]
+	var j := sim.home_goal(h)
+	check(j.cells == [door] and not j.adj, "going home is walking to the door")
+
+## Issues #285, #356: an old house takes no work from its resident until it's updated in place or moved.
+func test_old_house_update() -> void:
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var h := sim.place_site("house", at(11, 0))
+	h.stage = 4
+	h.done = true
+	h.owner = ada.id
+	h.old = true
+	sim.rev += 1
+	check(Sim.is_old_house(h) and sim.waits_for_home(ada) and not sim.walkable(sim.door_cell(h.origin, h.rot)), "an old house has no entrance, and its resident waits")
+	ada.job = null
+	sim.step()
+	check(ada.job == null, "she takes no job")
+	var loaded := Sim.from_state(sim.save_state())
+	check(Sim.is_old_house(loaded.site_at(h.origin)), "old is saved")
+	check(sim.update_house(h) == "" and not Sim.is_old_house(h) and not sim.waits_for_home(ada), "with its front clear, Update converts it where it stands")
+	check(sim.walkable(sim.door_cell(h.origin, h.rot)), "and its door is open")
+	var blocked := sim.place_site("house", at(11, 8))
+	blocked.stage = 4
+	blocked.done = true
+	blocked.old = true
+	sim.place_site("bench", Sim.front_cell(blocked.origin, blocked.rot))
+	check(sim.update_house(blocked) == "move" and Sim.is_old_house(blocked), "with the front taken, Update asks for a move")
+	var v68 := SaveFormat.upgrade(str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/save_v68.save")))
+	check(v68.has("data") and v68.data.state.maps.village.sites.filter(func(x): return x.tpl == "house").all(func(x): return x.get("old", false)), "a v68 save's houses are stamped old")
 
 ## Issue #321: a Cartographer's survey finds the old caves, then a ruined portal, and can fail; the portal waits for the ruin.
 func test_survey() -> void:

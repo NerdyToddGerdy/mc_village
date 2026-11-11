@@ -2589,6 +2589,8 @@ func _status(sim: Sim, r: Dictionary) -> String:
 	var ex := sim.expedition_of(r)
 	if Sim.realm_of(r.map) == "nether" and ex.get("target", {}).get("item", "") in ["line", "pline"] and r.job != null and r.job.kind == "build":  # issue #159
 		return "In the Nether: %s" % r.job.label.to_lower()
+	if r.job == null and sim.waits_for_home(r):  # issue #356
+		return "Waits for a new home"
 	return r.job.label if r.job != null else "Idle"
 
 
@@ -2765,6 +2767,12 @@ func _fill_site(c: Container, sim: Sim, s: Dictionary) -> void:
 		var tier := Sim.house_tier(s)
 		c.add_child(_label(Defs.HOUSE_TIER_NAMES[tier - 1] if tier >= 1 else "House", true, Palette.CHALK, Palette.TITLE))
 		c.add_child(_label(line, false, Palette.CHALK_DIM, Palette.BODY, true))
+		if Sim.is_old_house(s):  # issue #356
+			var in_place := sim.house_update_in_place(s)
+			c.add_child(_label("An old house, with no entrance. %s eats and sleeps here but takes no work until it's updated." % (owner.name if not owner.is_empty() else "Its resident"), false, Palette.YELLOW, Palette.BODY, true))
+			var upd := _button("Update" if in_place else "Update: move it", func(): game.update_house(s), "Primary")
+			upd.tooltip_text = "Gives it an entrance where it stands, free." if in_place else "There's no room for a door here. Pick it up and put it down where a 5x5 and its entrance fit."
+			c.add_child(upd)
 		if s.has("tier") and s.tier < 3 and not owner.is_empty():
 			var need: int = Tuning.EMERALD_COSTS[s.tier - 1]
 			var next: String = Defs.HOUSE_TIER_NAMES[s.tier].to_lower()
