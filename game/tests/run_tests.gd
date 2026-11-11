@@ -40,6 +40,7 @@ func _init() -> void:
 		"test_house_tiers",
 		"test_house_entrance",
 		"test_old_house_update",
+		"test_village_torches",
 		"test_survey",
 		"test_lead_animals_home",
 		"test_village_pen_breeding",
@@ -1272,6 +1273,51 @@ func test_house_entrance() -> void:
 	var ada: Dictionary = sim.residents[0]
 	var j := sim.home_goal(h)
 	check(j.cells == [door] and not j.adj, "going home is walking to the door")
+
+## Issue #367: a torch at each new house's door lights the night around it; unlit ground at night slows work, and by day nothing changes.
+func test_village_torches() -> void:
+	Night.enabled = true
+	var sim := Sim.new_game()
+	var ada: Dictionary = sim.residents[0]
+	var h := sim.place_site("house", at(11, 0))
+	h.stage = 4
+	h.done = true
+	h.owner = ada.id
+	sim.rev += 1
+	var tc := sim.torch_cell(h)
+	check(tc == Sim.front_cell(h.origin, h.rot) and not h.get("torch", false), "a finished house wants a torch at its door step")
+	var old := sim.place_site("house", at(11, 8))
+	old.stage = 4
+	old.done = true
+	old.old = true
+	check(sim.torch_cell(old).x < 0, "an old house gets none")
+	var recipe := Defs.recipe("torch")
+	check(recipe.inp == {"coal": 1, "stick": 1} and recipe.out == {"torch": 4}, "a coal over a stick makes four torches")
+	# By day: no slowdown. By night with no torch: slowdown.
+	sim.tick = 100
+	check(not sim.dark_here(tc), "by day the village isn't dark")
+	sim.tick = int((Tuning.NIGHT_AT + 60) * Tuning.TPS) + int(sim.stats.get("day_zero", 0))
+	check(Night.is_night(sim) and sim.dark_here(tc), "at night an unlit cell is dark")
+	# An idle resident takes a torch from the stockpile and sets it down.
+	sim.drop_items(Sim.rcell(ada), "torch", 4)
+	var j = sim._torch_job(ada)
+	check(j != null, "with torches in the stockpile, a job places one")
+	ada.job = j
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if h.get("torch", false):
+			break
+	check(h.get("torch", false) and sim.m.torches.has(tc), "the torch is at the door")
+	check(not sim.dark_here(tc) and not sim.dark_here(tc + Vector2i(2, 0)) and sim.dark_here(tc + Vector2i(6, 0)), "it lights its 3 cells and no further")
+	check(not sim.m.is_dark(tc + Vector2i(6, 0)), "the village has no tunnel dark")
+	var loaded := Sim.from_state(sim.save_state())
+	check(loaded.m.torches.has(tc) and loaded.m.is_lit(tc), "the torch is saved")
+	# A moved house takes its torch along.
+	sim.rev += 1
+	var moved := sim.move_site(h, at(11, 8) + Vector2i(0, 6), 0)
+	if moved == "":
+		check(sim.m.torches.has(Sim.front_cell(h.origin, h.rot)) and not sim.m.torches.has(tc), "its torch follows it")
+	Night.enabled = false
 
 ## Issues #285, #356: an old house takes no work from its resident until it's updated in place or moved.
 func test_old_house_update() -> void:
