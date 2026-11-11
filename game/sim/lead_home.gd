@@ -2,7 +2,7 @@ class_name LeadHome
 extends RefCounted
 ## The hunter leads animals home from the meadow (issues #355, #275). A hunter who works a finished lodge, with a pen standing in the
 ## village that has room, goes to the meadow on their own and brings back up to three animals the player marked to be led, one trip at a
-## time, at walking pace: gone for the walk there and back. The animals are taken off the meadow when the hunter sets out and are in
+## time, at walking pace: they walk the meadow's road there and back where the player can see them. The animals are taken off the meadow when the hunter sets out and are in
 ## `stats.lead_home` while they walk (so a save in the middle keeps them), and are penned in the village when the hunter returns.
 ## Every function takes the Sim it works on.
 
@@ -78,14 +78,30 @@ static func step(sim: Sim) -> void:
 		taken.append(a)
 	if r.job != null:
 		sim.fail_job(r)
-	r.away = true
-	r.trip = "lead_home"
-	r.back_at = sim.tick + int(seconds(sim) * Tuning.TPS)
-	r.path = []
+	sim.move_to_map(r, MeadowRoad.ID, MeadowRoad.VILLAGE_END)  # the hunter walks the strip where it can be seen
+	r.trip = "lead_out"
 	sim.stats.lead_home = {"who": r.id, "animals": taken, "pen": pen.id}
 	sim.maps[Meadow.ID].known = true
 	sim.rev += 1
 	sim._toast("%s sets out for the meadow to lead %s home." % [r.name, Defs.animals(taken[0].species, taken.size()) if taken.all(func(x): return x.species == taken[0].species) else "%d animals" % taken.size()], r.id)
+
+
+## The walk: out along the meadow's strip to its far end, where they take the animals' leads, then back to the village.
+static func walk_job(sim: Sim, r: Dictionary) -> Job:
+	var out: bool = r.trip == "lead_out"
+	var j := Job.new("road", "Walking out to lead animals home" if out else "Leading animals home", "the end of the road")
+	j.step(sim._goto([MeadowRoad.far_end() if out else MeadowRoad.VILLAGE_END], false))
+	j.step({"op": "lead_end"})
+	return j
+
+
+## The hunter reaches an end of the strip: at the meadow's they turn round with the animals, at the village's they pen them.
+static func reached_end(sim: Sim, r: Dictionary) -> void:
+	if r.trip == "lead_out":
+		r.trip = "lead_back"
+		sim.rev += 1
+	else:
+		arrive(sim, r)
 
 
 ## The hunter is home: the animals go into the pen.

@@ -227,7 +227,7 @@ static func _rest_job(sim: Sim, r: Dictionary) -> Job:
 			bed = s
 	var j := Job.new("rest", "Resting in bed" if bed != null else "Resting, with no bed of their own", "their bed")
 	if bed != null:
-		j.step(sim._goto(sim.site_cells(bed), true))
+		j.step(sim.home_goal(bed))
 	j.step({"op": "rest", "bed": bed != null})
 	return j
 

@@ -546,8 +546,10 @@ func _recompute_occ() -> void:
 			occ[b.cell.y * m.w + b.cell.x] = 1
 	for s in m.sites:
 		if site_blocks(s):
+			var gate := house_gate(s)
 			for c in site_cells(s):
-				occ[c.y * m.w + c.x] = 1
+				if c != gate:
+					occ[c.y * m.w + c.x] = 1
 	m.occ = occ
 	m.occ_dirty = false
 
@@ -944,6 +946,57 @@ func door_cell(origin: Vector2i, rot: int) -> Vector2i:
 		_: return origin + Vector2i(0, 2)
 
 
+## The cell in front of a house's door, outside its plot (issue #285): where residents come and go.
+static func front_cell(origin: Vector2i, rot: int) -> Vector2i:
+	match rot % 4:
+		0: return origin + Vector2i(2, 5)
+		1: return origin + Vector2i(5, 2)
+		2: return origin + Vector2i(2, -1)
+		_: return origin + Vector2i(-1, 2)
+
+
+## A house placed before entrances (issue #285, #356) is an old house: it has no entrance, its residents take no jobs, and it shows
+## as a blueprint until it's updated or moved.
+static func is_old_house(s: Dictionary) -> bool:
+	return s.tpl == "house" and s.get("old", false)
+
+
+## The one cell of a house's plot residents can walk onto, its door, or (-1, -1) for anything else and for an old house.
+func house_gate(s: Dictionary) -> Vector2i:
+	if s.tpl != "house" or s.get("old", false):
+		return Vector2i(-1, -1)
+	return door_cell(s.origin, s.rot)
+
+
+## Where a resident goes to be home: through the door, or beside an old house.
+func home_goal(s: Dictionary) -> Dictionary:
+	if is_old_house(s):
+		return _goto(site_cells(s), true)
+	return _goto([door_cell(s.origin, s.rot)], false)
+
+
+## Whether the cell in front of a house's door can be walked from: in bounds, no water or fence, no building or reserved plot on it.
+## `ignore` is a site that doesn't count (the one being moved). Trees and boulders there are cleared with the footprint.
+func front_clear(front: Vector2i, ignore := 0) -> bool:
+	if not m.in_bounds(front) or m.water.has(front) or m.rock.has(front) or m.fences.has(front):
+		return false
+	for s in m.sites:
+		if s.id != ignore and (Rect2i(s.origin, s.size).has_point(front) or (s.get("plot") != null and s.plot.has_point(front))):
+			return false
+	return true
+
+
+## Whether this resident's own house is an old one, so they take no jobs until it's updated (issue #356). Worked out once per change.
+func waits_for_home(r: Dictionary) -> bool:
+	if _old_owner_rev != rev:
+		_old_owner_rev = rev
+		_old_owners.clear()
+		for s in maps.village.sites:
+			if is_old_house(s) and s.owner != 0:
+				_old_owners[s.owner] = true
+	return _old_owners.has(r.id)
+
+
 ## What's on a rect that a building put there has to clear (issue #205): trees and boulders to fell
 ## or break, and the debris: loose stacks and berry bushes.
 func obstacles_in(rect: Rect2i) -> Dictionary:
@@ -971,7 +1024,17 @@ func obstacles_in(rect: Rect2i) -> Dictionary:
 
 
 func site_obstacles(s: Dictionary) -> Dictionary:
-	return obstacles_in(Rect2i(s.origin, s.size))
+	return obstacles_for(s.tpl, s.origin, s.rot, s)
+
+
+## What a building at `origin` has to clear: its footprint, and a house's front door step (issue #285).
+func obstacles_for(tpl: String, origin: Vector2i, rot: int, s = null) -> Dictionary:
+	var o := obstacles_in(Rect2i(origin, Defs.TEMPLATES[tpl].size if s == null else s.size))
+	if tpl == "house" and (s == null or not is_old_house(s)):
+		var f := obstacles_in(Rect2i(front_cell(origin, rot), Vector2i.ONE))
+		for k in ["trees", "boulders"]:  # only what blocks walking: loose items and bushes can be stepped over
+			o[k].append_array(f[k])
+	return o
 
 
 ## Whether a blueprint's footprint is clear of trees, boulders and debris, so building can start.
@@ -2792,6 +2855,9 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			return false
 		"unload_wait":  # the party unloading its packs at the signpost (issue #123)
 			return not expedition.get("unloading", false)
+		"lead_end":  # the hunter at an end of the meadow's strip (issue #355)
+			LeadHome.reached_end(self, r)
+			return true
 		"road_end":  # the far end of the road: into the site, or home (issue #118)
 			var leg: String = "road_" + expedition.get("leg", "out")
 			if expedition.has(leg):
@@ -3451,11 +3517,16 @@ func _finish_work(r: Dictionary, st: Dictionary):
 ## Picks the resident's next job. Priority (spec §5): craft > deliver to a bench > build >
 ## deliver to a site > mine > haul.
 func _claim(r: Dictionary) -> void:
+	if r.get("trip", "") in ["lead_out", "lead_back"] and r.map == MeadowRoad.ID:  # the hunter walking animals home (issue #355)
+		r.job = LeadHome.walk_job(self, r)
+		return
 	# Starving residents only eat (spec §4); hungry ones eat after any orders you've given them.
 	if r.hunger <= 0.0:
 		var ej = _eat_job(r)
 		if ej != null:
 			r.job = ej
+		return
+	if map_id == "village" and waits_for_home(r):  # an old house: no jobs till it's updated or moved (issue #356)
 		return
 	if r.direct != null:
 		r.job = r.direct
@@ -3551,7 +3622,7 @@ func _home_job(r: Dictionary):
 			if near <= Tuning.HOME_NEAR:
 				return null
 			var j := Job.new("home", "Heading home", "their house")
-			j.step(_goto(site_cells(s), true))
+			j.step(home_goal(s))
 			return j
 	return null
 
@@ -3635,6 +3706,10 @@ func _claim_kind(r: Dictionary, c: Vector2i, kind: String, jobs: Array):
 				var wj = _workstation_job(r, c)
 				if wj != null:
 					return wj
+			if r.role == "hunt" and m.kind == "village":  # the lodge's hunter feeds the village pens' pairs (issue #355)
+				var fj = _village_feed_job(r, c)
+				if fj != null:
+					return _tagged(fj, "hunt")
 			if r.role == "hunt" and m.kind == "village" and not claimed(r).is_empty():  # down to the herd floor (issue #183)
 				var prey := auto_prey()
 				if not prey.is_empty():
@@ -3974,6 +4049,8 @@ func _step_sheep(sh: Dictionary) -> void:
 		sh.cell = Vector2i(roundi(sh.pos.x), roundi(sh.pos.y))
 
 
+var _old_owners := {}  ## Resident id -> true for those whose own house is an old one (issue #356); worked out per `rev`, not saved.
+var _old_owner_rev := -1
 var _idle_ticks := {}  ## Resident id -> ticks they've gone without work (issue #345); not saved.
 
 
@@ -4455,6 +4532,39 @@ func _feed_job(r: Dictionary, c: Vector2i):
 	return null
 
 
+## The lodge's hunter feeding a pair in a village pen (issue #355): wheat from a stack at home, as the party feeds with the packs'.
+## The young one comes after BREED_TIME, so the village herd grows by itself once it has a grown pair.
+func _village_feed_job(r: Dictionary, c: Vector2i):
+	var need := 2 * Tuning.FEED_WHEAT
+	var stacks := stacks_where(func(s): return s.type == "wheat" and avail(s) >= need)
+	if stacks.is_empty():
+		return null
+	var stack: Dictionary = nearest(stacks, c)
+	var pens: Array = m.pens.duplicate()
+	pens.sort_custom(func(x, y): return manhattan(x.gate, c) < manhattan(y.gate, c))
+	for p in pens:
+		var pairs := feed_pairs(p)
+		if pairs.is_empty():
+			continue
+		var pair: Array = pairs[0]
+		var many: String = Defs.SPECIES[pair[0].species].many
+		var j := Job.new("feed", "Going to feed a pair of %s" % many, "the pen")
+		j.work = "hunt"
+		j.target = pair[0]
+		stack.res += need
+		var hd := j.hold({"t": "stack", "stack": stack, "n": need})
+		for a in pair:
+			a.claim = r.id
+			j.hold({"t": "claim", "ent": a})
+		j.step(_goto(reach(stack.cell), false))
+		j.step({"op": "pickup", "stack": stack, "n": need, "hold": hd})
+		j.step(_goto([p.gate], false))
+		j.step({"op": "chase", "target": pair[0], "planned_for": null})
+		j.step({"op": "work", "what": "feed", "pair": pair, "label": "Feeding the %s" % many})
+		return j
+	return null
+
+
 ## Each tick on a map with pens: fed pairs have their young, and the young grow up.
 func _step_pens() -> void:
 	for a in m.sheep:
@@ -4929,7 +5039,14 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0, ignore := 0) -> St
 		var gap := Rect2i(pf.origin, pf.size).grow(Tuning.PORTAL_STATION_REACH)
 		if not gap.encloses(foot):
 			return "The station stands beside the portal"
+	if tpl == "house" and not front_clear(front_cell(origin, rot), ignore):
+		return "The entrance is blocked: leave the cell in front of the door clear"
 	var plot = plot_rect(tpl, origin, rot)
+	for s in m.sites:  # a later building can't close an entrance that's there (issue #285)
+		if s.tpl == "house" and s.id != ignore and not is_old_house(s):
+			var fc := front_cell(s.origin, s.rot)
+			if foot.has_point(fc) or (plot != null and plot.has_point(fc)):
+				return "It would block a house's entrance"
 	if plot != null:
 		var no_room := "Not enough room to grow into a %s" % Defs.TEMPLATES[tpl].plot
 		if not Rect2i(0, 0, w, h).encloses(plot):
@@ -4984,6 +5101,7 @@ func move_site(s: Dictionary, origin: Vector2i, rot := 0) -> String:
 		s.area = shifted
 	s.origin = origin
 	s.rot = rot
+	s.erase("old")  # put down where it has an entrance (issue #356)
 	if s.tpl == "storehouse":
 		s.erase("door")  # it moves only while 3 wide: the door is the formula's again (issue #318)
 	s.plot = plot_rect(s.tpl, origin, rot)
@@ -4999,6 +5117,27 @@ func move_site(s: Dictionary, origin: Vector2i, rot := 0) -> String:
 	_occ_dirty = true
 	_mark_obstacles(s)
 	rev += 1
+	return ""
+
+
+## Whether an old house can be updated where it stands: the cell in front of its old door is clear (issue #356).
+func house_update_in_place(s: Dictionary) -> bool:
+	return front_clear(front_cell(s.origin, s.rot), s.id)
+
+
+## Updates an old house (issue #356). With its front clear it turns into a house with an entrance where it stands, its door where it
+## was, at no cost, and its resident works again: returns "". Otherwise returns "move": the player moves it to a spot that fits.
+func update_house(s: Dictionary) -> String:
+	if not is_old_house(s):
+		return "It's not an old house"
+	if not house_update_in_place(s):
+		return "move"
+	s.erase("old")
+	_occ_dirty = true
+	_mark_obstacles(s)
+	rev += 1
+	var who := resident(s.owner)
+	_toast("The house is updated%s." % ((", and %s is back to work" % who.name) if not who.is_empty() else ""), 0, s.id)
 	return ""
 
 
