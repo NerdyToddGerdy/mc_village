@@ -8,6 +8,7 @@ extends "res://tests/playtest_base.gd"
 
 
 func _initialize() -> void:
+	Goals.follow_book = false  # this bot builds in its own order, not the founding book's (issue #370)
 	game = load("res://scenes/main.tscn").instantiate()
 	game.keys_path = "user://test_settings/playtest_village_keys.cfg"
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.keys_path))

@@ -19,6 +19,7 @@ func _init() -> void:
 	var tests := [
 		"test_full_opening",
 		"test_founding_goals",
+		"test_workstation_goal_counts_every_station",
 		"test_bench_skips_blocked_recipes_and_comes_before_building",
 		"test_auto_ingredients_from_the_start",
 		"test_blueprint_clears_trees_and_boulders",
@@ -302,6 +303,15 @@ func spot(sim: Sim, tpl: String, near: Vector2i) -> Vector2i:
 
 
 ## Issue #182: a new game's founding, and finished villages from older saves stay finished.
+## Issue #378: the village goal counts every job's workstation, not a fixed six.
+func test_workstation_goal_counts_every_station() -> void:
+	for job in Defs.JOB_STATIONS:
+		var sim := Sim.new_game()
+		sim.sites.append({"id": 9001, "tpl": "chopping_block", "done": true, "worker": 1, "cell": Vector2i(0, 0)})
+		check(not Goals.village_done(sim, 0), "one station isn't enough (%s)" % job)
+		sim.sites.append({"id": 9002, "tpl": Defs.JOB_STATIONS[job], "done": true, "worker": 2, "cell": Vector2i(5, 5)})
+		check(Goals.village_done(sim, 0), "a second resident at the %s's station completes the goal" % job)
+
 func test_founding_goals() -> void:
 	var sim := Sim.new_game()
 	check(sim.sheep.size() == 3 and sim.auto_craft and Goals.current(sim) == 0, "a new game: 3 sheep, auto ingredients on, the first goal")
