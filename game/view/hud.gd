@@ -42,6 +42,7 @@ var _loc_open := false
 var _minimap: MiniMap                ## The corner map (issue #298), always on from issue #347.
 var _world_map: WorldMap             ## The full-screen world map (issue #347).
 var minimap_on := true
+var _corner_row: HBoxContainer      ## The bottom right: the menus and toolbar, and the corner map beside them.
 
 
 ## The message log (issue #297): the toasts so far, newest last, in a list that opens under its button.
@@ -307,6 +308,16 @@ func _ready() -> void:
 	bl.add_child(_sel_panel)
 
 	var br := _corner(Control.PRESET_BOTTOM_RIGHT)
+	_corner_row = HBoxContainer.new()  # the menus and toolbar, with the corner map to their right, fixed to the corner
+	_corner_row.add_theme_constant_override("separation", 8)
+	_corner_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.remove_child(br)
+	_root.add_child(_corner_row)
+	_corner_row.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 16)
+	_corner_row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_corner_row.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_corner_row.add_child(br)
+	br.size_flags_vertical = Control.SIZE_SHRINK_END
 	for m in OrderMenus.MENUS:  # Gather, Paint and Build: one menu control for all three (#93, #94)
 		var box := GridContainer.new()  # one column, or two once a menu is long (the Build menu, #184)
 		box.add_theme_constant_override("h_separation", 2)
@@ -355,7 +366,8 @@ func _ready() -> void:
 	_root.add_child(_maps_drop)
 	_minimap = MiniMap.new()
 	_minimap.game = game
-	_root.add_child(_minimap)
+	_corner_row.add_child(_minimap)
+	_minimap.size_flags_vertical = Control.SIZE_SHRINK_END
 	_world_map = WorldMap.new()
 	_world_map.game = game
 	_root.add_child(_world_map)
@@ -1986,19 +1998,14 @@ func toggle_minimap() -> void:
 	_refresh_minimap()
 
 
-## Shown in the bottom right corner above the orders toolbar, over the map, while it's on.
+## Shown in the bottom right corner, to the right of the orders toolbar, as part of that corner's row, so it stays put while menus and panels open and close.
 func _refresh_minimap() -> void:
 	_minimap.visible = minimap_on and not game._menu.visible and not game.world_map_open
 	if not _minimap.visible:
 		return
-	var view := get_viewport().get_visible_rect().size
-	var side := MiniMap.side_for(view)  # smaller on a short screen, so it never reaches the top bar or the Menu button (issue #347)
+	var side := MiniMap.side_for(get_viewport().get_visible_rect().size)  # smaller on a short screen, so it never reaches the top bar or the Menu button (issue #347)
+	_minimap.custom_minimum_size = Vector2(side, side)
 	_minimap.size = Vector2(side, side)
-	var x := view.x - side - 16.0
-	for p in [_craft_panel, _plan_panel] + _menu_panels.values():  # it keeps clear of the panels that open at the right, the Build menu included (issue #347)
-		if p.visible:
-			x = minf(x, p.get_global_rect().position.x - side - 12.0)
-	_minimap.position = Vector2(maxf(x, 0.0), view.y - side - 82.0)
 
 
 # ---------------------------------------------------------------- the message log (issue #297)

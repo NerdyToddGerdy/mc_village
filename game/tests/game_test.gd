@@ -389,6 +389,14 @@ func _test_minimap(game: Game) -> void:
 	await game.get_tree().process_frame
 	hud._refresh_minimap()
 	check(not hud._menu_panels.build.get_global_rect().intersects(mm.get_global_rect()), "the corner map keeps clear of the Build menu (%s, %s)" % [mm.get_global_rect(), hud._menu_panels.build.get_global_rect()])
+	var at_rest := mm.get_global_rect()
+	check(mm.get_global_rect().position.x >= hud._toolbar_panel.get_global_rect().end.x - 0.5 and absf(mm.get_global_rect().end.y - hud._toolbar_panel.get_global_rect().end.y) < 1.0, "it sits right of the toolbar, on the same bottom edge")
+	game.menu_open = ""
+	hud.refresh(game.sim)
+	await game.get_tree().process_frame
+	await game.get_tree().process_frame
+	check(mm.get_global_rect().is_equal_approx(at_rest), "and doesn't move when a menu opens or closes")
+	game.menu_open = "build"
 	game.menu_open = ""
 	hud.refresh(game.sim)
 	await game.get_tree().process_frame
