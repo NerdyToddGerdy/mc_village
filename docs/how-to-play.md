@@ -371,6 +371,10 @@ Each kind of wild animal grows back on its own, a few minutes at a time, up to t
 - **Tend the pens** is an objective of its own: the party builds, leads and feeds, then hunts only the penned animals over the number you choose to keep of each kind, and packs their drops.
 - On any trip to the meadow, the party builds the pens and leads and feeds before it hunts, and never hunts penned animals for its objective. Wild animals regrow apart from the pens.
 
+## The Nether fossil
+
+A fourth route leaves the portal landing, through a new gap in its **west** wall: **scout** it like the others (the Scout objective lists it), and it reveals a **fossil ridge**, a bone-white dig in the Nether. Once it's scouted, a **Gather** mission can go there as well as to the quartz site. The ridge holds eight blocks of **Nether fossil**, each giving 2 bone, with a little quartz and glowstone, some lava to walk round, and a magma cube on the way. A village whose Nether you set up before this keeps its landing and gets the gap opened when it loads.
+
 ## The coast
 
 A new village has a **sea** along its south edge: three rows of water. It can't be walked, built on, farmed or made a stockpile, and the south edge can't be claimed, so the village grows north, east and west. A village founded before this keeps its land and has no sea.
@@ -393,6 +397,19 @@ All of them work like the old caves: pack pickaxes and meals, mark what you want
 | Geode | east | lapis, gold ore; **needs iron pickaxes** | old stone |
 
 Their rooms are lit only near their torches, and a digger can fall from a ledge in the dark.
+
+**Places with creatures.** Further surveys find structures with zombies, skeletons or spiders inside: a **dungeon**, an **igloo cellar**, a **swamp hut**, a **pillager outpost**, some **trial chambers**, a **woodland mansion**, a **stronghold** and an **abandoned mineshaft**. They work like the others, but the creatures **come for the party** and the plan fights by default, so send someone who can fight (a Guard with a sword, or Ada). The planner warns when no one can, and the place's report lists what's inside. The party digs while the guards deal with what comes.
+
+| Structure | Way there | Holds | Inside |
+|---|---|---|---|
+| Dungeon | west | coal, two chests | 2 zombies, a skeleton |
+| Igloo cellar | east | flint, coal, two chests | a zombie |
+| Swamp hut | west | coal, a chest | 2 spiders |
+| Pillager outpost | east | gold ore, three chests | 3 skeletons |
+| Trial chambers | west | gold, lapis, redstone, chests (**iron pickaxes**) | zombies, skeletons, a spider |
+| Woodland mansion | east | gold, lapis, redstone, chests (**iron pickaxes**) | 2 zombies, 2 skeletons, a spider |
+| Stronghold | east | gold ore, three chests | 2 skeletons, 2 zombies |
+| Abandoned mineshaft | west | coal, flint, three chests | 3 cave spiders, a ledge in the dark |
 
 ## The road to the mine
 

@@ -215,7 +215,7 @@ static func trade_text(t: Dictionary) -> String:
 const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}, "diamond": {"item": "diamond", "name": "Diamond ore"},
 	"chest": {"item": "book_efficiency", "name": "Chest"},  # a chest in the rock holds one book, named by the block (issue #164)
 	"lapis": {"item": "lapis", "name": "Lapis ore"}, "redstone": {"item": "redstone", "name": "Redstone ore"},
-	"quartz": {"item": "quartz", "name": "Nether quartz ore"}, "glowstone": {"item": "glowstone", "name": "Glowstone"},
+	"quartz": {"item": "quartz", "name": "Nether quartz ore"}, "fossil": {"item": "bone", "name": "Nether fossil"}, "glowstone": {"item": "glowstone", "name": "Glowstone"},
 	"gold": {"item": "gold_ore", "name": "Gold ore"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}
 
 ## `pattern` (bench) and `fuel` (fireplace) are display only, for the Craft panel's crafting grid and
