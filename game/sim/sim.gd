@@ -1440,6 +1440,8 @@ func plan_warnings(plan: Dictionary) -> Array:
 		var r := resident(id)
 		if not r.is_empty() and needs_sword(r) and tool_items("sword", 0).is_empty():
 			out.append("No sword for %s" % r.name)
+	if Adventures.def(plan.dest).get("fight", false) and not plan.party.any(func(id): return resident(id).get("role", "") in ["guard", "all"]):  # a structure with creatures in it (Slice 7)
+		out.append("No guard in the party: %s" % Structures.DEFS[plan.dest].told.split(".")[0].to_lower() if Structures.is_structure(plan.dest) else "someone must fight")
 	if plan.get("objective", "") == "fortress" and not plan.party.any(func(id): return resident(id).get("role", "") in ["guard", "all"]):
 		out.append("No guard in the party: a fortress has blazes and skeletons")  # issue #157
 	return out
@@ -4804,7 +4806,7 @@ func new_plan(dest := OldMine.ID) -> Dictionary:
 	var wheat := wheat_wanted() if ad.pens else 0
 	var plan := {"dest": dest, "party": party, "target": {"item": ad.target[0], "n": ad.target[1]}, "meals": 3, "picks": ad.picks,
 		"sticks": sticks, "wheat": wheat,
-		"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": cart_adds_room(), "clear": false}
+		"policy": {"target": true, "full": true, "low": true}, "spend_return": false, "cart_cap": cart_adds_room(), "clear": false, "fight": ad.get("fight", false)}
 	plan.list = cargo_list_for(dest)
 	sync_target(plan)
 	return plan
