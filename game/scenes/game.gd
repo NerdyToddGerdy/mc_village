@@ -403,6 +403,8 @@ func _update_live_overlays() -> void:
 		if err == "" and placing == "house":
 			fills.append({"rect": Rect2i(sim.door_cell(origin, rot), Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.55)})
 			fills.append({"rect": Rect2i(Sim.front_cell(origin, rot), Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.3)})
+		elif err == "" and Sim.entrance_front(placing, origin, rot).x >= 0:  # a job building's entrance step, outside its plot (issue #285)
+			fills.append({"rect": Rect2i(Sim.entrance_front(placing, origin, rot), Vector2i.ONE), "h": 0.02, "color": Color(Palette.BLUE, 0.3)})
 		if err != "":
 			hint = err
 			hint_col = Palette.YELLOW

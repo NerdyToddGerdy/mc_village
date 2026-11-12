@@ -275,6 +275,8 @@ func _build_static() -> void:
 	_ov_col = col
 	for s in sim.sites:
 		_add_site(solid, ghost, s)
+		if Sim.entrance_front(s.tpl, s.origin, s.rot).x >= 0 and s.tpl != "house" and s.get("plot") != null:
+			_add_station_decor(solid, s)
 		if not s.done:
 			_outline(dark, col, Rect2i(s.origin, s.size), 0.52 if s.stage >= 1 else 0.02, Palette.BLUE, true)
 		if s.get("plot") != null:  # the reserved plot it will grow into, faint
@@ -1189,6 +1191,16 @@ func _add_dock(b: Batch, s: Dictionary) -> void:
 	var e := o + Vector2i(0, s.size.y - 1)
 	b.box(Vector3(e.x + 0.42, 0.08, e.y + 0.7), Vector3(e.x + 0.58, 0.9, e.y + 0.85), Palette.LOG, BlockTextures.LOG)
 	b.box(Vector3(e.x + 0.3, 0.7, e.y + 0.68), Vector3(e.x + 0.7, 0.9, e.y + 0.87), Palette.RED if s.done else col)
+
+
+## What fills a job building's plot until it grows into it (issue #285): a crate and a young sapling flanking its entrance step.
+func _add_station_decor(b: Batch, s: Dictionary) -> void:
+	var cells := Sim.station_decor_cells(s)
+	var crate: Vector2i = cells[0]
+	var sapling: Vector2i = cells[1]
+	b.box(Vector3(crate.x + 0.2, 0, crate.y + 0.2), Vector3(crate.x + 0.8, 0.45, crate.y + 0.8), Palette.PLANK, BlockTextures.BOARD)
+	b.box(Vector3(sapling.x + 0.45, 0, sapling.y + 0.45), Vector3(sapling.x + 0.55, 0.4, sapling.y + 0.55), Palette.LOG, BlockTextures.LOG)
+	b.box(Vector3(sapling.x + 0.3, 0.4, sapling.y + 0.3), Vector3(sapling.x + 0.7, 0.7, sapling.y + 0.7), Palette.LEAVES, BlockTextures.FOLIAGE)
 
 
 static var EMBER := Color("#E8763A")
