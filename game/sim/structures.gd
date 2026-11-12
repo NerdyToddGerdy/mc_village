@@ -202,6 +202,22 @@ const DEFS := {
 			"###t######t###",
 		],
 	},
+	"abandoned_mineshaft": {
+		"name": "Abandoned mineshaft", "find": "an abandoned mineshaft", "sign": "west", "road": MeadowRoad.ID, "pin": "north-west:3", "fight": true,
+		"told": "Rotten timbers and old rails under the western hills, thick with cave spiders. Coal, flint and chests, they say.",
+		"access": ["Narrow shafts: 1 resident per shaft"],
+		"gives": ["coal", "gravel"], "others": ["coal", "flint", "cobble"], "target": ["coal", 8], "picks": 1,
+		"loose": [Vector2i(3, 1), Vector2i(3, 4), Vector2i(9, 2)], "ledges": [Vector2i(5, 3)],
+		"layout": [
+			"###t######t###",
+			"#c.o..#..X.c.#",
+			"#X.k..#..o.k.#",
+			"E.......v....#",
+			"#c.o..#..k.X.#",
+			"#..o..#.v...c#",
+			"###t######t###",
+		],
+	},
 	"buried_treasure": {
 		"name": "Buried treasure", "find": "buried treasure", "sign": "dock", "road": MeadowRoad.ID, "pin": "south:1", "coast": true,
 		"told": "A map's X in the sand along the shore: a chest, and gold with it.",
@@ -263,7 +279,7 @@ const DEFS := {
 }
 
 ## The structures, in the order the Cartographer finds them: the land ones in the sectors on land, then the coastal ones (`coast`) in the sectors on the sea, which need a dock.
-const IDS := ["desert_well", "desert_temple", "jungle_temple", "fossil_site", "trail_ruins", "geode", "dungeon", "igloo_cellar", "swamp_hut", "pillager_outpost", "trial_chambers", "woodland_mansion", "stronghold", "buried_treasure", "shipwreck", "ocean_ruins"]
+const IDS := ["desert_well", "desert_temple", "jungle_temple", "fossil_site", "trail_ruins", "geode", "dungeon", "igloo_cellar", "swamp_hut", "pillager_outpost", "trial_chambers", "woodland_mansion", "stronghold", "abandoned_mineshaft", "buried_treasure", "shipwreck", "ocean_ruins"]
 
 const ORE_OF := {"c": "coal", "g": "gold", "l": "lapis", "r": "redstone", "v": "gravel", "k": "chest"}
 

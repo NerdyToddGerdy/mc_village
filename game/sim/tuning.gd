@@ -172,6 +172,7 @@ const CARGO_DEFAULTS := {
 	"trial_chambers": [["gold_ore", 4], ["lapis", 3], ["redstone", 3], ["cobble", 0]],
 	"woodland_mansion": [["gold_ore", 4], ["lapis", 3], ["redstone", 3], ["cobble", 0]],
 	"stronghold": [["gold_ore", 4], ["cobble", 0]],
+	"abandoned_mineshaft": [["coal", 8], ["flint", 3], ["cobble", 0]],
 	"buried_treasure": [["gold_ore", 4], ["cobble", 0]],
 	"shipwreck": [["gold_ore", 4], ["flint", 3], ["cobble", 0]],
 	"ocean_ruins": [["lapis", 4], ["gold_ore", 2], ["cobble", 0]],

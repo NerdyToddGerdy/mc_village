@@ -28,7 +28,7 @@ Not a structure-table entry: the Nether's sites are routes, so it is a **fourth 
 
 ## Structures with creatures (group B of #242)
 
-A structure whose layout has `Z` (zombie), `S` (skeleton) or `X` (spider) puts that creature in the map, hunting anyone who comes in (`hunt`), and its entry says `fight`: the plan fights by default (`plan.fight`, which makes the party engage creatures in range), the planner warns when no Guard (or Ada) is going, and the site report lists what's inside. The Slice 5 auto-combat does the rest. Provisional: the creatures are the village's night mobs (zombie, skeleton, spider), standing in for pillagers and the rest until #30 settles names and art. The **abandoned mineshaft (#256)** is not built: the old caves are one already, and #256 says as much. The **stronghold** is only a stone fortress to dig here; it is not the way to the End (#289 is open).
+A structure whose layout has `Z` (zombie), `S` (skeleton) or `X` (spider) puts that creature in the map, hunting anyone who comes in (`hunt`), and its entry says `fight`: the plan fights by default (`plan.fight`, which makes the party engage creatures in range), the planner warns when no Guard (or Ada) is going, and the site report lists what's inside. The Slice 5 auto-combat does the rest. Provisional: the creatures are the village's night mobs (zombie, skeleton, spider), standing in for pillagers and the rest until #30 settles names and art. The **abandoned mineshaft (#256)** is built as its own place (spiders, a ledge in the dark) even though the old caves are one too. The **stronghold** is only a stone fortress to dig here; it is not the way to the End (#289 is open).
 
 ## Kinds
 
@@ -56,6 +56,7 @@ A structure uses an existing road until it needs its own: the meadow's strip (a 
 | Trial chambers | #260 | west | gold, lapis, redstone, chests (iron pickaxes) | zombies, skeletons, a spider |
 | Woodland mansion | #261 | east | gold, lapis, redstone, chests (iron pickaxes) | zombies, skeletons, a spider |
 | Stronghold | #262 | east | gold ore, three chests | skeletons and zombies |
+| Abandoned mineshaft | #256 | west | coal, flint, three chests | 3 spiders, loose stone and a ledge in the dark |
 | Buried treasure | #244 | dock | gold ore, a chest's book | old stone comes down |
 | Shipwreck | #245 | dock | gold ore, flint, two chests | old stone comes down |
 | Ocean ruins | #246 | dock | lapis (needs iron pickaxes), gold ore, a chest | old stone comes down |

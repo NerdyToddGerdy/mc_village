@@ -396,7 +396,7 @@ All of them work like the old caves: pack pickaxes and meals, mark what you want
 
 Their rooms are lit only near their torches, and a digger can fall from a ledge in the dark.
 
-**Places with creatures.** Further surveys find structures with zombies, skeletons or spiders inside: a **dungeon**, an **igloo cellar**, a **swamp hut**, a **pillager outpost**, some **trial chambers**, a **woodland mansion** and a **stronghold**. They work like the others, but the creatures **come for the party** and the plan fights by default, so send someone who can fight (a Guard with a sword, or Ada). The planner warns when no one can, and the place's report lists what's inside. The party digs while the guards deal with what comes.
+**Places with creatures.** Further surveys find structures with zombies, skeletons or spiders inside: a **dungeon**, an **igloo cellar**, a **swamp hut**, a **pillager outpost**, some **trial chambers**, a **woodland mansion**, a **stronghold** and an **abandoned mineshaft**. They work like the others, but the creatures **come for the party** and the plan fights by default, so send someone who can fight (a Guard with a sword, or Ada). The planner warns when no one can, and the place's report lists what's inside. The party digs while the guards deal with what comes.
 
 | Structure | Way there | Holds | Inside |
 |---|---|---|---|
@@ -407,6 +407,7 @@ Their rooms are lit only near their torches, and a digger can fall from a ledge 
 | Trial chambers | west | gold, lapis, redstone, chests (**iron pickaxes**) | zombies, skeletons, a spider |
 | Woodland mansion | east | gold, lapis, redstone, chests (**iron pickaxes**) | 2 zombies, 2 skeletons, a spider |
 | Stronghold | east | gold ore, three chests | 2 skeletons, 2 zombies |
+| Abandoned mineshaft | west | coal, flint, three chests | 3 cave spiders, a ledge in the dark |
 
 ## The road to the mine
 
