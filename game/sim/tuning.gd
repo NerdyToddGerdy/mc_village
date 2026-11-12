@@ -91,7 +91,7 @@ const BREED_COOLDOWN := 300.0           ## Seconds before a pair that bred can b
 const GROW_TIME := 240.0                ## Seconds for a young animal to grow up; till then it can't be hunted.
 
 # Site maps (Slice 3, issues #102, #103).
-const ORE_YIELD := {"coal": 3, "iron": 4, "diamond": 1, "gold": 2, "obsidian": 1, "gravel": 1, "quartz": 2, "glowstone": 2, "lapis": 3, "redstone": 3, "chest": 1}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).
+const ORE_YIELD := {"coal": 3, "iron": 4, "diamond": 1, "gold": 2, "obsidian": 1, "gravel": 1, "quartz": 2, "fossil": 2, "glowstone": 2, "lapis": 3, "redstone": 3, "chest": 1}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).
 const TORCH_LIGHT := 3.0                ## Cells a torch lights; open cells further from every torch are dark.
 # The old mine's deeper levels (issue #132).
 const LEVEL_ORE := {"coal": 2, "iron": 1}  ## Ore blocks each level down adds to Level 1's 6 coal and 4 iron.

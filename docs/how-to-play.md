@@ -369,6 +369,10 @@ Each kind of wild animal grows back on its own, a few minutes at a time, up to t
 - **Tend the pens** is an objective of its own: the party builds, leads and feeds, then hunts only the penned animals over the number you choose to keep of each kind, and packs their drops.
 - On any trip to the meadow, the party builds the pens and leads and feeds before it hunts, and never hunts penned animals for its objective. Wild animals regrow apart from the pens.
 
+## The Nether fossil
+
+A fourth route leaves the portal landing, through a new gap in its **west** wall: **scout** it like the others (the Scout objective lists it), and it reveals a **fossil ridge**, a bone-white dig in the Nether. Once it's scouted, a **Gather** mission can go there as well as to the quartz site. The ridge holds eight blocks of **Nether fossil**, each giving 2 bone, with a little quartz and glowstone, some lava to walk round, and a magma cube on the way. A village whose Nether you set up before this keeps its landing and gets the gap opened when it loads.
+
 ## The coast
 
 A new village has a **sea** along its south edge: three rows of water. It can't be walked, built on, farmed or made a stockpile, and the south edge can't be claimed, so the village grows north, east and west. A village founded before this keeps its land and has no sea.

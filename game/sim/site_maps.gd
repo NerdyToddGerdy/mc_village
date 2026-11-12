@@ -166,7 +166,7 @@ static func _nether_site_report(sim: Sim, id: String) -> Dictionary:
 	var rk := NetherRoute.site_key(id)
 	var def: Dictionary = NetherRoute.ROUTES[rk]
 	var res: Array = []
-	for ore in ["quartz", "glowstone"]:
+	for ore in ["quartz", "glowstone", "fossil"]:
 		if mp.boulders.any(func(b): return b.get("ore", "") == ore):
 			res.append({"item": Defs.ORES[ore].item, "name": Defs.ITEMS[Defs.ORES[ore].item].label, "reserve": sim.ore_left(id, ore) * Tuning.ORE_YIELD[ore] if mp.visited else -1, "known": true})
 	if sim.rk_of_site(id) == "fortress":  # what the halls give, known from the start (issue #157)
@@ -201,7 +201,7 @@ static func rk_of_site(id: String) -> String:
 
 ## What a site has room for, by its route.
 static func rk_access(rk: String) -> String:
-	return {"quartz": "Room beside the far wall for the Nether line's station", "fortress": "Halls, narrow in places"}.get(rk, "Room for the party")
+	return {"quartz": "Room beside the far wall for the Nether line's station", "fortress": "Halls, narrow in places", "fossil": "An open ridge: 2 residents"}.get(rk, "Room for the party")
 
 
 ## The portal landing's report (issue #148): nothing to bring back yet, a survey to make, and what's known of its dangers.

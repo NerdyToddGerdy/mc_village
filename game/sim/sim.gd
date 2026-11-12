@@ -315,6 +315,9 @@ func _add_site_maps() -> void:
 			var was_known: bool = maps[NetherRoute.ROUTES[key].site].known
 			maps[NetherRoute.ROUTES[key].site] = NetherRoute.build_site(self, key)
 			maps[NetherRoute.ROUTES[key].site].known = was_known
+	for key in NetherRoute.ROUTES:  # every way out is a gap in the landing's wall, also in a landing an older save built without the newest (Slice 7, issue #254)
+		maps[NetherLanding.ID].rock.erase(NetherRoute.ROUTES[key].exit)
+	maps[NetherLanding.ID].occ_dirty = true
 
 
 func add_bush(cell: Vector2i) -> Dictionary:

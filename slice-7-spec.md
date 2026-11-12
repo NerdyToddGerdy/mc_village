@@ -22,6 +22,10 @@ Provisional decisions, made to build it (#271 listed them as open):
 - **Coastal structures** (`"coast": true` in `Structures.DEFS`) are found only by surveying the coast's sectors (`Survey.COAST`), which needs a dock; land surveys never find them.
 - **No boats yet.** The trip is the meadow's strip, a placeholder for a boat ride. Underwater diving and fishing are not built.
 
+## The Nether fossil (#254)
+
+Not a structure-table entry: the Nether's sites are routes, so it is a **fourth Nether route** (`NetherRoute.ROUTES.fossil`) with a hand-laid site at its end. It leaves the landing by a gap in the west wall (`Landing.LAYOUT` row 20; older saves' landings get it opened on load). Its ore, `fossil`, gives bone. The **Gather** objective lists every scouted site that gives something (quartz, fossil) rather than one fixed site.
+
 ## Kinds
 
 - **mine:** the party digs boulders and ores from its packs, with the mine's cave-ins and (where a map has them) ledges and darkness. Structures with loot and traps use it.
@@ -49,4 +53,4 @@ A structure uses an existing road until it needs its own: the meadow's strip (a 
 
 ## Next
 
-The rest of group A of #242 need something the mine kind lacks: **another village** (friendly: trading and recruiting, #253) and the **Nether fossil** (#254, a Nether site). Then the structures that need combat (group B), then the late ones. The ruined portal (#243) is already a survey find that unlocks the village's own portal rather than an adventure map.
+The rest of group A of #242 need something the mine kind lacks: **another village** (friendly: trading and recruiting, #253). Then the structures that need combat (group B), then the late ones. The ruined portal (#243) is already a survey find that unlocks the village's own portal rather than an adventure map.

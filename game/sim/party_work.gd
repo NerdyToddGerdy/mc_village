@@ -55,7 +55,7 @@ static func block_yield(item: String) -> int:
 		if Tuning.ANIMAL_DROPS[sp].has(item):
 			return Tuning.ANIMAL_DROPS[sp][item]
 	return {"cobble": Tuning.BOULDER_COBBLE, "coal": Tuning.ORE_YIELD.coal, "iron_ore": Tuning.ORE_YIELD.iron, "diamond": Tuning.ORE_YIELD.diamond,
-		"gold_ore": Tuning.ORE_YIELD.gold, "obsidian": Tuning.ORE_YIELD.obsidian, "lapis": Tuning.ORE_YIELD.lapis, "redstone": Tuning.ORE_YIELD.redstone, "quartz": Tuning.ORE_YIELD.quartz, "glowstone": Tuning.ORE_YIELD.glowstone}.get(item, 1)
+		"gold_ore": Tuning.ORE_YIELD.gold, "obsidian": Tuning.ORE_YIELD.obsidian, "lapis": Tuning.ORE_YIELD.lapis, "redstone": Tuning.ORE_YIELD.redstone, "quartz": Tuning.ORE_YIELD.quartz, "bone": Tuning.ORE_YIELD.fossil, "glowstone": Tuning.ORE_YIELD.glowstone}.get(item, 1)
 
 
 ## Whether a block gives the objective's resource (stone, coal or iron ore), or an animal does when
@@ -75,6 +75,7 @@ static func gives(b: Dictionary, item: String) -> bool:
 		"lapis": return b.get("ore", "") == "lapis"
 		"redstone": return b.get("ore", "") == "redstone"
 		"quartz": return b.get("ore", "") == "quartz"
+		"bone": return b.get("ore", "") == "fossil"
 		"glowstone": return b.get("ore", "") == "glowstone"
 	return false
 
