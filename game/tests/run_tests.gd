@@ -1292,7 +1292,7 @@ func test_station_entrance() -> void:
 	check(sim.placement_check("bench", front).contains("entrance") and sim.placement_check("house", front - Vector2i(2, 0)).contains("entrance"), "nothing goes on a bench's step")
 	check(sim.placement_check("fireplace", front + Vector2i(4, 0)) == "", "but beside it, something can")
 	var edge := sim.placement_check("bench", Vector2i(3, sim.h - 3))
-	check(edge.contains("entrance") or edge.contains("room"), "a step off the map's edge isn't allowed: " + edge)
+	check(edge.contains("entrance") or edge.contains("room") or edge.contains("sea"), "a step off the map's edge (here the sea) isn't allowed: " + edge)
 	var tree := {"id": sim._id(), "kind": "tree", "cell": Sim.entrance_front("fireplace", at(2, 2), 0), "logs": 4, "alive": true, "des": false, "claim": 0, "unreach_until": 0}
 	sim.trees.append(tree)
 	check(sim.obstacles_for("fireplace", at(2, 2), 0).trees.has(tree), "a tree on the step is cleared with the building")
