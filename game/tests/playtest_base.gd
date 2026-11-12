@@ -53,6 +53,7 @@ func press(pos: Vector2, down: bool, button := MOUSE_BUTTON_LEFT, shift := false
 func click(pos: Vector2, button := MOUSE_BUTTON_LEFT, shift := false) -> void:
 	game._hud.minimap_on = false  # the corner map is always on now (#347) and would take clicks aimed at the world beneath it
 	await move(pos)
+	await frames(1)  # the game's hover pick runs per frame: let it see the pointer before the press (issue #313)
 	await press(pos, true, button, shift)
 	await press(pos, false, button, shift)
 	await frames(2)
@@ -80,6 +81,7 @@ func drag_until(a: Vector2, b: Vector2, done: Callable, tries := 3, shift := fal
 
 func drag(a: Vector2, b: Vector2, shift := false, alt := false) -> void:
 	await move(a)
+	await frames(1)  # as in click (issue #313)
 	await press(a, true, MOUSE_BUTTON_LEFT, shift, alt)
 	for i in range(1, 6):
 		await move(a.lerp(b, i / 5.0))
