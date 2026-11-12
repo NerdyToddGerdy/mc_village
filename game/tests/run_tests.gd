@@ -44,6 +44,7 @@ func _init() -> void:
 		"test_desert_well",
 		"test_the_coast",
 		"test_coastal_trip",
+		"test_dungeon_trip",
 		"test_every_structure",
 		"test_jungle_temple_trip",
 		"test_survey",
@@ -3824,6 +3825,57 @@ func test_coastal_trip() -> void:
 			break
 	check(home and ada.map == "village" and Sim.manhattan(Sim.rcell(ada), sim.dock_end()) <= 3, "they come home by the dock")
 	check(count(sim, "gold_ore") >= 2, "with gold (%d)" % count(sim, "gold_ore"))
+	Survey.enabled = false
+
+## Slice 7, issue #255: a structure with creatures in it. The plan fights by default and warns when no one can; the creatures hunt the party, and
+## a party that can fight clears them while it digs.
+func test_dungeon_trip() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	var id := "dungeon"
+	var mp := sim.get_map(id)
+	var b := built_board(sim)
+	Survey.reveal(sim, id)
+	check(mp.creatures.size() == 3 and mp.creatures.all(func(c): return c.get("hunt", false) and c.alive), "three creatures wait in it, and they hunt")
+	var plan := sim.new_plan(id)
+	check(plan.fight, "a plan to it fights by default")
+	var ada: Dictionary = sim.residents[0]
+	ada.role = "mason"
+	plan.party = [ada.id]
+	check(sim.plan_warnings(plan).any(func(x): return x.begins_with("No guard")), "and warns when no one in the party can fight")
+	ada.role = "all"
+	check(not sim.plan_warnings(plan).any(func(x): return x.begins_with("No guard")), "not when Ada, who does everything, goes")
+	var rep := sim.site_report(id)
+	check(rep.hazards.any(func(h): return h.contains("Zombie")) and rep.hazards.any(func(h): return h.contains("Skeleton")), "the report says what's inside")
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	tomas.role = "all"
+	for r in [ada, tomas]:
+		r.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 6
+	plan.picks = 0
+	sim.aim_plan(plan, "coal", 4)
+	check(sim.plan_expedition(plan) == "", "the plan is accepted")
+	b.store = {"bread": 6}
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	check(sim.depart() == "", "they depart")
+	until_at_site(sim, [ada, tomas], MeadowRoad.walk_time() + 15)
+	check(ada.map == id, "and arrive")
+	var home := false
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose(sim.pending[0].options[0].id)
+		for r in [ada, tomas]:
+			r.hurt = 0  # the blows aren't what's tested here: that the fight happens and the party still brings its load home
+		if sim.expedition.is_empty():
+			home = true
+			break
+	check(mp.creatures.any(func(c): return not c.alive), "the party fought what came at it (%d of %d down)" % [mp.creatures.filter(func(c): return not c.alive).size(), mp.creatures.size()])
+	check(home and ada.map == "village" and count(sim, "coal") >= 2, "and came home with coal (%d)" % count(sim, "coal"))
 	Survey.enabled = false
 
 ## Slice 7, issue #247: the desert well. Hidden until the Cartographer finds it; then a party walks the meadow's strip to it, digs gold,

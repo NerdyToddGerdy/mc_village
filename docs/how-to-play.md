@@ -396,6 +396,18 @@ All of them work like the old caves: pack pickaxes and meals, mark what you want
 
 Their rooms are lit only near their torches, and a digger can fall from a ledge in the dark.
 
+**Places with creatures.** Further surveys find structures with zombies, skeletons or spiders inside: a **dungeon**, an **igloo cellar**, a **swamp hut**, a **pillager outpost**, some **trial chambers**, a **woodland mansion** and a **stronghold**. They work like the others, but the creatures **come for the party** and the plan fights by default, so send someone who can fight (a Guard with a sword, or Ada). The planner warns when no one can, and the place's report lists what's inside. The party digs while the guards deal with what comes.
+
+| Structure | Way there | Holds | Inside |
+|---|---|---|---|
+| Dungeon | west | coal, two chests | 2 zombies, a skeleton |
+| Igloo cellar | east | flint, coal, two chests | a zombie |
+| Swamp hut | west | coal, a chest | 2 spiders |
+| Pillager outpost | east | gold ore, three chests | 3 skeletons |
+| Trial chambers | west | gold, lapis, redstone, chests (**iron pickaxes**) | zombies, skeletons, a spider |
+| Woodland mansion | east | gold, lapis, redstone, chests (**iron pickaxes**) | 2 zombies, 2 skeletons, a spider |
+| Stronghold | east | gold ore, three chests | 2 skeletons, 2 zombies |
+
 ## The road to the mine
 
 The road between the village and the old caves is a map of its own: **Road to the mine** in the map switcher, once the expedition board has word of the mine. It's split into six segments, from the village edge to the slope below the mine.

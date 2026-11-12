@@ -26,6 +26,10 @@ Provisional decisions, made to build it (#271 listed them as open):
 
 Not a structure-table entry: the Nether's sites are routes, so it is a **fourth Nether route** (`NetherRoute.ROUTES.fossil`) with a hand-laid site at its end. It leaves the landing by a gap in the west wall (`Landing.LAYOUT` row 20; older saves' landings get it opened on load). Its ore, `fossil`, gives bone. The **Gather** objective lists every scouted site that gives something (quartz, fossil) rather than one fixed site.
 
+## Structures with creatures (group B of #242)
+
+A structure whose layout has `Z` (zombie), `S` (skeleton) or `X` (spider) puts that creature in the map, hunting anyone who comes in (`hunt`), and its entry says `fight`: the plan fights by default (`plan.fight`, which makes the party engage creatures in range), the planner warns when no Guard (or Ada) is going, and the site report lists what's inside. The Slice 5 auto-combat does the rest. Provisional: the creatures are the village's night mobs (zombie, skeleton, spider), standing in for pillagers and the rest until #30 settles names and art. The **abandoned mineshaft (#256)** is not built: the old caves are one already, and #256 says as much. The **stronghold** is only a stone fortress to dig here; it is not the way to the End (#289 is open).
+
 ## Kinds
 
 - **mine:** the party digs boulders and ores from its packs, with the mine's cave-ins and (where a map has them) ledges and darkness. Structures with loot and traps use it.
@@ -45,6 +49,13 @@ A structure uses an existing road until it needs its own: the meadow's strip (a 
 | Fossil site | #250 | west | coal, flint | old stone comes down |
 | Trail ruins | #251 | west | flint, four chests' books | old stone comes down |
 | Geode | #252 | east | lapis, gold ore (needs iron pickaxes) | old stone comes down |
+| Dungeon | #255 | west | coal, two chests | 2 zombies and a skeleton hunt the party |
+| Igloo cellar | #258 | east | flint, coal, two chests | a zombie |
+| Swamp hut | #257 | west | coal, a chest | 2 spiders |
+| Pillager outpost | #259 | east | gold ore, three chests | 3 skeletons |
+| Trial chambers | #260 | west | gold, lapis, redstone, chests (iron pickaxes) | zombies, skeletons, a spider |
+| Woodland mansion | #261 | east | gold, lapis, redstone, chests (iron pickaxes) | zombies, skeletons, a spider |
+| Stronghold | #262 | east | gold ore, three chests | skeletons and zombies |
 | Buried treasure | #244 | dock | gold ore, a chest's book | old stone comes down |
 | Shipwreck | #245 | dock | gold ore, flint, two chests | old stone comes down |
 | Ocean ruins | #246 | dock | lapis (needs iron pickaxes), gold ore, a chest | old stone comes down |

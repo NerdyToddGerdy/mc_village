@@ -165,6 +165,13 @@ const KEEP_STEP := 5                    ## The keep-stock target's step in the w
 ## amount wanted (0: as much as fits). Only the items the village knows the location gives are listed.
 const CARGO_DEFAULTS := {
 	"mine": [["iron_ore", 8], ["coal", 8], ["cobble", 0]],
+	"dungeon": [["coal", 6], ["cobble", 0]],
+	"igloo_cellar": [["flint", 4], ["coal", 3], ["cobble", 0]],
+	"swamp_hut": [["coal", 6], ["cobble", 0]],
+	"pillager_outpost": [["gold_ore", 4], ["cobble", 0]],
+	"trial_chambers": [["gold_ore", 4], ["lapis", 3], ["redstone", 3], ["cobble", 0]],
+	"woodland_mansion": [["gold_ore", 4], ["lapis", 3], ["redstone", 3], ["cobble", 0]],
+	"stronghold": [["gold_ore", 4], ["cobble", 0]],
 	"buried_treasure": [["gold_ore", 4], ["cobble", 0]],
 	"shipwreck": [["gold_ore", 4], ["flint", 3], ["cobble", 0]],
 	"ocean_ruins": [["lapis", 4], ["gold_ore", 2], ["cobble", 0]],

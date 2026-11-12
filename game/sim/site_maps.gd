@@ -85,6 +85,12 @@ static func site_report(sim: Sim, id: String) -> Dictionary:
 	var told: String = OldMine.TOLD if mp.level <= 1 else "Behind the door at the far end of level %d. Nobody has been down." % (mp.level - 1)
 	if not is_mine:
 		told = Adventures.def(id).told
+		var kinds: Dictionary = {}
+		for cr in mp.creatures:
+			if cr.alive:
+				kinds[Defs.CREATURES[cr.species].name] = true
+		for k in kinds:  # what's in there, told before anyone goes
+			hazards.append("%s inside: they come for the party" % k)
 	if mp.level > 1 and mp.level - 1 == 1:
 		told = "Behind the door at the far end of the old caves. Nobody has been down."
 	var levels: Array = []
