@@ -40,6 +40,7 @@ func _init() -> void:
 		"test_house_tiers",
 		"test_house_entrance",
 		"test_old_house_update",
+		"test_station_entrance",
 		"test_village_torches",
 		"test_desert_well",
 		"test_every_structure",
@@ -1277,6 +1278,25 @@ func test_house_entrance() -> void:
 	var j := sim.home_goal(h)
 	check(j.cells == [door] and not j.adj, "going home is walking to the door")
 
+## Issue #285: a job building's plot opens on one side, and the step outside it must stay clear: a blocked step refuses the spot, a later
+## building can't close it, and a tree on it is cleared with the footprint.
+func test_station_entrance() -> void:
+	var sim := Sim.new_game()
+	var bench := sim.place_site("bench", at(8, 8))
+	var front := Sim.entrance_front("bench", bench.origin, bench.rot)
+	check(front == bench.origin + Vector2i(0, 3), "a bench facing south has its step three cells down, outside the plot (%s)" % front)
+	check(Sim.entrance_front("bench", at(8, 8), 1) == at(5, 8) and Sim.entrance_front("bench", at(8, 8), 2) == at(8, 5) and Sim.entrance_front("bench", at(8, 8), 3) == at(11, 8), "and turning it turns the step")
+	check(Sim.entrance_front("storehouse", at(8, 8), 0).x < 0 and Sim.entrance_front("portal", at(8, 8), 0).x < 0 and Sim.entrance_front("track", at(8, 8), 0).x < 0, "the storehouse, portal and track have their own doors")
+	check(sim.placement_check("bench", front).contains("entrance") and sim.placement_check("house", front - Vector2i(2, 0)).contains("entrance"), "nothing goes on a bench's step")
+	check(sim.placement_check("fireplace", front + Vector2i(4, 0)) == "", "but beside it, something can")
+	var edge := sim.placement_check("bench", Vector2i(3, sim.h - 3))
+	check(edge.contains("entrance") or edge.contains("room"), "a step off the map's edge isn't allowed: " + edge)
+	var tree := {"id": sim._id(), "kind": "tree", "cell": Sim.entrance_front("fireplace", at(2, 2), 0), "logs": 4, "alive": true, "des": false, "claim": 0, "unreach_until": 0}
+	sim.trees.append(tree)
+	check(sim.obstacles_for("fireplace", at(2, 2), 0).trees.has(tree), "a tree on the step is cleared with the building")
+	var cells := Sim.station_decor_cells(bench)
+	check(cells == [bench.origin + Vector2i(1, 2), bench.origin + Vector2i(-1, 2)] and not Sim.pile_cells(bench).has(cells[0]) and not Sim.pile_cells(bench).has(cells[1]), "decor flanks the entrance, off the pile cells")
+
 ## Issue #367: a torch at each new house's door lights the night around it; unlit ground at night slows work, and by day nothing changes.
 func test_village_torches() -> void:
 	Night.enabled = true
@@ -1891,7 +1911,8 @@ func test_fireplace_reserves_a_kitchen_plot() -> void:
 	# Its own plot needs room: not off the map, not over a building or another plot.
 	check(sim.placement_check("fireplace", Vector2i(0, 5)) == "Not enough room to grow into a kitchen", "a plot can't run off the map edge")
 	check(sim.placement_check("bench", Vector2i(0, 5)) == "Not enough room to grow into a workshop", "benches placed now reserve a workshop plot too")
-	check(sim.placement_check("fireplace", o + Vector2i(0, -2)) == "Not enough room to grow into a kitchen", "or overlap another plot")
+	var over := sim.placement_check("fireplace", o + Vector2i(0, -2))
+	check(over == "Not enough room to grow into a kitchen" or over.contains("entrance"), "or overlap another plot (refused: %s)" % over)
 	check(sim.placement_check("fireplace", o + Vector2i(0, -1), 2) == "", "turned to face away, a fireplace fits right behind it")
 	var bench := sim.place_site("bench", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 0))
 	check(bench.plot != null, "a newly placed bench reserves a plot")

@@ -960,6 +960,32 @@ static func front_cell(origin: Vector2i, rot: int) -> Vector2i:
 		_: return origin + Vector2i(-1, 2)
 
 
+## The step in front of a building's entrance, where residents come and go: a house's door step, or the cell just outside a job
+## building's plot on the side it opens toward (issue #285). (-1, -1) for a building with neither: the storehouse, the portal, the
+## stations and devices, which have their own doors or none.
+static func entrance_front(tpl: String, origin: Vector2i, rot: int) -> Vector2i:
+	if tpl == "house":
+		return front_cell(origin, rot)
+	var t: Dictionary = Defs.TEMPLATES[tpl]
+	if t.has("plot") and t.size == Vector2i.ONE:
+		return origin + station_facing(rot) * 3
+	return Vector2i(-1, -1)
+
+
+## Which way a job building faces: the side its plot opens toward (spec §8).
+static func station_facing(rot: int) -> Vector2i:
+	return [Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, 0)][rot % 4]
+
+
+## The two cells flanking a job building's entrance step, on the plot's edge: where its decor goes (issue #285). They're open ground:
+## the pile cells and the work cell are the ones inside the plot that stay clear.
+static func station_decor_cells(s: Dictionary) -> Array:
+	var dir := station_facing(s.rot)
+	var edge: Vector2i = s.origin + dir * 2
+	var side := Vector2i(absi(dir.y), absi(dir.x))
+	return [edge + side, edge - side]
+
+
 ## A house placed before entrances (issue #285, #356) is an old house: it has no entrance, its residents take no jobs, and it shows
 ## as a blueprint until it's updated or moved.
 static func is_old_house(s: Dictionary) -> bool:
@@ -1032,11 +1058,12 @@ func site_obstacles(s: Dictionary) -> Dictionary:
 	return obstacles_for(s.tpl, s.origin, s.rot, s)
 
 
-## What a building at `origin` has to clear: its footprint, and a house's front door step (issue #285).
+## What a building at `origin` has to clear: its footprint, and the step in front of its entrance (issue #285).
 func obstacles_for(tpl: String, origin: Vector2i, rot: int, s = null) -> Dictionary:
 	var o := obstacles_in(Rect2i(origin, Defs.TEMPLATES[tpl].size if s == null else s.size))
-	if tpl == "house" and (s == null or not is_old_house(s)):
-		var f := obstacles_in(Rect2i(front_cell(origin, rot), Vector2i.ONE))
+	var ef := entrance_front(tpl, origin, rot)
+	if ef.x >= 0 and (s == null or not is_old_house(s)):
+		var f := obstacles_in(Rect2i(ef, Vector2i.ONE))
 		for k in ["trees", "boulders"]:  # only what blocks walking: loose items and bushes can be stepped over
 			o[k].append_array(f[k])
 	return o
