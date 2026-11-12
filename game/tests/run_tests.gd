@@ -45,6 +45,7 @@ func _init() -> void:
 		"test_desert_well",
 		"test_the_coast",
 		"test_coastal_trip",
+		"test_dungeon_trip",
 		"test_every_structure",
 		"test_jungle_temple_trip",
 		"test_survey",
@@ -103,6 +104,7 @@ func _init() -> void:
 		"test_scouting_the_routes",
 		"test_mission_types",
 		"test_the_quartz_site",
+		"test_the_fossil_ridge",
 		"test_piglin_trading",
 		"test_enchanted_books",
 		"test_the_enchanting_workshop",
@@ -3846,6 +3848,57 @@ func test_coastal_trip() -> void:
 	check(count(sim, "gold_ore") >= 2, "with gold (%d)" % count(sim, "gold_ore"))
 	Survey.enabled = false
 
+## Slice 7, issue #255: a structure with creatures in it. The plan fights by default and warns when no one can; the creatures hunt the party, and
+## a party that can fight clears them while it digs.
+func test_dungeon_trip() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	var id := "dungeon"
+	var mp := sim.get_map(id)
+	var b := built_board(sim)
+	Survey.reveal(sim, id)
+	check(mp.creatures.size() == 3 and mp.creatures.all(func(c): return c.get("hunt", false) and c.alive), "three creatures wait in it, and they hunt")
+	var plan := sim.new_plan(id)
+	check(plan.fight, "a plan to it fights by default")
+	var ada: Dictionary = sim.residents[0]
+	ada.role = "mason"
+	plan.party = [ada.id]
+	check(sim.plan_warnings(plan).any(func(x): return x.begins_with("No guard")), "and warns when no one in the party can fight")
+	ada.role = "all"
+	check(not sim.plan_warnings(plan).any(func(x): return x.begins_with("No guard")), "not when Ada, who does everything, goes")
+	var rep := sim.site_report(id)
+	check(rep.hazards.any(func(h): return h.contains("Zombie")) and rep.hazards.any(func(h): return h.contains("Skeleton")), "the report says what's inside")
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	tomas.role = "all"
+	for r in [ada, tomas]:
+		r.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 6
+	plan.picks = 0
+	sim.aim_plan(plan, "coal", 4)
+	check(sim.plan_expedition(plan) == "", "the plan is accepted")
+	b.store = {"bread": 6}
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	check(sim.depart() == "", "they depart")
+	until_at_site(sim, [ada, tomas], MeadowRoad.walk_time() + 15)
+	check(ada.map == id, "and arrive")
+	var home := false
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose(sim.pending[0].options[0].id)
+		for r in [ada, tomas]:
+			r.hurt = 0  # the blows aren't what's tested here: that the fight happens and the party still brings its load home
+		if sim.expedition.is_empty():
+			home = true
+			break
+	check(mp.creatures.any(func(c): return not c.alive), "the party fought what came at it (%d of %d down)" % [mp.creatures.filter(func(c): return not c.alive).size(), mp.creatures.size()])
+	check(home and ada.map == "village" and count(sim, "coal") >= 2, "and came home with coal (%d)" % count(sim, "coal"))
+	Survey.enabled = false
+
 ## Slice 7, issue #247: the desert well. Hidden until the Cartographer finds it; then a party walks the meadow's strip to it, digs gold,
 ## and comes home by the west signpost. An old save gets the map on loading.
 func test_desert_well() -> void:
@@ -6419,7 +6472,7 @@ func test_scouting_the_routes() -> void:
 	var landing: SimMap = sim.get_map(NetherLanding.ID)
 	landing.known = true
 	landing.visited = true
-	check(NetherRoute.ROUTES.keys() == ["quartz", "piglin", "fortress"], "three routes: the quartz site, the piglin camp and the fortress entrance")
+	check(NetherRoute.ROUTES.keys() == ["quartz", "piglin", "fortress", "fossil"], "four routes: the quartz site, the piglin camp, the fortress entrance and the fossil ridge")
 	for rk in NetherRoute.ROUTES:
 		var def: Dictionary = NetherRoute.ROUTES[rk]
 		var rm: SimMap = sim.get_map(def.id)
@@ -6467,7 +6520,7 @@ func test_scouting_the_routes() -> void:
 	var unseen := sim.site_report(NetherRoute.ROUTES.piglin.id)
 	check(unseen.segments.filter(func(sg): return sg.known).size() == 1 and unseen.travel < 0.0 and unseen.hazards.is_empty(), "an unscouted route shows only its first segment and no dangers")
 	var lrep := sim.site_report(NetherLanding.ID)
-	check(lrep.routes.filter(func(x): return x.state == "scouted").map(func(x): return x.key) == ["quartz"] and lrep.routes.filter(func(x): return x.state == "unknown").size() == 2, "the landing's report shows the quartz route scouted and the others unknown")
+	check(lrep.routes.filter(func(x): return x.state == "scouted").map(func(x): return x.key) == ["quartz"] and lrep.routes.filter(func(x): return x.state == "unknown").size() == 3, "the landing's report shows the quartz route scouted and the others unknown")
 	check(sim.plan_problems(sim.scout_plan("quartz")).has("That route is already scouted"), "a scouted route can't be scouted again")
 	# The scouted site is a destination (it can't be reached until it's built, #155).
 	site_plan = sim.new_plan("nether_quartz")
@@ -6495,7 +6548,7 @@ func test_mission_types() -> void:
 	sim.get_map(NetherLanding.ID).known = true
 	var dests := func(o: String) -> Array: return sim.objective_destinations(o).map(func(d): return d.dest + ":" + d.route)
 	check(dests.call("survey") == ["nether_landing:"] and dests.call("build") == ["nether_landing:"], "survey and build can use the landing")
-	check(dests.call("scout") == ["nether_landing:quartz", "nether_landing:piglin", "nether_landing:fortress"], "scout offers the three unscouted routes")
+	check(dests.call("scout") == ["nether_landing:quartz", "nether_landing:piglin", "nether_landing:fortress", "nether_landing:fossil"], "scout offers the four unscouted routes")
 	for o in ["gather", "trade", "fortress", "rescue"]:
 		check(dests.call(o).is_empty() and sim.objective_why_none(o) != "", "%s has no valid destination yet, and explains why (%s)" % [o, sim.objective_why_none(o)])
 	check(sim.objective_why_none("gather").contains("scout the route to the quartz site"), "gather says to scout the quartz route first")
@@ -6512,7 +6565,7 @@ func test_mission_types() -> void:
 	# What a scout plan lists is only what it can use: a scouted route drops out.
 	sim.get_map(NetherRoute.ROUTES.quartz.id).surveyed = true
 	sim.get_map("nether_quartz").known = true
-	check(dests.call("scout") == ["nether_landing:piglin", "nether_landing:fortress"], "a scouted route drops off the scout list")
+	check(dests.call("scout") == ["nether_landing:piglin", "nether_landing:fortress", "nether_landing:fossil"], "a scouted route drops off the scout list")
 	check(dests.call("gather") == ["nether_quartz:"] and dests.call("trade").is_empty() and dests.call("fortress").is_empty(), "the quartz site can be gathered from; the piglins and fortress still can't")
 	var gather := sim.nether_plan("gather")
 	check(gather.dest == "nether_quartz" and gather.target == {"item": "quartz", "n": 8} and gather.objective == "gather" and gather.picks == 1, "a gather plan for the quartz site wants 8 quartz, with a spare pickaxe")
@@ -6540,6 +6593,63 @@ func test_mission_types() -> void:
 	# Overworld plans keep their form.
 	var old := sim.new_plan(OldMine.ID)
 	check(not old.has("objective") and old.target.item == "coal", "an Overworld plan is still a gather at the old caves")
+
+
+## Slice 7, issue #254: the Nether fossil. A fourth route leaves the landing's west edge to a ridge of fossil blocks that give bone; a gather mission
+## can go there once it's scouted, along with quartz.
+func test_the_fossil_ridge() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var portal: Dictionary = w.portal
+	var site: SimMap = sim.get_map("nether_fossil")
+	var fossils: Array = site.boulders.filter(func(b): return b.ore == "fossil")
+	check(site.pattern == "hand_laid" and site.w == 18 and site.h == 11 and fossils.size() == 8 and site.entrance == Vector2i(0, 5), "a hand-laid 18×11 ridge with eight fossil blocks")
+	check(Defs.ORES.fossil.item == "bone" and Tuning.ORE_YIELD.fossil == 2, "which give bone")
+	var landing: SimMap = sim.get_map(NetherLanding.ID)
+	check(not landing.rock.has(NetherRoute.ROUTES.fossil.exit) and NetherRoute.ROUTES.fossil.exit.x == 0, "its way out is a gap in the landing's west wall")
+	portal.lit = true
+	landing.known = true
+	check(sim.objective_destinations("gather").is_empty() and sim.objective_destinations("scout").any(func(d): return d.route == "fossil"), "it can be scouted, and there's nothing to gather before it is")
+	sim.get_map(NetherRoute.ROUTES.fossil.id).surveyed = true
+	site.known = true
+	var dests := sim.objective_destinations("gather")
+	check(dests.size() == 1 and dests[0].dest == "nether_fossil", "scouted, a gather mission can go to it")
+	var rep := sim.site_report("nether_fossil")
+	check(rep.resources.any(func(x): return x.item == "bone") and rep.told == NetherRoute.ROUTES.fossil.told, "its report names the bone it holds")
+	var plan := sim.nether_plan("gather", dests[0])
+	plan.party = [ada.id]
+	sim.aim_plan(plan, "bone", 4)
+	plan.policy = {"target": true, "full": true, "low": true}
+	check(sim.plan_problems(plan).is_empty() and sim.plan_expedition(plan) == "", "a plan for four bone is accepted (%s)" % [sim.plan_problems(plan)])
+	portal.store = {"bread": 3}
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 50}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "stone_pick", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("nether") == "", "sent")
+	var maps_seen := {}
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		maps_seen[ada.map] = true
+		ada.hurt = 0
+		if sim.expeditions.nether.is_empty():
+			break
+	check(maps_seen.has(NetherRoute.ROUTES.fossil.id) and maps_seen.has("nether_fossil"), "Ada walks the route west and reaches the ridge")
+	var brought := 0
+	for st in sim.stacks_where(func(x): return x.type == "bone"):
+		brought += st.n
+	check(sim.expeditions.nether.is_empty() and ada.map == "village" and brought >= 4, "and comes home with bone (%d)" % brought)
+	# An older save's landing had a wall there: loading opens it.
+	var data := sim.save_state()
+	data.maps[NetherLanding.ID].rock[NetherRoute.ROUTES.fossil.exit] = true
+	var old := Sim.from_state(data)
+	check(not old.get_map(NetherLanding.ID).rock.has(NetherRoute.ROUTES.fossil.exit), "a landing saved with the wall has the gap opened on loading")
 
 
 ## The quartz site and the gather mission to it (issue #155).
