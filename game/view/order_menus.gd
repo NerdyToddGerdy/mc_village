@@ -40,6 +40,7 @@ const MENUS := {
 		{"id": "claim", "name": "Claim land", "sub": "A strip of new land, 8 cells deep, along an edge. A builder plants stakes (4 sticks). One claim for every 2 residents beyond the first two", "mark": "build", "unlock": "claims"},
 		{"id": "storehouse", "name": "Storehouse", "sub": "6 cobblestone, 12 planks and 4 logs. Chests carried in store anything; stockpiles take the overflow. Reserves room to grow", "mark": "build", "step": 8},
 		{"id": "enchanting_workshop", "name": "Enchanting workshop", "sub": "4 obsidian, 2 diamonds and 6 planks. An enchanter carries books to it to learn their recipes, and enchants gear. Reserves room for a library", "mark": "build", "unlock": "enchanting"},
+		{"id": "dock", "name": "Dock", "sub": "12 planks and 4 logs, on the beach and out over the sea. A party leaves from its end for the coast, and the Cartographer can survey the sea's sectors from it", "mark": "build", "unlock": "coast"},
 		{"id": "portal_station", "name": "Portal station", "sub": "6 planks and 4 cobblestone, beside the portal. The village end of the portal line; a Build party lays the rest in the Nether. Reserves room for a freight loader", "mark": "build", "unlock": "portal_line"},
 		{"id": "cache_sensor", "name": "Cache sensor", "sub": "2 redstone dust, 1 quartz and 2 cobblestone. Reads the Nether cache from here and is on when an item is below a threshold", "mark": "build", "unlock": "portal_line"},
 		{"id": "condition", "name": "Condition", "sub": "2 redstone dust, 1 quartz and 2 cobblestone. Passes a signal along only while a fact holds: the portal is lit, the cart is home, the loader is idle", "mark": "build", "unlock": "portal_line"},
@@ -88,6 +89,8 @@ static func unlocked(e: Dictionary, sim: Sim) -> bool:
 			return not sim.m.pens.is_empty()
 		"enchanting":  # once an enchanted book has been found, or a workshop stands (issue #165)
 			return sim.stats.get("book_found", false) or sim.maps.village.sites.any(func(s): return s.tpl == "enchanting_workshop")
+		"coast":  # a village with a coast, once the expedition board is built (issue #271)
+			return sim.maps.village.coast != "" and sim.stats.get("built", {}).has("board")
 		"portal_line":  # once the portal stands (issue #168)
 			return not sim.village_portal().is_empty()
 		"portal":  # once obsidian has come home from the deep mine (issue #147)

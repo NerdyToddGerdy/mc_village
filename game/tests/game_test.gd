@@ -1745,7 +1745,7 @@ func _test_land_claims(game: Game) -> void:
 	game._mouse = game._cam.unproject_position(Vector3(-3.0, 0, sim.h / 2.0))
 	check(game._claim_edge() == "west", "and one past the west edge, the west")
 	game._update_live_overlays()
-	check(game._world.live_outlines.size() == 4 and game._hud._hint.text.begins_with("Claim 256 cells of new land to the west"), "all four strips are outlined, and the hint says what a claim gives (%s)" % game._hud._hint.text)
+	check(game._world.live_outlines.size() == 3 and game._hud._hint.text.begins_with("Claim 256 cells of new land to the west"), "the three strips on land are outlined (the sea's edge offers none), and the hint says what a claim gives (%s)" % game._hud._hint.text)
 	var w0: int = sim.w
 	var before: Vector3 = game._target
 	var e := InputEventMouseButton.new()

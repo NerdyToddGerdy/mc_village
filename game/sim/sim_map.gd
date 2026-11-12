@@ -30,6 +30,7 @@ var farm := {}               ## Vector2i -> {id, kind:"crop", cell, grow, claim,
 var sites: Array = []        ## Construction sites and finished buildings.
 # Site maps (issue #102).
 var rock := {}               ## Vector2i -> true: rock walls, which can't be mined.
+var coast := ""               ## The edge a village's sea lies along ("south"), or "" for none: an old village has none (issue #271).
 var torches: Array = []      ## Rock cells with a torch on them; tunnels beyond their light are dark.
 var entrance := Vector2i.ZERO  ## Where a party arrives and leaves.
 var known := true            ## Shown in the map switcher. A site becomes known before anyone goes.
@@ -81,7 +82,7 @@ func _init(p_w := Tuning.MAP_W, p_h := Tuning.MAP_H) -> void:
 	occ.resize(w * h)
 
 
-const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "diamond_found", "ledges", "water", "lava", "landmarks", "landmarks_seen", "surveyed", "fire", "creatures", "hostile", "abandoned", "line", "salvage", "salvage_taken", "drops_known", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear"]
+const SAVED := ["id", "kind", "name", "w", "h", "rock", "torches", "entrance", "known", "visited", "found", "discovered", "diamond_found", "ledges", "water", "lava", "landmarks", "landmarks_seen", "surveyed", "fire", "creatures", "hostile", "abandoned", "line", "salvage", "salvage_taken", "drops_known", "seen", "level", "pattern", "door", "door_state", "banks", "fences", "regrow", "pens", "gates", "wear", "coast"]
 
 
 ## The map as plain data. Reservations and job bookkeeping aren't saved (spec §2, Saving).

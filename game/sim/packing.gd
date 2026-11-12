@@ -269,6 +269,8 @@ static func plan_problems(sim: Sim, plan: Dictionary) -> Array:
 		out.append("%s %s is already out" % ["An" if sl == "overworld" else "A", sim.party_name(sl)])
 	if sim.expedition_board().is_empty():
 		out.append("Build an expedition board first")
+	if Adventures.def(plan.dest).sign == "dock" and sim.dock().is_empty():
+		out.append("Build a dock first")
 	if plan.target.item == "trade" and plan.get("gold", 0) <= 0:  # nothing to trade with (issue #156)
 		out.append("Take some gold to trade")
 	if plan.target.item == "scout":  # which route, and not one already scouted (issue #153)

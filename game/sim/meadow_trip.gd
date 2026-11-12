@@ -9,12 +9,18 @@ static func meadow_sign(sim: Sim) -> Vector2i:
 
 
 ## The signpost a destination's party leaves from and comes home to: west for the meadow, east for
-## the old mine (issue #136).
+## the old mine (issue #136), or the dock for the coast (issue #271).
 static func sign_for(sim: Sim, dest: String) -> Vector2i:
 	if Sim.realm_of(dest) == "nether":  # a Nether party gathers in front of the portal (issue #148)
 		var p := village_portal(sim)
 		return Sim.staging_cells(p)[1] if not p.is_empty() else sim.route_sign()
-	return meadow_sign(sim) if Adventures.def(dest).sign == "west" else sim.route_sign()
+	match Adventures.def(dest).sign:
+		"west":
+			return meadow_sign(sim)
+		"dock":  # the sea end of the village's dock (Slice 7, issue #271)
+			var end := sim.dock_end()
+			return end if end.x >= 0 else meadow_sign(sim)
+	return sim.route_sign()
 
 
 ## The village's finished portal, or {} (issue #148).

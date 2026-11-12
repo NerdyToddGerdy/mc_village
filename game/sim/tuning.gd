@@ -7,6 +7,8 @@ const DT := 1.0 / TPS
 const SPEEDS := [0, 1, 2, 3]
 
 const CLAIM_EVERY := 2                  ## A land claim for every this many residents beyond the founding pair (issue #187).
+const COAST_DEPTH := 3                 ## How many rows of sea a new game has along its south edge (Slice 7, issue #271).
+const DOCK_LAND := 3                   ## The dock runs this many cells over the beach and COAST_DEPTH out over the sea.
 const CLAIM_DEPTH := 8                  ## How deep a claimed strip is, in cells.
 const CLAIM_STAKES := 4                 ## Sticks a builder plants as boundary stakes.
 const MAP_MAX := 64                     ## The village never grows past this many cells a side.
@@ -163,6 +165,9 @@ const KEEP_STEP := 5                    ## The keep-stock target's step in the w
 ## amount wanted (0: as much as fits). Only the items the village knows the location gives are listed.
 const CARGO_DEFAULTS := {
 	"mine": [["iron_ore", 8], ["coal", 8], ["cobble", 0]],
+	"buried_treasure": [["gold_ore", 4], ["cobble", 0]],
+	"shipwreck": [["gold_ore", 4], ["flint", 3], ["cobble", 0]],
+	"ocean_ruins": [["lapis", 4], ["gold_ore", 2], ["cobble", 0]],
 	"desert_well": [["gold_ore", 4], ["cobble", 0]],
 	"desert_temple": [["gold_ore", 4], ["cobble", 0]],
 	"jungle_temple": [["redstone", 4], ["lapis", 3], ["cobble", 0]],

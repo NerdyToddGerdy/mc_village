@@ -35,11 +35,16 @@ static func surveyed(sim: Sim, sector: String, ring: int) -> bool:
 
 
 ## The next place a survey would find, or "" when there's nothing more yet.
-static func next_find(sim: Sim) -> String:
+static func next_find(sim: Sim, sector := "") -> String:
 	for id in FINDS:
-		if not found(sim, id):
+		if not found(sim, id) and (sector == "" or is_coastal(id) == (sector in COAST)):
 			return id
 	return ""
+
+
+## Whether a find lies on the coast: only a survey of the sea's sectors finds it, and the others never do (Slice 7, issue #271).
+static func is_coastal(id: String) -> bool:
+	return Structures.is_structure(id) and Structures.DEFS[id].get("coast", false)
 
 
 ## The village's finished cartographer's table, or {}.
@@ -81,16 +86,16 @@ static func check(sim: Sim, sector: String, ring: int) -> String:
 		return "Give someone the Cartographer job"
 	if who.away or who.map != "village" or who.get("hurt", 0) > 0 or sim.expedition_of(who).size() > 0:
 		return "%s is away or hurt" % who.name
-	if sector in COAST:
-		return "The sea: it needs a boat"
+	if sector in COAST and sim.dock().is_empty():
+		return "The sea: build a dock first"
 	if ring < 1 or ring > 3:
 		return "No such ring"
 	if surveyed(sim, sector, ring):
 		return "Already surveyed"
 	if ring > 1 and not surveyed(sim, sector, ring - 1):
 		return "Survey the %s ring first" % ring_name(ring - 1)
-	if next_find(sim) == "":
-		return "Nothing more to find yet"
+	if next_find(sim, sector) == "":
+		return "Nothing more to find yet" if sector not in COAST else "Nothing more to find on the coast yet"
 	return ""
 
 
@@ -131,7 +136,7 @@ static func arrive(sim: Sim, r: Dictionary) -> void:
 		sim.stats.surveyed = {}
 	sim.stats.surveyed["%s:%d" % [sv.sector, sv.ring]] = true
 	sim.gain_xp(r, "cartographer")
-	var id := next_find(sim)
+	var id := next_find(sim, sv.sector)
 	if id == "":
 		sim._toast("%s surveyed the %s ring to the %s and found nothing new." % [r.name, ring_name(sv.ring), sv.sector], r.id)
 		return

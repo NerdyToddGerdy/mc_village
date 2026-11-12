@@ -375,6 +375,8 @@ func _update_live_overlays() -> void:
 		var edge := _claim_edge()
 		var why := sim.claim_check(edge)
 		for e in Claims.EDGES:
+			if e == sim.maps.village.coast:  # the sea edge offers no strip (issue #271)
+				continue
 			var strip := Claims.strip(e, sim.w, sim.h)
 			if e == edge:
 				outlines.append({"rect": strip, "h": 0.03, "color": Palette.RED if why != "" else Palette.BLUE, "dashed": true})
@@ -934,6 +936,7 @@ func _key(e: InputEventKey) -> void:
 		"portal": start_placing("portal")
 		"enchanting_workshop": start_placing("enchanting_workshop")
 		"portal_station": start_placing("portal_station")
+		"dock": start_placing("dock")
 		"cache_sensor", "condition", "freight_loader", "dispatcher": start_placing(keys.action_for(e))
 		"redstone_overlay": toggle_redstone_overlay()
 		"minimap": _hud.toggle_minimap()
@@ -1237,7 +1240,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "village_pen", "storehouse", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
+const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "village_pen", "storehouse", "portal", "enchanting_workshop", "portal_station", "dock", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -2413,6 +2416,15 @@ func _screenshot_scene() -> void:
 		selection = {"kind": "site", "id": sh.id}
 		_target = Vector3(sh.origin.x + 2.5, 0, sh.origin.y + 1.5)
 		_cam.size = 9.0
+		_place_camera()
+	if "--coast" in OS.get_cmdline_user_args():  # the sea along the south edge, with a finished dock (Slice 7, issue #271)
+		var dk := sim.place_site("dock", Vector2i(sim.w / 2, sim.h - Defs.TEMPLATES.dock.size.y))
+		dk.stage = 1
+		dk.done = true
+		sim._occ_dirty = true
+		selection = {"kind": "site", "id": dk.id}
+		_target = Vector3(sim.w / 2.0, 0, sim.h - 4.0)
+		_cam.size = 14.0
 		_place_camera()
 	if "--move" in OS.get_cmdline_user_args():  # a finished building selected, with its Move button (issue #234); --storehouse for the storehouse's panel
 		var tpl := "storehouse" if "--storehouse" in OS.get_cmdline_user_args() else "bench"

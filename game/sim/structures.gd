@@ -90,6 +90,48 @@ const DEFS := {
 			"###t####t###",
 		],
 	},
+	"buried_treasure": {
+		"name": "Buried treasure", "find": "buried treasure", "sign": "dock", "road": MeadowRoad.ID, "pin": "south:1", "coast": true,
+		"told": "A map's X in the sand along the shore: a chest, and gold with it.",
+		"access": ["A shallow dig: 1 resident at a time"],
+		"gives": ["gold"], "others": ["gold_ore", "cobble"], "target": ["gold_ore", 4], "picks": 1,
+		"loose": [Vector2i(4, 1)], "ledges": [],
+		"layout": [
+			"##t###t##",
+			"#...o...#",
+			"E....k..#",
+			"#..g.g..#",
+			"##t###t##",
+		],
+	},
+	"shipwreck": {
+		"name": "Shipwreck", "find": "a shipwreck", "sign": "dock", "road": MeadowRoad.ID, "pin": "south-west:1", "coast": true,
+		"told": "A wreck on the sand bars off the shore. Chests in the hold, they say, and gold.",
+		"access": ["A narrow hold: 1 resident per room"],
+		"gives": ["gold", "gravel"], "others": ["gold_ore", "flint", "cobble"], "target": ["gold_ore", 4], "picks": 1,
+		"loose": [Vector2i(1, 1), Vector2i(10, 3)], "ledges": [],
+		"layout": [
+			"###t####t###",
+			"#o..g..k..o#",
+			"E.....v....#",
+			"#o..k..g..o#",
+			"###t####t###",
+		],
+	},
+	"ocean_ruins": {
+		"name": "Ocean ruins", "find": "some ocean ruins", "sign": "dock", "road": MeadowRoad.ID, "pin": "south:2", "coast": true,
+		"told": "Drowned stone halls off the coast, lapis in their walls. It wants an iron pickaxe.",
+		"access": ["Drowned halls: 1 resident per hall"],
+		"gives": ["lapis", "gold"], "others": ["lapis", "gold_ore", "cobble"], "target": ["lapis", 4], "picks": 1,
+		"loose": [Vector2i(4, 1), Vector2i(6, 3)], "ledges": [],
+		"layout": [
+			"###t###t###",
+			"#l..o.o..l#",
+			"E....k...g#",
+			"#l..o.o..l#",
+			"###t###t###",
+		],
+	},
 	"geode": {
 		"name": "Geode", "find": "a geode", "sign": "east", "road": Road.ID, "pin": "north-east:3",
 		"told": "A hollow in the rock past the old caves, lined with lapis. It wants an iron pickaxe.",
@@ -108,8 +150,8 @@ const DEFS := {
 	},
 }
 
-## The structures, in the order the Cartographer finds them.
-const IDS := ["desert_well", "desert_temple", "jungle_temple", "fossil_site", "trail_ruins", "geode"]
+## The structures, in the order the Cartographer finds them: the land ones in the sectors on land, then the coastal ones (`coast`) in the sectors on the sea, which need a dock.
+const IDS := ["desert_well", "desert_temple", "jungle_temple", "fossil_site", "trail_ruins", "geode", "buried_treasure", "shipwreck", "ocean_ruins"]
 
 const ORE_OF := {"c": "coal", "g": "gold", "l": "lapis", "r": "redstone", "v": "gravel", "k": "chest"}
 

@@ -399,6 +399,10 @@ const TEMPLATES := {
 	"enchanting_workshop": {"name": "Enchanting workshop", "size": Vector2i(1, 1), "plot": "library", "stages": [
 		{"name": "Workshop", "verb": "needs", "cost": {"obsidian": 4, "diamond": 2, "plank": 6}},
 	]},
+	# The dock (Slice 7, issue #271): runs from the beach out over the sea, walkable once built. A party leaves by it for the coast.
+	"dock": {"name": "Dock", "size": Vector2i(1, Tuning.DOCK_LAND + Tuning.COAST_DEPTH), "walk": true, "stages": [
+		{"name": "Dock", "verb": "needs", "cost": {"plank": 12, "log": 4}},
+	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},
 		{"name": "Walls", "verb": "need", "cost": {"plank": 16, "log": 4}},

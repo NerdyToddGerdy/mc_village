@@ -369,6 +369,12 @@ Each kind of wild animal grows back on its own, a few minutes at a time, up to t
 - **Tend the pens** is an objective of its own: the party builds, leads and feeds, then hunts only the penned animals over the number you choose to keep of each kind, and packs their drops.
 - On any trip to the meadow, the party builds the pens and leads and feeds before it hunts, and never hunts penned animals for its objective. Wild animals regrow apart from the pens.
 
+## The coast
+
+A new village has a **sea** along its south edge: three rows of water. It can't be walked, built on, farmed or made a stockpile, and the south edge can't be claimed, so the village grows north, east and west. A village founded before this keeps its land and has no sea.
+
+Once the expedition board is built, **Build → Dock** (12 planks and 4 logs) lays a dock from the beach out over the water. There's only one, it can't be moved, and its far end is where a coastal party leaves from and comes home to. With a dock, the Cartographer can survey the **south and south-west sectors**, which find only coastal places (**buried treasure**, a **shipwreck** and **ocean ruins**, in that order); the other sectors find only places on land. Coastal trips work like the other structures: pack pickaxes and meals, mark what you want back, and the party digs from its packs. The ocean ruins' lapis wants an iron pickaxe. The trip itself is a walk along the same strip as the meadow's (about 15 s each way) for now: there are no boats yet.
+
 ## Structures
 
 After the old caves and the ruined portal, each further **Cartographer's survey** that succeeds finds the next **structure**: a desert well, a desert temple, a jungle temple, a fossil site, some trail ruins and a geode, in that order. A found structure gets a red pin on the world map and a row on the expedition board, with what's said of it, what it holds and the walk there.

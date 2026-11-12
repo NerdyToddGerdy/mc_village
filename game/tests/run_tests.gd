@@ -42,6 +42,8 @@ func _init() -> void:
 		"test_old_house_update",
 		"test_village_torches",
 		"test_desert_well",
+		"test_the_coast",
+		"test_coastal_trip",
 		"test_every_structure",
 		"test_jungle_temple_trip",
 		"test_survey",
@@ -441,13 +443,13 @@ func test_blueprint_clears_trees_and_boulders() -> void:
 func test_bigger_clearing() -> void:
 	var sim := Sim.new_game()
 	check(sim.w == 32 and sim.h == 32, "a new game is 32×32")
-	check(sim.trees.size() == 40 and sim.boulders.size() == 16, "40 trees and 16 boulders")
+	check(sim.trees.size() >= 36 and sim.trees.size() <= 40 and sim.boulders.size() >= 14 and sim.boulders.size() <= 16, "about 40 trees and 16 boulders, less any the sea takes (%d, %d)" % [sim.trees.size(), sim.boulders.size()])
 	check(Sim.rcell(sim.residents[0]) == at(9, 9), "Ada starts where the opening expects, near the middle")
 	var cells := {}
 	for o in sim.trees + sim.boulders:
 		check(sim.in_bounds(o.cell) and not cells.has(o.cell), "%s at %s is on the map and alone" % [o.kind, o.cell])
 		cells[o.cell] = true
-	check(sim.walkable(Vector2i(0, sim.h - 1)), "travelers can walk in at the bottom-left corner")
+	check(sim.walkable(Vector2i(0, sim.h - 1 - Tuning.COAST_DEPTH)) and not sim.walkable(Vector2i(0, sim.h - 1)), "travelers can walk in at the bottom-left corner, on the beach: the sea is below it")
 
 
 func test_mine_marks_trees_and_boulders() -> void:
@@ -1371,7 +1373,7 @@ func test_survey() -> void:
 	sim.set_role(tomas, "cartographer")
 	run(sim, 5)
 	check(t.worker == tomas.id and Survey.check(sim, "north", 2) == "Survey the near ring first", "Tomas claims the table; a far ring waits for the near one")
-	check(Survey.check(sim, "south", 1) == "The sea: it needs a boat", "the coast can't be surveyed on foot")
+	check(Survey.check(sim, "south", 1) == "The sea: build a dock first", "the coast needs a dock to be surveyed from")
 	var heal_hp: float = Survey.danger(sim, 1)
 	check(heal_hp > 0.0 and Survey.seconds(sim, 2) > Survey.seconds(sim, 1), "a ring further out takes longer and is more dangerous")
 	check(sim.start_survey("north", 1) and tomas.away and not sim.start_survey("east", 1), "Tomas sets out, and only one survey is out")
@@ -3730,6 +3732,99 @@ func test_the_adventures_registry() -> void:
 	check(Adventures.def("a_place_nobody_listed") == Adventures.def(OldMine.ID), "an unlisted destination works as the old caves does")
 
 
+## Slice 7, issue #271: a new game has a sea along its south edge. It can't be walked, built on, painted or claimed; a dock runs out over it and
+## opens the coast to the Cartographer, which finds the coastal places and only those; an old village has no sea.
+func test_the_coast() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	var v: SimMap = sim.maps.village
+	check(v.coast == "south" and v.water.size() == sim.w * Tuning.COAST_DEPTH, "a new game has %d rows of sea along its south edge" % Tuning.COAST_DEPTH)
+	var shore := Vector2i(5, sim.h - Tuning.COAST_DEPTH)
+	check(not sim.walkable(shore) and sim.walkable(shore - Vector2i(0, 1)), "the sea can't be walked, the beach can")
+	check(sim.trees.all(func(t): return not v.water.has(t.cell)) and sim.sheep.all(func(a): return not v.water.has(Vector2i(a.pos))), "nothing grows or grazes in it")
+	check(sim.placement_check("bench", shore).contains("sea"), "nothing is built on it")
+	check(sim.farm_blocked(shore) == "the sea", "and it can't be farmed")
+	sim.paint_zone(Rect2i(shore.x, shore.y, 2, 2))
+	check(not sim.zone.has(shore), "or made a stockpile")
+	check(sim.claim_check("south").contains("sea") and sim.claim_check("north") != "The sea: that edge can't be claimed", "its edge can't be claimed")
+	var dh: int = Tuning.DOCK_LAND + Tuning.COAST_DEPTH
+	check(sim.placement_check("dock", Vector2i(4, sim.h - dh)) == "" and sim.placement_check("dock", Vector2i(4, 2)).contains("beach"), "a dock runs from the beach out over the sea")
+	var dk := sim.place_site("dock", Vector2i(4, sim.h - dh))
+	check(sim.placement_check("dock", Vector2i(8, sim.h - dh)).contains("already") and not sim.walkable(Vector2i(4, sim.h - 1)), "only one, and it's no bridge until it's built")
+	dk.stage = 1
+	dk.done = true
+	sim._occ_dirty = true
+	check(sim.dock() == dk and sim.walkable(Vector2i(4, sim.h - 1)) and sim.dock_end() == Vector2i(4, sim.h - 1), "built, it spans the water to its sea end")
+	check(sim.find_path(Vector2i(4, sim.h - dh - 2), sim.cell_set([sim.dock_end()])) != null, "and the end can be walked to")
+	check(Sim.UNMOVABLE.has("dock"), "it can't be moved")
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], sim.nearest_walkable(Sim.rcell(sim.residents[0]) + Vector2i(2, 0)))
+	var board := sim.place_site("board", at(2, 2))
+	board.stage = 1
+	board.done = true
+	sim._on_site_done(board)
+	var t := sim.place_site("cartographer_table", at(6, 6))
+	t.stage = 1
+	t.done = true
+	sim._occ_dirty = true
+	sim.set_role(tomas, "cartographer")
+	run(sim, 5)
+	check(Survey.check(sim, "south", 1) == "" and Survey.next_find(sim, "south") == "buried_treasure" and Survey.next_find(sim, "north") == "old_mine", "the sea's sectors find the coast's places, the land's find the land's")
+	var saved := Sim.from_state(sim.save_state())
+	check(saved.maps.village.coast == "south" and saved.dock().origin == dk.origin and saved.maps.village.water.size() == v.water.size(), "the sea and the dock are saved")
+	var old := Sim.from_state(SaveFormat.read("res://tests/fixtures/save_v69.save").data.state)
+	check(old.maps.village.coast == "" and old.maps.village.water.is_empty(), "a village founded before it keeps its land")
+	Survey.enabled = false
+
+## Slice 7: a party leaves by the dock for a coastal place (buried treasure), digs, and comes home by the dock.
+func test_coastal_trip() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	var id := "buried_treasure"
+	var mp := sim.get_map(id)
+	var b := built_board(sim)
+	var dk := sim.place_site("dock", Vector2i(4, sim.h - Defs.TEMPLATES.dock.size.y))
+	dk.stage = 1
+	dk.done = true
+	sim._occ_dirty = true
+	Survey.reveal(sim, id)
+	check(sim.adventures().any(func(a): return a.id == id), "the coast's place is listed once found")
+	var ada: Dictionary = sim.residents[0]
+	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
+	for r in [ada, tomas]:
+		r.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
+	var plan := sim.new_plan(id)
+	plan.party = [ada.id, tomas.id]
+	plan.meals = 4
+	plan.picks = 0
+	sim.aim_plan(plan, "gold_ore", 4)
+	check(sim.plan_expedition(plan) == "", "the plan is accepted")
+	b.store = {"bread": 4}
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	check(sim.depart() == "", "they depart")
+	var left_by_dock := false
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		if sim.on_road(ada):
+			left_by_dock = true
+			break
+	check(left_by_dock, "they walk out along the dock and onto the road")
+	until_at_site(sim, [ada, tomas], MeadowRoad.walk_time() + 15)
+	check(ada.map == id and Sim.rcell(ada) == mp.entrance, "and arrive at the site")
+	var home := false
+	for i in 600 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose(sim.pending[0].options[0].id)
+		if sim.expedition.is_empty():
+			home = true
+			break
+	check(home and ada.map == "village" and Sim.manhattan(Sim.rcell(ada), sim.dock_end()) <= 3, "they come home by the dock")
+	check(count(sim, "gold_ore") >= 2, "with gold (%d)" % count(sim, "gold_ore"))
+	Survey.enabled = false
+
 ## Slice 7, issue #247: the desert well. Hidden until the Cartographer finds it; then a party walks the meadow's strip to it, digs gold,
 ## and comes home by the west signpost. An old save gets the map on loading.
 func test_desert_well() -> void:
@@ -3822,7 +3917,16 @@ func test_every_structure() -> void:
 		check(plan.target.item == def.target[0] and plan.list.any(func(r): return r.item == def.target[0]), "%s: a new plan asks for %s" % [id, def.target[0]])
 		var rep := sim.site_report(id)
 		check(rep.told == d.told and rep.levels.is_empty() and rep.resources.any(func(r): return r.item == Defs.ORES[d.gives[0]].item) and rep.travel > 5.0, "%s: its report says what's told and the walk (%.0f s)" % [id, rep.travel])
-		check(sim.sign_for(id) == (sim.meadow_sign() if d.sign == "west" else sim.route_sign()) and Sim.road_map_for(id) == d.road, "%s: by the %s signpost and its road" % [id, d.sign])
+		if d.sign == "dock":  # the coast: no dock, no trip; with one, its sea end is the signpost (issue #271)
+			if sim.dock().is_empty():
+				check(sim.plan_problems(plan).any(func(x): return x.contains("dock")), "%s: a plan says to build a dock first" % id)
+				var dk := sim.place_site("dock", Vector2i(2, sim.h - Defs.TEMPLATES.dock.size.y))
+				dk.stage = 1
+				dk.done = true
+				sim._occ_dirty = true
+			check(sim.sign_for(id) == sim.dock_end() and sim.dock_end() == Vector2i(2, sim.h - 1) and Sim.road_map_for(id) == d.road, "%s: by the dock's sea end and its road" % id)
+		else:
+			check(sim.sign_for(id) == (sim.meadow_sign() if d.sign == "west" else sim.route_sign()) and Sim.road_map_for(id) == d.road, "%s: by the %s signpost and its road" % [id, d.sign])
 	var loaded := Sim.from_state(sim.save_state())
 	check(Structures.IDS.all(func(id): return loaded.get_map(id).known), "what's found is saved")
 	Survey.enabled = false
@@ -4619,7 +4723,7 @@ func test_land_claims() -> void:
 	for i in 6:
 		big.add_resident("R%d" % i, Sim.TRAVELERS[i % 5][1], big.nearest_walkable(Vector2i(10 + i, 10)))
 	big.maps.village.grow("east", Tuning.MAP_MAX - Tuning.CLAIM_DEPTH + 1 - big.w)
-	check(big.claim_check("east").contains("at its largest") and big.claim_check("south") == "", "the village stops growing at %d cells a side, per direction (%s)" % [Tuning.MAP_MAX, big.claim_check("east")])
+	check(big.claim_check("east").contains("at its largest") and big.claim_check("north") == "", "the village stops growing at %d cells a side, per direction (%s)" % [Tuning.MAP_MAX, big.claim_check("east")])
 	# Older saves: the size is kept and claims come from the residents.
 	var raw := SaveFormat.read("res://tests/fixtures/save_v24.save")
 	var old := Sim.from_state(raw.data.state)

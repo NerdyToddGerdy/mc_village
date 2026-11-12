@@ -14,6 +14,14 @@ A mine-kind structure is **one entry in `Structures.DEFS`** (`structures.gd`) pl
 4. **A site report:** the old mine's report without its levels, with the table's `told`, `access` and the ores it `gives`, and the walk time of its road.
 5. **Tests:** `test_every_structure` checks each one is well-formed, every block can be dug to, and that it's found, listed, planned and reported; a full trip is tested for the desert well (the strip) and the jungle temple (the road to the mine). The map is added to a loaded save by `Sim._add_site_maps`, so no save step is needed.
 
+## The coast (#271)
+
+Provisional decisions, made to build it (#271 listed them as open):
+- **A sea on the south edge of every new game**, three rows deep across the whole edge. Old villages keep their land (`SimMap.coast` is `""` in them; save v70 says so). The edge can't be claimed, and nothing is built, farmed or stockpiled in water.
+- **One dock**, from the beach out over the water (`Defs.TEMPLATES.dock`, `walk`). Built, it opens the water under it to walking. Its sea end is the signpost for coastal adventures (`"sign": "dock"`).
+- **Coastal structures** (`"coast": true` in `Structures.DEFS`) are found only by surveying the coast's sectors (`Survey.COAST`), which needs a dock; land surveys never find them.
+- **No boats yet.** The trip is the meadow's strip, a placeholder for a boat ride. Underwater diving and fishing are not built.
+
 ## Kinds
 
 - **mine:** the party digs boulders and ores from its packs, with the mine's cave-ins and (where a map has them) ledges and darkness. Structures with loot and traps use it.
@@ -33,9 +41,12 @@ A structure uses an existing road until it needs its own: the meadow's strip (a 
 | Fossil site | #250 | west | coal, flint | old stone comes down |
 | Trail ruins | #251 | west | flint, four chests' books | old stone comes down |
 | Geode | #252 | east | lapis, gold ore (needs iron pickaxes) | old stone comes down |
+| Buried treasure | #244 | dock | gold ore, a chest's book | old stone comes down |
+| Shipwreck | #245 | dock | gold ore, flint, two chests | old stone comes down |
+| Ocean ruins | #246 | dock | lapis (needs iron pickaxes), gold ore, a chest | old stone comes down |
 
 `Survey.FINDS` is an ordered list: each successful survey reveals the next place, so the order is the order places are found in. The two on the road to the mine take its longer walk.
 
 ## Next
 
-The rest of group A of #242 need something the mine kind lacks: the **coast** (buried treasure, shipwreck, ocean ruins: #244, #245, #246, with #271), **another village** (friendly: trading and recruiting, #253) and the **Nether fossil** (#254, a Nether site). Then the structures that need combat (group B), then the late ones. The ruined portal (#243) is already a survey find that unlocks the village's own portal rather than an adventure map.
+The rest of group A of #242 need something the mine kind lacks: **another village** (friendly: trading and recruiting, #253) and the **Nether fossil** (#254, a Nether site). Then the structures that need combat (group B), then the late ones. The ruined portal (#243) is already a survey find that unlocks the village's own portal rather than an adventure map.

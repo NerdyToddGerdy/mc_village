@@ -253,10 +253,40 @@ static func new_game() -> Sim:
 		s.add_sheep(Vector2i(p[0], p[1]))
 	s.add_resident("Ada", ADA_TUNIC, OPENING_START + o)
 	s.auto_craft = true  # the bench makes a recipe's planks and sticks from the start (issue #182)
+	s._add_sea()
 	s._add_site_maps()
 	s.stats.day_zero = -int(Tuning.DUSK_SECONDS * Tuning.TPS)  # a game starts on a morning, just past the dawn light (issue #357)
 	Goals.seed_seen(s)  # the pages open from the start aren't "new" (issue #348)
 	return s
+
+
+## A new game's sea (Slice 7, issue #271): the village's south edge is `Tuning.COAST_DEPTH` rows of water. Nothing grows or stands in it, the
+## edge can't be claimed, and a dock runs out over it. An old village keeps its land: no sea is added to one that was founded without.
+func _add_sea() -> void:
+	m.coast = "south"
+	for x in m.w:
+		for y in range(m.h - Tuning.COAST_DEPTH, m.h):
+			m.water[Vector2i(x, y)] = true
+	var wet := func(c): return m.water.has(c)
+	trees = trees.filter(func(t): return not wet.call(t.cell))
+	boulders = boulders.filter(func(b): return not wet.call(b.cell))
+	bushes = bushes.filter(func(b): return not wet.call(b.cell))
+	sheep = sheep.filter(func(a): return not wet.call(Vector2i(a.pos)))
+	_occ_dirty = true
+
+
+## The village's finished dock, or {}.
+func dock() -> Dictionary:
+	for s in maps.village.sites:
+		if s.tpl == "dock" and s.done:
+			return s
+	return {}
+
+
+## The sea end of the dock, where a coastal party leaves from and comes home to, or (-1, -1) with no dock.
+func dock_end() -> Vector2i:
+	var d := dock()
+	return d.origin + Vector2i(0, d.size.y - 1) if not d.is_empty() else Vector2i(-1, -1)
 
 
 ## Adds any site map the sim doesn't have yet: a new game's, or one newer than a loaded save.
@@ -553,6 +583,9 @@ func _recompute_occ() -> void:
 			for c in site_cells(s):
 				if c != gate:
 					occ[c.y * m.w + c.x] = 1
+		elif s.tpl == "dock" and s.done:  # the planks span the water (issue #271)
+			for c in site_cells(s):
+				occ[c.y * m.w + c.x] = 0
 	m.occ = occ
 	m.occ_dirty = false
 
@@ -1809,6 +1842,8 @@ func _stake_ok(c: Vector2i) -> bool:
 ## Why a claim on `edge` can't be made now, or "".
 func claim_check(edge: String) -> String:
 	var v: SimMap = maps.village
+	if v.coast == edge:  # the sea edge is never offered (issue #271)
+		return "The sea: that edge can't be claimed"
 	if claims_available() <= 0:
 		return "A claim is already staked" if claims_pending() > 0 else "The next land claim needs %d residents" % claim_threshold()
 	if not Claims.fits(edge, v.w, v.h):
@@ -4364,7 +4399,7 @@ func _step_arrivals() -> void:
 
 func _arrive() -> void:
 	arrived = true
-	var spawn := Vector2i(0, h - 1)
+	var spawn := Vector2i(0, h - 1 - (Tuning.COAST_DEPTH if m.coast == "south" else 0))  # the beach corner, with a sea on the south edge (issue #271)
 	if not walkable(spawn):
 		spawn = nearest_walkable(spawn)
 	var n := residents.size() - 1
@@ -4493,7 +4528,7 @@ func paint_zone(rect: Rect2i) -> void:
 	for x in range(rect.position.x, rect.end.x):
 		for y in range(rect.position.y, rect.end.y):
 			var c := Vector2i(x, y)
-			if walkable(c) and site_at(c) == null and not m.farm.has(c) and reserved_at(c) == null and c != meadow_sign() and c != route_sign():
+			if walkable(c) and not m.water.has(c) and site_at(c) == null and not m.farm.has(c) and reserved_at(c) == null and c != meadow_sign() and c != route_sign():
 				m.zone[c] = true
 				_clear_wear(c)
 	rev += 1
@@ -4551,6 +4586,8 @@ func _retarget_haul(r: Dictionary, old: Vector2i) -> void:
 func farm_blocked(c: Vector2i) -> String:
 	if m.kind != "village":
 		return "the " + m.name.to_lower()
+	if m.water.has(c):
+		return "the sea"
 	if not walkable(c):
 		return "not open ground"
 	if site_at(c) != null:
@@ -4635,7 +4672,7 @@ func placement_check(tpl: String, origin: Vector2i, rot := 0, ignore := 0) -> St
 
 ## Buildings that can't move: the portal and the three that stand by it (issues #168, #172, #173) are placed
 ## relative to each other, so one can't be lifted without the rest.
-const UNMOVABLE := ["portal", "portal_station", "dispatcher", "freight_loader"]
+const UNMOVABLE := ["portal", "portal_station", "dispatcher", "freight_loader", "dock"]
 
 
 func move_check(s: Dictionary, origin: Vector2i, rot := 0) -> String:
