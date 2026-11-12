@@ -165,6 +165,9 @@ static func _take_salvage(sim: Sim) -> void:
 	if sim.m.salvage_taken:
 		return
 	sim.m.salvage_taken = true
+	if sim.m.id == NetherRoute.ROUTES.fortress.site and not sim.maps[NetherRoute.DEEP_ID].known:  # the sealed way opens (Slice 7, issue #263)
+		sim.maps[NetherRoute.DEEP_ID].known = true
+		sim._toast("With the salvage taken, the sealed way at the fortress's far end gives. The halls beyond can be delved.")
 	var contents: Dictionary = Defs.FORTRESS_SALVAGE.duplicate()
 	var book := Defs.book_for("fortress", hash([sim.seed, "salvage"]))  # an enchanted book, favouring the protections (issue #164)
 	contents[book] = 1

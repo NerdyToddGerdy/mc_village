@@ -104,6 +104,7 @@ func _init() -> void:
 		"test_mission_types",
 		"test_the_quartz_site",
 		"test_the_fossil_ridge",
+		"test_the_fortress_halls",
 		"test_piglin_trading",
 		"test_enchanted_books",
 		"test_the_enchanting_workshop",
@@ -6573,6 +6574,78 @@ func test_mission_types() -> void:
 	var old := sim.new_plan(OldMine.ID)
 	check(not old.has("objective") and old.target.item == "coal", "an Overworld plan is still a gather at the old caves")
 
+
+## Slice 7, issue #263: the sealed way at the fortress's far end opens when its salvage is taken, onto halls of blazes and skeletons that a gather
+## mission with a guard can delve for glowstone, quartz and chests.
+func test_the_fortress_halls() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var portal: Dictionary = w.portal
+	var deep: SimMap = sim.get_map(NetherRoute.DEEP_ID)
+	var w_ok: bool = deep.pattern == "hand_laid" and deep.w == 20 and deep.h == 12 and deep.entrance == Vector2i(0, 5)
+	check(w_ok and deep.creatures.size() == 5 and deep.creatures.filter(func(c): return c.species == "blaze").size() == 2 and not deep.known, "a hand-laid 20×12 site with two blazes and three skeletons, unknown")
+	check(deep.boulders.filter(func(b): return b.ore == "chest" and b.has("book")).size() == 3 and deep.boulders.any(func(b): return b.ore == "glowstone") and deep.boulders.any(func(b): return b.ore == "quartz"), "chests with books, glowstone and quartz")
+	check(NetherRoute.site_key(NetherRoute.DEEP_ID) == "fortress" and NetherRoute.map_ids().has(NetherRoute.DEEP_ID) and NetherRoute.site_ids().has(NetherRoute.DEEP_ID), "it's on the fortress's route")
+	# Every block can be dug to from the entrance.
+	var seen := {deep.entrance: true}
+	var queue: Array = [deep.entrance]
+	while not queue.is_empty():
+		var c: Vector2i = queue.pop_front()
+		for dd in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + dd
+			if n.x >= 0 and n.y >= 0 and n.x < deep.w and n.y < deep.h and not deep.rock.has(n) and not seen.has(n):
+				seen[n] = true
+				queue.append(n)
+	check(deep.boulders.all(func(b): return seen.has(b.cell)), "every block can be dug to")
+	# The sealed way: nothing to gather before the salvage is taken; a village that has taken it already has the way open when it loads.
+	var landing: SimMap = sim.get_map(NetherLanding.ID)
+	landing.known = true
+	sim.get_map(NetherRoute.ROUTES.fortress.id).surveyed = true
+	sim.get_map(NetherRoute.ROUTES.fortress.site).known = true
+	check(sim.objective_destinations("gather").all(func(d): return d.dest != NetherRoute.DEEP_ID), "the halls aren't listed while the way is sealed")
+	sim.get_map(NetherRoute.ROUTES.fortress.site).salvage_taken = true
+	var reopened := Sim.from_state(sim.save_state())
+	check(reopened.get_map(NetherRoute.DEEP_ID).known, "a village that took the salvage before this has the way open on loading")
+	deep.known = true
+	var dests := sim.objective_destinations("gather")
+	check(dests.any(func(d): return d.dest == NetherRoute.DEEP_ID), "open, a gather mission can go to the halls")
+	var rep := sim.site_report(NetherRoute.DEEP_ID)
+	check(rep.name == NetherRoute.DEEP_NAME and rep.told == NetherRoute.DEEP_TOLD and rep.resources.any(func(x): return x.item == "glowstone"), "its report is its own")
+	# A party with a guard goes, fights what hunts it and brings glowstone home.
+	portal.lit = true
+	var pick: Dictionary = dests.filter(func(d): return d.dest == NetherRoute.DEEP_ID)[0]
+	var plan := sim.nether_plan("gather", pick)
+	check(plan.fight, "the plan fights by default")
+	ada.role = "all"
+	plan.party = [ada.id]
+	sim.aim_plan(plan, "glowstone", 4)
+	plan.policy = {"target": true, "full": true, "low": true}
+	check(sim.plan_problems(plan).is_empty() and sim.plan_expedition(plan) == "", "planned (%s)" % [sim.plan_problems(plan)])
+	portal.store = {"bread": 3}
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 50}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "stone_pick", 1)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("nether") == "", "sent")
+	var maps_seen := {}
+	for i in 1200 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		maps_seen[ada.map] = true
+		ada.hurt = 0
+		if sim.expeditions.nether.is_empty():
+			break
+	check(maps_seen.has(NetherRoute.ROUTES.fortress.id) and maps_seen.has(NetherRoute.DEEP_ID), "she walks the fortress route and reaches the halls (%s; expedition %s)" % [maps_seen.keys(), sim.expeditions.nether.get("home_why", sim.expeditions.nether.get("state", "none"))])
+	var brought := 0
+	for st in sim.stacks_where(func(x): return x.type == "glowstone"):
+		brought += st.n
+	check(sim.expeditions.nether.is_empty() and ada.map == "village" and brought >= 2, "and comes home with glowstone (%d)" % brought)
+	check(deep.creatures.any(func(c): return not c.alive), "and fought: %d of %d down" % [deep.creatures.filter(func(c): return not c.alive).size(), deep.creatures.size()])
 
 ## Slice 7, issue #254: the Nether fossil. A fourth route leaves the landing's west edge to a ridge of fossil blocks that give bone; a gather mission
 ## can go there once it's scouted, along with quartz.

@@ -32,6 +32,8 @@ static func objective_destinations(sim: Sim, obj: String) -> Array:
 			for rk in {"gather": ["quartz", "fossil"], "trade": ["piglin"], "fortress": ["fortress"]}[obj]:  # a gather mission can go to any scouted site that gives something (issue #254)
 				if sim.maps[NetherRoute.ROUTES[rk].site].known:
 					out.append({"dest": NetherRoute.ROUTES[rk].site, "label": NetherRoute.ROUTES[rk].site_name.substr(8), "route": ""})
+			if obj == "gather" and sim.maps[NetherRoute.DEEP_ID].known:  # the fortress's halls, once the sealed way is open (issue #263)
+				out.append({"dest": NetherRoute.DEEP_ID, "label": NetherRoute.DEEP_NAME.substr(8), "route": ""})
 		"build":
 			var sh := sim.shelter_site()
 			if sim.maps[NetherLanding.ID].known and not sh.get("done", false):
@@ -105,6 +107,7 @@ static func nether_plan(sim: Sim, obj: String, pick := {}) -> Dictionary:
 				sim._pline_supplies(plan)
 		"gather":  # the first thing the site gives, as much as 8, with a spare pickaxe (issue #155)
 			plan.picks = 1
+			plan.fight = pick.dest == NetherRoute.DEEP_ID  # the halls have blazes and skeletons in them (issue #263)
 			var first: Array = sim.plan_targets(plan.dest)
 			if not first.is_empty():
 				sim.aim_plan(plan, first[0].item, 8)
