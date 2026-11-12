@@ -315,6 +315,10 @@ func _add_site_maps() -> void:
 			var was_known: bool = maps[NetherRoute.ROUTES[key].site].known
 			maps[NetherRoute.ROUTES[key].site] = NetherRoute.build_site(self, key)
 			maps[NetherRoute.ROUTES[key].site].known = was_known
+	if not maps.has(NetherRoute.DEEP_ID):  # the fortress's halls, beyond its sealed way (Slice 7, issue #263)
+		maps[NetherRoute.DEEP_ID] = NetherRoute.build_deep(self)
+	if maps[NetherRoute.ROUTES.fortress.site].salvage_taken:  # a village that has already taken the salvage has the way open
+		maps[NetherRoute.DEEP_ID].known = true
 	for key in NetherRoute.ROUTES:  # every way out is a gap in the landing's wall, also in a landing an older save built without the newest (Slice 7, issue #254)
 		maps[NetherLanding.ID].rock.erase(NetherRoute.ROUTES[key].exit)
 	maps[NetherLanding.ID].occ_dirty = true
@@ -3086,7 +3090,8 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			return true
 		"to_site":  # the route's far end: onto the site (issue #155)
 			var tk := dest_route(expedition.get("dest", ""))
-			_enter_level(r, NetherRoute.ROUTES[tk].site)
+			var to_dest: String = expedition.get("dest", "")
+			_enter_level(r, to_dest if NetherRoute.site_key(to_dest) == tk else NetherRoute.ROUTES[tk].site)  # the fortress's halls are on its route too (issue #263)
 			return true
 		"leave_site":  # off a site, back onto the route's far end (issue #155)
 			var lk := NetherRoute.site_key(map_id)

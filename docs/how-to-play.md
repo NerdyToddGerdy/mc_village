@@ -369,6 +369,10 @@ Each kind of wild animal grows back on its own, a few minutes at a time, up to t
 - **Tend the pens** is an objective of its own: the party builds, leads and feeds, then hunts only the penned animals over the number you choose to keep of each kind, and packs their drops.
 - On any trip to the meadow, the party builds the pens and leads and feeds before it hunts, and never hunts penned animals for its objective. Wild animals regrow apart from the pens.
 
+## The fortress halls
+
+Taking the fortress's **salvage** opens the sealed way at its far end, with a toast. From then on a **Gather** mission can go to the **fortress halls** beyond it: a hand-laid set of rooms with two blazes and three skeletons that come for the party, and glowstone, quartz and three chests with enchanted books in the walls. The plan fights by default, so send a Guard with a sword (or Ada); glowstone breaks by hand, quartz needs a pickaxe. A village that already took the salvage has the way open when it loads.
+
 ## The Nether fossil
 
 A fourth route leaves the portal landing, through a new gap in its **west** wall: **scout** it like the others (the Scout objective lists it), and it reveals a **fossil ridge**, a bone-white dig in the Nether. Once it's scouted, a **Gather** mission can go there as well as to the quartz site. The ridge holds eight blocks of **Nether fossil**, each giving 2 bone, with a little quartz and glowstone, some lava to walk round, and a magma cube on the way. A village whose Nether you set up before this keeps its landing and gets the gap opened when it loads.

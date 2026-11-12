@@ -56,6 +56,30 @@ const ROUTES := {
 }
 
 
+## The fortress's halls (Slice 7, issue #263): beyond the sealed way at the entrance's far end, opened when its salvage is taken. A site of its own,
+## reached by the fortress route: blazes and skeletons, glowstone, quartz and chests. Its id starts with "nether", so it is a Nether place.
+const DEEP_ID := "nether_fortress_deep"
+const DEEP_NAME := "Nether: fortress halls"
+const DEEP_ID_BASE := 1100000000
+const DEEP_TOLD := "Halls beyond the sealed way at the fortress's far end: blazes and skeletons, glowstone and quartz in the walls, and chests."
+
+## The halls, west to east: the party arrives at E. B a blaze, S a skeleton, q quartz ore, g glowstone, k a chest in the rock holding an enchanted book.
+const DEEP_LAYOUT := [
+	"####################",
+	"#..B.......q.....k.#",
+	"#.....###..........#",
+	"#..q..#g.....S.....#",
+	"#.....###......q...#",
+	"E..................#",
+	"#...S......B.......#",
+	"#.....###..........#",
+	"#..g..#k.....g.....#",
+	"#.....###......q...#",
+	"#.......S.....k..q.#",
+	"####################",
+]
+
+
 ## The route key ("quartz"...) a map id belongs to, or "".
 static func route_of(id: String) -> String:
 	for k in ROUTES:
@@ -66,6 +90,8 @@ static func route_of(id: String) -> String:
 
 ## The route key whose site a map id is, or "".
 static func site_key(id: String) -> String:
+	if id == DEEP_ID:  # the halls are on the fortress's route
+		return "fortress"
 	for k in ROUTES:
 		if ROUTES[k].site == id:
 			return k
@@ -78,6 +104,7 @@ static func map_ids() -> Array:
 	for k in ROUTES:
 		out.append(ROUTES[k].id)
 		out.append(ROUTES[k].site)
+	out.append(DEEP_ID)
 	return out
 
 
@@ -86,7 +113,25 @@ static func route_ids() -> Array:
 
 
 static func site_ids() -> Array:
-	return ROUTES.keys().map(func(k): return ROUTES[k].site)
+	return ROUTES.keys().map(func(k): return ROUTES[k].site) + [DEEP_ID]
+
+
+## The fortress halls as they are before anyone has been there.
+static func build_deep(s: Sim) -> SimMap:
+	var was: int = s.next_id  # the halls' ids are their own, so building them never moves the ids of anything else (the residents', the village's)
+	var m := _build_laid(s, "fortress", DEEP_LAYOUT)
+	s.next_id = was
+	var n := DEEP_ID_BASE
+	for b in m.boulders:
+		b.id = n
+		n += 1
+	for c in m.creatures:
+		c.id = n
+		n += 1
+	m.id = DEEP_ID
+	m.name = DEEP_NAME
+	m.known = false
+	return m
 
 
 ## The route strip as it is before anyone has walked it. Its west end meets the landing, its east end the site.
@@ -159,6 +204,10 @@ static func _build_laid(s: Sim, key: String, rows: Array) -> SimMap:
 					m.boulders.append(OldMine._block(s, c, "glowstone"))
 				"f":
 					m.boulders.append(OldMine._block(s, c, "fossil"))
+				"k":
+					var chest := OldMine._block(s, c, "chest")
+					chest.book = Defs.book_for("fortress", hash([s.seed, def.site, c]))
+					m.boulders.append(chest)
 				"B", "S":
 					var sp := "blaze" if rows[y][x] == "B" else "skeleton"
 					m.creatures.append({"id": s._id(), "kind": "creature", "species": sp, "cell": c, "pos": Vector2(c), "alive": true,

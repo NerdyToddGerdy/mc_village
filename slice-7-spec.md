@@ -30,6 +30,10 @@ Not a structure-table entry: the Nether's sites are routes, so it is a **fourth 
 
 A structure whose layout has `Z` (zombie), `S` (skeleton) or `X` (spider) puts that creature in the map, hunting anyone who comes in (`hunt`), and its entry says `fight`: the plan fights by default (`plan.fight`, which makes the party engage creatures in range), the planner warns when no Guard (or Ada) is going, and the site report lists what's inside. The Slice 5 auto-combat does the rest. Provisional: the creatures are the village's night mobs (zombie, skeleton, spider), standing in for pillagers and the rest until #30 settles names and art. The **abandoned mineshaft (#256)** is built as its own place (spiders, a ledge in the dark) even though the old caves are one too. The **stronghold** is only a stone fortress to dig here; it is not the way to the End (#289 is open).
 
+## The fortress halls (#263)
+
+The Slice 5 fortress entrance (#157) ends at a sealed way "a later expedition could open". The halls beyond are a Nether site of their own (`NetherRoute.DEEP_ID`, on the fortress's route, so `site_key` answers "fortress" for it): hand-laid, with blazes and skeletons, glowstone, quartz and three chests. Taking the entrance's salvage sets the halls `known`; a gather mission with `fight` can go there, and the route's end steps onto the plan's destination rather than the route's fixed site. A save that had already taken the salvage opens the way on load.
+
 ## Kinds
 
 - **mine:** the party digs boulders and ores from its packs, with the mine's cave-ins and (where a map has them) ledges and darkness. Structures with loot and traps use it.

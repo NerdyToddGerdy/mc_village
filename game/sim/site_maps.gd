@@ -175,7 +175,7 @@ static func _nether_site_report(sim: Sim, id: String) -> Dictionary:
 	for ore in ["quartz", "glowstone", "fossil"]:
 		if mp.boulders.any(func(b): return b.get("ore", "") == ore):
 			res.append({"item": Defs.ORES[ore].item, "name": Defs.ITEMS[Defs.ORES[ore].item].label, "reserve": sim.ore_left(id, ore) * Tuning.ORE_YIELD[ore] if mp.visited else -1, "known": true})
-	if sim.rk_of_site(id) == "fortress":  # what the halls give, known from the start (issue #157)
+	if sim.rk_of_site(id) == "fortress" and id != NetherRoute.DEEP_ID:  # what the halls give, known from the start (issue #157)
 		for k in ["blaze_rod", "bone"]:
 			res.append({"item": k, "name": Defs.ITEMS[k].label, "reserve": -1, "known": true})
 	for k in mp.drops_known:
@@ -185,9 +185,12 @@ static func _nether_site_report(sim: Sim, id: String) -> Dictionary:
 	if mp.visited and not mp.lava.is_empty():
 		hazards.append("Lava pools in the rock: someone beside one can be burned")
 	var walk: float = (Road.SEGMENTS.size() * 8.0 + NetherLanding.LAYOUT[0].length() / 2.0) / Tuning.WALK
-	var out := {"name": def.site_name, "told": def.told, "visited": mp.visited, "travel": walk, "level": 0, "pattern": "", "resources": res, "hazards": hazards,
+	var deep: bool = id == NetherRoute.DEEP_ID
+	var out := {"name": NetherRoute.DEEP_NAME if deep else def.site_name, "told": NetherRoute.DEEP_TOLD if deep else def.told, "visited": mp.visited, "travel": walk, "level": 0, "pattern": "", "resources": res, "hazards": hazards,
 		"access": [sim.rk_access(rk)] if mp.visited else [], "finds": [], "levels": [], "door": ""}
-	if rk == "fortress":  # issue #157
+	if deep and mp.visited:
+		out.hazards.append("Blazes and skeletons in the halls")
+	if rk == "fortress" and not deep:  # issue #157
 		if mp.visited:
 			out.hazards.append("Blazes and skeletons in the halls")
 			out.hazards.append("A sealed way leads deeper: a later expedition")
