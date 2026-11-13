@@ -54,6 +54,7 @@ const BASE_ITEMS := {
 	"fire_resistance": {"one": "fire-resistance supply", "many": "fire-resistance supplies", "label": "Fire resistance", "group": "ores"},
 	# What the Nether's creatures leave (issue #151), carried home as cargo.
 	"magma_cream": {"one": "magma cream", "many": "magma cream", "label": "Magma cream", "group": "ores"},
+	"dragon_scale": {"one": "dragon scale", "many": "dragon scales", "label": "Dragon scales", "group": "ores"},  # the dragon's trophy (issue #412)
 	"end_stone": {"one": "block of End stone", "many": "blocks of End stone", "label": "End stone", "group": "ores"},  # what the stronghold's portal frame gives (issue #411)
 	"bone": {"one": "bone", "many": "bones", "label": "Bones", "group": "ores"},
 	"blaze_rod": {"one": "blaze rod", "many": "blaze rods", "label": "Blaze rods", "group": "ores"},
@@ -160,6 +161,7 @@ const CREATURES := {
 	"slime": {"name": "Slime", "hp": 6, "hit": 0.35, "serious": 0.1, "cool": 1.4, "reach": 1, "notice": 5, "drops": {"slime_ball": 1}},
 	"drowned": {"name": "Drowned", "hp": 8, "hit": 0.4, "serious": 0.15, "cool": 1.6, "reach": 1, "notice": 5, "drops": {"nautilus_shell": 1}},
 	"husk": {"name": "Husk", "hp": 10, "hit": 0.45, "serious": 0.2, "cool": 1.5, "reach": 1, "notice": 6, "drops": {"husk_dust": 1}},
+	"dragon": {"name": "Ender dragon", "hp": 90, "hit": 0.6, "serious": 0.3, "cool": 1.6, "reach": 1, "notice": 8, "drops": {"dragon_scale": 3}},  # the End's one boss (issue #412)
 	"golem": {"name": "Iron golem", "hp": 100, "hit": 0.0, "serious": 0.0, "cool": 1.2, "reach": 1, "notice": 0, "drops": {}},
 }
 
@@ -227,7 +229,7 @@ const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "i
 	"chest": {"item": "book_efficiency", "name": "Chest"},  # a chest in the rock holds one book, named by the block (issue #164)
 	"lapis": {"item": "lapis", "name": "Lapis ore"}, "redstone": {"item": "redstone", "name": "Redstone ore"},
 	"quartz": {"item": "quartz", "name": "Nether quartz ore"}, "fossil": {"item": "bone", "name": "Nether fossil"}, "glowstone": {"item": "glowstone", "name": "Glowstone"},
-	"gold": {"item": "gold_ore", "name": "Gold ore"}, "end_portal": {"item": "end_stone", "name": "Portal frame"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}
+	"gold": {"item": "gold_ore", "name": "Gold ore"}, "end_portal": {"item": "end_stone", "name": "Portal frame"}, "bridge_stone": {"item": "end_stone", "name": "Bridge stone"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}
 
 ## `pattern` (bench) and `fuel` (fireplace) are display only, for the Craft panel's crafting grid and
 ## furnace (issue #95); they never change what a recipe costs. A pattern is three rows of three, each

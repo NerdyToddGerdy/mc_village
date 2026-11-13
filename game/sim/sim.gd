@@ -3372,8 +3372,15 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				drop_items(t.cell, "sapling", saplings)  # issue #177
 				stats.felled += 1
 			elif t.has("ore"):  # an ore block (issue #103); it never comes back (issue #102)
+				if t.ore == "bridge_stone" and not stats.get("end_bridged", false) and not m.boulders.any(func(b): return b.alive and b.get("ore", "") == "bridge_stone"):  # the last stone is laid (issue #413)
+					stats.end_bridged = true
+					for iid in ["end_city", "end_ship"]:
+						maps[iid].known = true
+					_toast("%s has laid the last stone: the bridge reaches the islands. An End city and an End ship lie beyond." % r.name, r.id)
 				if t.ore == "end_portal" and not stats.get("end_open", false):  # the way to the End is found (issue #411)
 					stats.end_open = true
+					maps["end_platform"].known = true  # the End is on the board (issue #412)
+					maps[Road.ID].known = true
 					_toast("%s has found the way to the End: the portal in the %s wall is open." % [r.name, m.name.to_lower()], r.id)
 				if t.ore == "gravel":  # sometimes a flint, else nothing (issue #146)
 					if rng.randf() < Tuning.GRAVEL_FLINT_CHANCE:

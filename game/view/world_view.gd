@@ -2015,7 +2015,7 @@ func _update_sheep() -> void:
 
 # ---------------------------------------------------------------- the Nether's creatures (issue #151)
 
-static var CREATURE_COLORS := {"magma_cube": Color("#C4501E"), "zombified_piglin": Color("#C98A83"), "piglin_brute": Color("#B5736B"), "villager": Color("#D2A67A"), "skeleton": Color("#DCD7C5"), "blaze": Color("#F2B531"), "zombie": Color("#6E9A5A"), "slime": Color("#6FBF5E"), "drowned": Color("#4F9A92"), "husk": Color("#B79A62"), "spider": Color("#3A3236"), "golem": Color("#B7B9B4")}
+static var CREATURE_COLORS := {"magma_cube": Color("#C4501E"), "zombified_piglin": Color("#C98A83"), "piglin_brute": Color("#B5736B"), "villager": Color("#D2A67A"), "dragon": Color("#3A2A4A"), "skeleton": Color("#DCD7C5"), "blaze": Color("#F2B531"), "zombie": Color("#6E9A5A"), "slime": Color("#6FBF5E"), "drowned": Color("#4F9A92"), "husk": Color("#B79A62"), "spider": Color("#3A3236"), "golem": Color("#B7B9B4")}
 var _creature_nodes := {}   ## Creature id -> its model.
 
 

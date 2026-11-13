@@ -12,7 +12,7 @@ const SECTORS := ["north", "north-east", "east", "south-east", "south", "south-w
 ## The two sectors on the coast (issue #271): the sea can't be surveyed on foot.
 const COAST := ["south", "south-west"]
 ## What a successful survey finds, in order. More follow when the structures are built (#242).
-const FINDS := ["old_mine", "ruined_portal"] + Structures.IDS
+const FINDS := ["old_mine", "ruined_portal"] + Structures.SURVEY_IDS
 const FIND_NAMES := {"old_mine": "the old caves", "ruined_portal": "a ruined portal"}
 
 

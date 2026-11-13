@@ -53,6 +53,7 @@ func _init() -> void:
 		"test_ocean_monument_trip",
 		"test_dungeon_trip",
 		"test_the_stronghold_portal",
+		"test_the_end",
 		"test_another_village",
 		"test_every_structure",
 		"test_jungle_temple_trip",
@@ -4119,6 +4120,50 @@ func test_the_stronghold_portal() -> void:
 	check(back.stats.get("end_open", false), "which is saved")
 
 
+## Issues #412, #413, #267 and #268: the End is behind the stronghold's portal; a dragon holds the platform, the bridge goes out once it is down, and the islands follow.
+func test_the_end() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	built_board(sim)
+	var ada: Dictionary = sim.residents[0]
+	check(Structures.END_IDS.all(func(id): return not Survey.FINDS.has(id) and Structures.DEFS[id].fight and Structures.DEFS[id].end), "the End's three places are fight places no survey finds")
+	check(Structures.END_IDS.all(func(id): return sim.adventures().all(func(a): return a.id != id)), "and none is on the board at the start")
+	# The way in: the stronghold's portal frame.
+	var sh := sim.get_map("stronghold")
+	var frame: Dictionary = sh.boulders.filter(func(b): return b.get("ore", "") == "end_portal")[0]
+	frame.erase("hidden")
+	sim.use_map("stronghold")
+	sim._finish_work(ada, {"what": "gather", "tool": "pick", "target": frame})
+	sim.use_map("village")
+	check(sim.stats.end_open and sim.get_map("end_platform").known and sim.adventures().any(func(a): return a.id == "end_platform"), "digging it puts the dragon's platform on the board")
+	check(sim.adventures().all(func(a): return a.id != "end_city" and a.id != "end_ship"), "the islands still aren't")
+	# The platform: one dragon, hunting, with edges and three hidden bridge stones.
+	var pf := sim.get_map("end_platform")
+	var dragons := pf.creatures.filter(func(c): return c.species == "dragon")
+	check(dragons.size() == 1 and dragons[0].get("hunt", false) and dragons[0].hp == Defs.CREATURES.dragon.hp and pf.ledges.size() >= 1, "one dragon, hunting, and edges")
+	var stones := pf.boulders.filter(func(b): return b.get("ore", "") == "bridge_stone")
+	check(stones.size() == 3 and stones.all(func(b): return b.get("hidden", false)), "three bridge stones, hidden")
+	# Its health stays between trips.
+	dragons[0].hp = 40
+	var back := Sim.from_state(sim.save_state())
+	check(back.get_map("end_platform").creatures.filter(func(c): return c.species == "dragon")[0].hp == 40, "the dragon's health is saved: a retreat leaves it hurt")
+	# Down it goes, and the stones show.
+	sim.use_map("end_platform")
+	var live := pf.creatures.filter(func(c): return c.alive)
+	for c in live:
+		Creatures._down(sim, c)
+	check(sim.stats.dragon_down and stones.all(func(b): return not b.get("hidden", false)), "with every creature down the dragon is beaten and the stones show")
+	check(not sim.stats.get("end_bridged", false), "the bridge isn't laid yet")
+	for i in stones.size():
+		sim._finish_work(ada, {"what": "gather", "tool": "pick", "target": stones[i]})
+		check(i == stones.size() - 1 or not sim.stats.get("end_bridged", false), "the bridge isn't done until the last stone")
+	sim.use_map("village")
+	check(sim.stats.end_bridged and sim.adventures().any(func(a): return a.id == "end_city") and sim.adventures().any(func(a): return a.id == "end_ship"), "the last stone opens the End city and the End ship")
+	check(sim.get_map("end_city").creatures.size() == 4 and sim.get_map("end_ship").creatures.size() == 2, "each with its guards")
+	var again := Sim.from_state(sim.save_state())
+	check(again.stats.end_bridged and again.get_map("end_city").known, "which is saved")
+
+
 func test_dungeon_trip() -> void:
 	Survey.enabled = true
 	var sim := Sim.new_game()
@@ -4230,7 +4275,7 @@ func test_every_structure() -> void:
 	Survey.enabled = true
 	var sim := Sim.new_game()
 	built_board(sim)
-	check(Survey.FINDS == ["old_mine", "ruined_portal"] + Structures.IDS, "the survey finds them in the table's order, after the caves and the portal")
+	check(Survey.FINDS == ["old_mine", "ruined_portal"] + Structures.SURVEY_IDS, "the survey finds them in the table's order, after the caves and the portal")
 	for id in Structures.IDS:
 		var d: Dictionary = Structures.DEFS[id]
 		var mp := sim.get_map(id)
@@ -6545,7 +6590,7 @@ func test_auto_combat() -> void:
 	var tomas: Dictionary = w.tomas
 	var mira: Dictionary = w.mira
 	var landing: SimMap = w.landing
-	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "villager", "piglin_brute", "blaze", "zombie", "spider", "slime", "drowned", "husk", "golem"], "the Nether's five creatures, then the village's and the caves'")
+	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "villager", "piglin_brute", "blaze", "zombie", "spider", "slime", "drowned", "husk", "dragon", "golem"], "the Nether's five creatures, then the village's and the caves'")
 	# A guard defeats a magma cube, which leaves its cream.
 	var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Sim.rcell(tomas) + Vector2i(5, 0))
 	var xp: int = tomas.jobs.guard.xp
