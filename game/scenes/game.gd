@@ -61,6 +61,7 @@ var _stuck_i := -1
 var _mods := {"shift": false, "alt": false}  ## Modifier keys, from the latest input event.
 var _menu := GameMenu.new()
 var keys: KeyBindings
+var controller: Controller  ## The controller as keys and clicks (issue #421).
 var keys_path := ""  ## Tests set this before the game starts, so they always use default keys.
 var _menu_prev_speed := 1
 
@@ -143,6 +144,7 @@ func next_ui_scale() -> float:
 
 func _ready() -> void:
 	keys = KeyBindings.new(keys_path)
+	controller = Controller.new(self)
 	_load_ui_scale()
 	_load_colours()
 	sim = Sim.new_game()
@@ -235,6 +237,7 @@ func _apply_daylight() -> void:
 
 func _process(delta: float) -> void:
 	_pan_with_keys(delta)
+	controller.update(delta)
 	_apply_daylight()
 	_acc += minf(delta, 0.1) * (Tuning.SKIP_SPEED if skipping else float(speed))
 	var n := 0
@@ -651,6 +654,9 @@ func _unhandled_input(event: InputEvent) -> void:
 ## The map key is taken before the HUD sees it: its default, Tab, would otherwise move keyboard
 ## focus between buttons once one has been clicked.
 func _input(event: InputEvent) -> void:
+	if controller.handle(event):  # a controller button is a key or a click (issue #421)
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and not _menu.visible and keys.action_for(event) == "map":
 		next_map()
 		get_viewport().set_input_as_handled()

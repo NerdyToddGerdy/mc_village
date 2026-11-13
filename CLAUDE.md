@@ -6,7 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Block Village** (working title) is an isometric settlement simulation inspired by Minecraft. The repo holds:
 - `block-village-design-brief.md`: the vision and decisions document.
-- `slice-7-spec.md`: the Slice 7 spec (in progress), structures as adventures: how one is added, and which are built. Its decisions are provisional.
+- `slice-8-spec.md`: the Slice 8 spec (in progress), the Steam Deck: a controller, a UI readable at 1280x800, a Linux export and a play check (#287).
+- `slice-7-spec.md`: the Slice 7 spec (built), structures as adventures: how one is added, and which are built. Its decisions are provisional.
 - `slice-2.5-spec.md`: the night, the iron golem and village combat (#66, #357 to #360). It only describes what's new since Slice 2.
 - `slice-6-spec.md`: the Slice 6 spec (done, #15), specialization and automation: enchantments and one redstone chain. It only describes what's new or changed since Slice 5.
 - `slice-5-spec.md`: the Slice 5 spec (done), the Nether foothold. It only describes what's new or changed since Slice 4.

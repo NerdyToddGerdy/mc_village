@@ -83,6 +83,16 @@ const ACTIONS := [
 
 const FIXED := [KEY_ESCAPE]  ## Keys that can't be bound to anything.
 
+## The controller (issue #421, the Steam Deck): an action can also have joypad buttons. A is the left click, X the right click and B Esc, and those
+## can't be rebound; the left stick pans, the right stick moves the cursor and the triggers zoom. Everything else here is rebindable.
+const PAD_FIXED := [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X]
+const PAD_DEFAULTS := {
+	"gather": [JOY_BUTTON_Y], "build": [JOY_BUTTON_LEFT_SHOULDER], "craft": [JOY_BUTTON_RIGHT_SHOULDER],
+	"menu": [JOY_BUTTON_START], "worldmap": [JOY_BUTTON_BACK], "toggle_pause": [JOY_BUTTON_LEFT_STICK],
+	"next_res": [JOY_BUTTON_RIGHT_STICK], "map": [JOY_BUTTON_GUIDE],
+	"pan_up": [JOY_BUTTON_DPAD_UP], "pan_down": [JOY_BUTTON_DPAD_DOWN], "pan_left": [JOY_BUTTON_DPAD_LEFT], "pan_right": [JOY_BUTTON_DPAD_RIGHT],
+}
+
 ## The Selection group's keys act on the selection panel (issue #197), so they may share a key with an
 ## order (Q E R Z X C V are the order keys too) or the speed keys (1 to 3, while a list is open), and
 ## nothing else. They are looked up with panel_index() and list_index(), never action_for().
@@ -91,6 +101,7 @@ const SHARED_WITH_SELECTION := ["speed1", "speed2", "speed3"]  ## besides the Or
 
 var path := "user://settings/keys.cfg"
 var keys := {}   ## action id -> Array of key codes
+var pads := {}   ## action id -> Array of joypad buttons (issue #421)
 var pinned: Array = []  ## Items pinned to the tally bar (issue #141): a view preference, kept here, not in game saves.
 
 
@@ -105,6 +116,9 @@ func reset() -> void:
 	keys = {}
 	for a in ACTIONS:
 		keys[a[0]] = (a[3] as Array).duplicate()
+	pads = {}
+	for a in ACTIONS:
+		pads[a[0]] = (PAD_DEFAULTS.get(a[0], []) as Array).duplicate()
 
 
 func load_file() -> void:
@@ -121,6 +135,10 @@ func load_file() -> void:
 			fresh.append(a[0])
 	for id in fresh:
 		keys[id] = keys[id].filter(func(k): return not keys.keys().any(func(o): return o != id and not fresh.has(o) and keys[o].has(k) and not may_share(id, o)))
+	for a in ACTIONS:  # buttons kept in the file win; an action it doesn't mention keeps its default buttons
+		var pv = cfg.get_value("pads", a[0]) if cfg.has_section_key("pads", a[0]) else null
+		if pv is Array:
+			pads[a[0]] = pv.filter(func(b): return b is int and not PAD_FIXED.has(b))
 	var pins = cfg.get_value("tally", "pinned", [])
 	if pins is Array:
 		pinned = pins.filter(func(t): return t is String and Defs.ITEMS.has(t)).slice(0, Defs.MAX_PINNED)
@@ -131,6 +149,9 @@ func save_file() -> bool:
 	var cfg := ConfigFile.new()
 	for a in ACTIONS:
 		cfg.set_value("keys", a[0], keys[a[0]])
+	for id in pads:
+		if not pads[id].is_empty() or PAD_DEFAULTS.has(id):
+			cfg.set_value("pads", id, pads[id])
 	cfg.set_value("tally", "pinned", pinned)
 	return cfg.save(path) == OK
 
@@ -155,6 +176,9 @@ func action_for(e: InputEventKey) -> String:
 
 
 func is_down(action: String) -> bool:
+	for b in pads.get(action, []):
+		if Input.is_joy_button_pressed(0, b):
+			return true
 	for k in keys[action]:
 		if k & KEY_MASK_SHIFT == 0 and Input.is_key_pressed(k):
 			return true
@@ -244,3 +268,31 @@ func text(action: String) -> String:
 	if keys[action].is_empty():
 		return "No key"
 	return "  ".join(keys[action].map(func(k): return key_text(k)))
+
+
+## The action a controller button triggers, or "" (issue #421).
+func pad_action_for(button: int) -> String:
+	for id in pads:
+		if pads[id].has(button):
+			return id
+	return ""
+
+
+## Makes `button` the only button for `action`, taking it away from any other action.
+func pad_assign(action: String, button: int) -> void:
+	for id in pads:
+		pads[id].erase(button)
+	pads[action] = [button]
+
+
+## Every button for an action, for the Controls page ("-" when it has none).
+func pad_text(action: String) -> String:
+	if pads.get(action, []).is_empty():
+		return "-"
+	return " ".join(pads[action].map(func(b): return pad_button_text(b)))
+
+
+static func pad_button_text(button: int) -> String:
+	return {JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y", JOY_BUTTON_LEFT_SHOULDER: "LB", JOY_BUTTON_RIGHT_SHOULDER: "RB",
+		JOY_BUTTON_START: "Start", JOY_BUTTON_BACK: "Select", JOY_BUTTON_GUIDE: "Steam", JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3",
+		JOY_BUTTON_DPAD_UP: "D-pad up", JOY_BUTTON_DPAD_DOWN: "D-pad down", JOY_BUTTON_DPAD_LEFT: "D-pad left", JOY_BUTTON_DPAD_RIGHT: "D-pad right"}.get(button, "Button %d" % button)
