@@ -76,7 +76,7 @@ Chapters 1 to 3 are also the opening's three book chapters decided in #318 (Shel
 
 *A foothold in another world, reached through the ruined portal the Cartographer finds.*
 - **Built:** the portal, the landing, guards and visible auto-combat, the shelter and supply cache, three scouted routes, mission types, the quartz site, piglin trading, the fortress delve, stranding and rescue instead of death, the Nether line.
-- **Prepared:** #286 (unstaffed outposts, camps and depots), #20 and #19 (difficulty, village combat), #30 (final names).
+- **Prepared:** #286 (unstaffed outposts, camps and depots, deferred). Settled and closed: #19 (combat stays automatic), #20 (nobody dies), #30 (names are a pre-release pass).
 - **Needs to get to:** a second realm with its own supply chain and a reason to stay.
 
 ## 9. Enchanting and automation

@@ -94,7 +94,7 @@ To run some of the sim tests, put words after `--`: `run_tests.gd -- farm firepl
 ## The design docs are the source of truth
 
 - The brief separates **core decisions** from **proposed** details. Treat core decisions as fixed. Treat proposed mechanics and all numbers as provisional, not final balance.
-- Section 14 ("Open Decisions") lists questions that are deliberately still open, including the final title, the End and the Sift (#27), village combat beyond the night (#19, partly settled by #66) and difficulty/permanent death (#20, nobody dies; permanent death stays a later optional mode). Don't quietly settle any of them in code or docs. Raise the choice with the user.
+- Section 14 ("Open Decisions") lists questions that are deliberately still open, including the final title (#16), platforms (#287), the End's details and the Sift (#27, #289, #290). Settled: combat is automatic everywhere (#19), nobody dies (#20, permanent death is only a possible later optional mode), the night as built (#66), and Minecraft names stay as working names until one pre-release pass (#30). Don't quietly settle any of them in code or docs. Raise the choice with the user.
 - Minecraft-derived content (Nether, End, the Sift, enchantments, redstone, minecarts) is an adaptation and doesn't have to match Minecraft's exact rules. How much original versus directly referenced terminology to use is still an open decision.
 
 ## Core loop and principles
