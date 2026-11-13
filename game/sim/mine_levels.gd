@@ -47,13 +47,16 @@ static func level_name(n: int) -> String:
 ## The underground biome of a level (issue #238): a look and a name for each stretch of depth, so the caves
 ## aren't one grey. It follows from the level number alone, so saves need nothing new and a level keeps its look.
 ## Level 1 stays the old workings; a biome decides how a level looks, the family still decides its shape.
-const BIOMES := {"mouth": "Cave mouth", "dripstone": "Dripstone cave", "flooded": "Flooded cavern", "deep": "Deep cave"}
+const BIOMES := {"mouth": "Cave mouth", "dripstone": "Dripstone cave", "flooded": "Flooded cavern", "deep": "Deep cave", "sculk": "Deep dark"}
 const BIOME_NOTES := {
 	"mouth": "Old timbers and torches: people were here once",
 	"dripstone": "Damp rock hung with stalactites",
 	"flooded": "Pools and wet, slippery stone",
 	"deep": "Bare dark stone, far from any daylight",
+	"sculk": "No light at all, and no sound to spare: every block broken is heard, and something wakes",
 }
+## From this level down the caves are the deep dark (issue #409): no torches, and the quiet rule (`Creatures.on_break`).
+const SCULK_FROM := 9
 
 
 static func biome(n: int) -> String:
@@ -61,6 +64,8 @@ static func biome(n: int) -> String:
 		return "mouth"
 	if n <= 3:
 		return "dripstone"
+	if n >= SCULK_FROM:
+		return "sculk"
 	return "flooded" if n <= 5 else "deep"
 
 
@@ -117,6 +122,8 @@ static func ore_count(n: int, ore: String) -> int:
 
 ## Torches on a level: fewer the deeper it is.
 static func torch_count(n: int) -> int:
+	if n >= SCULK_FROM:  # the deep dark has no light (issue #409)
+		return 0
 	return maxi(1, 5 - n)
 
 

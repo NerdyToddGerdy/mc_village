@@ -276,6 +276,14 @@ func _add_sea() -> void:
 
 
 ## The village's finished dock, or {}.
+## The village's finished boatyard, or {} (issue #407): a party needs one to sail.
+func boatyard() -> Dictionary:
+	for s in maps.village.sites:
+		if s.tpl == "boatyard" and s.done:
+			return s
+	return {}
+
+
 func dock() -> Dictionary:
 	for s in maps.village.sites:
 		if s.tpl == "dock" and s.done:
@@ -302,6 +310,8 @@ func _add_site_maps() -> void:
 	if not maps.has(MeadowRoad.ID):  # and the strip of road that leads to it (issue #210)
 		maps[MeadowRoad.ID] = MeadowRoad.build(self)
 		maps[MeadowRoad.ID].known = maps[Meadow.ID].known
+	if not maps.has(SeaRoad.ID):  # the sail from the dock, for places that name it (issue #407)
+		maps[SeaRoad.ID] = SeaRoad.build(self)
 	for sid in Structures.IDS:  # the structure adventures: known once surveyed (Slice 7)
 		if not maps.has(sid):
 			maps[sid] = Structures.build(self, sid)
@@ -2566,7 +2576,7 @@ func _build_job(r: Dictionary, s: Dictionary) -> Job:
 		label = "Building the bench"
 	elif s.tpl == "fireplace":
 		label = "Building the fireplace"
-	elif s.tpl in ["board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher"]:
+	elif s.tpl in ["boatyard", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "portal", "enchanting_workshop", "portal_station", "cache_sensor", "condition", "freight_loader", "dispatcher"]:
 		label = "Building the " + Defs.TEMPLATES[s.tpl].name.to_lower()
 	elif s.tpl == "bridge":
 		label = "Building the bridge"
@@ -3355,6 +3365,7 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			t.alive = false
 			t.des = false
 			_occ_dirty = true
+			Creatures.on_break(self, t.cell)  # the deep dark hears the digging (issue #409)
 			if t.kind == "tree":
 				drop_items(t.cell, "log", t.logs + skill_bonus(r, "lumber"))
 				var saplings := Tuning.SAPLINGS + (1 if rng.randf() < Tuning.SAPLING_EXTRA else 0)
@@ -6108,7 +6119,7 @@ static func from_state(d: Dictionary) -> Sim:
 	s.maps = {}
 	# Maps tick in the order a game makes them, so a loaded game replays as the saved one would have:
 	# the village, the old mine, the road, the meadow, then the levels below the mine as they opened.
-	var order := ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID] + Structures.IDS + [NetherLanding.ID] + NetherRoute.map_ids()
+	var order := ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID, SeaRoad.ID] + Structures.IDS + [NetherLanding.ID] + NetherRoute.map_ids()
 	var ids: Array = d.maps.keys()
 	ids.sort_custom(func(a, b): return [order.find(a) if a in order else 9, MineLevels.level_of(a)] < [order.find(b) if b in order else 9, MineLevels.level_of(b)])
 	for id in ids:

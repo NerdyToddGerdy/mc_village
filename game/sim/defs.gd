@@ -410,6 +410,10 @@ const TEMPLATES := {
 	"enchanting_workshop": {"name": "Enchanting workshop", "size": Vector2i(1, 1), "plot": "library", "stages": [
 		{"name": "Workshop", "verb": "needs", "cost": {"obsidian": 4, "diamond": 2, "plank": 6}},
 	]},
+	# The boatyard (Slice 7, issue #407): a party needs one built to sail out from the dock.
+	"boatyard": {"name": "Boatyard", "size": Vector2i(1, 1), "stages": [
+		{"name": "Boatyard", "verb": "needs", "cost": {"plank": 16, "log": 4, "stick": 4}},
+	]},
 	# The dock (Slice 7, issue #271): runs from the beach out over the sea, walkable once built. A party leaves by it for the coast.
 	"dock": {"name": "Dock", "size": Vector2i(1, Tuning.DOCK_LAND + Tuning.COAST_DEPTH), "walk": true, "stages": [
 		{"name": "Dock", "verb": "needs", "cost": {"plank": 12, "log": 4}},

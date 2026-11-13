@@ -223,7 +223,7 @@ func _party_progress(sim: Sim, ex: Dictionary) -> float:
 		var r := sim.resident(id)
 		if r.is_empty():
 			continue
-		if r.map == Road.ID or r.map == MeadowRoad.ID:
+		if r.map == Road.ID or r.map == MeadowRoad.ID or r.map == SeaRoad.ID:
 			var mp := sim.get_map(r.map)
 			return clampf(r.pos.x / float(maxi(mp.w - 1, 1)), 0.0, 1.0)
 		if r.map == "village":

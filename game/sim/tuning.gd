@@ -59,6 +59,7 @@ const FIGHT_BACK_SLOW := 2.2          ## Anyone but a guard takes this many time
 const CAVE_MOBS_BASE := 2             ## Creatures on Level 2.
 const CAVE_MOBS_PER_LEVEL := 1        ## One more for each level deeper.
 const CAVE_MOBS_MAX := 7
+const NOISE_PER_WAKE := 3             ## Blocks broken in the deep dark before the nearest sleeper wakes (issue #409).
 const CAVE_MOB_REGROW := 240.0        ## Seconds of nobody being there for one creature to come back.
 const IDLE_HOME_AFTER := 20.0              ## Seconds a resident with nothing to do waits before walking home (issue #345).
 const HOME_NEAR := 3                      ## Cells from their house door that count as home.
@@ -76,6 +77,7 @@ const SKIP_MAX_SECS := 600.0            ## Game seconds a skip runs at most, if 
 const AUTOSAVE_SECS := 300.0            ## Seconds of play between autosaves.
 const AUTOSAVE_MIN_SECS := 120.0        ## A game younger than this isn't autosaved, so a fresh one never replaces a real village's.
 # The meadow (Slice 3.5, issues #137, #138). Its herds are laid out in game/sim/meadow.gd.
+const SEA_ROAD_LEN := 76               ## Cells in the sea road, which sets the sail: 75 cells at WALK is 25 s each way (issue #407).
 const MEADOW_ROAD_LEN := 46             ## Cells in the road to the meadow, which sets the walk: 45 cells at WALK is 15 s each way (issues #210, #377).
 const MEADOW_REGROW := {"sheep": 240.0, "cow": 300.0, "pig": 180.0}  ## Seconds for a species to regain one animal.
 const BULL_CHANCE := 0.15               ## Chance hunting a cow gets the hunter hurt by an angry bull (never seriously).

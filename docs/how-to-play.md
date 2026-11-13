@@ -135,7 +135,7 @@ Once the village has **3 residents**, two things start:
 
 **Guards** (and Ada) go after mobs, and anyone else hits back, slowly, when one gets close. Mobs that are left slink away at dawn. What they drop (rotten flesh, bones, arrows, string) lies where they fell, and haulers carry it to a stockpile like anything else.
 
-**In the caves.** From Level 2 down, creatures live in the caves, a different kind in each: slimes in the dripstone caves, drowned in the flooded cavern, husks in the deep cave. They strike anyone who comes near, so armor and a guard in the party matter. A cleared level stays quiet for a while, then they slowly come back while nobody is down there. Level 1 is safe. What they drop (slime balls, nautilus shells, husk dust) joins what the party carries home.
+**In the caves.** From Level 2 down, creatures live in the caves, a different kind in each: slimes in the dripstone caves, drowned in the flooded cavern, husks in the deep cave. They strike anyone who comes near, so armor and a guard in the party matter. A cleared level stays quiet for a while, then they slowly come back while nobody is down there. Level 1 is safe. What they drop (slime balls, nautilus shells, husk dust) joins what the party carries home. From **Level 9** the caves become the **deep dark**: there are **no torches at all**, and it is **quiet**: every third block a party breaks wakes the sleeper nearest the sound (a zombie, standing in for something worse), which then comes for them. Until it wakes they stay asleep, so a party that digs only what it must meets few of them. The site report tells you before you go.
 
 ## Residents
 
@@ -380,6 +380,10 @@ A fourth route leaves the portal landing, through a new gap in its **west** wall
 ## The bastion remnant
 
 A fifth Nether route leaves the landing through a gap in its **west** wall, lower down than the fossil's. **Scout** it and it reveals a **bastion remnant**, a hostile stronghold of the piglins. It is **fight only**: there's no bargaining (the piglin camp is the one that trades). Five **piglin brutes** stand in its halls and **come for anyone who walks in**, and they're tougher than the camp's piglins, so send Guards. A **Gather** mission goes there once it's scouted. It holds five blocks of **gold ore** and three **chests**, each with an enchanted book, and a brute drops gold ingots.
+
+## The boatyard
+
+**Build → Boatyard** (16 planks, 4 logs and 4 sticks, once the coast is open) builds the party's boat. It's needed for places **out on the sea**: a party sails from the dock along the **sea road**, a longer trip (about 25 seconds each way) than the meadow's walk, drawn as open water with the boat's deck. The planner says "Build a boatyard first" until one stands. The first three coastal places (buried treasure, a shipwreck, ocean ruins) are still walked.
 
 ## The coast
 

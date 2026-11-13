@@ -14,6 +14,10 @@ A mine-kind structure is **one entry in `Structures.DEFS`** (`structures.gd`) pl
 4. **A site report:** the old mine's report without its levels, with the table's `told`, `access` and the ores it `gives`, and the walk time of its road.
 5. **Tests:** `test_every_structure` checks each one is well-formed, every block can be dug to, and that it's found, listed, planned and reported; a full trip is tested for the desert well (the strip) and the jungle temple (the road to the mine). The map is added to a loaded save by `Sim._add_site_maps`, so no save step is needed.
 
+## Boats (#407)
+
+A **boatyard** (`Defs.TEMPLATES.boatyard`, a 1x1 station, unlocked by "coast") and a **sea road** (`sea_road.gd`, kind "walk", `Tuning.SEA_ROAD_LEN` cells, no trees so adding it moves no ids). A coastal structure that names `"road": SeaRoad.ID` is sailed to: `RoadWork`, `Travel.trip_time` and the view treat the sea road as they do the meadow's strip, and `Packing.plan_problems` asks for a boatyard (`Sim.boatyard()`). The older coastal places keep the meadow's strip. Old saves get the map on load: no save bump.
+
 ## The coast (#271)
 
 Provisional decisions, made to build it (#271 listed them as open):
@@ -82,6 +86,10 @@ A `folk` entry in `Structures.DEFS` (`another_village`, found after the geode), 
 ## The stronghold's portal (#411)
 
 `Structures.DEFS.stronghold.portal` is the cell of a **portal frame** block (`ore` "end_portal", gives one `end_stone`), added by `Structures.add_portal` when the map is built and, for a save from before, on loading. It is **hidden until every creature in the stronghold is down** (`Structures.reveal_portal`, called from `Creatures._down`), then it is an ordinary block the plan can ask for (the stronghold's list has an "End stone" row). Mining it sets `stats.end_open`, which the End adventure (#412) reads. **Provisional:** there is no key item yet (an eye crafted from the Nether's blaze rod and quartz is the likely one); clearing the place is the clue. No save bump: the frame is added on load, `end_open` is a key of `stats`.
+
+## The deep dark (#409)
+
+`MineLevels.biome` gives **"sculk"** (shown as "Deep dark") from `MineLevels.SCULK_FROM` (level 9) down: no torches (`torch_count` is 0), the darkest rock, and the **quiet rule**: `Creatures.on_break` counts blocks broken on the level (`regrow.noise`, saved with the map) and each `Tuning.NOISE_PER_WAKE` wakes the sleeper nearest the sound (`angry`, which makes it come). Its sleepers are zombies (`CAVE_SPECIES.sculk`), standing in until #30. This is the biome the ancient city (#410) sits at the bottom of. No save bump: biomes follow the level number and the counter is in the existing `regrow`.
 
 ## Next
 

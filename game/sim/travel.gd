@@ -11,7 +11,12 @@ static func route_sign(sim: Sim) -> Vector2i:
 ## Seconds on the way to `to`, or home from it: the road to the meadow, or the road to the mine.
 static func trip_time(sim: Sim, to: String) -> float:
 	var dest: String = sim.expedition.get("dest", "") if to == "village" else to
-	return MeadowRoad.walk_time() if Adventures.road_of(dest) == MeadowRoad.ID else sim.route_walk_time()
+	match Adventures.road_of(dest):
+		MeadowRoad.ID:
+			return MeadowRoad.walk_time()
+		SeaRoad.ID:
+			return SeaRoad.walk_time()
+	return sim.route_walk_time()
 
 
 ## Whether a party member is on their way: walking to the signpost to leave the village, or to the

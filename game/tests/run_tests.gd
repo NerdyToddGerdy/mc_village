@@ -34,6 +34,7 @@ func _init() -> void:
 		"test_storehouse_grows",
 		"test_composter_plots",
 		"test_cave_creatures",
+		"test_the_deep_dark",
 		"test_day_and_night_clock",
 		"test_night_waves",
 		"test_the_iron_golem",
@@ -46,6 +47,7 @@ func _init() -> void:
 		"test_village_torches",
 		"test_desert_well",
 		"test_the_coast",
+		"test_the_boatyard",
 		"test_coastal_trip",
 		"test_dungeon_trip",
 		"test_the_stronghold_portal",
@@ -1663,6 +1665,35 @@ func test_composter_plots() -> void:
 	check(loaded.farm.values().any(func(c): return c.get("owner", 0) == c2.id), "owners are saved")
 
 
+## Issue #409: the deepest biome has no light, and every few blocks broken wake a sleeper.
+func test_the_deep_dark() -> void:
+	Creatures.cave_mobs = true
+	var sim := Sim.new_game()
+	check(MineLevels.torch_count(8) >= 1 and MineLevels.torch_count(MineLevels.SCULK_FROM) == 0, "the deep dark has no torches; the levels above keep theirs")
+	var m := MineLevels.build(sim, MineLevels.SCULK_FROM)
+	check(m.torches.is_empty() and m.creatures.size() > 0 and m.creatures.all(func(x): return x.species == "zombie" and not x.angry and not x.get("hunt", false)), "a deep-dark level has sleepers and no torches")
+	sim.maps[m.id] = m
+	m.known = true
+	sim.use_map(m.id)
+	for i in Tuning.NOISE_PER_WAKE - 1:
+		Creatures.on_break(sim, m.entrance)
+	check(m.creatures.all(func(x): return not x.angry), "a little digging wakes nothing")
+	Creatures.on_break(sim, m.entrance)
+	check(m.creatures.filter(func(x): return x.angry).size() == 1, "the %dth block wakes one" % Tuning.NOISE_PER_WAKE)
+	var ok := true
+	var upper := MineLevels.build(sim, 6)
+	sim.maps[upper.id] = upper
+	sim.use_map(upper.id)
+	for i in 10:
+		Creatures.on_break(sim, upper.entrance)
+	check(upper.creatures.all(func(x): return not x.angry), "above it the quiet rule doesn't apply")
+	sim.use_map("village")
+	m.visited = true
+	var rep := sim.site_report(m.id)
+	check(rep.biome == "Deep dark" and rep.hazards.any(func(h): return h.contains("wake a sleeper")), "the report names the biome and the rule")
+	Creatures.cave_mobs = false
+
+
 ## Issue #241: the caves have creatures from Level 2, each biome its own, and they come back slowly.
 func test_cave_creatures() -> void:
 	Creatures.cave_mobs = true
@@ -2382,7 +2413,7 @@ func send_to_mine(sim: Sim, r: Dictionary) -> void:
 ## tallies leave out what lies on another map.
 func test_residents_only_work_on_their_own_map() -> void:
 	var sim := Sim.new_game()
-	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID] + Structures.IDS + [NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old caves, the road between them, the meadow and its road, and the Nether landing, with the village current")
+	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID, SeaRoad.ID] + Structures.IDS + [NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old caves, the road between them, the meadow and its road, and the Nether landing, with the village current")
 	var ada: Dictionary = sim.residents[0]
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
 	check(ada.map == "village" and tomas.map == "village", "residents start on the village map")
@@ -3423,8 +3454,8 @@ func test_ride_the_line() -> void:
 ## levels come from the seed, each from a pattern family the mine hasn't used yet, never the same
 ## family twice in a row; deeper is richer and riskier.
 func test_cave_biomes() -> void:
-	var order := [1, 2, 3, 4, 5, 6, 9].map(func(n): return MineLevels.biome(n))
-	check(order == ["mouth", "dripstone", "dripstone", "flooded", "flooded", "deep", "deep"], "the caves' biomes follow depth: mouth, dripstone, flooded, deep (%s)" % [order])
+	var order := [1, 2, 3, 4, 5, 6, 8, 9, 12].map(func(n): return MineLevels.biome(n))
+	check(order == ["mouth", "dripstone", "dripstone", "flooded", "flooded", "deep", "deep", "sculk", "sculk"], "the caves' biomes follow depth: mouth, dripstone, flooded, deep, then the deep dark (%s)" % [order])
 	check(MineLevels.BIOMES.keys().all(func(k): return MineLevels.BIOME_NOTES.has(k)), "every biome has a note for the site report")
 	var sim := Sim.new_game()
 	sim.get_map(OldMine.ID).visited = true
@@ -3803,6 +3834,28 @@ func test_the_adventures_registry() -> void:
 
 ## Slice 7, issue #271: a new game has a sea along its south edge. It can't be walked, built on, painted or claimed; a dock runs out over it and
 ## opens the coast to the Cartographer, which finds the coastal places and only those; an old village has no sea.
+## The boatyard and the sea road (issue #407).
+func test_the_boatyard() -> void:
+	var sim := Sim.new_game()
+	var sr := sim.get_map(SeaRoad.ID)
+	check(sr.kind == "walk" and sr.w == Tuning.SEA_ROAD_LEN and not sr.known and sr.trees.is_empty(), "the sea road is an empty strip, unknown until a place on it is found")
+	check(SeaRoad.walk_time() > MeadowRoad.walk_time(), "and a sail is longer than the meadow's walk (%.0f s)" % SeaRoad.walk_time())
+	check(RoadWork.road_ends(SeaRoad.ID) == [SeaRoad.VILLAGE_END, SeaRoad.far_end()], "its ends are the dock's and the place's")
+	check(sim.boatyard().is_empty(), "no boatyard yet")
+	var spot := open_rect(sim, Vector2i(3, 3))
+	var by := sim.place_site("boatyard", spot.position)
+	check(not by.is_empty() and sim.boatyard().is_empty(), "a placed one is only a plan")
+	by.stage = 1
+	by.done = true
+	sim._on_site_done(by)
+	check(not sim.boatyard().is_empty(), "built, it counts")
+	var old := Sim.from_state(sim.save_state())
+	var data := sim.save_state()
+	data.maps.erase(SeaRoad.ID)
+	check(Sim.from_state(data).get_map(SeaRoad.ID).w == Tuning.SEA_ROAD_LEN, "an older save gets the sea road on loading")
+	check(old.boatyard().get("tpl", "") == "boatyard", "and the boatyard is saved")
+
+
 func test_the_coast() -> void:
 	Survey.enabled = true
 	var sim := Sim.new_game()

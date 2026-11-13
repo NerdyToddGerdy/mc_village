@@ -939,6 +939,7 @@ func _key(e: InputEventKey) -> void:
 		"enchanting_workshop": start_placing("enchanting_workshop")
 		"portal_station": start_placing("portal_station")
 		"dock": start_placing("dock")
+		"boatyard": start_placing("boatyard")
 		"cache_sensor", "condition", "freight_loader", "dispatcher": start_placing(keys.action_for(e))
 		"redstone_overlay": toggle_redstone_overlay()
 		"minimap": _hud.toggle_minimap()
@@ -1242,7 +1243,7 @@ func show_craft_bench(i: int) -> void:
 
 
 ## Orders that only make sense in the village: painting stockpiles and farms, and placing buildings.
-const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "village_pen", "storehouse", "portal", "enchanting_workshop", "portal_station", "dock", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
+const VILLAGE_ONLY := ["area", "room", "plots", "build", "claim", "bench", "house", "fireplace", "boatyard", "board", "chopping_block", "mason_bench", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table", "village_pen", "storehouse", "portal", "enchanting_workshop", "portal_station", "dock", "cache_sensor", "condition", "freight_loader", "dispatcher", "keep"]
 ## And at the meadow: painting pens (issue #139).
 const MEADOW_ONLY := ["pen"]
 
@@ -2005,6 +2006,8 @@ func known_maps() -> Array:
 			return 2.05
 		if id == MeadowRoad.ID:
 			return 2.15
+		if id == SeaRoad.ID:
+			return 2.16
 		return 2.0 + Sim.ADVENTURES.find(id) / 10.0 if id in Sim.ADVENTURES else 2.0
 	out.sort_custom(func(a, b2): return rank.call(a) < rank.call(b2))
 	return out
