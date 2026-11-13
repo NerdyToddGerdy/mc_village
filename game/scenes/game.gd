@@ -79,6 +79,12 @@ const WATCHED_SITES := 8  ## Blueprints and stuck buildings whose trees in front
 ## isn't scaled. Saved beside the key bindings, so tests use their own settings folder.
 const UI_SCALES := [0.9, 1.0, 1.15, 1.3]
 var ui_scale := 1.0
+const DECK_HEIGHT := 800  ## A screen this short or shorter (the Steam Deck's 1280x800, or 800x1280 held upright) starts at the large interface (issue #422).
+
+
+## The interface size a game starts at on a screen with no saved choice: large on a Deck-sized screen, so the text is readable on its 7 inches.
+static func default_ui_scale(screen: Vector2i) -> float:
+	return 1.3 if mini(screen.x, screen.y) <= DECK_HEIGHT else 1.0
 
 
 func _ui_settings_path() -> String:
@@ -87,8 +93,8 @@ func _ui_settings_path() -> String:
 
 func _load_ui_scale() -> void:
 	var cfg := ConfigFile.new()
-	var v = cfg.get_value("ui", "scale", 1.0) if cfg.load(_ui_settings_path()) == OK else 1.0
-	ui_scale = v if v is float and UI_SCALES.has(v) else 1.0
+	var v = cfg.get_value("ui", "scale", null) if cfg.load(_ui_settings_path()) == OK and cfg.has_section_key("ui", "scale") else null
+	ui_scale = v if v is float and UI_SCALES.has(v) else default_ui_scale(DisplayServer.window_get_size() if not DisplayServer.get_name() == "headless" else Vector2i(1920, 1080))
 	for a in OS.get_cmdline_user_args():  # --ui-scale=1.15, for checking the layout in screenshots
 		if a.begins_with("--ui-scale="):
 			ui_scale = a.get_slice("=", 1).to_float()

@@ -932,6 +932,13 @@ func _key(game: Game, code: Key, shift := false) -> void:
 	game._unhandled_input(e)
 
 
+## Issue #422: a screen as small as the Steam Deck's starts at the large interface; a bigger one doesn't.
+func _test_deck_scale() -> void:
+	check(Game.default_ui_scale(Vector2i(1280, 800)) == 1.3 and Game.default_ui_scale(Vector2i(800, 1280)) == 1.3, "a Deck-sized screen, either way up, starts at the large interface")
+	check(Game.default_ui_scale(Vector2i(1920, 1080)) == 1.0 and Game.default_ui_scale(Vector2i(1280, 720)) == 1.3, "a bigger one starts at normal (and a 720p one at large)")
+	check(Game.UI_SCALES.has(Game.default_ui_scale(Vector2i(1280, 800))), "and the choice is one the menu offers")
+
+
 ## Issue #8: keys can be rebound on the Controls page, with conflict warnings and a reset.
 ## The keycaps on a toolbar menu's row: its number, then its direct key if it has one.
 func _menu_caps(game: Game, menu: String, row: String) -> Array:
@@ -2340,6 +2347,7 @@ func _initialize() -> void:
 	await _test_fading(game)
 	_test_smooth_movement(game)
 	await _test_rebinding(game)
+	_test_deck_scale()
 	_test_order_menus(game)
 	_test_menu_button(game)
 	await _test_work_area_painting(game)
