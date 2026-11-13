@@ -387,9 +387,13 @@ A new village has a **sea** along its south edge: three rows of water. It can't 
 
 Once the expedition board is built, **Build → Dock** (12 planks and 4 logs) lays a dock from the beach out over the water. There's only one, it can't be moved, and its far end is where a coastal party leaves from and comes home to. With a dock, the Cartographer can survey the **south and south-west sectors**, which find only coastal places (**buried treasure**, a **shipwreck** and **ocean ruins**, in that order); the other sectors find only places on land. Coastal trips work like the other structures: pack pickaxes and meals, mark what you want back, and the party digs from its packs. The ocean ruins' lapis wants an iron pickaxe. The trip itself is a walk along the same strip as the meadow's (about 15 s each way) for now: there are no boats yet.
 
+## Another village
+
+A small village of its own folk, to the west by the meadow's road. It's friendly: no guard needed, and nothing there to fear. The party digs a little coal, and **one villager is invited home** on each visit: they walk home behind the party, and **take a free bed** like any traveller (the planner warns when there's no free bed). It adds to the travellers who walk in on their own; it doesn't replace them. There are only **four** villagers, so it's four visits' worth. There's no trading yet.
+
 ## Structures
 
-After the old caves and the ruined portal, each further **Cartographer's survey** that succeeds finds the next **structure**: a desert well, a desert temple, a jungle temple, a fossil site, some trail ruins and a geode, in that order. A found structure gets a red pin on the world map and a row on the expedition board, with what's said of it, what it holds and the walk there.
+After the old caves and the ruined portal, each further **Cartographer's survey** that succeeds finds the next **structure**: a desert well, a desert temple, a jungle temple, a fossil site, some trail ruins, a geode and **another village**, in that order. A found structure gets a red pin on the world map and a row on the expedition board, with what's said of it, what it holds and the walk there.
 
 All of them work like the old caves: pack pickaxes and meals, mark what you want back, and the party digs from its packs. What's different is where they are, what they hold and what goes wrong:
 

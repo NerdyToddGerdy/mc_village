@@ -177,6 +177,7 @@ static func _finish_return(sim: Sim) -> void:
 		sim.expedition_board().report = report
 	if ex.dest == Meadow.ID and ex.get("cargo", {}).get("wool", 0) > 0:
 		sim.stats.meadow_wool = true  # a founding goal (issue #182)
+	Visits.home(sim, ex)
 	sim.expedition = {}
 	sim.stats.expeditions = sim.stats.get("expeditions", 0) + 1
 	sim.rev += 1
@@ -207,6 +208,8 @@ static func expedition_report(sim: Sim, ex: Dictionary) -> Array:
 	lines.append(cost)
 	if not ex.get("abandoned", []).is_empty():  # issue #158
 		lines.append("Left behind: " + ", ".join(ex.abandoned))
+	if not ex.get("invited", []).is_empty():  # issue #253
+		lines.append("Invited home: " + ", ".join(ex.invited))
 	if not ex.get("traded", []).is_empty():  # issue #156
 		lines.append("Traded: " + "; ".join(ex.traded))
 	if ex.get("cart", false) and ex.has("road_out") and ex.has("road_home"):  # issue #124

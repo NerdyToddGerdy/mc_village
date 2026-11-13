@@ -114,6 +114,9 @@ static func _site_job(sim: Sim, r: Dictionary):
 	var fj = sim._fight_job(r, c)  # a guard fights what threatens the party (issue #151)
 	if fj != null:
 		return fj
+	var vj = Visits.invite_job(sim, r, c)  # a village of folk: someone is invited home (issue #253)
+	if vj != null:
+		return vj
 	if sim.expedition.get("rescue", false):  # a rescue party looks for the stranded (issue #158)
 		return sim._rescue_job(r, c)
 	if sim.m.id == Meadow.ID:

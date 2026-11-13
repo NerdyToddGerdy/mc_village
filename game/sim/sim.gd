@@ -1469,6 +1469,8 @@ func plan_warnings(plan: Dictionary) -> Array:
 			out.append("No sword for %s" % r.name)
 	if Adventures.def(plan.dest).get("fight", false) and not plan.party.any(func(id): return resident(id).get("role", "") in ["guard", "all"]):  # a structure with creatures in it (Slice 7)
 		out.append("No guard in the party: %s" % Structures.DEFS[plan.dest].told.split(".")[0].to_lower() if Structures.is_structure(plan.dest) else "someone must fight")
+	if Visits.is_village(plan.dest) and free_house() == null:
+		out.append("No free bed: whoever is invited home has nowhere to sleep yet")  # issue #253
 	if plan.get("objective", "") == "fortress" and not plan.party.any(func(id): return resident(id).get("role", "") in ["guard", "all"]):
 		out.append("No guard in the party: a fortress has blazes and skeletons")  # issue #157
 	return out
@@ -2885,6 +2887,8 @@ func _run_step(r: Dictionary, j: Job, st: Dictionary):
 			var at = on_map(up, nearest_walkable.bind(MineLevels.door_front(maps[up])))
 			move_to_map(r, up, at if at != null else maps[up].entrance)
 			return true
+		"invite":  # a villager is asked home (Slice 7, issue #253)
+			return Visits.invite(self, r, st.folk)
 		"at_door":  # the party has reached the door at the end of the level
 			if m.door_state == "closed":
 				_find_door(r)
@@ -4424,7 +4428,7 @@ func _step_arrivals() -> void:
 		return
 	if arrival_at < 0:
 		if free_house() != null:
-			arrival_at = tick + int(Tuning.ARRIVAL_DELAY * Tuning.TPS)
+			arrival_at = tick + int((Tuning.GUEST_DELAY if not stats.get("guests", []).is_empty() else Tuning.ARRIVAL_DELAY) * Tuning.TPS)
 	elif tick >= arrival_at:
 		arrival_at = -1
 		if free_house() != null:
@@ -4438,7 +4442,8 @@ func _arrive() -> void:
 		spawn = nearest_walkable(spawn)
 	var n := residents.size() - 1
 	var who: Array = TRAVELERS[n % TRAVELERS.size()]
-	var t := add_resident(who[0] if n < TRAVELERS.size() else "%s %d" % [who[0], n / TRAVELERS.size() + 1], who[1], spawn)
+	var guest := Visits.next_guest(self)  # someone invited home from another village comes first (issue #253)
+	var t := add_resident(guest if guest != "" else (who[0] if n < TRAVELERS.size() else "%s %d" % [who[0], n / TRAVELERS.size() + 1]), who[1], spawn)
 	var skill: String = Defs.SKILL_POOL[rng.randi_range(0, Defs.SKILL_POOL.size() - 1)]
 	if n == 0:
 		skill = "lumber"  # the first traveler fells trees from the chopping block the founding ends on (issue #182)

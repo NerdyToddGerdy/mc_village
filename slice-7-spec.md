@@ -67,6 +67,10 @@ A structure uses an existing road until it needs its own: the meadow's strip (a 
 
 `Survey.FINDS` is an ordered list: each successful survey reveals the next place, so the order is the order places are found in. The two on the road to the mine take its longer walk.
 
+## Another village (#253)
+
+A `folk` entry in `Structures.DEFS` (`another_village`, found after the geode), friendly: four villagers (`V`, species `villager`, named, no hostility) and a little coal. The new `visits.gd` does the rest: a party member walks up to the nearest villager and **invites** them (`invite` job and op), up to `Tuning.INVITES_PER_VISIT` (1) per visit; on the party's return the names go into `stats.guests`, and `_arrive` takes the next guest by name, after `Tuning.GUEST_DELAY` instead of the usual delay, when a house has a free bed. **Provisional rules, decided by default, to be confirmed:** no trade and no currency (still open, with #264's trade); recruiting adds to the free-bed arrivals rather than replacing them (#24); the folk are finite. No save bump: `guests` is a key of `stats` and `invited` one of the expedition.
+
 ## Next
 
-The rest of group A of #242 need something the mine kind lacks: **another village** (friendly: trading and recruiting, #253). Then the structures that need combat (group B), then the late ones. The ruined portal (#243) is already a survey find that unlocks the village's own portal rather than an adventure map.
+What's left of group A of #242 needs a trade system and currency (open). Then the structures that need combat (group B), then the late ones. The ruined portal (#243) is already a survey find that unlocks the village's own portal rather than an adventure map.
