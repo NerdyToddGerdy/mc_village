@@ -3353,6 +3353,7 @@ func _finish_work(r: Dictionary, st: Dictionary):
 			t.alive = false
 			t.des = false
 			_occ_dirty = true
+			Creatures.on_break(self, t.cell)  # the deep dark hears the digging (issue #409)
 			if t.kind == "tree":
 				drop_items(t.cell, "log", t.logs + skill_bonus(r, "lumber"))
 				var saplings := Tuning.SAPLINGS + (1 if rng.randf() < Tuning.SAPLING_EXTRA else 0)
