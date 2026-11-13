@@ -46,6 +46,7 @@ func _init() -> void:
 		"test_village_torches",
 		"test_desert_well",
 		"test_the_coast",
+		"test_the_boatyard",
 		"test_coastal_trip",
 		"test_dungeon_trip",
 		"test_another_village",
@@ -2381,7 +2382,7 @@ func send_to_mine(sim: Sim, r: Dictionary) -> void:
 ## tallies leave out what lies on another map.
 func test_residents_only_work_on_their_own_map() -> void:
 	var sim := Sim.new_game()
-	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID] + Structures.IDS + [NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old caves, the road between them, the meadow and its road, and the Nether landing, with the village current")
+	check(sim.maps.keys() == ["village", OldMine.ID, Road.ID, Meadow.ID, MeadowRoad.ID, SeaRoad.ID] + Structures.IDS + [NetherLanding.ID] + NetherRoute.map_ids() and sim.map_id == "village", "a new game has the village, the old caves, the road between them, the meadow and its road, and the Nether landing, with the village current")
 	var ada: Dictionary = sim.residents[0]
 	var tomas := sim.add_resident("Tomas", Sim.TRAVELERS[0][1], Sim.rcell(ada) + Vector2i(1, 0))
 	check(ada.map == "village" and tomas.map == "village", "residents start on the village map")
@@ -3802,6 +3803,28 @@ func test_the_adventures_registry() -> void:
 
 ## Slice 7, issue #271: a new game has a sea along its south edge. It can't be walked, built on, painted or claimed; a dock runs out over it and
 ## opens the coast to the Cartographer, which finds the coastal places and only those; an old village has no sea.
+## The boatyard and the sea road (issue #407).
+func test_the_boatyard() -> void:
+	var sim := Sim.new_game()
+	var sr := sim.get_map(SeaRoad.ID)
+	check(sr.kind == "walk" and sr.w == Tuning.SEA_ROAD_LEN and not sr.known and sr.trees.is_empty(), "the sea road is an empty strip, unknown until a place on it is found")
+	check(SeaRoad.walk_time() > MeadowRoad.walk_time(), "and a sail is longer than the meadow's walk (%.0f s)" % SeaRoad.walk_time())
+	check(RoadWork.road_ends(SeaRoad.ID) == [SeaRoad.VILLAGE_END, SeaRoad.far_end()], "its ends are the dock's and the place's")
+	check(sim.boatyard().is_empty(), "no boatyard yet")
+	var spot := open_rect(sim, Vector2i(3, 3))
+	var by := sim.place_site("boatyard", spot.position)
+	check(not by.is_empty() and sim.boatyard().is_empty(), "a placed one is only a plan")
+	by.stage = 1
+	by.done = true
+	sim._on_site_done(by)
+	check(not sim.boatyard().is_empty(), "built, it counts")
+	var old := Sim.from_state(sim.save_state())
+	var data := sim.save_state()
+	data.maps.erase(SeaRoad.ID)
+	check(Sim.from_state(data).get_map(SeaRoad.ID).w == Tuning.SEA_ROAD_LEN, "an older save gets the sea road on loading")
+	check(old.boatyard().get("tpl", "") == "boatyard", "and the boatyard is saved")
+
+
 func test_the_coast() -> void:
 	Survey.enabled = true
 	var sim := Sim.new_game()

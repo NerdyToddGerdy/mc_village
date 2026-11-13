@@ -381,6 +381,10 @@ A fourth route leaves the portal landing, through a new gap in its **west** wall
 
 A fifth Nether route leaves the landing through a gap in its **west** wall, lower down than the fossil's. **Scout** it and it reveals a **bastion remnant**, a hostile stronghold of the piglins. It is **fight only**: there's no bargaining (the piglin camp is the one that trades). Five **piglin brutes** stand in its halls and **come for anyone who walks in**, and they're tougher than the camp's piglins, so send Guards. A **Gather** mission goes there once it's scouted. It holds five blocks of **gold ore** and three **chests**, each with an enchanted book, and a brute drops gold ingots.
 
+## The boatyard
+
+**Build → Boatyard** (16 planks, 4 logs and 4 sticks, once the coast is open) builds the party's boat. It's needed for places **out on the sea**: a party sails from the dock along the **sea road**, a longer trip (about 25 seconds each way) than the meadow's walk, drawn as open water with the boat's deck. The planner says "Build a boatyard first" until one stands. The first three coastal places (buried treasure, a shipwreck, ocean ruins) are still walked.
+
 ## The coast
 
 A new village has a **sea** along its south edge: three rows of water. It can't be walked, built on, farmed or made a stockpile, and the south edge can't be claimed, so the village grows north, east and west. A village founded before this keeps its land and has no sea.

@@ -14,6 +14,10 @@ A mine-kind structure is **one entry in `Structures.DEFS`** (`structures.gd`) pl
 4. **A site report:** the old mine's report without its levels, with the table's `told`, `access` and the ores it `gives`, and the walk time of its road.
 5. **Tests:** `test_every_structure` checks each one is well-formed, every block can be dug to, and that it's found, listed, planned and reported; a full trip is tested for the desert well (the strip) and the jungle temple (the road to the mine). The map is added to a loaded save by `Sim._add_site_maps`, so no save step is needed.
 
+## Boats (#407)
+
+A **boatyard** (`Defs.TEMPLATES.boatyard`, a 1x1 station, unlocked by "coast") and a **sea road** (`sea_road.gd`, kind "walk", `Tuning.SEA_ROAD_LEN` cells, no trees so adding it moves no ids). A coastal structure that names `"road": SeaRoad.ID` is sailed to: `RoadWork`, `Travel.trip_time` and the view treat the sea road as they do the meadow's strip, and `Packing.plan_problems` asks for a boatyard (`Sim.boatyard()`). The older coastal places keep the meadow's strip. Old saves get the map on load: no save bump.
+
 ## The coast (#271)
 
 Provisional decisions, made to build it (#271 listed them as open):

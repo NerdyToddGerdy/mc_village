@@ -1219,7 +1219,7 @@ func _refresh_maps(sim: Sim) -> void:
 		if party.is_empty():
 			continue
 		line = "Party at the %s: %s" % [sim.get_map(id).name.to_lower(), _party_doing(party)]
-		if id == Road.ID or id == MeadowRoad.ID:  # a party walking the road, or villagers out working on it (issues #118, #119)
+		if id == Road.ID or id == MeadowRoad.ID or id == SeaRoad.ID:  # a party walking the road, or villagers out working on it (issues #118, #119)
 			var walking: Array = party.filter(func(r): return sim.on_road(r))
 			line = "On the road: %s" % _party_doing(party)
 			if not walking.is_empty():
