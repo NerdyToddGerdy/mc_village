@@ -6592,7 +6592,7 @@ func test_mission_types() -> void:
 	sim.get_map(NetherLanding.ID).known = true
 	var dests := func(o: String) -> Array: return sim.objective_destinations(o).map(func(d): return d.dest + ":" + d.route)
 	check(dests.call("survey") == ["nether_landing:"] and dests.call("build") == ["nether_landing:"], "survey and build can use the landing")
-	check(dests.call("scout") == ["nether_landing:quartz", "nether_landing:piglin", "nether_landing:fortress", "nether_landing:fossil"], "scout offers the four unscouted routes")
+	check(dests.call("scout") == ["nether_landing:quartz", "nether_landing:piglin", "nether_landing:fortress", "nether_landing:fossil", "nether_landing:bastion"], "scout offers the five unscouted routes")
 	for o in ["gather", "trade", "fortress", "rescue"]:
 		check(dests.call(o).is_empty() and sim.objective_why_none(o) != "", "%s has no valid destination yet, and explains why (%s)" % [o, sim.objective_why_none(o)])
 	check(sim.objective_why_none("gather").contains("scout the route to the quartz site"), "gather says to scout the quartz route first")
@@ -6609,7 +6609,7 @@ func test_mission_types() -> void:
 	# What a scout plan lists is only what it can use: a scouted route drops out.
 	sim.get_map(NetherRoute.ROUTES.quartz.id).surveyed = true
 	sim.get_map("nether_quartz").known = true
-	check(dests.call("scout") == ["nether_landing:piglin", "nether_landing:fortress", "nether_landing:fossil"], "a scouted route drops off the scout list")
+	check(dests.call("scout") == ["nether_landing:piglin", "nether_landing:fortress", "nether_landing:fossil", "nether_landing:bastion"], "a scouted route drops off the scout list")
 	check(dests.call("gather") == ["nether_quartz:"] and dests.call("trade").is_empty() and dests.call("fortress").is_empty(), "the quartz site can be gathered from; the piglins and fortress still can't")
 	var gather := sim.nether_plan("gather")
 	check(gather.dest == "nether_quartz" and gather.target == {"item": "quartz", "n": 8} and gather.objective == "gather" and gather.picks == 1, "a gather plan for the quartz site wants 8 quartz, with a spare pickaxe")
