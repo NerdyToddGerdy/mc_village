@@ -1,0 +1,70 @@
+name: Linux build
+
+# Exports the game for Linux, which is also what runs on the Steam Deck (issue #423). Every pull request builds it, so a change that breaks
+# the export shows up before it reaches main; the build is kept as an artifact for a few days, to copy to a Deck and play.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Export for Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GODOT_VERSION: 4.7.2
+    defaults:
+      run:
+        working-directory: game
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot and its Linux templates
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64-linux-templates
+
+      - name: Download Godot ${{ env.GODOT_VERSION }} and its Linux templates
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        working-directory: .
+        run: |
+          mkdir -p ~/godot
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          curl -fsSL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot
+          mv ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ~/godot/godot
+          chmod +x ~/godot/godot
+          # The templates archive holds every platform; only the Linux ones are kept.
+          curl -fsSL -o /tmp/templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          dest=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mkdir -p "$dest"
+          unzip -q -j /tmp/templates.tpz 'templates/linux_*' 'templates/version.txt' -d "$dest"
+          ls "$dest"
+
+      - name: Import project
+        run: timeout 300 ~/godot/godot --headless --path . --import
+
+      - name: Export
+        run: |
+          mkdir -p ../build/linux
+          timeout 300 ~/godot/godot --headless --path . --export-release "Linux" ../build/linux/block-village.x86_64
+          test -f ../build/linux/block-village.x86_64
+          ls -la ../build/linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: block-village-linux
+          path: build/linux
+          retention-days: 7
