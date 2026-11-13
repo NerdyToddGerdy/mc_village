@@ -10,11 +10,11 @@ const SAVES_NOTE_WEB := "Saves are kept in this browser only. Clearing site data
 
 const FIXED_ROWS := {
 	"Orders": [["Shift-drag", "With Mine: trees only"], ["Alt-drag", "With Mine: boulders only (Option on a Mac)"],
-		["Esc", "Cancel the current order"]],
+		["Esc", "Cancel the current order"], ["Controller A, X, B", "Left click, right click, Esc"]],
 	"Residents": [["Click", "Select a resident, tree, boulder or building"], ["Shift-drag", "Select several residents"],
 		["Right-click a tree, boulder or animal", "Its orders in a ring: click, 1–4, or drag and let go. Esc closes"],
 		["Right-click the ground", "Walk the selected residents there"], ["Shift + right-click", "Queue an order after their current one, skipping the ring"]],
-	"Time and camera": [["Drag", "Pan the map (middle-drag too)"], ["Wheel", "Zoom (pinch too)"]],
+	"Time and camera": [["Drag", "Pan the map (middle-drag too)"], ["Wheel", "Zoom (pinch too)"], ["Controller sticks", "Left stick pans, right stick moves the cursor, triggers zoom"]],
 	"Game": [["Esc", "Open the menu"]],
 }
 
@@ -30,6 +30,7 @@ var _auto = null            ## The autosave's label, or null (issue #295).
 
 var _box := VBoxContainer.new()
 var listening := ""       ## Action waiting for its new key on the Controls page.
+var listening_pad := false  ## ... for its new controller button (issue #421).
 
 
 func _ready() -> void:
@@ -149,24 +150,32 @@ func _render_keys() -> void:
 	for g in groups:
 		list.add_child(hud.label(g, true, Palette.CHALK, Palette.BODY))
 		var grid := GridContainer.new()
-		grid.columns = 3
+		grid.columns = 5
 		grid.add_theme_constant_override("h_separation", 12)
 		for a in KeyBindings.ACTIONS:
 			if a[1] != g:
 				continue
 			var waiting: bool = listening == a[0]
-			var key_label := hud.label("Press a key…" if waiting else k.text(a[0]), true, Palette.YELLOW if waiting or k.keys[a[0]].is_empty() else Palette.CHALK, Palette.BODY)
+			var key_label := hud.label("Press a key…" if waiting and not listening_pad else k.text(a[0]), true, Palette.YELLOW if waiting or k.keys[a[0]].is_empty() else Palette.CHALK, Palette.BODY)
 			key_label.custom_minimum_size = Vector2(110, 0)
 			grid.add_child(key_label)
+			var pad_label := hud.label("Press a button…" if waiting and listening_pad else k.pad_text(a[0]), true, Palette.YELLOW if waiting and listening_pad else Palette.CHALK_DIM, Palette.BODY)
+			pad_label.custom_minimum_size = Vector2(90, 0)
+			grid.add_child(pad_label)
 			var name := hud.label(a[2], false, Palette.CHALK, Palette.BODY)
 			name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			grid.add_child(name)
-			var change := hud.button("Cancel" if waiting else "Change", func(): _listen(a[0]), "Secondary")
+			var change := hud.button("Cancel" if waiting and not listening_pad else "Change", func(): _listen(a[0]), "Secondary")
 			change.custom_minimum_size = Vector2(80, 30)
 			grid.add_child(change)
+			var pad_change := hud.button("Cancel" if waiting and listening_pad else "Button", func(): _listen(a[0], true), "Secondary")
+			pad_change.custom_minimum_size = Vector2(80, 30)
+			grid.add_child(pad_change)
 		for row in FIXED_ROWS.get(g, []):
 			grid.add_child(hud.label(row[0], true, Palette.CHALK_DIM, Palette.BODY))
+			grid.add_child(Control.new())
 			grid.add_child(hud.label(row[1], false, Palette.CHALK_DIM, Palette.BODY))
+			grid.add_child(Control.new())
 			grid.add_child(Control.new())
 		list.add_child(grid)
 	var scroll := ScrollContainer.new()
@@ -176,7 +185,7 @@ func _render_keys() -> void:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_box.add_child(scroll)
 	if listening != "":
-		_box.add_child(hud.label("Press the new key for “%s”. Esc cancels." % KeyBindings.label_of(listening), false, Palette.YELLOW, Palette.BODY, true))
+		_box.add_child(hud.label(("Press the new button for “%s”. B cancels." if listening_pad else "Press the new key for “%s”. Esc cancels.") % KeyBindings.label_of(listening), false, Palette.YELLOW, Palette.BODY, true))
 	_add_confirm()
 	if _msg != "":
 		_box.add_child(hud.label(_msg, false, Palette.CHALK_DIM, Palette.BODY, true))
@@ -189,8 +198,9 @@ func _render_keys() -> void:
 	_box.add_child(row)
 
 
-func _listen(action: String) -> void:
-	listening = "" if listening == action else action
+func _listen(action: String, pad := false) -> void:
+	listening = "" if listening == action and listening_pad == pad else action
+	listening_pad = pad
 	_confirm = {}
 	_msg = ""
 	_render()
@@ -215,6 +225,24 @@ func key_pressed(e: InputEventKey) -> void:
 		_render()
 		return
 	_rebind(action, code)
+
+
+## The next controller button pressed while waiting on the Controls page (B cancels; A and X are the clicks and can't be bound).
+func pad_pressed(button: int) -> void:
+	var action := listening
+	listening = ""
+	listening_pad = false
+	if button == JOY_BUTTON_B:
+		_render()
+		return
+	if KeyBindings.PAD_FIXED.has(button):
+		_msg = "%s is a click and can't be changed." % KeyBindings.pad_button_text(button)
+		_render()
+		return
+	game.keys.pad_assign(action, button)
+	game.keys.save_file()
+	_msg = "“%s” is now %s." % [KeyBindings.label_of(action), KeyBindings.pad_button_text(button)]
+	_render()
 
 
 func _rebind(action: String, code: int) -> void:

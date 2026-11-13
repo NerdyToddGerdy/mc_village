@@ -6,7 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Block Village** (working title) is an isometric settlement simulation inspired by Minecraft. The repo holds:
 - `block-village-design-brief.md`: the vision and decisions document.
-- `slice-7-spec.md`: the Slice 7 spec (in progress), structures as adventures: how one is added, and which are built. Its decisions are provisional.
+- `slice-8-spec.md`: the Slice 8 spec (in progress), the Steam Deck: a controller, a UI readable at 1280x800, a Linux export and a play check (#287).
+- `slice-7-spec.md`: the Slice 7 spec (built), structures as adventures: how one is added, and which are built. Its decisions are provisional.
 - `slice-2.5-spec.md`: the night, the iron golem and village combat (#66, #357 to #360). It only describes what's new since Slice 2.
 - `slice-6-spec.md`: the Slice 6 spec (done, #15), specialization and automation: enchantments and one redstone chain. It only describes what's new or changed since Slice 5.
 - `slice-5-spec.md`: the Slice 5 spec (done), the Nether foothold. It only describes what's new or changed since Slice 4.
@@ -37,6 +38,7 @@ $GODOT --headless --path . -s res://tests/playtest_village.gd  # Slice 2 bot: fo
 $GODOT --headless --path . -s res://tests/playtest_slice3.gd   # Slice 3 bot: an expedition from a saved Slice 2 village, then a trip down to Level 2, through input
 $GODOT --headless --path . -s res://tests/playtest_slice4.gd   # Slice 4 bot: survey, build and ride the line from a saved Slice 3 village
 $GODOT --headless --path . -s res://tests/playtest_slice35.gd  # Slice 3.5 bot: a pen, a meadow trip, cooking, a leather tunic and a mine trip, from a saved Slice 3 village
+$GODOT --headless --path . -s res://tests/playtest_deck.gd     # Slice 8 bot: the opening at the Steam Deck's 1280x800 with controller input only (A clicks, the right stick/pointer moves the cursor)
 $GODOT --headless --path . -s res://tests/playtest_slice6.gd   # Slice 6 bot: the enchanting workshop, the portal line, a freight cart and the sensor-condition-loader-dispatcher chain, from a saved Slice 3 village
 $GODOT --headless --path . --import                          # refresh the class cache after adding a class_name script
 $GODOT --headless --path . --export-release "Web" ../build/web/index.html  # browser build (needs the 4.7.2 export templates)

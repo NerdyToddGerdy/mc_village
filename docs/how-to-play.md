@@ -497,6 +497,8 @@ Anything that can't go on gets a **yellow flag** on the map and an entry in the 
 
 ## Controls
 
+**On a controller (the Steam Deck).** **A** is the left click, **X** the right click and **B** is Esc. The **left stick pans**, the **right stick moves the cursor**, and the **triggers zoom**. The rest are ordinary shortcuts on buttons: **Y** Gather, **LB** Build, **RB** Craft, **Start** the menu, **Select** the world map, **L3** pause, **R3** the next resident, **Steam** switches between the village and a site, and the **D-pad** pans. On the Controls page, **Button** beside an action waits for a new controller button (B cancels; A, B and X can't be changed). Every order the keyboard reaches is on a menu you can open and click with the cursor.
+
 Every key can be changed on the menu's **Controls** page. Esc and the mouse can't be changed.
 
 | Key or mouse | Action |
