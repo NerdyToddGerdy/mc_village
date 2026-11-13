@@ -932,6 +932,44 @@ func _key(game: Game, code: Key, shift := false) -> void:
 	game._unhandled_input(e)
 
 
+## Issue #421: a controller button is a key or a click, and the buttons can be rebound on the Controls page.
+func _pad(game: Game, button: int, pressed := true) -> void:
+	var e := InputEventJoypadButton.new()
+	e.button_index = button as JoyButton
+	e.pressed = pressed
+	game._input(e)
+
+
+func _test_controller(game: Game) -> void:
+	game.close_menu()
+	game.set_tool("")
+	await process_frame
+	_pad(game, JOY_BUTTON_START)
+	await process_frame
+	await process_frame
+	check(game._menu.visible, "the Start button opens the menu, like its key")
+	_pad(game, JOY_BUTTON_START, false)
+	game.close_menu()
+	await process_frame
+	# Rebinding on the Controls page: B cancels, A and X can't be bound, another button takes over.
+	game.open_menu("keys")
+	var menu: GameMenu = game._menu
+	menu._listen("mine", true)
+	check(menu.listening == "mine" and menu.listening_pad, "Button waits for a controller button")
+	_pad(game, JOY_BUTTON_B)
+	check(menu.listening == "", "B cancels")
+	menu._listen("mine", true)
+	_pad(game, JOY_BUTTON_A)
+	check(game.keys.pads.get("mine", []).is_empty() and "click" in menu._msg, "A is a click and can't be bound")
+	menu._listen("mine", true)
+	_pad(game, JOY_BUTTON_Y)
+	check(game.keys.pads.mine == [JOY_BUTTON_Y] and game.keys.pads.gather.is_empty() and KeyBindings.new(game.keys_path).pads.mine == [JOY_BUTTON_Y], "Y now means Mine, Gather lost it, and it is saved")
+	game._menu._reset_keys()
+	check(game.keys.pads.gather == [JOY_BUTTON_Y] and game.keys.pads.mine.is_empty(), "Reset brings the default buttons back")
+	game.close_menu()
+	await process_frame
+
+
 ## Issue #8: keys can be rebound on the Controls page, with conflict warnings and a reset.
 ## The keycaps on a toolbar menu's row: its number, then its direct key if it has one.
 func _menu_caps(game: Game, menu: String, row: String) -> Array:
@@ -2340,6 +2378,7 @@ func _initialize() -> void:
 	await _test_fading(game)
 	_test_smooth_movement(game)
 	await _test_rebinding(game)
+	await _test_controller(game)
 	_test_order_menus(game)
 	_test_menu_button(game)
 	await _test_work_area_painting(game)

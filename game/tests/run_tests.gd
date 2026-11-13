@@ -49,6 +49,7 @@ func _init() -> void:
 		"test_desert_well",
 		"test_the_coast",
 		"test_the_boatyard",
+		"test_controller_buttons",
 		"test_coastal_trip",
 		"test_ocean_monument_trip",
 		"test_dungeon_trip",
@@ -3878,6 +3879,30 @@ func test_the_adventures_registry() -> void:
 
 ## Slice 7, issue #271: a new game has a sea along its south edge. It can't be walked, built on, painted or claimed; a dock runs out over it and
 ## opens the coast to the Cartographer, which finds the coastal places and only those; an old village has no sea.
+## Issue #421: the controller's buttons are KeyBindings' too: defaults that don't clash, and the clicks are fixed.
+func test_controller_buttons() -> void:
+	var k := KeyBindings.new("user://test_settings/pad_keys.cfg")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(k.path))
+	k.reset()
+	var seen := {}
+	var clash := false
+	for id in k.pads:
+		for b in k.pads[id]:
+			clash = clash or seen.has(b) or KeyBindings.PAD_FIXED.has(b)
+			seen[b] = id
+	check(not clash and k.pad_action_for(JOY_BUTTON_START) == "menu" and k.pad_action_for(JOY_BUTTON_A) == "", "the default buttons are one to an action, and A, B and X are left for the clicks")
+	check(k.pads.keys().all(func(id): return k.keys.has(id)), "every pad action is a real action")
+	k.pad_assign("mine", JOY_BUTTON_Y)
+	check(k.pads.mine == [JOY_BUTTON_Y] and k.pads.gather.is_empty() and k.pad_text("gather") == "-" and k.pad_text("mine") == "Y", "assigning a button takes it from the other action")
+	check(k.save_file() and KeyBindings.new(k.path).pads.mine == [JOY_BUTTON_Y], "the buttons are saved")
+	var cfg := ConfigFile.new()
+	cfg.load(k.path)
+	cfg.set_value("pads", "build", [JOY_BUTTON_A])  # a file can't bind a click button
+	cfg.save(k.path)
+	check(KeyBindings.new(k.path).pads.build.is_empty(), "and a file's bound click button is dropped on loading")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(k.path))
+
+
 ## The boatyard and the sea road (issue #407).
 func test_the_boatyard() -> void:
 	var sim := Sim.new_game()
