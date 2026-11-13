@@ -54,6 +54,7 @@ const BASE_ITEMS := {
 	"fire_resistance": {"one": "fire-resistance supply", "many": "fire-resistance supplies", "label": "Fire resistance", "group": "ores"},
 	# What the Nether's creatures leave (issue #151), carried home as cargo.
 	"magma_cream": {"one": "magma cream", "many": "magma cream", "label": "Magma cream", "group": "ores"},
+	"end_stone": {"one": "block of End stone", "many": "blocks of End stone", "label": "End stone", "group": "ores"},  # what the stronghold's portal frame gives (issue #411)
 	"bone": {"one": "bone", "many": "bones", "label": "Bones", "group": "ores"},
 	"blaze_rod": {"one": "blaze rod", "many": "blaze rods", "label": "Blaze rods", "group": "ores"},
 	# What the village's night mobs leave (issue #358).
@@ -226,7 +227,7 @@ const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "i
 	"chest": {"item": "book_efficiency", "name": "Chest"},  # a chest in the rock holds one book, named by the block (issue #164)
 	"lapis": {"item": "lapis", "name": "Lapis ore"}, "redstone": {"item": "redstone", "name": "Redstone ore"},
 	"quartz": {"item": "quartz", "name": "Nether quartz ore"}, "fossil": {"item": "bone", "name": "Nether fossil"}, "glowstone": {"item": "glowstone", "name": "Glowstone"},
-	"gold": {"item": "gold_ore", "name": "Gold ore"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}
+	"gold": {"item": "gold_ore", "name": "Gold ore"}, "end_portal": {"item": "end_stone", "name": "Portal frame"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}
 
 ## `pattern` (bench) and `fuel` (fireplace) are display only, for the Craft panel's crafting grid and
 ## furnace (issue #95); they never change what a recipe costs. A pattern is three rows of three, each

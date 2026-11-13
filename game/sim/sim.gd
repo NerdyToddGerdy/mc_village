@@ -315,6 +315,8 @@ func _add_site_maps() -> void:
 	for sid in Structures.IDS:  # the structure adventures: known once surveyed (Slice 7)
 		if not maps.has(sid):
 			maps[sid] = Structures.build(self, sid)
+		else:
+			Structures.add_portal(maps[sid], sid)  # a save from before the portal frame (issue #411)
 	if not maps.has(NetherLanding.ID):  # the first Nether map: known once the portal is lit (issue #148)
 		maps[NetherLanding.ID] = NetherLanding.build(self)
 	for key in NetherRoute.ROUTES:  # the routes out of the landing, and the sites at their ends: known once scouted (issue #153)
@@ -3370,6 +3372,9 @@ func _finish_work(r: Dictionary, st: Dictionary):
 				drop_items(t.cell, "sapling", saplings)  # issue #177
 				stats.felled += 1
 			elif t.has("ore"):  # an ore block (issue #103); it never comes back (issue #102)
+				if t.ore == "end_portal" and not stats.get("end_open", false):  # the way to the End is found (issue #411)
+					stats.end_open = true
+					_toast("%s has found the way to the End: the portal in the %s wall is open." % [r.name, m.name.to_lower()], r.id)
 				if t.ore == "gravel":  # sometimes a flint, else nothing (issue #146)
 					if rng.randf() < Tuning.GRAVEL_FLINT_CHANCE:
 						drop_items(t.cell, "flint", 1)

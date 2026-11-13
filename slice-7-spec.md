@@ -36,7 +36,7 @@ A **fifth Nether route** (`NetherRoute.ROUTES.bastion`), fight only, decided wit
 
 ## Structures with creatures (group B of #242)
 
-A structure whose layout has `Z` (zombie), `S` (skeleton) or `X` (spider) puts that creature in the map, hunting anyone who comes in (`hunt`), and its entry says `fight`: the plan fights by default (`plan.fight`, which makes the party engage creatures in range), the planner warns when no Guard (or Ada) is going, and the site report lists what's inside. The Slice 5 auto-combat does the rest. Provisional: the creatures are the village's night mobs (zombie, skeleton, spider), standing in for pillagers and the rest until #30 settles names and art. The **abandoned mineshaft (#256)** is built as its own place (spiders, a ledge in the dark) even though the old caves are one too. The **stronghold** is only a stone fortress to dig here; it is not the way to the End (#289 is open).
+A structure whose layout has `Z` (zombie), `S` (skeleton) or `X` (spider) puts that creature in the map, hunting anyone who comes in (`hunt`), and its entry says `fight`: the plan fights by default (`plan.fight`, which makes the party engage creatures in range), the planner warns when no Guard (or Ada) is going, and the site report lists what's inside. The Slice 5 auto-combat does the rest. Provisional: the creatures are the village's night mobs (zombie, skeleton, spider), standing in for pillagers and the rest until #30 settles names and art. The **abandoned mineshaft (#256)** is built as its own place (spiders, a ledge in the dark) even though the old caves are one too. The **stronghold** has a portal (#411): see below.
 
 ## Kinds
 
@@ -82,6 +82,10 @@ A `folk` entry in `Structures.DEFS` (`another_village`, found after the geode), 
 - **Ancient city (#266):** the bottom of the **deepest mine biome (#238)**, with quiet-and-dark rules. The Sift (#290) stays parked behind it.
 - **The End (#289, #267, #268):** a late chapter. The stronghold gains a portal; the dragon platform is its own fight-only map (health persisting over trips, as decided); End city and End ship are structures on the islands, reached by the bridging stage.
 - **Outposts (#286):** deferred until something needs one.
+
+## The stronghold's portal (#411)
+
+`Structures.DEFS.stronghold.portal` is the cell of a **portal frame** block (`ore` "end_portal", gives one `end_stone`), added by `Structures.add_portal` when the map is built and, for a save from before, on loading. It is **hidden until every creature in the stronghold is down** (`Structures.reveal_portal`, called from `Creatures._down`), then it is an ordinary block the plan can ask for (the stronghold's list has an "End stone" row). Mining it sets `stats.end_open`, which the End adventure (#412) reads. **Provisional:** there is no key item yet (an eye crafted from the Nether's blaze rod and quartz is the likely one); clearing the place is the clue. No save bump: the frame is added on load, `end_open` is a key of `stats`.
 
 ## The deep dark (#409)
 

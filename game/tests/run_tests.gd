@@ -50,6 +50,7 @@ func _init() -> void:
 		"test_the_boatyard",
 		"test_coastal_trip",
 		"test_dungeon_trip",
+		"test_the_stronghold_portal",
 		"test_another_village",
 		"test_every_structure",
 		"test_jungle_temple_trip",
@@ -3986,6 +3987,38 @@ func test_another_village() -> void:
 	check(sim.plan_warnings(sim.new_plan(id)).any(func(x): return x.begins_with("No free bed")), "and a plan to the village warns that there's no free bed")
 	sim._arrive()
 	check(Visits.NAMES.has(sim.residents.back().name) and sim.stats.guests.is_empty(), "the next arrival is the guest, by name")
+
+
+## Issue #411: the stronghold has a portal frame behind its wall, found once its creatures are down, and digging it opens the way to the End.
+func test_the_stronghold_portal() -> void:
+	var sim := Sim.new_game()
+	var mp := sim.get_map("stronghold")
+	var frames: Array = mp.boulders.filter(func(b): return b.get("ore", "") == "end_portal")
+	check(frames.size() == 1 and frames[0].hidden and frames[0].cell == Structures.DEFS.stronghold.portal, "one portal frame, hidden")
+	check(Structures.DEFS.stronghold.others.has("end_stone") and Tuning.CARGO_DEFAULTS.stronghold.any(func(r): return r[0] == "end_stone"), "and a plan to the stronghold can ask for the stone")
+	check(frames[0].id >= Structures.ID_BASE and not Structures.DEFS.keys().any(func(k): return k != "stronghold" and Structures.DEFS[k].has("portal")), "its id is in the structure's own range, and no other place has one")
+	# An older save's stronghold has none: loading adds it.
+	var data := sim.save_state()
+	data.maps.stronghold.boulders = data.maps.stronghold.boulders.filter(func(b): return b.get("ore", "") != "end_portal")
+	var old := Sim.from_state(data)
+	check(old.get_map("stronghold").boulders.any(func(b): return b.get("ore", "") == "end_portal"), "a save from before it gets the frame on loading")
+	# Down to the last creature, it shows.
+	sim.use_map("stronghold")
+	var live: Array = mp.creatures.filter(func(c): return c.alive)
+	check(live.size() > 1, "the stronghold has creatures (%d)" % live.size())
+	for i in live.size() - 1:
+		Creatures._down(sim, live[i])
+	check(frames[0].get("hidden", false), "with one left it is still hidden")
+	Creatures._down(sim, live.back())
+	check(not frames[0].get("hidden", false), "the last one down shows it")
+	# Digging it opens the way.
+	var ada: Dictionary = sim.residents[0]
+	check(not sim.stats.get("end_open", false), "the way to the End isn't open yet")
+	sim._finish_work(ada, {"what": "gather", "tool": "pick", "target": frames[0]})
+	check(sim.stats.get("end_open", false) and sim.m.items.size() > 0, "mined, it opens the way to the End and gives a block of End stone")
+	sim.use_map("village")
+	var back := Sim.from_state(sim.save_state())
+	check(back.stats.get("end_open", false), "which is saved")
 
 
 func test_dungeon_trip() -> void:
