@@ -90,7 +90,7 @@ static func site_report(sim: Sim, id: String) -> Dictionary:
 		told = Adventures.def(id).told
 		var kinds: Dictionary = {}
 		for cr in mp.creatures:
-			if cr.alive:
+			if cr.alive and cr.species != "villager":  # the folk of another village are no hazard (issue #253)
 				kinds[Defs.CREATURES[cr.species].name] = true
 		for k in kinds:  # what's in there, told before anyone goes
 			hazards.append("%s inside: they come for the party" % k)

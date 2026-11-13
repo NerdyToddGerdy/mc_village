@@ -6,6 +6,7 @@ extends RefCounted
 ## and saves read this table. Each one's `layout` has one row per line, west to east; the party arrives at E. Characters as in
 ## `OldMine.LAYOUT`, with
 ##   g gold ore   l lapis   r redstone   v gravel (flint)   c coal   k a chest in the stone, holding one enchanted book
+##   V a villager, friendly: one can be invited home (`folk`, Visits)
 ##   Z a zombie   S a skeleton   X a spider: they come for the party, so a place with them has `fight` and wants a guard
 
 const DEFS := {
@@ -89,6 +90,23 @@ const DEFS := {
 			"#..v....v..#",
 			"#o..o..o..o#",
 			"###t####t###",
+		],
+	},
+	"another_village": {
+		"name": "Another village", "find": "another village", "sign": "west", "road": MeadowRoad.ID, "pin": "west:4", "folk": true,
+		"told": "Smoke over the western hills: a small village of its own folk, who'd welcome visitors. One might come home with a party, if you've a bed for them.",
+		"access": ["Open lanes between cottages"],
+		"gives": ["coal"], "others": ["coal", "cobble"], "target": ["coal", 4], "picks": 0,
+		"loose": [Vector2i(7, 3)], "ledges": [],
+		"layout": [
+			"###t########t###",
+			"#.V....c..V....#",
+			"#.###.....###..#",
+			"#.#.#..o..#.#..#",
+			"E.###.....###..c",
+			"#...V.....V....#",
+			"#.c.....o......#",
+			"###t########t###",
 		],
 	},
 	"dungeon": {
@@ -279,7 +297,7 @@ const DEFS := {
 }
 
 ## The structures, in the order the Cartographer finds them: the land ones in the sectors on land, then the coastal ones (`coast`) in the sectors on the sea, which need a dock.
-const IDS := ["desert_well", "desert_temple", "jungle_temple", "fossil_site", "trail_ruins", "geode", "dungeon", "igloo_cellar", "swamp_hut", "pillager_outpost", "trial_chambers", "woodland_mansion", "stronghold", "abandoned_mineshaft", "buried_treasure", "shipwreck", "ocean_ruins"]
+const IDS := ["desert_well", "desert_temple", "jungle_temple", "fossil_site", "trail_ruins", "geode", "another_village", "dungeon", "igloo_cellar", "swamp_hut", "pillager_outpost", "trial_chambers", "woodland_mansion", "stronghold", "abandoned_mineshaft", "buried_treasure", "shipwreck", "ocean_ruins"]
 
 const ORE_OF := {"c": "coal", "g": "gold", "l": "lapis", "r": "redstone", "v": "gravel", "k": "chest"}
 
@@ -329,6 +347,10 @@ static func build(s: Sim, id: String) -> SimMap:
 				"o":
 					m.boulders.append(_block(next, c, ""))
 					next += 1
+				"V":  # a villager of another village: friendly, and can be invited home (issue #253)
+					next += 1
+					m.creatures.append({"id": next, "kind": "creature", "species": "villager", "cell": c, "pos": Vector2(c), "alive": true, "name": Visits.NAMES[(next - ID_BASE) % Visits.NAMES.size()],
+						"hp": Defs.CREATURES.villager.hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0})
 				"Z", "S", "X":  # a creature that hunts anyone who comes in (issue #255)
 					var sp: String = {"Z": "zombie", "S": "skeleton", "X": "spider"}[ch]
 					next += 1

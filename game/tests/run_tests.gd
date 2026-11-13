@@ -48,6 +48,7 @@ func _init() -> void:
 		"test_the_coast",
 		"test_coastal_trip",
 		"test_dungeon_trip",
+		"test_another_village",
 		"test_every_structure",
 		"test_jungle_temple_trip",
 		"test_survey",
@@ -3893,6 +3894,46 @@ func test_coastal_trip() -> void:
 
 ## Slice 7, issue #255: a structure with creatures in it. The plan fights by default and warns when no one can; the creatures hunt the party, and
 ## a party that can fight clears them while it digs.
+## Another village (issue #253): friendly folk, one of whom a party invites home to a free bed.
+func test_another_village() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	var id := "another_village"
+	var mp := sim.get_map(id)
+	var b := built_board(sim)
+	Survey.reveal(sim, id)
+	var folk := Visits.folk_left(mp)
+	check(folk.size() == 4 and folk.all(func(c): return c.name != "" and not c.get("hunt", false)), "four named, friendly villagers live there")
+	check(not Adventures.def(id).fight and not sim.plan_warnings(sim.new_plan(id)).any(func(x): return x.begins_with("No guard")), "it needs no guard")
+	var rep := sim.site_report(id)
+	check(not rep.hazards.any(func(h): return h.contains("Villager")), "and the report lists no creature as a hazard")
+	var ada: Dictionary = sim.residents[0]
+	ada.role = "all"
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
+	var plan := sim.new_plan(id)
+	plan.party = [ada.id]
+	plan.meals = 4
+	plan.picks = 0
+	check(sim.plan_expedition(plan) == "", "the plan is accepted")
+	b.store = {"bread": 4}
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	check(sim.depart() == "", "they depart")
+	var n_before := sim.residents.size()
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if sim.expedition.is_empty():
+			break
+	check(sim.expedition.is_empty() and Visits.folk_left(mp).size() == 3, "the party comes back, having invited one villager (3 left)")
+	var guests: Array = sim.stats.get("guests", [])
+	check(guests.size() == 1 and Visits.NAMES.has(guests[0]), "who is now a guest, owed a bed")
+	check(sim.plan_warnings(sim.new_plan(id)).any(func(x): return x.begins_with("No free bed")), "and a plan to the village warns that there's no free bed")
+	sim._arrive()
+	check(Visits.NAMES.has(sim.residents.back().name) and sim.stats.guests.is_empty(), "the next arrival is the guest, by name")
+
+
 func test_dungeon_trip() -> void:
 	Survey.enabled = true
 	var sim := Sim.new_game()

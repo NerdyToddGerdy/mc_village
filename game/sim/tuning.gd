@@ -155,6 +155,8 @@ const COOK_TIME := 3.0                  ## Seconds to cook mutton at the firepla
 const MEAL_STOCK := 6                   ## The fireplace's standing order keeps this many meals stored.
 const SMELT_TIME := 5.0                 ## Seconds to smelt one iron ingot at the fireplace (issue #104).
 const STAGE_TIME := 10.0                ## Seconds of build work per construction stage.
+const INVITES_PER_VISIT := 1            ## Villagers a party invites home from another village (issue #253, provisional).
+const GUEST_DELAY := 8.0                ## Seconds after a party is home before an invited guest takes a free bed.
 const ARRIVAL_DELAY := 45.0             ## Seconds after a house with a free bed is finished, per traveler.
 # Workstations (issue #177).
 const WORK_START_RADIUS := 8.0          ## A new chopping block or mason's bench starts with the cells this near it (issue #203).
@@ -186,6 +188,7 @@ const CARGO_DEFAULTS := {
 	"jungle_temple": [["redstone", 4], ["lapis", 3], ["cobble", 0]],
 	"fossil_site": [["coal", 8], ["flint", 4], ["cobble", 0]],
 	"trail_ruins": [["flint", 4], ["cobble", 0]],
+	"another_village": [["coal", 4], ["cobble", 0]],
 	"geode": [["lapis", 6], ["gold_ore", 2], ["cobble", 0]],
 	"meadow": [["wool", 6], ["leather", 0], ["beef", 0], ["porkchop", 0], ["mutton", 0]],
 }
