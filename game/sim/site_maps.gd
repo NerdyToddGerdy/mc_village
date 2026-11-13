@@ -94,6 +94,8 @@ static func site_report(sim: Sim, id: String) -> Dictionary:
 				kinds[Defs.CREATURES[cr.species].name] = true
 		for k in kinds:  # what's in there, told before anyone goes
 			hazards.append("%s inside: they come for the party" % k)
+	if is_mine and MineLevels.biome(mp.level) == "sculk":  # the quiet rule, told before anyone goes down (issue #409)
+		hazards.append("No light, and every %d blocks broken wake a sleeper" % Tuning.NOISE_PER_WAKE)
 	if mp.level > 1 and mp.level - 1 == 1:
 		told = "Behind the door at the far end of the old caves. Nobody has been down."
 	var levels: Array = []

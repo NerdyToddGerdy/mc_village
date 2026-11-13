@@ -34,6 +34,7 @@ func _init() -> void:
 		"test_storehouse_grows",
 		"test_composter_plots",
 		"test_cave_creatures",
+		"test_the_deep_dark",
 		"test_day_and_night_clock",
 		"test_night_waves",
 		"test_the_iron_golem",
@@ -1661,6 +1662,35 @@ func test_composter_plots() -> void:
 	check(not shared.is_empty() and shared.all(func(c): return c.owner == c2.id and Sim.plot_dying(c) == 0.0), "a plot another composter reaches passes to it (%d)" % shared.size())
 	var loaded := Sim.from_state(sim2.save_state())
 	check(loaded.farm.values().any(func(c): return c.get("owner", 0) == c2.id), "owners are saved")
+
+
+## Issue #409: the deepest biome has no light, and every few blocks broken wake a sleeper.
+func test_the_deep_dark() -> void:
+	Creatures.cave_mobs = true
+	var sim := Sim.new_game()
+	check(MineLevels.torch_count(8) >= 1 and MineLevels.torch_count(MineLevels.SCULK_FROM) == 0, "the deep dark has no torches; the levels above keep theirs")
+	var m := MineLevels.build(sim, MineLevels.SCULK_FROM)
+	check(m.torches.is_empty() and m.creatures.size() > 0 and m.creatures.all(func(x): return x.species == "zombie" and not x.angry and not x.get("hunt", false)), "a deep-dark level has sleepers and no torches")
+	sim.maps[m.id] = m
+	m.known = true
+	sim.use_map(m.id)
+	for i in Tuning.NOISE_PER_WAKE - 1:
+		Creatures.on_break(sim, m.entrance)
+	check(m.creatures.all(func(x): return not x.angry), "a little digging wakes nothing")
+	Creatures.on_break(sim, m.entrance)
+	check(m.creatures.filter(func(x): return x.angry).size() == 1, "the %dth block wakes one" % Tuning.NOISE_PER_WAKE)
+	var ok := true
+	var upper := MineLevels.build(sim, 6)
+	sim.maps[upper.id] = upper
+	sim.use_map(upper.id)
+	for i in 10:
+		Creatures.on_break(sim, upper.entrance)
+	check(upper.creatures.all(func(x): return not x.angry), "above it the quiet rule doesn't apply")
+	sim.use_map("village")
+	m.visited = true
+	var rep := sim.site_report(m.id)
+	check(rep.biome == "Deep dark" and rep.hazards.any(func(h): return h.contains("wake a sleeper")), "the report names the biome and the rule")
+	Creatures.cave_mobs = false
 
 
 ## Issue #241: the caves have creatures from Level 2, each biome its own, and they come back slowly.
@@ -3423,8 +3453,8 @@ func test_ride_the_line() -> void:
 ## levels come from the seed, each from a pattern family the mine hasn't used yet, never the same
 ## family twice in a row; deeper is richer and riskier.
 func test_cave_biomes() -> void:
-	var order := [1, 2, 3, 4, 5, 6, 9].map(func(n): return MineLevels.biome(n))
-	check(order == ["mouth", "dripstone", "dripstone", "flooded", "flooded", "deep", "deep"], "the caves' biomes follow depth: mouth, dripstone, flooded, deep (%s)" % [order])
+	var order := [1, 2, 3, 4, 5, 6, 8, 9, 12].map(func(n): return MineLevels.biome(n))
+	check(order == ["mouth", "dripstone", "dripstone", "flooded", "flooded", "deep", "deep", "sculk", "sculk"], "the caves' biomes follow depth: mouth, dripstone, flooded, deep, then the deep dark (%s)" % [order])
 	check(MineLevels.BIOMES.keys().all(func(k): return MineLevels.BIOME_NOTES.has(k)), "every biome has a note for the site report")
 	var sim := Sim.new_game()
 	sim.get_map(OldMine.ID).visited = true

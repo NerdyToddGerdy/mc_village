@@ -59,6 +59,7 @@ const FIGHT_BACK_SLOW := 2.2          ## Anyone but a guard takes this many time
 const CAVE_MOBS_BASE := 2             ## Creatures on Level 2.
 const CAVE_MOBS_PER_LEVEL := 1        ## One more for each level deeper.
 const CAVE_MOBS_MAX := 7
+const NOISE_PER_WAKE := 3             ## Blocks broken in the deep dark before the nearest sleeper wakes (issue #409).
 const CAVE_MOB_REGROW := 240.0        ## Seconds of nobody being there for one creature to come back.
 const IDLE_HOME_AFTER := 20.0              ## Seconds a resident with nothing to do waits before walking home (issue #345).
 const HOME_NEAR := 3                      ## Cells from their house door that count as home.

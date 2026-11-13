@@ -135,7 +135,7 @@ Once the village has **3 residents**, two things start:
 
 **Guards** (and Ada) go after mobs, and anyone else hits back, slowly, when one gets close. Mobs that are left slink away at dawn. What they drop (rotten flesh, bones, arrows, string) lies where they fell, and haulers carry it to a stockpile like anything else.
 
-**In the caves.** From Level 2 down, creatures live in the caves, a different kind in each: slimes in the dripstone caves, drowned in the flooded cavern, husks in the deep cave. They strike anyone who comes near, so armor and a guard in the party matter. A cleared level stays quiet for a while, then they slowly come back while nobody is down there. Level 1 is safe. What they drop (slime balls, nautilus shells, husk dust) joins what the party carries home.
+**In the caves.** From Level 2 down, creatures live in the caves, a different kind in each: slimes in the dripstone caves, drowned in the flooded cavern, husks in the deep cave. They strike anyone who comes near, so armor and a guard in the party matter. A cleared level stays quiet for a while, then they slowly come back while nobody is down there. Level 1 is safe. What they drop (slime balls, nautilus shells, husk dust) joins what the party carries home. From **Level 9** the caves become the **deep dark**: there are **no torches at all**, and it is **quiet**: every third block a party breaks wakes the sleeper nearest the sound (a zombie, standing in for something worse), which then comes for them. Until it wakes they stay asleep, so a party that digs only what it must meets few of them. The site report tells you before you go.
 
 ## Residents
 

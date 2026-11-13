@@ -22,7 +22,8 @@ static func make_creature(sim: Sim, species: String, cell: Vector2i) -> Dictiona
 static var cave_mobs := true
 
 ## Each biome's creature. Level 1 (the cave mouth) is safe: it teaches the first trip.
-const CAVE_SPECIES := {"dripstone": "slime", "flooded": "drowned", "deep": "husk"}
+## The deep dark's sleepers are zombies, standing in until names and art (#30): they stay asleep until the quiet rule wakes one.
+const CAVE_SPECIES := {"dripstone": "slime", "flooded": "drowned", "deep": "husk", "sculk": "zombie"}
 
 
 static func cave_species(level: int) -> String:
@@ -63,6 +64,25 @@ static func populate_cave(sim: Sim, m: SimMap) -> void:
 		var c: Vector2i = cells[g.randi_range(0, cells.size() - 1)]
 		if not m.creatures.any(func(o): return o.cell == c):
 			m.creatures.append(make_creature(sim, sp, c))
+
+
+## The quiet rule (issue #409): in the deep dark every block broken makes a noise, and each `Tuning.NOISE_PER_WAKE` of them wakes the sleeper
+## nearest the sound, which then comes for the party. The count is kept on the level (`regrow.noise`), so a save keeps it.
+static func on_break(sim: Sim, cell: Vector2i) -> void:
+	var m: SimMap = sim.m
+	if m.level <= 0 or MineLevels.biome(m.level) != "sculk" or not cave_mobs:
+		return
+	m.regrow["noise"] = m.regrow.get("noise", 0.0) + 1.0
+	if m.regrow.noise < Tuning.NOISE_PER_WAKE:
+		return
+	m.regrow["noise"] = 0.0
+	var asleep := m.creatures.filter(func(x): return x.alive and not x.angry)
+	if asleep.is_empty():
+		return
+	var x: Dictionary = Sim.nearest(asleep, cell)
+	x.angry = true
+	sim._toast("Something in the dark has heard the digging.")
+	sim.rev += 1
 
 
 ## While nobody is down there a cleared level slowly fills again, one creature at a time.

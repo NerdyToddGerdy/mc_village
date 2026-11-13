@@ -308,8 +308,8 @@ static var MINE_ROCK := Color("#6E6A63")
 static var TORCH_FLAME := Color("#F2A640")
 static var DARK_TINT := Color("#2C3445")
 ## Each underground biome's rock and floor (issue #238), so the levels don't all read as one cold grey.
-static var BIOME_ROCK := {"mouth": Color("#6E6A63"), "dripstone": Color("#7A6E5C"), "flooded": Color("#58666A"), "deep": Color("#46444E")}
-static var BIOME_FLOOR := {"mouth": Color("#5B5650"), "dripstone": Color("#6A5F4E"), "flooded": Color("#4A5A5C"), "deep": Color("#38363E")}
+static var BIOME_ROCK := {"mouth": Color("#6E6A63"), "dripstone": Color("#7A6E5C"), "flooded": Color("#58666A"), "deep": Color("#46444E"), "sculk": Color("#1E2A33")}
+static var BIOME_FLOOR := {"mouth": Color("#5B5650"), "dripstone": Color("#6A5F4E"), "flooded": Color("#4A5A5C"), "deep": Color("#38363E"), "sculk": Color("#141C22")}
 
 
 ## A site map's ground (issue #102): a stone floor, rock walls a block high, torches on the walls,
