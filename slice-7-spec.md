@@ -100,6 +100,10 @@ Three entries in `Structures.DEFS` with `end: true` (`Structures.END_IDS`, not i
 - `end_bridged` is set by mining the last of the three **bridge stones** (`s`, ore `bridge_stone`, hidden until every creature on the platform is down: `Structures.reveal_portal`, generalised), which makes the End city and End ship known.
 Provisional: the bridge is quarried End stone rather than a placed structure (the mine kind has no placing), guards are the night mobs standing in (#30), the edges are `ledges`, and the Nether's stranding and rescue are not wired to the platform yet. No save bump: the maps are added on load; the flags are `stats` keys.
 
+## The ancient city (#410)
+
+`MineLevels.CITY_LEVEL` (11) is hand-laid (`CITY_LAYOUT`, family "city") instead of generated: level 10's door leads to it, it is in the deep-dark biome (so the quiet rule and no torches apply), and its `door_state` is **"sealed"**: no door down, so `dig_to_door` and the cleared-level step stop there. Sleepers are `Z` zombies placed by the layout. It is the place the Sift (#290, parked) would be reached from. No save bump: the map is built when the door above is opened, as every level is.
+
 ## Next
 
 What's left of group A of #242 needs a trade system and currency (open). Then the structures that need combat (group B), then the late ones. The ruined portal (#243) is already a survey find that unlocks the village's own portal rather than an adventure map.

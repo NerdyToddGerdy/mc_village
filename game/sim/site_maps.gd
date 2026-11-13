@@ -96,13 +96,15 @@ static func site_report(sim: Sim, id: String) -> Dictionary:
 			hazards.append("%s inside: they come for the party" % k)
 	if is_mine and MineLevels.biome(mp.level) == "sculk":  # the quiet rule, told before anyone goes down (issue #409)
 		hazards.append("No light, and every %d blocks broken wake a sleeper" % Tuning.NOISE_PER_WAKE)
-	if mp.level > 1 and mp.level - 1 == 1:
+	if is_mine and mp.level == MineLevels.CITY_LEVEL:
+		told = MineLevels.CITY_TOLD
+	elif mp.level > 1 and mp.level - 1 == 1:
 		told = "Behind the door at the far end of the old caves. Nobody has been down."
 	var levels: Array = []
 	for lid in sim.mine_levels():  # every level known so far (issue #132)
 		var lm: SimMap = sim.maps[lid]
 		var left: int = lm.boulders.filter(func(b): return b.alive and b.has("ore") and (lm.discovered or not b.get("hidden", false)) and not (b.get("ore", "") == "diamond" and b.get("hidden", false))).size()
-		var door: String = {"open": "door open", "found": "door found"}.get(lm.door_state, "door not reached")
+		var door: String = {"open": "door open", "found": "door found", "sealed": "the bottom"}.get(lm.door_state, "door not reached")
 		levels.append({"id": lid, "level": lm.level, "pattern": MineLevels.FAMILY_NAMES.get(lm.pattern, ""), "ore": left if lm.visited else -1, "door": door, "visited": lm.visited})
 	var travel := sim.route_walk_time() + sim.level_walk(id) if sim.route_surveyed() else -1.0
 	if not is_mine:

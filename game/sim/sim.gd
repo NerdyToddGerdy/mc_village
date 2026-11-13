@@ -5971,6 +5971,8 @@ func go_down() -> String:
 ## ceilings on the way are marked too: the player chose the way. Returns why it can't, or "".
 func dig_to_door(id: String) -> String:
 	var mp: SimMap = maps[id]
+	if mp.door_state == "sealed":
+		return "This is the bottom: there is no door"
 	if mp.door_state != "closed":
 		return "The door is already reached"
 	var prev := use_map(id)
