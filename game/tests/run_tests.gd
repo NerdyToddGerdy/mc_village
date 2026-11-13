@@ -6360,7 +6360,7 @@ func test_auto_combat() -> void:
 	var tomas: Dictionary = w.tomas
 	var mira: Dictionary = w.mira
 	var landing: SimMap = w.landing
-	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "blaze", "zombie", "spider", "slime", "drowned", "husk", "golem"], "the Nether's five creatures, then the village's and the caves'")
+	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "villager", "blaze", "zombie", "spider", "slime", "drowned", "husk", "golem"], "the Nether's five creatures, then the village's and the caves'")
 	# A guard defeats a magma cube, which leaves its cream.
 	var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Sim.rcell(tomas) + Vector2i(5, 0))
 	var xp: int = tomas.jobs.guard.xp
