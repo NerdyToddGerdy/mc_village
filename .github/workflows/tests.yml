@@ -57,6 +57,13 @@ jobs:
           timeout 300 ~/godot/godot --headless --path . -s res://tests/game_test.gd 2>&1 | tee /tmp/game.log
           grep -q '^ALL PASSED$' /tmp/game.log
 
+      - name: Deck bot playtest (Slice 8, controller input at 1280x800)
+        run: |
+          set -o pipefail
+          timeout 600 ~/godot/godot --headless --path . -s res://tests/playtest_deck.gd 2>&1 | tee /tmp/deck.log
+          grep -q '^deck bot done$' /tmp/deck.log
+          ! grep -q '^FAIL' /tmp/deck.log
+
       - name: Bot playtest
         run: |
           set -o pipefail

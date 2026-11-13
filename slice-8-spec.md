@@ -11,4 +11,10 @@ Desktop, the web build and the Steam Deck are the targets (#16, #287); consoles 
 - **Sticks and triggers** (each frame, `Controller.update`): the right stick moves the mouse cursor, the left stick pans (`Game._pan_screen`), a trigger zooms once per press.
 - Held actions (`KeyBindings.is_down`) also count a held button, so the D-pad pans.
 
+The click and pointer events are pushed straight into the window's viewport (`Viewport.push_input`), like a mouse click; keys go through `Input.parse_input_event` so held keys (`Input.is_key_pressed`) still work for panning. `Controller` keeps its own cursor: the mouse's last position, or where the stick took it.
+
+## The Deck bot (#424)
+
+`tests/playtest_deck.gd` plays the opening at 1280x800 with controller events only: the cursor moved as the stick would (a pointer motion), A to click Play and Chop trees and to drag-mark trees, Start and B for the menu, Y and LB for the Gather and Build menus, the D-pad to pan. It runs in CI (`tests.yml`) and prints "deck bot done" with no FAIL lines (it doesn't use the usual PLAYTEST PASSED line).
+
 Every order is on a menu a click reaches, so the controller reaches every order. The keyboard stays as it was; tests that set `game.keys_path` still get default keys.

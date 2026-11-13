@@ -58,7 +58,7 @@ func click(button: int, pressed: bool) -> void:
 	ev.button_index = button
 	ev.pressed = pressed
 	ev.button_mask = (1 << (button - 1)) if pressed else 0
-	Input.parse_input_event(ev)
+	game.get_viewport().push_input(ev, true)  # straight to the window's viewport, in its own coordinates, like a pointer click
 
 
 func key(code: int, pressed: bool, shift: bool) -> void:
@@ -84,7 +84,7 @@ func update(delta: float) -> void:
 		ev.position = at
 		ev.global_position = at
 		ev.relative = r * CURSOR_SPEED * delta
-		Input.parse_input_event(ev)
+		vp.push_input(ev, true)
 	var l := Vector2(Input.get_joy_axis(0, JOY_AXIS_LEFT_X), Input.get_joy_axis(0, JOY_AXIS_LEFT_Y))
 	if l.length() > DEAD:
 		game._pan_screen(l * PAN_SPEED * delta * game.get_viewport().get_visible_rect().size.y)
