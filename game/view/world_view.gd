@@ -1992,7 +1992,7 @@ func _update_sheep() -> void:
 
 # ---------------------------------------------------------------- the Nether's creatures (issue #151)
 
-static var CREATURE_COLORS := {"magma_cube": Color("#C4501E"), "zombified_piglin": Color("#C98A83"), "skeleton": Color("#DCD7C5"), "blaze": Color("#F2B531"), "zombie": Color("#6E9A5A"), "slime": Color("#6FBF5E"), "drowned": Color("#4F9A92"), "husk": Color("#B79A62"), "spider": Color("#3A3236"), "golem": Color("#B7B9B4")}
+static var CREATURE_COLORS := {"magma_cube": Color("#C4501E"), "zombified_piglin": Color("#C98A83"), "piglin_brute": Color("#B5736B"), "skeleton": Color("#DCD7C5"), "blaze": Color("#F2B531"), "zombie": Color("#6E9A5A"), "slime": Color("#6FBF5E"), "drowned": Color("#4F9A92"), "husk": Color("#B79A62"), "spider": Color("#3A3236"), "golem": Color("#B7B9B4")}
 var _creature_nodes := {}   ## Creature id -> its model.
 
 
@@ -2007,7 +2007,7 @@ func _make_creature(species: String) -> Node3D:
 			_part(body, Vector3(0.62, 0.5, 0.62), 0.0, col.darkened(0.25))
 			_part(body, Vector3(0.64, 0.12, 0.64), 0.2, Color("#F7C948"))
 			_part(body, Vector3(0.5, 0.14, 0.5), 0.5, col)
-		"zombified_piglin":  # a pink head over a green rag of a shirt
+		"zombified_piglin", "piglin_brute":  # a pink head over a green rag of a shirt
 			_part(body, Vector3(0.26, 0.3, 0.26), 0.0, Color("#4B4F5C"))
 			_part(body, Vector3(0.34, 0.44, 0.34), 0.3, Color("#6E8E58"))
 			_part(body, Vector3(0.32, 0.3, 0.32), 0.74, col)

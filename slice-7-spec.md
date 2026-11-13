@@ -26,6 +26,10 @@ Provisional decisions, made to build it (#271 listed them as open):
 
 Not a structure-table entry: the Nether's sites are routes, so it is a **fourth Nether route** (`NetherRoute.ROUTES.fossil`) with a hand-laid site at its end. It leaves the landing by a gap in the west wall (`Landing.LAYOUT` row 20; older saves' landings get it opened on load). Its ore, `fossil`, gives bone. The **Gather** objective lists every scouted site that gives something (quartz, fossil) rather than one fixed site.
 
+## The bastion remnant (#264)
+
+A **fifth Nether route** (`NetherRoute.ROUTES.bastion`), fight only, decided with the owner: no trade yet. Its site (`BASTION_LAYOUT`) holds five **piglin brutes** (`R`, species `piglin_brute`: 20 hp, always hostile, notice 6) and gold ore (`G`), chests (`K`). The landing's gap is at (0, 16). It joins the Gather objective. The piglin camp stays the only place that trades; if a trade system for bastions comes later, it builds on this site. Older saves add the maps on load.
+
 ## Structures with creatures (group B of #242)
 
 A structure whose layout has `Z` (zombie), `S` (skeleton) or `X` (spider) puts that creature in the map, hunting anyone who comes in (`hunt`), and its entry says `fight`: the plan fights by default (`plan.fight`, which makes the party engage creatures in range), the planner warns when no Guard (or Ada) is going, and the site report lists what's inside. The Slice 5 auto-combat does the rest. Provisional: the creatures are the village's night mobs (zombie, skeleton, spider), standing in for pillagers and the rest until #30 settles names and art. The **abandoned mineshaft (#256)** is built as its own place (spiders, a ledge in the dark) even though the old caves are one too. The **stronghold** is only a stone fortress to dig here; it is not the way to the End (#289 is open).

@@ -29,7 +29,7 @@ static func objective_destinations(sim: Sim, obj: String) -> Array:
 					if not sim.maps[NetherRoute.ROUTES[rk].id].surveyed:
 						out.append({"dest": NetherLanding.ID, "label": NetherRoute.ROUTES[rk].name.substr(8), "route": rk})
 		"gather", "trade", "fortress":
-			for rk in {"gather": ["quartz", "fossil"], "trade": ["piglin"], "fortress": ["fortress"]}[obj]:  # a gather mission can go to any scouted site that gives something (issue #254)
+			for rk in {"gather": ["quartz", "fossil", "bastion"], "trade": ["piglin"], "fortress": ["fortress"]}[obj]:  # a gather mission can go to any scouted site that gives something (issue #254)
 				if sim.maps[NetherRoute.ROUTES[rk].site].known:
 					out.append({"dest": NetherRoute.ROUTES[rk].site, "label": NetherRoute.ROUTES[rk].site_name.substr(8), "route": ""})
 		"build":
@@ -57,7 +57,7 @@ static func objective_why_none(sim: Sim, obj: String) -> String:
 		"scout":
 			return "Every route is scouted"
 		"gather":
-			return "No site to gather from: scout the route to the quartz site or the fossil ridge first"
+			return "No site to gather from: scout the route to the quartz site, the fossil ridge or the bastion first"
 		"trade":
 			return "No one to trade with: scout the route to the piglin camp first"
 		"fortress":

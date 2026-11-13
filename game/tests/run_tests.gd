@@ -107,6 +107,7 @@ func _init() -> void:
 		"test_mission_types",
 		"test_the_quartz_site",
 		"test_the_fossil_ridge",
+		"test_the_bastion",
 		"test_piglin_trading",
 		"test_enchanted_books",
 		"test_the_enchanting_workshop",
@@ -6319,7 +6320,7 @@ func test_auto_combat() -> void:
 	var tomas: Dictionary = w.tomas
 	var mira: Dictionary = w.mira
 	var landing: SimMap = w.landing
-	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "blaze", "zombie", "spider", "slime", "drowned", "husk", "golem"], "the Nether's five creatures, then the village's and the caves'")
+	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "piglin_brute", "blaze", "zombie", "spider", "slime", "drowned", "husk", "golem"], "the Nether's five creatures, then the village's and the caves'")
 	# A guard defeats a magma cube, which leaves its cream.
 	var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Sim.rcell(tomas) + Vector2i(5, 0))
 	var xp: int = tomas.jobs.guard.xp
@@ -6515,7 +6516,7 @@ func test_scouting_the_routes() -> void:
 	var landing: SimMap = sim.get_map(NetherLanding.ID)
 	landing.known = true
 	landing.visited = true
-	check(NetherRoute.ROUTES.keys() == ["quartz", "piglin", "fortress", "fossil"], "four routes: the quartz site, the piglin camp, the fortress entrance and the fossil ridge")
+	check(NetherRoute.ROUTES.keys() == ["quartz", "piglin", "fortress", "fossil", "bastion"], "five routes: the quartz site, the piglin camp, the fortress entrance, the fossil ridge and the bastion")
 	for rk in NetherRoute.ROUTES:
 		var def: Dictionary = NetherRoute.ROUTES[rk]
 		var rm: SimMap = sim.get_map(def.id)
@@ -6563,7 +6564,7 @@ func test_scouting_the_routes() -> void:
 	var unseen := sim.site_report(NetherRoute.ROUTES.piglin.id)
 	check(unseen.segments.filter(func(sg): return sg.known).size() == 1 and unseen.travel < 0.0 and unseen.hazards.is_empty(), "an unscouted route shows only its first segment and no dangers")
 	var lrep := sim.site_report(NetherLanding.ID)
-	check(lrep.routes.filter(func(x): return x.state == "scouted").map(func(x): return x.key) == ["quartz"] and lrep.routes.filter(func(x): return x.state == "unknown").size() == 3, "the landing's report shows the quartz route scouted and the others unknown")
+	check(lrep.routes.filter(func(x): return x.state == "scouted").map(func(x): return x.key) == ["quartz"] and lrep.routes.filter(func(x): return x.state == "unknown").size() == 4, "the landing's report shows the quartz route scouted and the others unknown")
 	check(sim.plan_problems(sim.scout_plan("quartz")).has("That route is already scouted"), "a scouted route can't be scouted again")
 	# The scouted site is a destination (it can't be reached until it's built, #155).
 	site_plan = sim.new_plan("nether_quartz")
@@ -6693,6 +6694,58 @@ func test_the_fossil_ridge() -> void:
 	data.maps[NetherLanding.ID].rock[NetherRoute.ROUTES.fossil.exit] = true
 	var old := Sim.from_state(data)
 	check(not old.get_map(NetherLanding.ID).rock.has(NetherRoute.ROUTES.fossil.exit), "a landing saved with the wall has the gap opened on loading")
+
+
+## The bastion remnant (issue #264): a fifth Nether route to a hostile stronghold. Fight only: the brutes come for anyone, and it pays in gold and books.
+func test_the_bastion() -> void:
+	var w := nether_world()
+	var sim: Sim = w.sim
+	var ada: Dictionary = w.ada
+	var tomas: Dictionary = w.tomas
+	var portal: Dictionary = w.portal
+	var site: SimMap = sim.get_map("nether_bastion")
+	var brutes: Array = site.creatures.filter(func(c): return c.species == "piglin_brute")
+	check(site.pattern == "hand_laid" and brutes.size() == 5 and site.entrance == Vector2i(0, 6), "a hand-laid site with five piglin brutes")
+	check(brutes.all(func(c): return Defs.CREATURES[c.species].notice > 0) and Defs.CREATURES.piglin_brute.hp > Defs.CREATURES.zombified_piglin.hp, "who come for anyone, and are stronger than the camp's piglins")
+	check(site.boulders.filter(func(b): return b.ore == "gold").size() == 5 and site.boulders.filter(func(b): return b.ore == "chest").size() == 3, "five gold blocks and three chests")
+	var landing: SimMap = sim.get_map(NetherLanding.ID)
+	check(not landing.rock.has(NetherRoute.ROUTES.bastion.exit) and NetherRoute.ROUTES.bastion.exit.x == 0, "its way out is a gap in the landing's west wall")
+	portal.lit = true
+	landing.known = true
+	sim.get_map(NetherRoute.ROUTES.bastion.id).surveyed = true
+	site.known = true
+	var dests := sim.objective_destinations("gather").filter(func(d): return d.dest == "nether_bastion")
+	check(dests.size() == 1, "once scouted, a gather mission can go to it")
+	var rep := sim.site_report("nether_bastion")
+	check(rep.resources.any(func(x): return x.item == "gold_ore") and rep.hazards.any(func(h): return h.contains("brutes")), "its report names the gold and the brutes")
+	var plan := sim.nether_plan("gather", dests[0])
+	plan.party = [ada.id, tomas.id]
+	for r in [ada, tomas]:
+		r.role = "guard"
+		r.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
+	sim.aim_plan(plan, "gold_ore", 4)
+	plan.policy = {"target": true, "full": true, "low": true}
+	check(sim.plan_expedition(plan) == "", "a plan for four gold ore is accepted (%s)" % [sim.plan_problems(plan)])
+	portal.store = {"bread": 6}
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 0), "flint_and_steel", 1)
+	sim.drop_items(Sim.rcell(ada) + Vector2i(-2, 1), "stone_pick", 2)
+	for i in 40 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker("nether") == "":
+			break
+	check(sim.depart("nether") == "", "sent (%s, %s)" % [sim.depart_blocker("nether"), sim.plan_problems(plan)])
+	var at_site := false
+	for i in 1500 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		at_site = at_site or ada.map == "nether_bastion"
+		ada.hurt = 0
+		tomas.hurt = 0
+		if sim.expeditions.nether.is_empty():
+			break
+	check(at_site and brutes.any(func(c): return not c.alive), "the party reaches the bastion and brings a brute down")
+	check(sim.expeditions.nether.is_empty() and ada.map == "village", "and comes home")
 
 
 ## The quartz site and the gather mission to it (issue #155).
