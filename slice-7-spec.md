@@ -71,6 +71,14 @@ A structure uses an existing road until it needs its own: the meadow's strip (a 
 
 A `folk` entry in `Structures.DEFS` (`another_village`, found after the geode), friendly: four villagers (`V`, species `villager`, named, no hostility) and a little coal. The new `visits.gd` does the rest: a party member walks up to the nearest villager and **invites** them (`invite` job and op), up to `Tuning.INVITES_PER_VISIT` (1) per visit; on the party's return the names go into `stats.guests`, and `_arrive` takes the next guest by name, after `Tuning.GUEST_DELAY` instead of the usual delay, when a house has a free bed. **Provisional rules, decided by default, to be confirmed:** no trade and no currency (still open, with #264's trade); recruiting adds to the free-bed arrivals rather than replacing them (#24); the folk are finite. No save bump: `guests` is a key of `stats` and `invited` one of the expedition.
 
+## Decisions on the remaining adventures
+
+- **Ruined portal (#243):** a survey find that unlocks the village's own portal recipe; it is not an adventure map. Done.
+- **Ocean monument (#265):** reached **by boat from the dock**. It needs a boat building at the dock and a sea-travel mode, then the monument as a coastal fight structure.
+- **Ancient city (#266):** the bottom of the **deepest mine biome (#238)**, with quiet-and-dark rules. The Sift (#290) stays parked behind it.
+- **The End (#289, #267, #268):** a late chapter. The stronghold gains a portal; the dragon platform is its own fight-only map (health persisting over trips, as decided); End city and End ship are structures on the islands, reached by the bridging stage.
+- **Outposts (#286):** deferred until something needs one.
+
 ## Next
 
 What's left of group A of #242 needs a trade system and currency (open). Then the structures that need combat (group B), then the late ones. The ruined portal (#243) is already a survey find that unlocks the village's own portal rather than an adventure map.
