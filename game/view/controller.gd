@@ -10,6 +10,7 @@ const PAN_SPEED := 1.2        ## Screens a second at full tilt.
 const TRIGGER := 0.5
 
 var game: Node
+var _cursor := Vector2.ZERO   ## Where the pointer is: the mouse's last position, moved by the right stick.
 var _zoom_held := 0   ## -1 or 1 while a trigger is down, so a held trigger zooms once
 
 
@@ -19,6 +20,9 @@ func _init(p_game: Node) -> void:
 
 ## A joypad button event: true when it was one (and now acts as a key or click).
 func handle(e: InputEvent) -> bool:
+	if e is InputEventMouseMotion:  # the pointer is where the mouse last was, or the stick took it
+		_cursor = e.position
+		return false
 	if not (e is InputEventJoypadButton):
 		return false
 	var b: int = e.button_index
@@ -49,7 +53,7 @@ func handle(e: InputEvent) -> bool:
 ## A click at the cursor.
 func click(button: int, pressed: bool) -> void:
 	var ev := InputEventMouseButton.new()
-	ev.position = game.get_viewport().get_mouse_position()
+	ev.position = _cursor
 	ev.global_position = ev.position
 	ev.button_index = button
 	ev.pressed = pressed
@@ -73,7 +77,8 @@ func update(delta: float) -> void:
 	var r := Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
 	if r.length() > DEAD:
 		var vp: Viewport = game.get_viewport()
-		var at: Vector2 = (vp.get_mouse_position() + r * CURSOR_SPEED * delta).clamp(Vector2.ZERO, vp.get_visible_rect().size)
+		var at: Vector2 = (_cursor + r * CURSOR_SPEED * delta).clamp(Vector2.ZERO, vp.get_visible_rect().size)
+		_cursor = at
 		vp.warp_mouse(at)
 		var ev := InputEventMouseMotion.new()
 		ev.position = at
