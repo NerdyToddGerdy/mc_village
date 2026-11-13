@@ -531,6 +531,8 @@ static func _clear_step(sim: Sim) -> bool:
 	var ex := sim.expedition
 	if not ex.get("clear", false) or sim.level_of(ex.dest) == 0 or not sim.pending.is_empty() or not _nothing_left(sim):
 		return false
+	if sim.m.door_state == "sealed":  # the bottom: no door down (issue #410)
+		return false
 	if sim.m.door_state != "closed":  # the door's been reached: through it
 		sim.go_down()
 		return true

@@ -13,7 +13,7 @@ extends RefCounted
 
 const FAMILIES := ["winding", "pillared", "branching", "stream", "collapsed"]
 const FAMILY_NAMES := {"workings": "Old workings", "winding": "Winding cave", "pillared": "Pillared hall",
-	"branching": "Branching tunnels", "stream": "Underground stream", "collapsed": "Collapsed chamber"}
+	"branching": "Branching tunnels", "stream": "Underground stream", "collapsed": "Collapsed chamber", "city": "Ancient city"}
 ## The site report's access notes for each pattern.
 const ACCESS := {
 	"workings": ["Narrow tunnels: 1 resident per tunnel"],
@@ -22,6 +22,7 @@ const ACCESS := {
 	"branching": ["A maze of narrow tunnels, with ore in the dead ends"],
 	"stream": ["A stream splits the cavern: the way goes around it"],
 	"collapsed": ["A field of rubble to dig through"],
+	"city": ["Silent halls: the whole party fits, and every blow is heard"],
 }
 
 
@@ -41,6 +42,8 @@ static func level_of(id: String) -> int:
 
 ## "Old caves" for Level 1, "Old caves, level 2" below it.
 static func level_name(n: int) -> String:
+	if n == CITY_LEVEL:
+		return "Ancient city"
 	return OldMine.NAME if n <= 1 else "%s, level %d" % [OldMine.NAME, n]
 
 
@@ -57,6 +60,23 @@ const BIOME_NOTES := {
 }
 ## From this level down the caves are the deep dark (issue #409): no torches, and the quiet rule (`Creatures.on_break`).
 const SCULK_FROM := 9
+## The ancient city (issue #410) is the bottom: this level is hand-laid, and has no door down (`door_state` "sealed").
+const CITY_LEVEL := 11
+## Characters as in a level's rows, with Z a sleeper (a zombie that stays asleep until the quiet rule wakes it). No torches, no door.
+const CITY_LAYOUT := [
+	"##################",
+	"#g...#...kk...#.l#",
+	"#.Z..#.......Z#..#",
+	"#....o...##......#",
+	"#.r..#...##..d...#",
+	"E....#...........#",
+	"#....o...##..Z...#",
+	"#.k..#...##......#",
+	"#..Z.#.......g...#",
+	"#l...#...kk...#.r#",
+	"##################",
+]
+const CITY_TOLD := "Far below the deep dark, a city of old stone, silent. Nothing is said to live there, but the dark keeps listening. Nobody has been down."
 
 
 static func biome(n: int) -> String:
@@ -170,7 +190,7 @@ static func layout(seed: int, n: int) -> Dictionary:
 
 ## Builds a deeper level's map, as it is before anyone has been down. Ids come from the sim.
 static func build(s: Sim, n: int) -> SimMap:
-	var lay := layout(s.seed, n)
+	var lay := {"rows": CITY_LAYOUT, "family": "city", "loose": [Vector2i(5, 3), Vector2i(5, 6)], "ledges": []} if n == CITY_LEVEL else layout(s.seed, n)
 	var rows: Array = lay.rows
 	var m := SimMap.new(rows[0].length(), rows.size())
 	m.id = level_id(n)
@@ -179,7 +199,7 @@ static func build(s: Sim, n: int) -> SimMap:
 	m.known = false
 	m.level = n
 	m.pattern = lay.family
-	m.door_state = "closed"
+	m.door_state = "sealed" if n == CITY_LEVEL else "closed"  # the city is the bottom: no door (issue #410)
 	m.found = true  # no hidden vein down here: what's seen is what's there
 	m.discovered = true
 	for y in rows.size():
@@ -222,6 +242,8 @@ static func build(s: Sim, n: int) -> SimMap:
 					var chest := OldMine._block(s, c, "chest")
 					chest.book = Defs.book_for("mine", hash([s.seed, n, c]))
 					m.boulders.append(chest)
+				"Z":  # a sleeper in the ancient city: asleep until the quiet rule wakes it (issue #410)
+					m.creatures.append(Creatures.make_creature(s, "zombie", c))
 				"L":  # a lava pool: rock to walk, with a glow (issue #146)
 					m.rock[c] = true
 					m.lava[c] = true
@@ -229,7 +251,8 @@ static func build(s: Sim, n: int) -> SimMap:
 		if b.cell in lay.loose:
 			b.loose = true
 	m.ledges = lay.ledges
-	Creatures.populate_cave(s, m)  # Level 2 and deeper have creatures (issue #241)
+	if n != CITY_LEVEL:
+		Creatures.populate_cave(s, m)  # Level 2 and deeper have creatures (issue #241)
 	return m
 
 

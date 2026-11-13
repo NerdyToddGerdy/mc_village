@@ -35,6 +35,7 @@ func _init() -> void:
 		"test_composter_plots",
 		"test_cave_creatures",
 		"test_the_deep_dark",
+		"test_the_ancient_city",
 		"test_day_and_night_clock",
 		"test_night_waves",
 		"test_the_iron_golem",
@@ -1664,6 +1665,47 @@ func test_composter_plots() -> void:
 	check(not shared.is_empty() and shared.all(func(c): return c.owner == c2.id and Sim.plot_dying(c) == 0.0), "a plot another composter reaches passes to it (%d)" % shared.size())
 	var loaded := Sim.from_state(sim2.save_state())
 	check(loaded.farm.values().any(func(c): return c.get("owner", 0) == c2.id), "owners are saved")
+
+
+## Issue #410: the ancient city is the bottom of the deep dark: hand-laid, silent, with no door down.
+func test_the_ancient_city() -> void:
+	Creatures.cave_mobs = true
+	var sim := Sim.new_game()
+	var n := MineLevels.CITY_LEVEL
+	check(n > MineLevels.SCULK_FROM and MineLevels.biome(n) == "sculk" and MineLevels.level_name(n) == "Ancient city", "it lies in the deep dark")
+	var m := MineLevels.build(sim, n)
+	check(m.pattern == "city" and m.door_state == "sealed" and m.torches.is_empty(), "no torches and no door")
+	check(m.w == 18 and m.h == 11 and m.entrance == Vector2i(0, 5), "an 18 by 11 hall entered from the west")
+	var sleepers := m.creatures.filter(func(c): return c.species == "zombie" and not c.angry and not c.get("hunt", false))
+	check(sleepers.size() == 4 and m.creatures.size() == 4, "four sleepers, asleep")
+	check(m.boulders.filter(func(b): return b.get("ore", "") == "chest").size() == 5 and m.boulders.any(func(b): return b.get("ore", "") == "diamond"), "five chests and a diamond")
+	check(m.boulders.any(func(b): return b.get("loose", false)), "with old stone that can come down")
+	# Every block can be dug to, from the way in.
+	var seen := {m.entrance: true}
+	var queue: Array = [m.entrance]
+	while not queue.is_empty():
+		var c: Vector2i = queue.pop_front()
+		for dd in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var q: Vector2i = c + dd
+			if q.x >= 0 and q.y >= 0 and q.x < m.w and q.y < m.h and not m.rock.has(q) and not seen.has(q):
+				seen[q] = true
+				queue.append(q)
+	check(m.boulders.all(func(b): return seen.has(b.cell)), "every block can be dug to")
+	# The quiet rule is on here, and the level above leads down to it.
+	sim.maps[m.id] = m
+	m.known = true
+	sim.use_map(m.id)
+	for i in Tuning.NOISE_PER_WAKE:
+		Creatures.on_break(sim, m.entrance)
+	check(m.creatures.filter(func(c): return c.angry).size() == 1, "every few blocks broken wake one")
+	check(sim.dig_to_door(m.id) == "This is the bottom: there is no door", "there's no door to dig to")
+	sim.use_map("village")
+	m.visited = true
+	var rep := sim.site_report(m.id)
+	check(rep.told == MineLevels.CITY_TOLD and rep.hazards.any(func(h): return h.contains("wake a sleeper")), "the report tells what it is and the rule")
+	var above := MineLevels.build(sim, n - 1)
+	check(above.door_state == "closed" and above.door.x > 0, "the level above has its door, which leads here")
+	Creatures.cave_mobs = false
 
 
 ## Issue #409: the deepest biome has no light, and every few blocks broken wake a sleeper.
