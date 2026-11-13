@@ -49,6 +49,7 @@ func _init() -> void:
 		"test_the_coast",
 		"test_the_boatyard",
 		"test_coastal_trip",
+		"test_ocean_monument_trip",
 		"test_dungeon_trip",
 		"test_the_stronghold_portal",
 		"test_another_village",
@@ -3898,6 +3899,61 @@ func test_the_coast() -> void:
 	Survey.enabled = false
 
 ## Slice 7: a party leaves by the dock for a coastal place (buried treasure), digs, and comes home by the dock.
+## The ocean monument (issue #408): sailed to from the dock, needing a boatyard, and guarded.
+func test_ocean_monument_trip() -> void:
+	Survey.enabled = true
+	var sim := Sim.new_game()
+	var id := "ocean_monument"
+	var mp := sim.get_map(id)
+	var b := built_board(sim)
+	var dk := sim.place_site("dock", Vector2i(4, sim.h - Defs.TEMPLATES.dock.size.y))
+	dk.stage = 1
+	dk.done = true
+	sim._occ_dirty = true
+	Survey.reveal(sim, id)
+	check(sim.get_map(SeaRoad.ID).known and Sim.road_map_for(id) == SeaRoad.ID, "found, it makes the sea road known")
+	check(mp.creatures.size() == 4 and mp.creatures.all(func(c): return c.species == "drowned" and c.get("hunt", false)), "four guardians stand in it, and hunt")
+	var row: Dictionary = sim.adventures().filter(func(a): return a.id == id)[0]
+	check(absf(row.travel - SeaRoad.walk_time()) < 0.5, "the board lists it with the sail's time")
+	var ada: Dictionary = sim.residents[0]
+	ada.role = "all"
+	ada.pick = {"type": "stone_pick", "tier": 2, "dur": 99}
+	var plan := sim.new_plan(id)
+	plan.party = [ada.id]
+	plan.meals = 6
+	plan.picks = 0
+	sim.aim_plan(plan, "gold_ore", 4)
+	check(sim.plan_problems(plan).has("Build a boatyard first") and sim.plan_expedition(plan) != "", "without a boatyard the plan says to build one")
+	var by := sim.place_site("boatyard", open_rect(sim, Vector2i(3, 3)).position + Vector2i(1, 1))
+	by.stage = 1
+	by.done = true
+	sim._on_site_done(by)
+	check(sim.plan_expedition(plan) == "", "with one it is accepted (%s)" % [sim.plan_problems(plan)])
+	b.store = {"bread": 6}
+	for i in 30 * Tuning.TPS:
+		sim.step()
+		if sim.depart_blocker() == "":
+			break
+	check(sim.depart() == "", "they depart")
+	var sailed := false
+	for i in 90 * Tuning.TPS:
+		sim.step()
+		if sim.on_road(ada) and ada.map == SeaRoad.ID:
+			sailed = true
+			break
+	check(sailed, "they set out onto the sea road from the dock")
+	until_at_site(sim, [ada], SeaRoad.walk_time() + 15)
+	check(ada.map == id, "and arrive at the monument")
+	for i in 900 * Tuning.TPS:
+		sim.step()
+		if not sim.pending.is_empty():
+			sim.choose("press_on")
+		ada.hurt = 0
+		if sim.expedition.is_empty():
+			break
+	check(sim.expedition.is_empty() and ada.map == "village" and mp.creatures.any(func(c): return not c.alive), "they fight, dig and come home")
+
+
 func test_coastal_trip() -> void:
 	Survey.enabled = true
 	var sim := Sim.new_game()

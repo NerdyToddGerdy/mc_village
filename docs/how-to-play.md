@@ -383,7 +383,7 @@ A fifth Nether route leaves the landing through a gap in its **west** wall, lowe
 
 ## The boatyard
 
-**Build → Boatyard** (16 planks, 4 logs and 4 sticks, once the coast is open) builds the party's boat. It's needed for places **out on the sea**: a party sails from the dock along the **sea road**, a longer trip (about 25 seconds each way) than the meadow's walk, drawn as open water with the boat's deck. The planner says "Build a boatyard first" until one stands. The first three coastal places (buried treasure, a shipwreck, ocean ruins) are still walked.
+**Build → Boatyard** (16 planks, 4 logs and 4 sticks, once the coast is open) builds the party's boat. It's needed for places **out on the sea**: a party sails from the dock along the **sea road**, a longer trip (about 25 seconds each way) than the meadow's walk, drawn as open water with the boat's deck. The planner says "Build a boatyard first" until one stands. The first three coastal places (buried treasure, a shipwreck, ocean ruins) are still walked. The **ocean monument**, found by a later coastal survey, is the first place that has to be sailed to: a prismarine hall far out, held by **four guardians** (so send a Guard), with gold and two chests.
 
 ## The coast
 
