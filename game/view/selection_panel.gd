@@ -373,13 +373,13 @@ func _refresh_board(sim: Sim) -> void:
 			col.mouse_filter = Control.MOUSE_FILTER_STOP
 			grid.add_child(col)
 		for r in sim.residents:
-			var who := hud._button(r.name + (" (away)" if r.away else (" (on the road)" if r.map == Road.ID or r.map == MeadowRoad.ID else "")), func(): game.focus_on("res", r.id))
+			var who := hud._button(r.name + (" (away)" if r.away else (" (on the road)" if r.map == Road.ID or r.map == MeadowRoad.ID or r.map == SeaRoad.ID else "")), func(): game.focus_on("res", r.id))
 			who.icon = hud._swatch_tex(r.shirt)
 			who.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			who.custom_minimum_size = Vector2(120, 0)
 			who.toggle_mode = true
 			who.set_pressed_no_signal(game.selection.get("ids", []).has(r.id))
-			who.tooltip_text = "Select %s" % r.name if r.map != Road.ID and r.map != MeadowRoad.ID else "Select %s. %s" % [r.name, _status(sim, r)]
+			who.tooltip_text = "Select %s" % r.name if r.map != Road.ID and r.map != MeadowRoad.ID and r.map != SeaRoad.ID else "Select %s. %s" % [r.name, _status(sim, r)]
 			grid.add_child(who)
 			var pick := _job_picker(sim, r)
 			pick.custom_minimum_size = Vector2(170, 0)

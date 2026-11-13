@@ -217,7 +217,10 @@ func _build_static() -> void:
 	elif sim.m.kind == "route":
 		_add_route_ground(solid)
 	elif sim.m.kind == "walk":
-		_add_walk_ground(solid)
+		if sim.m.id == SeaRoad.ID:
+			_add_sea_ground(solid)
+		else:
+			_add_walk_ground(solid)
 	else:
 		var gsig := "%s|%d|%d|%d|%s|%d" % [sim.m.id, sim.w, sim.h, sim.m.wear.hash(), Palette.mode, sim.m.water.size()]
 		if gsig != _ground_sig:  # the ground is the bulk of the boxes and changes rarely: it keeps its own batch
@@ -569,6 +572,20 @@ func _add_walk_ground(b: Batch) -> void:
 			b.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (TRODDEN if on_line else Palette.GRASS) * Color(v, v, v), BlockTextures.EARTH if on_line else BlockTextures.GROUND)
 	_add_end_sign(b, MeadowRoad.VILLAGE_END + Vector2i(0, -1), -1.0, Palette.GRASS)
 	_add_end_sign(b, MeadowRoad.far_end() + Vector2i(0, -1), 1.0, Palette.GRASS)
+
+
+## The sea road (issue #407): open water, with the boat's plank deck along the line a party sails.
+func _add_sea_ground(b: Batch) -> void:
+	var mp := sim.m
+	for x in mp.w:
+		for y in mp.h:
+			var v := 0.96 + _hash(x, y) * 0.08
+			b.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.4, y + 1), SAND.darkened(0.35), BlockTextures.EARTH)
+			b.box(Vector3(x, -0.4, y), Vector3(x + 1, -0.25, y + 1), WATER * Color(v, v, v))
+	for x in mp.w:
+		b.box(Vector3(x, -0.25, SeaRoad.LINE_ROW + 0.2), Vector3(x + 1, -0.1, SeaRoad.LINE_ROW + 0.8), Palette.PLANK, BlockTextures.BOARD)
+	_add_end_sign(b, SeaRoad.VILLAGE_END + Vector2i(0, -1), -1.0, Palette.GRASS)
+	_add_end_sign(b, SeaRoad.far_end() + Vector2i(0, -1), 1.0, Palette.GRASS)
 
 
 ## A Nether route strip: netherrack, rock and lava as laid out, fire, and the dark where nobody has scouted yet.
@@ -1044,7 +1061,7 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "mason_bench":
 		_add_mason_bench(solid if s.done else ghost, s)
 		return
-	if s.tpl in ["toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table"]:
+	if s.tpl in ["boatyard", "toolsmith_bench", "composter", "lodge", "builder_table", "cartographer_table"]:
 		_add_small_station(solid if s.done else ghost, s)
 		return
 	if s.tpl == "portal":
@@ -1478,6 +1495,12 @@ func _add_small_station(b: Batch, s: Dictionary) -> void:
 			for k in [0.15, 0.75]:
 				b.box(Vector3(x + k, 0, z + 0.15), Vector3(x + k + 0.1, 1.0, z + 0.25), Palette.LOG, BlockTextures.LOG)
 			b.box(Vector3(x + 0.2, 0.35, z + 0.17), Vector3(x + 0.8, 0.95, z + 0.23), Palette.ITEM_COLORS.leather, BlockTextures.FLEECE)
+		"boatyard":  # a hull on a pair of trestles, half planked
+			for k in [0.12, 0.78]:
+				b.box(Vector3(x + k, 0, z + 0.2), Vector3(x + k + 0.1, 0.3, z + 0.8), Palette.LOG, BlockTextures.LOG)
+			b.box(Vector3(x + 0.05, 0.3, z + 0.3), Vector3(x + 0.95, 0.5, z + 0.7), Palette.PLANK, BlockTextures.BOARD)
+			b.box(Vector3(x + 0.45, 0.5, z + 0.3), Vector3(x + 0.55, 0.9, z + 0.36), Palette.LOG, BlockTextures.LOG)
+			b.box(Vector3(x + 0.55, 0.62, z + 0.36), Vector3(x + 0.9, 0.9, z + 0.4), Color("#EFE6CC"))
 		"cartographer_table":  # a slanted desk with a sheet of paper on it
 			for k in [0.12, 0.78]:
 				b.box(Vector3(x + k, 0, z + 0.2), Vector3(x + k + 0.1, 0.55, z + 0.8), Palette.LOG, BlockTextures.LOG)

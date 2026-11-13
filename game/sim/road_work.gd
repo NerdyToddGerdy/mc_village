@@ -10,7 +10,7 @@ static func road(sim: Sim) -> SimMap:
 ## Whether a party member is walking the road map (issue #118), out or home. One who's already home
 ## and out there for other work isn't.
 static func on_road(sim: Sim, r: Dictionary) -> bool:
-	return sim.expedition.get("state", "") == "out" and sim.expedition.party.has(r.id) and (r.map == Road.ID or r.map == MeadowRoad.ID) and r.trip != ""
+	return sim.expedition.get("state", "") == "out" and sim.expedition.party.has(r.id) and (r.map == Road.ID or r.map == MeadowRoad.ID or r.map == SeaRoad.ID) and r.trip != ""
 
 
 ## The road map a trip to `dest` walks: the meadow's strip, or the road to the mine.
@@ -20,6 +20,8 @@ static func road_map_for(dest: String) -> String:
 
 ## The two ends of the road map `id`: the village's and the site's.
 static func road_ends(id: String) -> Array:
+	if id == SeaRoad.ID:
+		return [SeaRoad.VILLAGE_END, SeaRoad.far_end()]
 	return [MeadowRoad.VILLAGE_END, MeadowRoad.far_end()] if id == MeadowRoad.ID else [Road.VILLAGE_END, Road.MINE_END]
 
 
@@ -30,7 +32,7 @@ static func _onto_road(sim: Sim, r: Dictionary, to: String) -> void:
 	sim.move_to_map(r, id, ends[0] if to != "village" else ends[1])
 	r.trip = to
 	sim.maps[id].known = true
-	if id == MeadowRoad.ID:
+	if id == MeadowRoad.ID or id == SeaRoad.ID:
 		return
 	if sim.expedition.get("state", "") == "out":  # when the leg started, for the report (issue #124)
 		var leg: String = "road_" + sim.expedition.get("leg", "out")

@@ -76,6 +76,7 @@ const SKIP_MAX_SECS := 600.0            ## Game seconds a skip runs at most, if 
 const AUTOSAVE_SECS := 300.0            ## Seconds of play between autosaves.
 const AUTOSAVE_MIN_SECS := 120.0        ## A game younger than this isn't autosaved, so a fresh one never replaces a real village's.
 # The meadow (Slice 3.5, issues #137, #138). Its herds are laid out in game/sim/meadow.gd.
+const SEA_ROAD_LEN := 76               ## Cells in the sea road, which sets the sail: 75 cells at WALK is 25 s each way (issue #407).
 const MEADOW_ROAD_LEN := 46             ## Cells in the road to the meadow, which sets the walk: 45 cells at WALK is 15 s each way (issues #210, #377).
 const MEADOW_REGROW := {"sheep": 240.0, "cow": 300.0, "pig": 180.0}  ## Seconds for a species to regain one animal.
 const BULL_CHANCE := 0.15               ## Chance hunting a cow gets the hunter hurt by an angry bull (never seriously).
