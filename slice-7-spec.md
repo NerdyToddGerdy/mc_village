@@ -91,6 +91,10 @@ A `folk` entry in `Structures.DEFS` (`another_village`, found after the geode), 
 
 `MineLevels.biome` gives **"sculk"** (shown as "Deep dark") from `MineLevels.SCULK_FROM` (level 9) down: no torches (`torch_count` is 0), the darkest rock, and the **quiet rule**: `Creatures.on_break` counts blocks broken on the level (`regrow.noise`, saved with the map) and each `Tuning.NOISE_PER_WAKE` wakes the sleeper nearest the sound (`angry`, which makes it come). Its sleepers are zombies (`CAVE_SPECIES.sculk`), standing in until #30. This is the biome the ancient city (#410) sits at the bottom of. No save bump: biomes follow the level number and the counter is in the existing `regrow`.
 
+## The ancient city (#410)
+
+`MineLevels.CITY_LEVEL` (11) is hand-laid (`CITY_LAYOUT`, family "city") instead of generated: level 10's door leads to it, it is in the deep-dark biome (so the quiet rule and no torches apply), and its `door_state` is **"sealed"**: no door down, so `dig_to_door` and the cleared-level step stop there. Sleepers are `Z` zombies placed by the layout. It is the place the Sift (#290, parked) would be reached from. No save bump: the map is built when the door above is opened, as every level is.
+
 ## Next
 
 What's left of group A of #242 needs a trade system and currency (open). Then the structures that need combat (group B), then the late ones. The ruined portal (#243) is already a survey find that unlocks the village's own portal rather than an adventure map.
