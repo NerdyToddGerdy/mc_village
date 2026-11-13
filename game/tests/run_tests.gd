@@ -16,6 +16,7 @@ const ROAD := 50.0
 func _init() -> void:
 	Night.enabled = false  # a long run isn't broken into by a night wave; the night's own tests switch it on
 	Survey.enabled = false  # the old board names the caves; the survey tests switch it on (#321)
+	Creatures.cave_mobs = false  # the cave creatures have their own test
 	var tests := [
 		"test_full_opening",
 		"test_founding_goals",
@@ -32,6 +33,7 @@ func _init() -> void:
 		"test_dig_up_bushes",
 		"test_storehouse_grows",
 		"test_composter_plots",
+		"test_cave_creatures",
 		"test_day_and_night_clock",
 		"test_night_waves",
 		"test_the_iron_golem",
@@ -1656,6 +1658,47 @@ func test_composter_plots() -> void:
 	check(not shared.is_empty() and shared.all(func(c): return c.owner == c2.id and Sim.plot_dying(c) == 0.0), "a plot another composter reaches passes to it (%d)" % shared.size())
 	var loaded := Sim.from_state(sim2.save_state())
 	check(loaded.farm.values().any(func(c): return c.get("owner", 0) == c2.id), "owners are saved")
+
+
+## Issue #241: the caves have creatures from Level 2, each biome its own, and they come back slowly.
+func test_cave_creatures() -> void:
+	Creatures.cave_mobs = true
+	var sim := Sim.new_game()
+	var l1 := MineLevels.build(sim, 1)
+	check(l1.creatures.is_empty(), "Level 1 stays safe")
+	var seen := {}
+	for n in [2, 3, 4, 5, 6, 7]:
+		var m := MineLevels.build(sim, n)
+		var sp: String = Creatures.cave_species(n)
+		check(m.creatures.size() > 0 and m.creatures.all(func(x): return x.species == sp), "Level %d has %s (%d)" % [n, sp, m.creatures.size()])
+		check(m.creatures.all(func(x): return not m.rock.has(x.cell) and Sim.manhattan(x.cell, m.entrance) >= 9), "away from the way in, on open floor")
+		seen[sp] = true
+	check(seen.keys().size() == 3, "each biome has its own creature (%s)" % [seen.keys()])
+	check(MineLevels.build(sim, 3).creatures.map(func(x): return x.cell) == MineLevels.build(sim, 3).creatures.map(func(x): return x.cell), "laid out by the game's seed")
+	check(Creatures.cave_target(6) > Creatures.cave_target(2), "deeper levels have more")
+	# Down they stay for a level; empty, a level slowly fills again, but only while nobody is there.
+	var lvl := MineLevels.build(sim, 2)
+	sim.maps[lvl.id] = lvl
+	lvl.known = true
+	var target := Creatures.cave_target(2)
+	for x in lvl.creatures:
+		x.alive = false
+	sim.use_map(lvl.id)
+	for i in int(Tuning.CAVE_MOB_REGROW * 0.5) * Tuning.TPS:
+		sim.tick += 1
+		Creatures.regrow_cave(sim)
+	check(lvl.creatures.filter(func(x): return x.alive).is_empty(), "a cleared level stays quiet for a while")
+	for i in int(Tuning.CAVE_MOB_REGROW * 0.6) * Tuning.TPS:
+		sim.tick += 1
+		Creatures.regrow_cave(sim)
+	check(lvl.creatures.filter(func(x): return x.alive).size() == 1, "then one comes back")
+	for i in int(Tuning.CAVE_MOB_REGROW * (target + 1)) * Tuning.TPS:
+		sim.tick += 1
+		Creatures.regrow_cave(sim)
+	check(lvl.creatures.filter(func(x): return x.alive).size() == target, "up to the level's number, no more")
+	sim.use_map("village")
+	check(sim.site_report(lvl.id).hazards.any(func(h): return "Something lives down there" in h), "the site report says something lives there")
+	Creatures.cave_mobs = false
 
 
 ## Issue #344: a marked berry bush is dug up by hand and its berries carried off; unmarking it stops the work.
@@ -6276,7 +6319,7 @@ func test_auto_combat() -> void:
 	var tomas: Dictionary = w.tomas
 	var mira: Dictionary = w.mira
 	var landing: SimMap = w.landing
-	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "blaze", "zombie", "spider", "golem"], "the Nether's five creatures, then the village's zombie, spider and golem")
+	check(Defs.CREATURES.keys() == ["magma_cube", "zombified_piglin", "skeleton", "piglin", "blaze", "zombie", "spider", "slime", "drowned", "husk", "golem"], "the Nether's five creatures, then the village's and the caves'")
 	# A guard defeats a magma cube, which leaves its cream.
 	var cube := sim.spawn_creature(NetherLanding.ID, "magma_cube", Sim.rcell(tomas) + Vector2i(5, 0))
 	var xp: int = tomas.jobs.guard.xp

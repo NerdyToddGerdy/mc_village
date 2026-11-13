@@ -59,6 +59,10 @@ const BASE_ITEMS := {
 	# What the village's night mobs leave (issue #358).
 	"rotten_flesh": {"one": "rotten flesh", "many": "rotten flesh", "label": "Rotten flesh", "group": "ores"},
 	"arrow": {"one": "arrow", "many": "arrows", "label": "Arrows", "group": "ores"},
+	# What the caves' creatures leave, by biome (issue #241).
+	"slime_ball": {"one": "slime ball", "many": "slime balls", "label": "Slime balls", "group": "ores"},
+	"nautilus_shell": {"one": "nautilus shell", "many": "nautilus shells", "label": "Nautilus shells", "group": "ores"},
+	"husk_dust": {"one": "husk dust", "many": "husk dust", "label": "Husk dust", "group": "ores"},
 	# The line to the mine (Slice 4, issue #120). A minecart is one big item: one to a cell, hauled like a tool.
 	"rail": {"one": "rail", "many": "rails", "label": "Rails", "group": "building"},
 	"minecart": {"one": "minecart", "many": "minecarts", "label": "Minecarts", "single": true, "group": "building"},
@@ -149,6 +153,10 @@ const CREATURES := {
 	# The village's night (issues #358, #359): mobs that come for residents, and the golem that keeps them off.
 	"zombie": {"name": "Zombie", "hp": 8, "hit": 0.4, "serious": 0.15, "cool": 1.6, "reach": 1, "notice": 0, "drops": {"rotten_flesh": 1}},
 	"spider": {"name": "Spider", "hp": 6, "hit": 0.35, "serious": 0.1, "cool": 1.2, "reach": 1, "notice": 0, "drops": {"string": 1}},
+	# The caves' (issue #241): one for each biome, with its own drop.
+	"slime": {"name": "Slime", "hp": 6, "hit": 0.35, "serious": 0.1, "cool": 1.4, "reach": 1, "notice": 5, "drops": {"slime_ball": 1}},
+	"drowned": {"name": "Drowned", "hp": 8, "hit": 0.4, "serious": 0.15, "cool": 1.6, "reach": 1, "notice": 5, "drops": {"nautilus_shell": 1}},
+	"husk": {"name": "Husk", "hp": 10, "hit": 0.45, "serious": 0.2, "cool": 1.5, "reach": 1, "notice": 6, "drops": {"husk_dust": 1}},
 	"golem": {"name": "Iron golem", "hp": 100, "hit": 0.0, "serious": 0.0, "cool": 1.2, "reach": 1, "notice": 0, "drops": {}},
 }
 

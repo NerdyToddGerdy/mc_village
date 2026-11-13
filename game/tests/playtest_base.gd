@@ -5,6 +5,7 @@ extends SceneTree
 func _init() -> void:
 	Night.enabled = false  # the bots play long stretches: a night wave would break into them
 	Survey.enabled = false  # and they reach the old caves from the board, as before the Cartographer (#321)
+	Creatures.cave_mobs = false  # and no cave creatures break into the trips down
 
 
 var game: Game

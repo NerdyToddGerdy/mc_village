@@ -4061,6 +4061,8 @@ func _step_map() -> void:
 		_regrow_herds()
 	if not m.pens.is_empty():
 		_step_pens()
+	if m.kind == "site" and m.level >= 2:
+		Creatures.regrow_cave(self)
 	if m.kind == "village":
 		LeadHome.step(self)  # the lodge's hunter fetching marked animals from the meadow (issue #355)
 		Night.step(self)  # dusk and dawn, the golem and the night's mobs (issues #357-#359)
