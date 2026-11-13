@@ -208,7 +208,8 @@ const DEFS := {
 		"name": "Stronghold", "find": "a stronghold", "sign": "east", "road": Road.ID, "pin": "south-east:3", "fight": true,
 		"told": "A buried stone fortress past the old caves, with libraries and archers in its halls. Gold and chests, they say.",
 		"access": ["Halls and a library: 1 resident per hall"],
-		"gives": ["gold"], "others": ["gold_ore", "cobble"], "target": ["gold_ore", 4], "picks": 1,
+		"gives": ["gold"], "others": ["gold_ore", "end_stone", "cobble"], "target": ["gold_ore", 4], "picks": 1,
+		"portal": Vector2i(12, 5),  # a portal frame behind the wall, found once its creatures are down (issue #411)
 		"loose": [Vector2i(4, 2), Vector2i(4, 4)], "ledges": [],
 		"layout": [
 			"###t######t###",
@@ -367,4 +368,27 @@ static func build(s: Sim, id: String) -> SimMap:
 		if b.cell in d.loose:
 			b.loose = true
 	m.ledges = d.ledges.duplicate()
+	add_portal(m, id)
 	return m
+
+
+## A structure with a `portal` has a frame block there, hidden until every creature in the place is down (issue #411). Idempotent, so a save from
+## before it gets one on loading. Its id is in the structure's own range, far above the layout's.
+static func add_portal(m: SimMap, id: String) -> void:
+	var d: Dictionary = DEFS[id]
+	if not d.has("portal") or m.boulders.any(func(b): return b.get("ore", "") == "end_portal"):
+		return
+	var b := _block(ID_BASE + IDS.find(id) * ID_SPAN + 900, d.portal, "end_portal")
+	b.hidden = true
+	m.boulders.append(b)
+
+
+## Every creature in a place is down: its hidden portal frame, if it has one, shows (issue #411).
+static func reveal_portal(sim: Sim, m: SimMap) -> void:
+	if not is_structure(m.id) or not DEFS[m.id].has("portal") or m.creatures.any(func(x): return x.alive):
+		return
+	for b in m.boulders:
+		if b.alive and b.get("ore", "") == "end_portal" and b.get("hidden", false):
+			b.erase("hidden")
+			sim._toast("With the last of them down, a portal frame shows in the %s's wall." % m.name.to_lower())
+			sim.rev += 1

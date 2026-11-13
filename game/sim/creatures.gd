@@ -171,6 +171,7 @@ static func _down(sim: Sim, cr: Dictionary) -> void:
 		sim.drop_items(cr.cell, k, drops[k])
 		if not sim.m.drops_known.has(k):
 			sim.m.drops_known.append(k)
+	Structures.reveal_portal(sim, sim.m)  # the stronghold's portal frame (issue #411)
 	sim.rev += 1
 
 
