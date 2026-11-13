@@ -68,6 +68,7 @@ A structure uses an existing road until it needs its own: the meadow's strip (a 
 | Buried treasure | #244 | dock | gold ore, a chest's book | old stone comes down |
 | Shipwreck | #245 | dock | gold ore, flint, two chests | old stone comes down |
 | Ocean ruins | #246 | dock | lapis (needs iron pickaxes), gold ore, a chest | old stone comes down |
+| Ocean monument | #408 | dock, sailed (needs a boatyard) | gold ore, two chests | four guardians (drowned stand in) |
 
 `Survey.FINDS` is an ordered list: each successful survey reveals the next place, so the order is the order places are found in. The two on the road to the mine take its longer walk.
 
