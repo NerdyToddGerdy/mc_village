@@ -104,6 +104,10 @@ const PAGES := [
 		"what": "Obsidian and diamonds make a workshop where an Enchanter reads enchanted books, learning their recipes for good, and enchants tools, swords and armor.",
 		"grows": "Reserves a plot, and grows into a library.",
 		"without": "Enchanted books are only things to carry, and gear stays plain."},
+	{"id": "dock", "clue": "Something at the edge of the sea.", "title": "Dock", "tpl": "dock", "unlock": "coast", "who": "Builders",
+		"what": "Planks laid from the beach out over the sea. A party leaves from its far end for the coast, and the Cartographer can survey the sea's sectors from it.",
+		"grows": "It doesn't grow, and there's only one. It can't be moved.",
+		"without": "The coast can't be surveyed or reached."},
 	{"id": "portal_station", "clue": "Something a lit portal leads to.", "title": "Portal station", "tpl": "portal_station", "unlock": "portal_line", "who": "Builders; a Build party lays the Nether side",
 		"what": "The village end of the portal line, beside the portal, with a landing station beside the shelter in the Nether. Carts and parties ride it.",
 		"grows": "Reserves a plot, and grows into a freight loader.",
@@ -172,6 +176,7 @@ static func page_known(sim: Sim, page: Dictionary) -> bool:
 		"road": return sim.get_map("old_mine").visited
 		"enchanting": return sim.stats.get("book_found", false) or sim.maps.village.sites.any(func(x): return x.tpl == "enchanting_workshop")
 		"portal_line": return not sim.village_portal().is_empty()
+		"coast": return sim.maps.village.coast != "" and sim.stats.get("built", {}).has("board")
 		"portal": return sim.stats.get("obsidian_home", false) or sim.maps.village.sites.any(func(x): return x.tpl == "portal")
 	return true
 

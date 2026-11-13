@@ -27,6 +27,7 @@ const ACTIONS := [
 	["portal", "Orders", "Place a Nether portal", []],
 	["enchanting_workshop", "Orders", "Place an enchanting workshop", []],
 	["portal_station", "Orders", "Place a portal station", []],
+	["dock", "Orders", "Place a dock", []],
 	["cache_sensor", "Orders", "Place a cache sensor", []],
 	["condition", "Orders", "Place a condition", []],
 	["freight_loader", "Orders", "Place a freight loader", []],

@@ -356,6 +356,8 @@ func _initialize() -> void:
 	await key(KEY_B)
 	check(await click_button("Claim land"), "the Build menu lists Claim land")
 	check(game.tool == "claim", "it starts the claim order")
+	game._hud.refresh(sim)  # the Build menu closes with it: the paused HUD needs to be told, or its taller panel still lies over the north edge
+	await frames(2)
 	var h_before: int = sim.h
 	game._target = Vector3(sim.w / 2.0, 0, 6.0)  # looking along the north edge, strips and all
 	game._cam.size = 30.0

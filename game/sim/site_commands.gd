@@ -14,6 +14,19 @@ static func placement_check(sim: Sim, tpl: String, origin: Vector2i, rot := 0, i
 			return "Find the ruined portal first: send a Cartographer to survey"
 	var size: Vector2i = Defs.TEMPLATES[tpl].size
 	var foot := Rect2i(origin, size)
+	if tpl == "dock":  # one dock, from the beach out over the sea (Slice 7, issue #271)
+		rot = 0
+		if sim.m.coast == "":
+			return "This village has no coast"
+		if sim.maps.village.sites.any(func(x): return x.tpl == "dock" and x.id != ignore):
+			return "There's a dock already"
+		if origin.y != sim.m.h - size.y or origin.x < 0 or origin.x >= sim.m.w:
+			return "The dock runs from the beach out over the sea"
+	elif tpl != "bridge":
+		for x in range(origin.x, origin.x + size.x):
+			for y in range(origin.y, origin.y + size.y):
+				if sim.m.water.has(Vector2i(x, y)):
+					return "The sea: nothing is built on water"
 	if origin.x < 0 or origin.y < 0 or origin.x + size.x > sim.w or origin.y + size.y > sim.h:
 		return "Too close to the edge"
 	if foot.has_point(sim.meadow_sign()):
@@ -64,6 +77,10 @@ static func placement_check(sim: Sim, tpl: String, origin: Vector2i, rot := 0, i
 		var no_room := "Not enough room to grow into a %s" % Defs.TEMPLATES[tpl].plot
 		if not Rect2i(0, 0, sim.w, sim.h).encloses(plot):
 			return no_room
+		for x in range(plot.position.x, plot.end.x):
+			for y in range(plot.position.y, plot.end.y):
+				if sim.m.water.has(Vector2i(x, y)):
+					return no_room
 		for s in sim.m.sites:
 			if s.id != ignore and (Rect2i(s.origin, s.size).intersects(plot) or (s.get("plot") != null and s.plot.intersects(plot))):
 				return no_room
@@ -156,7 +173,7 @@ static func update_house(sim: Sim, s: Dictionary) -> String:
 
 
 static func place_site(sim: Sim, tpl: String, origin: Vector2i, rot := 0) -> Dictionary:
-	if tpl == "portal":
+	if tpl == "portal" or tpl == "dock":
 		rot = 0
 	var s := {"id": sim._id(), "kind": "site", "tpl": tpl, "origin": origin, "size": Defs.TEMPLATES[tpl].size,
 		"rot": rot, "stage": 0, "store": {}, "incoming": {}, "builder": 0, "crafter": 0, "crafting": "",

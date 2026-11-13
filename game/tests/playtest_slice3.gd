@@ -148,6 +148,8 @@ func _initialize() -> void:
 		await look_at(c)
 		await click(screen(c, 0.5))
 	await key(KEY_ESCAPE)
+	if not sim.expedition.is_empty():  # the party mines cobblestone on its own meanwhile, and which block it reaches first moves with the ids: don't let a full pack send it home before the iron is in
+		sim.expedition.policy.full = false
 	check(await play_ticks_until(400, func(): return sim.expedition.get("cargo", {}).get("iron_ore", 0) >= 3 and sim.expedition.cargo.get("coal", 0) >= 3), "the party mines and packs iron ore and coal (%s, why %s, load %d of %d, %s)" % [sim.expedition.get("cargo", {}), sim.expedition.get("home_why", ""), sim.pack_load(), Sim.pack_capacity(sim.expedition), _seen.filter(func(t): return "Heading home" in t or "Back from" in t or "hurt" in t)])
 
 	# ---- A serious injury (issue #110): triggered here, then answered with Retreat

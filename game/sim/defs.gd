@@ -215,7 +215,7 @@ static func trade_text(t: Dictionary) -> String:
 const ORES := {"coal": {"item": "coal", "name": "Coal ore"}, "iron": {"item": "iron_ore", "name": "Iron ore"}, "diamond": {"item": "diamond", "name": "Diamond ore"},
 	"chest": {"item": "book_efficiency", "name": "Chest"},  # a chest in the rock holds one book, named by the block (issue #164)
 	"lapis": {"item": "lapis", "name": "Lapis ore"}, "redstone": {"item": "redstone", "name": "Redstone ore"},
-	"quartz": {"item": "quartz", "name": "Nether quartz ore"}, "glowstone": {"item": "glowstone", "name": "Glowstone"},
+	"quartz": {"item": "quartz", "name": "Nether quartz ore"}, "fossil": {"item": "bone", "name": "Nether fossil"}, "glowstone": {"item": "glowstone", "name": "Glowstone"},
 	"gold": {"item": "gold_ore", "name": "Gold ore"}, "obsidian": {"item": "obsidian", "name": "Obsidian"}, "gravel": {"item": "flint", "name": "Gravel"}}
 
 ## `pattern` (bench) and `fuel` (fireplace) are display only, for the Craft panel's crafting grid and
@@ -398,6 +398,10 @@ const TEMPLATES := {
 	# Where recipes are learned from books and gear enchanted (Slice 6, issue #165). It grows into a library.
 	"enchanting_workshop": {"name": "Enchanting workshop", "size": Vector2i(1, 1), "plot": "library", "stages": [
 		{"name": "Workshop", "verb": "needs", "cost": {"obsidian": 4, "diamond": 2, "plank": 6}},
+	]},
+	# The dock (Slice 7, issue #271): runs from the beach out over the sea, walkable once built. A party leaves by it for the coast.
+	"dock": {"name": "Dock", "size": Vector2i(1, Tuning.DOCK_LAND + Tuning.COAST_DEPTH), "walk": true, "stages": [
+		{"name": "Dock", "verb": "needs", "cost": {"plank": 12, "log": 4}},
 	]},
 	"house": {"name": "House", "size": Vector2i(5, 5), "stages": [
 		{"name": "Foundation", "verb": "needs", "cost": {"cobble": 8}},

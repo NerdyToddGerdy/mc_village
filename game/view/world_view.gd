@@ -219,14 +219,22 @@ func _build_static() -> void:
 	elif sim.m.kind == "walk":
 		_add_walk_ground(solid)
 	else:
-		var gsig := "%s|%d|%d|%d|%s" % [sim.m.id, sim.w, sim.h, sim.m.wear.hash(), Palette.mode]
+		var gsig := "%s|%d|%d|%d|%s|%d" % [sim.m.id, sim.w, sim.h, sim.m.wear.hash(), Palette.mode, sim.m.water.size()]
 		if gsig != _ground_sig:  # the ground is the bulk of the boxes and changes rarely: it keeps its own batch
 			_ground_sig = gsig
 			var g := Batch.new()
 			for x in sim.w:
 				for y in sim.h:
 					var v := 0.96 + _hash(x, y) * 0.08
+					if sim.m.water.has(Vector2i(x, y)):  # the sea along the village's coast (issue #271), a little below the beach
+						var edge: bool = not sim.m.water.has(Vector2i(x, y - 1))
+						g.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.4, y + 1), SAND.darkened(0.35), BlockTextures.EARTH)
+						g.box(Vector3(x, -0.4, y), Vector3(x + 1, -0.25, y + 1), (WATER.lightened(0.18) if edge else WATER) * Color(v, v, v))
+						continue
 					g.box(Vector3(x, -0.6, y), Vector3(x + 1, -0.1, y + 1), Palette.DIRT, BlockTextures.EARTH)
+					if sim.m.coast != "" and sim.m.water.has(Vector2i(x, y + 1)):  # the beach, the row above the sea
+						g.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), SAND * Color(v, v, v), BlockTextures.EARTH)
+						continue
 					var stage := sim.path_stage(Vector2i(x, y))  # the ground packs down where residents walk (issue #196)
 					if stage >= 2:
 						g.box(Vector3(x, -0.1, y), Vector3(x + 1, 0, y + 1), (TRODDEN if stage == 2 else PACKED) * Color(v, v, v), BlockTextures.EARTH)
@@ -1042,6 +1050,9 @@ func _add_site(solid: Batch, ghost: Batch, s: Dictionary) -> void:
 	if s.tpl == "portal":
 		_add_portal(solid if s.done else ghost, s)
 		return
+	if s.tpl == "dock":
+		_add_dock(solid if s.done else ghost, s)
+		return
 	if s.tpl == "shelter":
 		_add_shelter(solid if s.done else ghost, s)
 		return
@@ -1167,6 +1178,21 @@ func _add_house_decor(b: Batch, s: Dictionary, r: Rect2i) -> void:
 	b.box(Vector3(sapling.x + 0.25, 0.5, sapling.y + 0.25), Vector3(sapling.x + 0.75, 0.9, sapling.y + 0.75), Palette.LEAVES, BlockTextures.FOLIAGE)
 
 
+## The dock (issue #271): planks laid over the beach and out across the water, on piles, with a post at the sea end.
+func _add_dock(b: Batch, s: Dictionary) -> void:
+	var o: Vector2i = s.origin
+	var col := Palette.PLANK if s.done else Color(Palette.BLUE, 0.45)
+	for i in s.size.y:
+		var y: int = o.y + i
+		b.box(Vector3(o.x + 0.1, -0.05, y), Vector3(o.x + 0.9, 0.08, y + 1.0), col, BlockTextures.BOARD)
+		if i % 2 == 0 and y >= o.y + Tuning.DOCK_LAND:
+			b.box(Vector3(o.x + 0.05, -0.55, y + 0.4), Vector3(o.x + 0.2, 0.0, y + 0.55), Palette.LOG, BlockTextures.LOG)
+			b.box(Vector3(o.x + 0.8, -0.55, y + 0.4), Vector3(o.x + 0.95, 0.0, y + 0.55), Palette.LOG, BlockTextures.LOG)
+	var e := o + Vector2i(0, s.size.y - 1)
+	b.box(Vector3(e.x + 0.42, 0.08, e.y + 0.7), Vector3(e.x + 0.58, 0.9, e.y + 0.85), Palette.LOG, BlockTextures.LOG)
+	b.box(Vector3(e.x + 0.3, 0.7, e.y + 0.68), Vector3(e.x + 0.7, 0.9, e.y + 0.87), Palette.RED if s.done else col)
+
+
 ## What fills a job building's plot until it grows into it (issue #285): a crate and a young sapling flanking its entrance step.
 func _add_station_decor(b: Batch, s: Dictionary) -> void:
 	var cells := Sim.station_decor_cells(s)
@@ -1178,6 +1204,7 @@ func _add_station_decor(b: Batch, s: Dictionary) -> void:
 
 
 static var EMBER := Color("#E8763A")
+static var SAND := Color("#D9C89A")
 
 
 ## Boundary stakes for a land claim (issue #187): a stake on their own cell, and one at each corner

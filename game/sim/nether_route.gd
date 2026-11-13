@@ -43,6 +43,16 @@ const ROUTES := {
 			{"name": "The lava lake", "terrain": "a lava lake", "obstacle": "lava", "hazards": ["Lava on both sides: someone can be burned", "Patches of fire"]},
 			{"name": "The fortress wall", "terrain": "netherrack", "obstacle": "", "hazards": ["A ledge: someone could fall"]}],
 		"creatures": [["magma_cube", Vector2i(26, 3)], ["magma_cube", Vector2i(36, 2)]]},
+	"fossil": {"id": "nether_route_fossil", "name": "Nether: route to the fossil ridge", "site": "nether_fossil", "site_name": "Nether: fossil ridge",
+		"exit": Vector2i(0, 20), "told": "A way west past the lava, to a bone-white ridge.",
+		"segments": [
+			{"name": "The landing's edge", "terrain": "netherrack", "obstacle": "", "hazards": []},
+			{"name": "Netherrack flats", "terrain": "netherrack", "obstacle": "", "hazards": []},
+			{"name": "The lava pool", "terrain": "a lava pool", "obstacle": "lava", "hazards": ["Lava beside the way: someone can be burned"]},
+			{"name": "Open flats", "terrain": "netherrack", "obstacle": "", "hazards": []},
+			{"name": "The bone-white ridge", "terrain": "a rocky cut", "obstacle": "cut", "hazards": []},
+			{"name": "Below the ridge", "terrain": "netherrack", "obstacle": "", "hazards": []}],
+		"creatures": [["magma_cube", Vector2i(24, 3)]]},
 }
 
 
@@ -94,6 +104,9 @@ static func build(s: Sim, key: String) -> SimMap:
 			_lava(m, 18, 21, [0, 1, 2, 4, 5, 6])
 			_fire(m, [Vector2i(27, 1), Vector2i(29, 5)])
 			_ledge(m, [Vector2i(34, 3), Vector2i(35, 3)])
+		"fossil":
+			_lava(m, 18, 21, [1, 2, 4, 5])
+			_rock(m, 34, 37, [0, 1, 2, 4, 5, 6])
 		"piglin":
 			_lava(m, 12, 15, [1, 2, 5])
 			_ledge(m, [Vector2i(27, 3), Vector2i(28, 3)])
@@ -144,6 +157,8 @@ static func _build_laid(s: Sim, key: String, rows: Array) -> SimMap:
 					m.boulders.append(OldMine._block(s, c, "quartz"))
 				"g":
 					m.boulders.append(OldMine._block(s, c, "glowstone"))
+				"f":
+					m.boulders.append(OldMine._block(s, c, "fossil"))
 				"B", "S":
 					var sp := "blaze" if rows[y][x] == "B" else "skeleton"
 					m.creatures.append({"id": s._id(), "kind": "creature", "species": sp, "cell": c, "pos": Vector2(c), "alive": true,
@@ -242,6 +257,22 @@ const FORTRESS_LAYOUT := [
 ]
 
 
+## The fossil ridge (issue #254): f a block of Nether fossil, which gives bone; the lava is rock to walk round.
+const FOSSIL_LAYOUT := [
+	"##################",
+	"#..f.....q.....f.#",
+	"#....###.........#",
+	"#.f..#L#....f..g.#",
+	"#....###.........#",
+	"E.......f........#",
+	"#........###.....#",
+	"#.f......#L#..f..#",
+	"#........###.....#",
+	"#..q.......f.....#",
+	"##################",
+]
+
+
 ## Room kept clear for the Nether line's far station (issue #159): its platform and the plot a loading station grows into.
 const QUARTZ_STATION_PLOT := Rect2i(14, 12, 5, 1)
 const QUARTZ_TOLD := "Where nether quartz is said to lie, with glowstone in the rock."
@@ -256,6 +287,8 @@ static func build_site(s: Sim, key: String) -> SimMap:
 		return _build_laid(s, key, PIGLIN_LAYOUT)
 	if key == "fortress":
 		return _build_laid(s, key, FORTRESS_LAYOUT)
+	if key == "fossil":
+		return _build_laid(s, key, FOSSIL_LAYOUT)
 	var def: Dictionary = ROUTES[key]
 	var m := SimMap.new(16, 16)
 	m.id = def.site

@@ -33,7 +33,7 @@ static func def(id: String) -> Dictionary:
 	if Structures.is_structure(id):  # a structure is a mine-kind adventure whose parts are its own table's
 		var d: Dictionary = Structures.DEFS[id]
 		return {"kind": "mine", "sign": d.sign, "road": d.road, "cargo": id, "others": d.others, "target": d.target, "picks": d.picks,
-			"pens": false, "got": "mined", "left": "nothing left to mine", "told": d.told}
+			"pens": false, "got": "mined", "left": "nothing left to mine", "told": d.told, "fight": d.get("fight", false)}
 	return DEFS.get(id, DEFS[OldMine.ID])
 
 

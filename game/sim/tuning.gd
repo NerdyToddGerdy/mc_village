@@ -7,6 +7,8 @@ const DT := 1.0 / TPS
 const SPEEDS := [0, 1, 2, 3]
 
 const CLAIM_EVERY := 2                  ## A land claim for every this many residents beyond the founding pair (issue #187).
+const COAST_DEPTH := 3                 ## How many rows of sea a new game has along its south edge (Slice 7, issue #271).
+const DOCK_LAND := 3                   ## The dock runs this many cells over the beach and COAST_DEPTH out over the sea.
 const CLAIM_DEPTH := 8                  ## How deep a claimed strip is, in cells.
 const CLAIM_STAKES := 4                 ## Sticks a builder plants as boundary stakes.
 const MAP_MAX := 64                     ## The village never grows past this many cells a side.
@@ -89,7 +91,7 @@ const BREED_COOLDOWN := 300.0           ## Seconds before a pair that bred can b
 const GROW_TIME := 240.0                ## Seconds for a young animal to grow up; till then it can't be hunted.
 
 # Site maps (Slice 3, issues #102, #103).
-const ORE_YIELD := {"coal": 3, "iron": 4, "diamond": 1, "gold": 2, "obsidian": 1, "gravel": 1, "quartz": 2, "glowstone": 2, "lapis": 3, "redstone": 3, "chest": 1}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).
+const ORE_YIELD := {"coal": 3, "iron": 4, "diamond": 1, "gold": 2, "obsidian": 1, "gravel": 1, "quartz": 2, "fossil": 2, "glowstone": 2, "lapis": 3, "redstone": 3, "chest": 1}  ## Items an ore block drops (coal; iron ore). The vein pays for the line (Slice 4).
 const TORCH_LIGHT := 3.0                ## Cells a torch lights; open cells further from every torch are dark.
 # The old mine's deeper levels (issue #132).
 const LEVEL_ORE := {"coal": 2, "iron": 1}  ## Ore blocks each level down adds to Level 1's 6 coal and 4 iron.
@@ -163,6 +165,17 @@ const KEEP_STEP := 5                    ## The keep-stock target's step in the w
 ## amount wanted (0: as much as fits). Only the items the village knows the location gives are listed.
 const CARGO_DEFAULTS := {
 	"mine": [["iron_ore", 8], ["coal", 8], ["cobble", 0]],
+	"dungeon": [["coal", 6], ["cobble", 0]],
+	"igloo_cellar": [["flint", 4], ["coal", 3], ["cobble", 0]],
+	"swamp_hut": [["coal", 6], ["cobble", 0]],
+	"pillager_outpost": [["gold_ore", 4], ["cobble", 0]],
+	"trial_chambers": [["gold_ore", 4], ["lapis", 3], ["redstone", 3], ["cobble", 0]],
+	"woodland_mansion": [["gold_ore", 4], ["lapis", 3], ["redstone", 3], ["cobble", 0]],
+	"stronghold": [["gold_ore", 4], ["cobble", 0]],
+	"abandoned_mineshaft": [["coal", 8], ["flint", 3], ["cobble", 0]],
+	"buried_treasure": [["gold_ore", 4], ["cobble", 0]],
+	"shipwreck": [["gold_ore", 4], ["flint", 3], ["cobble", 0]],
+	"ocean_ruins": [["lapis", 4], ["gold_ore", 2], ["cobble", 0]],
 	"desert_well": [["gold_ore", 4], ["cobble", 0]],
 	"desert_temple": [["gold_ore", 4], ["cobble", 0]],
 	"jungle_temple": [["redstone", 4], ["lapis", 3], ["cobble", 0]],
