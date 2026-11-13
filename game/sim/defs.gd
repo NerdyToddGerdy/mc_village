@@ -150,6 +150,7 @@ const CREATURES := {
 	"skeleton": {"name": "Skeleton", "hp": 6, "hit": 0.3, "serious": 0.2, "cool": 2.0, "reach": 4, "notice": 6, "drops": {"bone": 1}},
 	"piglin": {"name": "Piglin", "hp": 12, "hit": 0.5, "serious": 0.3, "cool": 1.4, "reach": 1, "notice": 0, "drops": {}},
 	"villager": {"name": "Villager", "hp": 8, "hit": 0.0, "serious": 0.0, "cool": 9.0, "reach": 0, "notice": 0, "drops": {}},  # a friendly folk of another village (issue #253)
+	"piglin_brute": {"name": "Piglin brute", "hp": 20, "hit": 0.6, "serious": 0.35, "cool": 1.2, "reach": 1, "notice": 6, "drops": {"gold_ingot": 2}},  # the bastion's fighters (issue #264)
 	"blaze": {"name": "Blaze", "hp": 10, "hit": 0.3, "serious": 0.3, "cool": 2.2, "reach": 5, "notice": 7, "drops": {"blaze_rod": 1}},
 	# The village's night (issues #358, #359): mobs that come for residents, and the golem that keeps them off.
 	"zombie": {"name": "Zombie", "hp": 8, "hit": 0.4, "serious": 0.15, "cool": 1.6, "reach": 1, "notice": 0, "drops": {"rotten_flesh": 1}},
