@@ -1689,6 +1689,7 @@ func test_the_deep_dark() -> void:
 	m.visited = true
 	var rep := sim.site_report(m.id)
 	check(rep.biome == "Deep dark" and rep.hazards.any(func(h): return h.contains("wake a sleeper")), "the report names the biome and the rule")
+	Creatures.cave_mobs = false
 
 
 ## Issue #241: the caves have creatures from Level 2, each biome its own, and they come back slowly.
