@@ -53,6 +53,16 @@ const ROUTES := {
 			{"name": "The bone-white ridge", "terrain": "a rocky cut", "obstacle": "cut", "hazards": []},
 			{"name": "Below the ridge", "terrain": "netherrack", "obstacle": "", "hazards": []}],
 		"creatures": [["magma_cube", Vector2i(24, 3)]]},
+	"bastion": {"id": "nether_route_bastion", "name": "Nether: route to the bastion", "site": "nether_bastion", "site_name": "Nether: bastion remnant",
+		"exit": Vector2i(0, 16), "told": "A way west across the black stone, to a hostile stronghold of the piglins. Gold, and chests, and strong fighters.",
+		"segments": [
+			{"name": "The landing's edge", "terrain": "netherrack", "obstacle": "", "hazards": []},
+			{"name": "Blackstone flats", "terrain": "netherrack", "obstacle": "", "hazards": []},
+			{"name": "The lava channel", "terrain": "a lava channel", "obstacle": "lava", "hazards": ["Lava on both sides of a narrow way: someone can be burned"]},
+			{"name": "Open flats", "terrain": "netherrack", "obstacle": "", "hazards": []},
+			{"name": "The broken causeway", "terrain": "a drop", "obstacle": "gap", "hazards": ["A ledge: someone could fall"]},
+			{"name": "The bastion's gate", "terrain": "netherrack", "obstacle": "", "hazards": []}],
+		"creatures": [["magma_cube", Vector2i(22, 3)]]},
 }
 
 
@@ -107,6 +117,9 @@ static func build(s: Sim, key: String) -> SimMap:
 		"fossil":
 			_lava(m, 18, 21, [1, 2, 4, 5])
 			_rock(m, 34, 37, [0, 1, 2, 4, 5, 6])
+		"bastion":
+			_lava(m, 14, 17, [0, 1, 2, 4, 5, 6])
+			_ledge(m, [Vector2i(30, 3), Vector2i(31, 3)])
 		"piglin":
 			_lava(m, 12, 15, [1, 2, 5])
 			_ledge(m, [Vector2i(27, 3), Vector2i(28, 3)])
@@ -159,6 +172,13 @@ static func _build_laid(s: Sim, key: String, rows: Array) -> SimMap:
 					m.boulders.append(OldMine._block(s, c, "glowstone"))
 				"f":
 					m.boulders.append(OldMine._block(s, c, "fossil"))
+				"G":
+					m.boulders.append(OldMine._block(s, c, "gold"))
+				"K":
+					m.boulders.append(OldMine._block(s, c, "chest"))
+				"R":
+					m.creatures.append({"id": s._id(), "kind": "creature", "species": "piglin_brute", "cell": c, "pos": Vector2(c), "alive": true,
+						"hp": Defs.CREATURES.piglin_brute.hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0})
 				"B", "S":
 					var sp := "blaze" if rows[y][x] == "B" else "skeleton"
 					m.creatures.append({"id": s._id(), "kind": "creature", "species": sp, "cell": c, "pos": Vector2(c), "alive": true,
@@ -273,6 +293,25 @@ const FOSSIL_LAYOUT := [
 ]
 
 
+## The bastion remnant (issue #264), fight only: R a piglin brute, who comes for anyone who walks in; G gold ore; K a chest holding a
+## book; the walls inside are rock to walk round. There's no bargaining here (the piglin camp is the one that trades).
+const BASTION_LAYOUT := [
+	"######################",
+	"#G..K.......#.....G..#",
+	"#...R.......#..R.....#",
+	"#.....###...#........#",
+	"#.....#G#............#",
+	"#.....###..R...###...#",
+	"E..........#...#K#...#",
+	"#.......R..#...###...#",
+	"#...###....#.........#",
+	"#...#K#....###.#######",
+	"#...###..............#",
+	"#G.......R.......G...#",
+	"######################",
+]
+
+
 ## Room kept clear for the Nether line's far station (issue #159): its platform and the plot a loading station grows into.
 const QUARTZ_STATION_PLOT := Rect2i(14, 12, 5, 1)
 const QUARTZ_TOLD := "Where nether quartz is said to lie, with glowstone in the rock."
@@ -289,6 +328,8 @@ static func build_site(s: Sim, key: String) -> SimMap:
 		return _build_laid(s, key, FORTRESS_LAYOUT)
 	if key == "fossil":
 		return _build_laid(s, key, FOSSIL_LAYOUT)
+	if key == "bastion":
+		return _build_laid(s, key, BASTION_LAYOUT)
 	var def: Dictionary = ROUTES[key]
 	var m := SimMap.new(16, 16)
 	m.id = def.site
