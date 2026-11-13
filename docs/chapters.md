@@ -91,7 +91,7 @@ Chapters 1 to 3 are also the opening's three book chapters decided in #318 (Shel
 
 *Everything past the Nether.*
 - **Built:** nothing in the sim yet.
-- **Built (Slice 7, started):** eighteen mine-kind structures (#244 to #253 and #255 to #262, another village among them, friendly, where one villager can be invited home, eight of them with creatures inside: the desert well, desert temple, jungle temple, fossil site, trail ruins, geode, and on the new coast buried treasure, a shipwreck and ocean ruins), found by the Cartographer's surveys, and the village's coast with its dock (#271); the Nether has a fourth route to a fossil ridge (#254) and a fifth to a fight-only bastion (#264). See `slice-7-spec.md`.
+- **Built (Slice 7, started):** nineteen mine-kind structures (#244 to #253, the ocean monument (#265) and #255 to #262, another village among them, friendly, where one villager can be invited home, eight of them with creatures inside: the desert well, desert temple, jungle temple, fossil site, trail ruins, geode, and on the new coast buried treasure, a shipwreck and ocean ruins), found by the Cartographer's surveys, and the village's coast with its dock (#271); the Nether has a fourth route to a fossil ridge (#254) and a fifth to a fight-only bastion (#264). See `slice-7-spec.md`.
 - **Prepared:** #289 (the End: a stronghold portal, the dragon's platform, bridging out), #290 (the Sift, parked), #242 and #243–#268 (Slice 7: 26 structures as adventures), #271 (a coast, a dock and underwater adventures), #66 (night and mobs).
 - **Needs to get to:** a late game of long, planned journeys, each different.
 
