@@ -191,7 +191,10 @@ static func _down(sim: Sim, cr: Dictionary) -> void:
 		sim.drop_items(cr.cell, k, drops[k])
 		if not sim.m.drops_known.has(k):
 			sim.m.drops_known.append(k)
-	Structures.reveal_portal(sim, sim.m)  # the stronghold's portal frame (issue #411)
+	if cr.species == "dragon" and not sim.stats.get("dragon_down", false):  # the End's one boss: a reward that carries on, not an ending (issue #412)
+		sim.stats.dragon_down = true
+		sim._toast("The dragon is down. The bridge out to the islands can be laid.")
+	Structures.reveal_portal(sim, sim.m)  # the stronghold's portal frame (issue #411); the End's bridge stones (issue #413)
 	sim.rev += 1
 
 

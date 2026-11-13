@@ -76,7 +76,7 @@ static func gives(b: Dictionary, item: String) -> bool:
 		"redstone": return b.get("ore", "") == "redstone"
 		"quartz": return b.get("ore", "") == "quartz"
 		"bone": return b.get("ore", "") == "fossil"
-		"end_stone": return b.get("ore", "") == "end_portal"
+		"end_stone": return b.get("ore", "") in ["end_portal", "bridge_stone"]
 		"glowstone": return b.get("ore", "") == "glowstone"
 	return false
 

@@ -395,6 +395,10 @@ Once the expedition board is built, **Build → Dock** (12 planks and 4 logs) la
 
 A small village of its own folk, to the west by the meadow's road. It's friendly: no guard needed, and nothing there to fear. The party digs a little coal, and **one villager is invited home** on each visit: they walk home behind the party, and **take a free bed** like any traveller (the planner warns when there's no free bed). It adds to the travellers who walk in on their own; it doesn't replace them. There are only **four** villagers, so it's four visits' worth. There's no trading yet.
 
+## The End
+
+Dig the **portal frame** in the stronghold (see above) and **the End** appears on the expedition board: a floating platform of pale stone, reached by the road to the old caves. It is **a fight and a commitment**: send guards with armor and swords, and expect more than one trip. **The dragon** (90 health, always after the party) **keeps its wounds between trips**, so a retreat leaves it hurt. There are edges on the platform; a fall costs the trip's supplies and injures, never a life. With the dragon down, **three bridge stones** show on the platform's east side: ask for End stone in the plan and dig the last one, and the bridge out to the islands is laid. Then an **End city** (towers, chests, gold and lapis, with guards) and an **End ship** (a hold with chests and a hostile crew) join the board. Beating the dragon is a reward that carries on, not an ending.
+
 ## Structures
 
 After the old caves and the ruined portal, each further **Cartographer's survey** that succeeds finds the next **structure**: a desert well, a desert temple, a jungle temple, a fossil site, some trail ruins, a geode and **another village**, in that order. A found structure gets a red pin on the world map and a row on the expedition board, with what's said of it, what it holds and the walk there.

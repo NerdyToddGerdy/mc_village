@@ -7,7 +7,7 @@ extends RefCounted
 ## `OldMine.LAYOUT`, with
 ##   g gold ore   l lapis   r redstone   v gravel (flint)   c coal   k a chest in the stone, holding one enchanted book
 ##   V a villager, friendly: one can be invited home (`folk`, Visits)
-##   D a drowned (the monument's guardians, until #30 settles names)   Z a zombie   S a skeleton   X a spider: they come for the party, so a place with them has `fight` and wants a guard
+##   N the dragon   s a hidden bridge stone   D a drowned (the monument's guardians, until #30 settles names)   Z a zombie   S a skeleton   X a spider: they come for the party, so a place with them has `fight` and wants a guard
 
 const DEFS := {
 	"desert_well": {
@@ -295,6 +295,56 @@ const DEFS := {
 			"###t######t###",
 		],
 	},
+	"end_platform": {
+		"name": "The End: the dragon's platform", "find": "the End", "sign": "east", "road": Road.ID, "pin": "east:3", "fight": true, "end": true,
+		"told": "Through the stronghold's portal: a floating platform of pale stone over nothing, and the dragon that rules it. It wants armor, guards and a plan, and more than one trip.",
+		"access": ["An open platform with edges: the party fights where it stands"],
+		"gives": ["gold"], "others": ["gold_ore", "end_stone", "cobble"], "target": ["gold_ore", 4], "picks": 1,
+		"loose": [Vector2i(6, 5), Vector2i(17, 3)], "ledges": [Vector2i(20, 5), Vector2i(20, 4)],
+		"layout": [
+			"######t########t######",
+			"#g....o......g.......#",
+			"#..k.........o....k..#",
+			"#.....##.........o...#",
+			"#.....##......N......#",
+			"E.....o.........sss..#",
+			"#.....##......S......#",
+			"#.....##.........o...#",
+			"#..k.........o....k..#",
+			"#g....o......g.......#",
+			"######t########t######",
+		],
+	},
+	"end_city": {
+		"name": "End city", "find": "an End city", "sign": "east", "road": Road.ID, "pin": "east:3", "fight": true, "end": true,
+		"told": "A purple tower city on an island past the bridge. Chests in its rooms, and what guards them. It wants an iron pickaxe.",
+		"access": ["Tower rooms: 1 resident per room"],
+		"gives": ["gold", "lapis"], "others": ["gold_ore", "lapis", "cobble"], "target": ["gold_ore", 4], "picks": 1,
+		"loose": [Vector2i(4, 2), Vector2i(4, 4)], "ledges": [],
+		"layout": [
+			"###t######t###",
+			"#g..k..#..X.l#",
+			"#...o..#..S..#",
+			"E.......S....#",
+			"#...o..#..k..#",
+			"#k..S..#.....#",
+			"###t######t###",
+		],
+	},
+	"end_ship": {
+		"name": "End ship", "find": "an End ship", "sign": "east", "road": Road.ID, "pin": "east:3", "fight": true, "end": true,
+		"told": "A ship that sails the void beside the End city. Its hold has chests, and its crew is not friendly.",
+		"access": ["A narrow deck: 1 resident at a time"],
+		"gives": ["gold"], "others": ["gold_ore", "cobble"], "target": ["gold_ore", 4], "picks": 1,
+		"loose": [Vector2i(3, 2)], "ledges": [],
+		"layout": [
+			"##t######t##",
+			"#X..k....g.#",
+			"E..o.....X.#",
+			"#..k....o..#",
+			"##t######t##",
+		],
+	},
 	"geode": {
 		"name": "Geode", "find": "a geode", "sign": "east", "road": Road.ID, "pin": "north-east:3",
 		"told": "A hollow in the rock past the old caves, lined with lapis. It wants an iron pickaxe.",
@@ -314,7 +364,10 @@ const DEFS := {
 }
 
 ## The structures, in the order the Cartographer finds them: the land ones in the sectors on land, then the coastal ones (`coast`) in the sectors on the sea, which need a dock.
-const IDS := ["desert_well", "desert_temple", "jungle_temple", "fossil_site", "trail_ruins", "geode", "another_village", "dungeon", "igloo_cellar", "swamp_hut", "pillager_outpost", "trial_chambers", "woodland_mansion", "stronghold", "abandoned_mineshaft", "buried_treasure", "shipwreck", "ocean_ruins", "ocean_monument"]
+const SURVEY_IDS := ["desert_well", "desert_temple", "jungle_temple", "fossil_site", "trail_ruins", "geode", "another_village", "dungeon", "igloo_cellar", "swamp_hut", "pillager_outpost", "trial_chambers", "woodland_mansion", "stronghold", "abandoned_mineshaft", "buried_treasure", "shipwreck", "ocean_ruins", "ocean_monument"]
+## The End's places: reached through the stronghold's portal and the bridge, never by a survey (issues #411-#413, #267, #268).
+const END_IDS := ["end_platform", "end_city", "end_ship"]
+const IDS := SURVEY_IDS + END_IDS
 
 const ORE_OF := {"c": "coal", "g": "gold", "l": "lapis", "r": "redstone", "v": "gravel", "k": "chest"}
 
@@ -368,6 +421,15 @@ static func build(s: Sim, id: String) -> SimMap:
 					next += 1
 					m.creatures.append({"id": next, "kind": "creature", "species": "villager", "cell": c, "pos": Vector2(c), "alive": true, "name": Visits.NAMES[(next - ID_BASE) % Visits.NAMES.size()],
 						"hp": Defs.CREATURES.villager.hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0})
+				"s":  # a stone of the bridge out over the void, hidden until the dragon is down (issue #413)
+					next += 1
+					var br := _block(next, c, "bridge_stone")
+					br.hidden = true
+					m.boulders.append(br)
+				"N":  # the dragon (issue #412)
+					next += 1
+					m.creatures.append({"id": next, "kind": "creature", "species": "dragon", "cell": c, "pos": Vector2(c), "alive": true,
+						"hp": Defs.CREATURES.dragon.hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0, "hunt": true})
 				"Z", "S", "X", "D":  # a creature that hunts anyone who comes in (issue #255); D a drowned, the monument's guardian stand-in (issue #408)
 					var sp: String = {"Z": "zombie", "S": "skeleton", "X": "spider", "D": "drowned"}[ch]
 					next += 1
@@ -401,10 +463,11 @@ static func add_portal(m: SimMap, id: String) -> void:
 
 ## Every creature in a place is down: its hidden portal frame, if it has one, shows (issue #411).
 static func reveal_portal(sim: Sim, m: SimMap) -> void:
-	if not is_structure(m.id) or not DEFS[m.id].has("portal") or m.creatures.any(func(x): return x.alive):
+	if not is_structure(m.id) or not (DEFS[m.id].has("portal") or DEFS[m.id].get("end", false)) or m.creatures.any(func(x): return x.alive):
 		return
 	for b in m.boulders:
-		if b.alive and b.get("ore", "") == "end_portal" and b.get("hidden", false):
+		if b.alive and b.get("ore", "") in ["end_portal", "bridge_stone"] and b.get("hidden", false):
 			b.erase("hidden")
-			sim._toast("With the last of them down, a portal frame shows in the %s's wall." % m.name.to_lower())
+			if b.ore == "end_portal":
+				sim._toast("With the last of them down, a portal frame shows in the %s's wall." % m.name.to_lower())
 			sim.rev += 1
