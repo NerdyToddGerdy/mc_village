@@ -191,6 +191,7 @@ const CARGO_DEFAULTS := {
 	"fossil_site": [["coal", 8], ["flint", 4], ["cobble", 0]],
 	"trail_ruins": [["flint", 4], ["cobble", 0]],
 	"another_village": [["coal", 4], ["cobble", 0]],
+	"ocean_monument": [["gold_ore", 4], ["cobble", 0]],
 	"geode": [["lapis", 6], ["gold_ore", 2], ["cobble", 0]],
 	"meadow": [["wool", 6], ["leather", 0], ["beef", 0], ["porkchop", 0], ["mutton", 0]],
 }

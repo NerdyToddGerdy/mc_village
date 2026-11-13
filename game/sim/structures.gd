@@ -7,7 +7,7 @@ extends RefCounted
 ## `OldMine.LAYOUT`, with
 ##   g gold ore   l lapis   r redstone   v gravel (flint)   c coal   k a chest in the stone, holding one enchanted book
 ##   V a villager, friendly: one can be invited home (`folk`, Visits)
-##   Z a zombie   S a skeleton   X a spider: they come for the party, so a place with them has `fight` and wants a guard
+##   D a drowned (the monument's guardians, until #30 settles names)   Z a zombie   S a skeleton   X a spider: they come for the party, so a place with them has `fight` and wants a guard
 
 const DEFS := {
 	"desert_well": {
@@ -279,6 +279,22 @@ const DEFS := {
 			"###t###t###",
 		],
 	},
+	"ocean_monument": {
+		"name": "Ocean monument", "find": "an ocean monument", "sign": "dock", "road": SeaRoad.ID, "pin": "south:3", "coast": true, "fight": true,
+		"told": "A great prismarine hall far out on the sea, kept by guardians. Gold and chests, they say. A party has to sail there.",
+		"access": ["Flooded halls: the party fights where it stands"],
+		"gives": ["gold"], "others": ["gold_ore", "cobble"], "target": ["gold_ore", 4], "picks": 1,
+		"loose": [Vector2i(5, 2)], "ledges": [],
+		"layout": [
+			"###t######t###",
+			"#g..D..#..k.g#",
+			"#....o.#.....#",
+			"E.....D.....o#",
+			"#....o.#..D..#",
+			"#k..D..#..g..#",
+			"###t######t###",
+		],
+	},
 	"geode": {
 		"name": "Geode", "find": "a geode", "sign": "east", "road": Road.ID, "pin": "north-east:3",
 		"told": "A hollow in the rock past the old caves, lined with lapis. It wants an iron pickaxe.",
@@ -298,7 +314,7 @@ const DEFS := {
 }
 
 ## The structures, in the order the Cartographer finds them: the land ones in the sectors on land, then the coastal ones (`coast`) in the sectors on the sea, which need a dock.
-const IDS := ["desert_well", "desert_temple", "jungle_temple", "fossil_site", "trail_ruins", "geode", "another_village", "dungeon", "igloo_cellar", "swamp_hut", "pillager_outpost", "trial_chambers", "woodland_mansion", "stronghold", "abandoned_mineshaft", "buried_treasure", "shipwreck", "ocean_ruins"]
+const IDS := ["desert_well", "desert_temple", "jungle_temple", "fossil_site", "trail_ruins", "geode", "another_village", "dungeon", "igloo_cellar", "swamp_hut", "pillager_outpost", "trial_chambers", "woodland_mansion", "stronghold", "abandoned_mineshaft", "buried_treasure", "shipwreck", "ocean_ruins", "ocean_monument"]
 
 const ORE_OF := {"c": "coal", "g": "gold", "l": "lapis", "r": "redstone", "v": "gravel", "k": "chest"}
 
@@ -352,8 +368,8 @@ static func build(s: Sim, id: String) -> SimMap:
 					next += 1
 					m.creatures.append({"id": next, "kind": "creature", "species": "villager", "cell": c, "pos": Vector2(c), "alive": true, "name": Visits.NAMES[(next - ID_BASE) % Visits.NAMES.size()],
 						"hp": Defs.CREATURES.villager.hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0})
-				"Z", "S", "X":  # a creature that hunts anyone who comes in (issue #255)
-					var sp: String = {"Z": "zombie", "S": "skeleton", "X": "spider"}[ch]
+				"Z", "S", "X", "D":  # a creature that hunts anyone who comes in (issue #255); D a drowned, the monument's guardian stand-in (issue #408)
+					var sp: String = {"Z": "zombie", "S": "skeleton", "X": "spider", "D": "drowned"}[ch]
 					next += 1
 					m.creatures.append({"id": next, "kind": "creature", "species": sp, "cell": c, "pos": Vector2(c), "alive": true,
 						"hp": Defs.CREATURES[sp].hp, "angry": false, "engaged": false, "cool": 0.0, "flash": 0, "acc": 0.0, "hunt": true})
